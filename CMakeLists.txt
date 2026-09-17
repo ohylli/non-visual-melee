@@ -18,6 +18,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_COLOR_DIAGNOSTICS ON)
 
+if (WIN32 AND NOT CMAKE_TOOLCHAIN_FILE)
+    # Native MinGW (MSYS2) build. Match the pinned SDK level of
+    # cmake/x86_64-w64-mingw32.cmake: without it, mingw's sdkddkver.h defaults
+    # NTDDI_VERSION to the newest release, which makes abseil's cctz pick its
+    # WinRT time zone path (windows.globalization.h) that mingw cannot compile
+    # (WindowsCreateStringReference and friends are undeclared).
+    add_compile_definitions(NTDDI_VERSION=0x0A000000 _WIN32_WINNT=0x0A00 WINVER=0x0A00)
+endif ()
+
 set(AURORA_ENABLE_DVD ON CACHE BOOL "" FORCE)
 set(AURORA_ENABLE_CARD ON CACHE BOOL "" FORCE)
 set(AURORA_ENABLE_THP ON CACHE BOOL "" FORCE)
@@ -124,6 +133,26 @@ if (WIN32)
     if (COMMAND aurora_copy_runtime_dlls)
         aurora_copy_runtime_dlls(melee)
     endif ()
+    # The nod prebuilt is an MSVC build: its import library binds the exe to
+    # nod.dll, but the MinGW-named libnod.dll alias is what TARGET_RUNTIME_DLLS
+    # copies. Ship the real name too so the exe resolves it from its own folder.
+    include(FetchContent)
+    FetchContent_GetProperties(nod_prebuilt)
+    if (nod_prebuilt_SOURCE_DIR AND EXISTS "${nod_prebuilt_SOURCE_DIR}/bin/nod.dll")
+        add_custom_command(TARGET melee POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${nod_prebuilt_SOURCE_DIR}/bin/nod.dll" "$<TARGET_FILE_DIR:melee>"
+        )
+    endif ()
+    # Native MinGW builds pull zlib and winpthread from the compiler's bin
+    # directory. They are not on PATH for an Explorer launch, so copy them.
+    cmake_path(GET CMAKE_CXX_COMPILER PARENT_PATH _melee_compiler_bin)
+    foreach (_dll IN ITEMS zlib1.dll libwinpthread-1.dll)
+        if (EXISTS "${_melee_compiler_bin}/${_dll}")
+            add_custom_command(TARGET melee POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_melee_compiler_bin}/${_dll}" "$<TARGET_FILE_DIR:melee>"
+            )
+        endif ()
+    endforeach ()
 elseif (NOT ANDROID)
     target_link_options(melee PRIVATE -no-pie -Wl,-Ttext-segment=0x10000000)
 else ()
