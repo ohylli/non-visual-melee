@@ -10,10 +10,20 @@
 #include <aurora/event.h>
 #include <aurora/gfx.h>
 #include <aurora/rmlui.hpp>
+/* TargetConditionals.h defines TARGET_OS_IPHONE on macOS too, as 0, so this
+ * has to test its value: defined() alone pulled the iOS-only dialog into the
+ * macOS build and left the link short a symbol. */
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+#include "ios_dialog.h"
+#endif
 #include <RmlUi/Core.h>
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <chrono>
+#include <random>
 #include <cstdlib>
 #include <future>
 #include <memory>
@@ -33,10 +43,27 @@ const char* filter_name(int mode) {
 }
 
 const char* backend_name(int mode) {
-    static const char* const names[] = {"Auto", "Direct3D 12", "Vulkan"};
-    if (mode < 0 || mode > 2)
+#if defined(__APPLE__)
+    return "Metal";
+#else
+    static const char* const names[] = {"Auto", "Direct3D 12", "Vulkan", "Direct3D 11"};
+    if (mode < 0 || mode > 3)
         return "Auto";
     return names[mode];
+#endif
+}
+
+/* The two Direct3D entries only exist on Windows, so elsewhere the cycle goes
+ * straight from Auto to Vulkan: offering a backend that can only ever fail
+ * over leaves the button showing a label for something the run is not using.
+ * ponytail: indices stay identical on every platform so the prefs file and
+ * the BACKEND_* mapping below need no per-platform cases. */
+int backend_next(int mode) {
+#if defined(_WIN32)
+    return (mode + 1) % 4;
+#else
+    return mode == 0 ? 2 : 0;
+#endif
 }
 
 constexpr const char* tab_ids[] = {"tab-graphics", "tab-audio", "tab-cheats", "tab-controls"};
@@ -62,6 +89,11 @@ std::string identity(const std::string& path) {
     return std::to_string(s.st_dev) + ":" + std::to_string(s.st_ino) + ":" +
            std::to_string(s.st_size) + ":" + std::to_string(s.st_mtime) + ":" +
            std::to_string(s.st_ctime);
+#elif defined(__APPLE__)
+    return std::to_string(s.st_dev) + ":" + std::to_string(s.st_ino) + ":" +
+           std::to_string(s.st_size) + ":" + std::to_string(s.st_mtimespec.tv_sec) + ":" +
+           std::to_string(s.st_mtimespec.tv_nsec) + ":" + std::to_string(s.st_ctimespec.tv_sec) +
+           ":" + std::to_string(s.st_ctimespec.tv_nsec);
 #else
     return std::to_string(s.st_dev) + ":" + std::to_string(s.st_ino) + ":" +
            std::to_string(s.st_size) + ":" + std::to_string(s.st_mtim.tv_sec) + ":" +
@@ -158,7 +190,7 @@ class Launcher final : public Rml::EventListener {
             return {"volume", "music-volume", "sfx-volume", "mute", "fps", "scale", "check-updates",
                 "check-now", "settings-discord"};
         case 2:
-            return {"unlock-all", "frozen-stadium", "free-camera"};
+            return {"unlock-all", "frozen-stadium", "free-camera", "ucf"};
         default:
             return {};
         }
@@ -263,6 +295,7 @@ class Launcher final : public Rml::EventListener {
         text("hud-mode", prefs.hud_mode == 0 ? "Classic (4:3)" : "Wide (16:9)");
         text("frozen-stadium", prefs.frozen_stadium ? "Hazardless" : "Normal");
         text("free-camera", prefs.free_camera ? "Free" : "Normal");
+        text("ucf", std::getenv("MELEE_UCF") ? "Environment override" : prefs.ucf ? "On" : "Off");
         text("unlock-all", prefs.unlock_all ? "Unlocked" : "Normal");
         text("backend", backend_name(prefs.backend));
         slider("volume", prefs.volume * 100.0f);
@@ -368,8 +401,13 @@ class Launcher final : public Rml::EventListener {
             static const SDL_DialogFileFilter filters[] = {
                 {"GameCube disc images", "iso;gcm;ciso;rvz;gcz;wia"}, {"All files", "*"}};
             dialog = std::make_shared<DialogResult>();
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+            ios_show_open_file_dialog(
+                dialog_done, new std::shared_ptr<DialogResult>(dialog), window);
+#else
             SDL_ShowOpenFileDialog(dialog_done, new std::shared_ptr<DialogResult>(dialog), window,
                 filters, 2, prefs.disc.empty() ? nullptr : prefs.disc.c_str(), false);
+#endif
             controls();
         } else if (id == "play" && supported) {
             auto check = launcher::inspect_disc(prefs.disc);
@@ -444,15 +482,19 @@ class Launcher final : public Rml::EventListener {
             refresh_settings();
             element("filter-mode")->Focus();
         } else if (id == "backend") {
+#if defined(__APPLE__)
+            status("Graphics backend is Metal (hardware accelerated).");
+#else
             if (std::getenv("MELEE_BACKEND")) {
                 status("Backend is controlled by the MELEE_BACKEND environment setting.");
             } else {
-                prefs.backend = (prefs.backend + 1) % 3;
+                prefs.backend = backend_next(prefs.backend);
                 save();
                 refresh_settings();
                 status("Graphics backend set to " + std::string(backend_name(prefs.backend)) +
                        " (takes effect on restart).");
             }
+#endif
             element("backend")->Focus();
         } else if (id == "custom-textures") {
             prefs.custom_textures = !prefs.custom_textures;
@@ -474,6 +516,11 @@ class Launcher final : public Rml::EventListener {
             save();
             refresh_settings();
             element("free-camera")->Focus();
+        } else if (id == "ucf") {
+            prefs.ucf = !prefs.ucf;
+            save();
+            refresh_settings();
+            element("ucf")->Focus();
         } else if (id == "unlock-all") {
             prefs.unlock_all = !prefs.unlock_all;
             save();
@@ -861,24 +908,98 @@ public:
 extern "C" void pc_launcher_configure(AuroraConfig* config) {
     config_path = std::filesystem::path(config->userPath ? config->userPath : ".") / "launcher.cfg";
     prefs = launcher::load_preferences(config_path);
+    if (prefs.install_id == 0) {
+        prefs.install_id = std::random_device{}() | uint64_t(std::random_device{}()) << 32 | 1;
+        std::string error;
+        if (!launcher::save_preferences(config_path, prefs, error))
+            SDL_Log("%s", error.c_str());
+    }
+#if defined(__APPLE__) || defined(TARGET_OS_IPHONE)
+    auto file_accessible = [](const std::filesystem::path& path) -> bool {
+        std::error_code ec;
+        if (std::filesystem::exists(path, ec) && !ec)
+            return true;
+        FILE* f = fopen(path.string().c_str(), "rb");
+        if (f) {
+            fclose(f);
+            return true;
+        }
+        return false;
+    };
+    if (prefs.disc.empty() || !file_accessible(prefs.disc)) {
+        const char* home = std::getenv("HOME");
+        const char* candidates[] = {"Documents/melee.ciso", "Documents/melee.iso",
+            "Documents/game.ciso", "Documents/game.iso", "melee.ciso", "melee.iso", nullptr};
+        for (int p = 0; candidates[p] != nullptr; p++) {
+            if (home && home[0] != '\0') {
+                std::filesystem::path full = std::filesystem::path(home) / candidates[p];
+                if (file_accessible(full)) {
+                    prefs.disc = full.string();
+                    break;
+                }
+            }
+            if (file_accessible(candidates[p])) {
+                prefs.disc = std::filesystem::absolute(candidates[p]).string();
+                break;
+            }
+        }
+        // If not found in standard candidate names, scan Documents directory for any disc
+        if ((prefs.disc.empty() || !file_accessible(prefs.disc)) && home && home[0] != '\0') {
+            std::filesystem::path docs = std::filesystem::path(home) / "Documents";
+            std::error_code dir_ec;
+            if (std::filesystem::exists(docs, dir_ec) &&
+                std::filesystem::is_directory(docs, dir_ec))
+            {
+                for (const auto& entry : std::filesystem::directory_iterator(docs, dir_ec)) {
+                    if (entry.is_regular_file(dir_ec)) {
+                        auto ext = entry.path().extension().string();
+                        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                        if (ext == ".iso" || ext == ".ciso" || ext == ".rvz" || ext == ".gcm" ||
+                            ext == ".gcz" || ext == ".wia")
+                        {
+                            auto info = launcher::inspect_disc(entry.path().string());
+                            if (info.supported) {
+                                prefs.disc = entry.path().string();
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+#endif
     config->startFullscreen = prefs.fullscreen;
     config->msaa = prefs.msaa;
     config->maxTextureAnisotropy = prefs.anisotropy;
     if (!std::getenv("MELEE_VSYNC"))
         config->vsync = prefs.vsync;
     if (!std::getenv("MELEE_BACKEND")) {
+#if defined(__APPLE__)
+        config->desiredBackend = BACKEND_METAL;
+#else
         if (prefs.backend == 1)
             config->desiredBackend = BACKEND_D3D12;
         else if (prefs.backend == 2)
             config->desiredBackend = BACKEND_VULKAN;
+        else if (prefs.backend == 3)
+            config->desiredBackend = BACKEND_D3D11;
         else
             config->desiredBackend = BACKEND_AUTO;
+#endif
     }
 }
 
 static std::filesystem::path pc_resources_path() {
 #if defined(__ANDROID__)
     return "";
+#elif defined(__APPLE__)
+    const char* base = SDL_GetBasePath();
+    std::filesystem::path p = std::filesystem::path(base ? base : ".");
+    std::error_code ec;
+    if (std::filesystem::exists(p / "resources", ec) && !ec)
+        return p / "resources";
+    return p;
 #else
     const char* base = SDL_GetBasePath();
     return std::filesystem::path(base ? base : ".") / "resources";
@@ -989,7 +1110,7 @@ public:
             return {"volume", "music-volume", "sfx-volume", "mute", "fps", "scale",
                 "port-check-update"};
         case 2:
-            return {"unlock-all", "frozen-stadium", "free-camera"};
+            return {"unlock-all", "frozen-stadium", "free-camera", "ucf"};
         default: {
             std::vector<std::string> ids{"pad-port"};
             for (int i = 0; i < PAD_BUTTON_COUNT; ++i)
@@ -1096,6 +1217,7 @@ public:
         label("hud-mode", prefs.hud_mode == 0 ? "Classic (4:3)" : "Wide (16:9)");
         label("frozen-stadium", prefs.frozen_stadium ? "Hazardless" : "Normal");
         label("free-camera", prefs.free_camera ? "Free" : "Normal");
+        label("ucf", std::getenv("MELEE_UCF") ? "Environment override" : prefs.ucf ? "On" : "Off");
         label("unlock-all", prefs.unlock_all ? "Unlocked" : "Normal");
         label("backend", backend_name(prefs.backend));
         slider("volume", prefs.volume * 100.0f);
@@ -1277,16 +1399,22 @@ public:
             prefs.frozen_stadium = !prefs.frozen_stadium;
         } else if (id == "free-camera") {
             prefs.free_camera = !prefs.free_camera;
+        } else if (id == "ucf") {
+            prefs.ucf = !prefs.ucf;
         } else if (id == "unlock-all") {
             prefs.unlock_all = !prefs.unlock_all;
         } else if (id == "backend") {
+#if defined(__APPLE__)
+            label("menu-status", "Graphics backend is Metal (hardware accelerated).");
+#else
             if (std::getenv("MELEE_BACKEND")) {
                 label("menu-status", "Backend set by MELEE_BACKEND environment.");
             } else {
-                prefs.backend = (prefs.backend + 1) % 3;
+                prefs.backend = backend_next(prefs.backend);
                 label("menu-status", "Backend set to " + std::string(backend_name(prefs.backend)) +
                                          " (restart required).");
             }
+#endif
         } else if (id == "volume") {
             int step = int(prefs.volume * 10 + 0.5f);
             prefs.volume = (step >= 10 ? 0 : step + 1) / 10.0f;
@@ -1533,14 +1661,27 @@ extern "C" void pc_menu_update(void) {
 extern "C" bool pc_is_custom_textures_enabled(void) {
     return prefs.custom_textures;
 }
+extern "C" bool pc_net_rules(bool* unlock_all, bool* frozen_stadium);
 extern "C" bool pc_is_unlock_all_enabled(void) {
-    return prefs.unlock_all;
+    bool unlock_all, frozen;
+    return pc_net_rules(&unlock_all, &frozen) ? unlock_all : prefs.unlock_all;
 }
 extern "C" bool pc_is_frozen_stadium_enabled(void) {
-    return prefs.frozen_stadium;
+    bool unlock_all, frozen;
+    return pc_net_rules(&unlock_all, &frozen) ? frozen : prefs.frozen_stadium;
 }
 extern "C" bool pc_is_free_camera_enabled(void) {
     return prefs.free_camera;
+}
+extern "C" uint64_t pc_install_id(void) {
+    return prefs.install_id;
+}
+extern "C" const char* pc_app_rev(void) {
+    return pc::get_app_version().c_str();
+}
+extern "C" bool pc_is_ucf_enabled(void) {
+    static const char* env = std::getenv("MELEE_UCF");
+    return env ? env[0] != '0' : prefs.ucf;
 }
 extern "C" int pc_get_hud_mode(void) {
     return prefs.hud_mode;

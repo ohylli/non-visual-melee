@@ -10,6 +10,9 @@
 #include "ifstatus.h"
 #include "ifstock.h"
 #include "iftime.h"
+#ifdef TARGET_PC
+#include "ifnet.h"
+#endif
 #include <melee/lb/lb_00B0.h>
 #include <melee/lb/lbarchive.h>
 #include <melee/lb/lbspdisplay.h>
@@ -242,7 +245,7 @@ void ifAll_802F390C(void)
     {
         HSD_CObjDesc* desc = DP(HSD_CObjDesc, DP(struct SceneCameraDesc, sp14->cameras)[0].desc);
         HSD_GObj* gobj = GObj_Create(0x13, 0x14, 0);
-        HSD_CObj* cobj = lb_80013B14((HSD_CameraDescPerspective*) desc);
+        HSD_CObj* cobj = lb_80013B14(&desc->perspective);
         HSD_GObjObject_80390A70(gobj, HSD_GObj_CameraKind, cobj);
         GObj_SetupGXLinkMax(gobj, fn_802F36B8, 8);
         gobj->gxlink_prios = 0xD00;
@@ -269,6 +272,9 @@ void ifAll_802F390C(void)
     un_802FD4C8();
     un_802FF1B4();
     un_802FF498();
+#ifdef TARGET_PC
+    ifNet_Create();
+#endif
 }
 
 void ifAll_802F3A64(void)
@@ -299,4 +305,7 @@ void ifAll_802F3A64(void)
     un_802FE390();
     un_802FF190();
     un_802FF4FC();
+#ifdef TARGET_PC
+    ifNet_Free();
+#endif
 }

@@ -15,10 +15,14 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "pc/pc.h"
 #include "pc/launcher.h"
+#include "pc/touch.h"
 #include "pc/widescreen.h"
+#include "pc/net.h"
+#include "pc/net_lan.h"
 
 bool pc_exit_requested;
 
@@ -32,6 +36,10 @@ static bool s_in_frame;
 
 void pc_os_run_alarms(void);
 void aurora_heap_check(void);
+
+uint32_t pc_gfx_prewarm(uint32_t max_wait_ms) {
+    return aurora_wait_pipelines(max_wait_ms);
+}
 
 void pc_frame_boundary(void) {
     static int fps_log = -1;
@@ -53,6 +61,39 @@ void pc_frame_boundary(void) {
     }
     aurora_heap_check();    /* no-op unless MELEE_HEAP_CHECK is set */
     pc_widescreen_update(); /* Auto mode follows window resizes. */
+    /* MELEE_LAN_TEST=1|host: the LAN lobby without the menu; "host" starts
+     * a match with the first peer found. MELEE_LAN_DIRECT=ip:port: the same
+     * with a known peer, no discovery (src/pc/net_lan.c). */
+    static int lan_test = -1;
+    static u32 lan_frames;
+    if (lan_test < 0) {
+        const char* t = getenv("MELEE_LAN_TEST");
+        lan_test = getenv("MELEE_LAN_DIRECT") != NULL ? 3 :
+                   t == NULL                          ? 0 :
+                   strcmp(t, "host") == 0             ? 2 :
+                                                        1;
+    }
+    if (lan_test) {
+        pc_lan_poll();
+        /* Both fixtures start only once the game has its rules loaded (the
+         * title screen), not at frame 0: RULES would carry zeros. */
+        lan_frames++;
+        if (lan_test == 2 && lan_frames >= 300 && pc_lan_state(NULL) == 0) {
+            pc_lan_start_match();
+        }
+        if (lan_test == 3 && lan_frames == 300) {
+            const char* d = getenv("MELEE_LAN_DIRECT");
+            char host[64];
+            const char* colon = strrchr(d, ':');
+            if (colon != NULL && (size_t)(colon - d) < sizeof host) {
+                memcpy(host, d, (size_t)(colon - d));
+                host[colon - d] = '\0';
+                pc_lan_connect_direct(host, (uint16_t)atoi(colon + 1));
+            } else {
+                pc_log_line("lan: MELEE_LAN_DIRECT must be ip:port");
+            }
+        }
+    }
     if (fps_log < 0) {
         fps_log = getenv("MELEE_FPS") != NULL;
         fps_t0 = SDL_GetTicks();
@@ -107,6 +148,7 @@ void pc_frame_boundary(void) {
                 pc_menu_toggle();
             pc_menu_event(&event->sdl);
             pc_keyboard_event(&event->sdl);
+            pc_touch_event(&event->sdl);
         }
         ++event;
     }
@@ -115,6 +157,20 @@ void pc_frame_boundary(void) {
      * frame instead of clearing the EFB to black underneath the menu. */
     aurora_preserve_frame_buffer(pc_menu_is_open());
     pc_keyboard_apply();
+    /* MELEE_EXIT_AFTER_FRAMES=<n>: bound a scripted run without needing
+     * synthetic input, which is unreliable under Xwayland. Setting
+     * pc_exit_requested instead of exiting here on purpose: the window-close
+     * path is the one that runs atexit(pc_shutdown_once), and skipping it is
+     * what makes Dawn's static destructors race the live device. */
+    static int exit_after = -1;
+    if (exit_after < 0) {
+        const char* n = getenv("MELEE_EXIT_AFTER_FRAMES");
+        exit_after = n != NULL ? atoi(n) : 0;
+    }
+    if (exit_after > 0 && s_retrace_count >= (u32)exit_after && !pc_exit_requested) {
+        pc_log_line("MELEE_EXIT_AFTER_FRAMES: reached frame %u, exiting", s_retrace_count);
+        pc_exit_requested = true;
+    }
     if (pc_exit_requested) {
         exit(0);
     }
@@ -125,7 +181,7 @@ void pc_frame_boundary(void) {
      * the simulation would run at 2x-4x speed. Pacing strictly to 60.000 Hz ensures physics,
      * hitboxes, and timers remain bit-identical. */
     static u64 next_sim_ns;
-    const u64 sim_period = 1000000000ull / 60;
+    const u64 sim_period = pc_sim_period_ns();
     u64 now = SDL_GetTicksNS();
     if (next_sim_ns == 0 || now > next_sim_ns + sim_period * 2) {
         next_sim_ns = now; /* first frame, or large hitch: resync */
@@ -161,7 +217,11 @@ void pc_frame_boundary(void) {
     s_in_frame = true;
 
     s_retrace_count++;
+    /* Age of the 1000 Hz sample the sim is about to consume, before the pad
+     * alarms (fn_800195FC -> PADRead) fire from pc_os_run_alarms. */
+    pc_input_latency_record();
     pc_os_run_alarms();
+    next_sim_ns += pc_net_pace_adjust_ns(); /* time-sync skips: a longer wait next frame */
     if (s_pre_cb) {
         s_pre_cb(s_retrace_count);
     }
@@ -183,6 +243,10 @@ void VIWaitForRetrace(void) {
 
 u32 VIGetRetraceCount(void) {
     return s_retrace_count;
+}
+
+u64 pc_sim_period_ns(void) {
+    return 1000000000ull / 60;
 }
 
 u32 VIGetNextField(void) {
