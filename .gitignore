@@ -9,6 +9,11 @@ docs/*
 !docs/screenshots/
 !docs/CODING_STYLE.md
 
+# Accessibility fork: the fork's own docs are published.
+!docs/agents/
+!docs/adr/
+!docs/a11y/
+
 # Android build outputs (CI builds these from source).
 platforms/android/.gradle/
 platforms/android/.idea/
