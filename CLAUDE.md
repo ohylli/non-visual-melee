@@ -37,15 +37,20 @@ Windows is the only supported target for fork work; keep code portable in princi
 
 - Toolchain: MSYS2 UCRT64 (GCC, CMake, Ninja) with its `bin` directory on `PATH`. GCC is required by the decomp layer.
 - Configure once with `cmake -B build -G Ninja`, then `cmake --build build`. The result is `build/melee.exe`, with its DLLs and `resources/` copied beside it.
-- The game writes `melee-pc.log` into its working directory; `MELEE_LOG_FILE` overrides the path.
+- On Windows the game writes `melee-pc.log` beside `melee.exe`; `MELEE_LOG_FILE` overrides the path.
+- The base port documents itself in `docs/building.md`, `docs/testing.md`, `docs/debugging.md`, `docs/architecture.md` and `docs/porting-notes.md`. Read the relevant one before exploring the code.
 
 ## Verification
 
-There is no test suite for game behaviour, the players cannot see the screen, and the agent cannot hear the game. The speech log bridges that.
+The players cannot see the screen, the agent cannot hear the game or drive its menus. The speech log bridges that.
 
-- Every announcement and cue is also written through `pc_log_line` with an `[a11y]` prefix into `melee-pc.log`, interleaved with game events. This logging is a developer setting, default on.
-- The agent cannot drive the game, so its own check after a change is: it builds, and the game still launches. Report that as "builds and launches"; "works" is reserved for what a blind tester has confirmed by ear. After the maintainer play-tests, read the `[a11y]` lines in the log against what they report.
-- When launching the game, start it minimized and in the background so it never takes focus from a running screen reader. Screenshots are fine when they help.
+- Every announcement and cue is also written through `pc_log_line` with an `[a11y]` prefix into the log, interleaved with game events. This logging is a developer setting, default on.
+- The agent's own check after a change: it builds, and a bounded run exits cleanly and logs the expected `[a11y]` lines. A bounded run boots straight into a scene and exits after a fixed frame count:
+  `SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0 MELEE_BOOT_SCENE=<title|vs|classic|training> MELEE_EXIT_AFTER_FRAMES=<n> MELEE_LOG_FILE=<path> build/melee.exe --no-card <disc>`
+  Capture stdout too: the `boot scene:` progress lines go there, not to the log file. The `vs` scene reaches the match within 600 frames.
+- `SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0` keeps the game window from taking focus away from a running screen reader, and `--no-card` keeps the run off the real memory card. Use both on every agent-started run. Screenshots are fine when they help.
+- Native menus, the port menu and the launcher are out of reach of bounded runs; they depend on the maintainer play-testing, after which the agent reads the `[a11y]` lines against what they report. "Works" is reserved for what a blind tester has confirmed by ear.
+- Base port tests: `cmake --build build --target unit_tests` then `ctest --test-dir build -L melee` (`launcher_data` currently fails on Windows, a base port bug in the test's file handling). `tools/smoke_test.py` runs on Windows only as `MELEE_BIN=<full path to melee.exe> python tools/smoke_test.py --no-disc`; its disc cases isolate save data on Linux only and would touch the real memory card here.
 - A debug control server (state queries, pause, input injection over localhost) is a possible future direction, not a commitment.
 
 ## Style and lint
