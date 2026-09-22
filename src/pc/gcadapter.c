@@ -49,6 +49,8 @@ extern HSD_RumbleData HSD_Rumble_804C22E0[GC_SLOTS];
 static bool s_enabled;
 static SDL_hid_device* s_dev;
 static int s_retry_ms = 999;
+/* SDL_hid_device_change_count() as of the last try_open, 0 before the first. */
+static uint32_t s_hid_change_seen;
 static bool s_warned_open;
 static uint8_t s_rumble[1 + GC_SLOTS] = {0x11};
 
@@ -320,10 +322,19 @@ void pc_gcadapter_poll(void) {
         return;
     }
     if (s_dev == NULL) {
-        /* Hot-plug: look again once a second. */
+        /* Hot-plug: look again once a second, but only after the set of HID
+         * devices changed. hid_open/hid_enumerate open every HID interface
+         * on the system to read its ids; with a wireless Xbox controller
+         * attached that takes ~800 ms per call on Windows, and it runs under
+         * the joystick lock that PADRead on the game thread needs while it
+         * holds the OS interrupt lock, so the audio mixer stalled with it. */
         if (++s_retry_ms >= 1000) {
             s_retry_ms = 0;
-            try_open();
+            const uint32_t change = SDL_hid_device_change_count();
+            if (change != s_hid_change_seen) {
+                s_hid_change_seen = change;
+                try_open();
+            }
         }
         return;
     }
