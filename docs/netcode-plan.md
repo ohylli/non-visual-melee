@@ -5,22 +5,37 @@ Expands ROADMAP.md Phase 4. Everything below is grounded in the current tree
 flow, re-implemented natively; matchmaking and ranked replace Slippi's central
 server with the BitTorrent Mainline DHT and signed, on-device rating records.
 
-**Where this stands.** The wire is v5 (`PC_NET_PROTO_VERSION`, `src/pc/net.h:20`).
-Netplay plays real matches on Linux x86-64 with rollback, and **M0 is met
-between Linux and Windows**: one 2400-frame recording now replays
-bit-identical on both, with the harness's byte-flip sensitivity row still
-firing at exactly the corrupted frame. Windows and the Apple targets still run
-**without** rollback — lockstep for the whole session — and nothing has ever
-run on an Android device. Detail in §4 ("Platforms with no snapshot region"),
-§5.1 (the determinism gate and the divergence that is now closed), §8
-(Android) and §12; the summary:
+**Current implementation checkpoint (2026-09-20, `netplay-finish`).**
+The existing LAN/direct-IP wire remains v6. This branch adds signed internet
+pairing, DHT discovery and BEP44 storage, persistent Ed25519 identities, ranked
+best-of-three sets and signed durable rating history. Older dated findings
+below are retained as investigation history; this checkpoint and §12 describe
+the current implementation.
 
-| Target | Links | Netplay | Rollback | What has actually been run |
-|---|---|---|---|---|
-| Linux x86-64 | yes, with `melee_state.ld` (`CMakeLists.txt:274-278`) | yes | yes | two instances through real matches, 126k in-match frames and 9k rollbacks in the longest run; the M0 reference recording replays bit-identical |
-| Windows x86-64 (MinGW) | yes — **since this batch**; the link used to fail outright on four undefined symbols, and before that the build did not even compile (§4) | yes, lockstep only | no: no snapshot region | the 2400-frame replay is **identical** to the Linux recording (§5.1). Play itself is untested: no two-machine session has been run |
-| macOS / iOS | same as Windows: links, no snapshot region | never run | no | nothing — no macOS host and no osxcross toolchain on this machine |
-| Android arm64 | yes, with `melee_state.ld` (`CMakeLists.txt:279-284`) | code complete, LAN included | yes | nothing on a device or emulator: none attached. Compile-only, reviewed against the API reference (§8) |
+- Rollback now restores the pointed RNG value, advances logical rumble while
+  suppressing/reconciling physical motors, and derives online offscreen damage
+  from simulation camera geometry rather than the last render. Shared stage
+  selection and explicit two-player initialization fix scene-flow defects.
+- Internet Direct uses a friend code; Unranked and Ranked use queue topics.
+  Signed pairing binds compatibility, keys, nonces and endpoints. Public DHT
+  bootstrap reached readiness in about 30 seconds. A separate live BEP44 probe
+  received five PUT acknowledgements and authenticated the exact value on GET.
+  Two different home NATs have not been tested.
+- Ranked uses verified public state before pairing, winner bans/loser picks,
+  dual-signed records and durable append before publication. Both peers confirm
+  saving. Failed publication is retriable, including after restart when the
+  public sequence is older. Timeout is never treated as an empty history.
+- Portable rating math produced identical bits for 4096 updates and 32 signed
+  records on Linux and MinGW/Wine. Full ranked gameplay acceptance is separate
+  from the transport/session fixtures.
+
+| Target | Snapshot implementation | Current evidence |
+|---|---|---|
+| Linux x86-64 | ELF game-state ranges | Live delayed and scene-flow tests; latest acceptance results below |
+| Windows x86-64 GNU MinGW | PE object section rewriting and post-link range verification | Wine restore/pointer/BSS/exclusion fixtures; full Windows game rollback remains unverified |
+| Windows ARM64 | PE section relabeling after the GCC-to-COFF bridge | Linked range/relocation/exclusion and CMake integration fixtures pass; hardware gameplay remains unverified |
+| macOS / iOS | Mach-O simulation data/zerofill sections with linker boundaries | Intel/ARM64 cross-link, iOS GCC bridge, universal-object preservation and CMake integration checks pass; native restore added to macOS CI, device gameplay unverified |
+| Android ARM64 / x86-64 | ELF game-state ranges | NDK-linked save/mutate/restore fixtures pass, ARM64 under QEMU; no new device gameplay acceptance |
 
 Numbers below are labelled with the harness that produced them, and with the
 build, because two defects were fixed mid-batch and several acceptance rows
@@ -140,7 +155,15 @@ so idle noise does not cause rollbacks.
 Measured on a live Link vs Mario match: 5.6 MB, 0.6 ms per snapshot (plain
 memcpy). No dirty tracking needed.
 
-**Platforms with no snapshot region (Windows, macOS, iOS).** `melee_state.ld`
+**Historical platform limitation (superseded on all supported platforms).**
+`cmake/WindowsSnapshot.cmake` supplies ordered PE ranges for x86-64 and ARM64;
+`cmake/AppleSnapshot.cmake` supplies Mach-O ranges for macOS and iOS. Both
+preserve game-object relocations and verify tracked/excluded symbols after
+linking. Linux/Android retain ELF ranges and now verify them after linking too.
+See §16 for implementation and platform-specific evidence. The fallback
+investigation below records the earlier state of the port.
+
+**Original investigation.** `melee_state.ld`
 is a GNU ld script built on `INSERT AFTER`; PE/COFF's GNU ld and ld64 have no
 equivalent, so only the Linux and Android links define the four bracket
 symbols (`CMakeLists.txt:274-292`, which is also where `MELEE_STATE_SECTIONS`
@@ -151,10 +174,9 @@ unconditionally and they were the only undefined symbols on the Windows link,
 so netplay could never have run on Windows or macOS at all. Those platforms
 now define the four as an empty span and refuse to snapshot rather than
 copying the heaps while silently omitting every static, which would roll back
-into a desync. `snapshot_state_region_missing()` returns the reason, the
-first predicted frame raises the barrier to `INT32_MAX` and logs
-`net: this platform's linker cannot bracket the decomp's statics at frame N,
-lockstep from here`. The session then plays at lockstep latency — input delay
+into a desync. `snapshot_state_region_missing()` returns the reason, and
+session initialization selects lockstep before any frame can be predicted.
+The session plays at lockstep latency — input delay
 must cover the whole round trip — with no prediction and no desync risk from
 prediction. `ponytail:` the ceiling is named in `net_snapshot.c`; the upgrade
 path is per-object section renaming with `objcopy` at archive level, or a PE
@@ -177,7 +199,13 @@ rises (`barrier_raise`) and is reset per session.
 | Scene change (`scene_kind()` differs from the last fresh tick) | `frame + 120` (`IO_QUIET`, `net_internal.h:104`) | heaps are torn down and rebuilt around it and its loads trail into the next frames; a snapshot also records its scene and cannot be taken back in another (`snapshot_unusable`) |
 | Game-thread disc request (`pc_net_note_io` from `HSD_DevComRequest`, `devcom.c:417`) | `frame + 120` | the tick that issued it cannot be re-run: a restore either double-issues the read (crash in `HSD_DevComDVDMemCallback`) or erases a completion the re-run then waits for forever; the completion lands on a worker thread some frames later |
 | Lost rollback: no snapshot for the frame, behind the barrier, or scene changed (`rollback_to`) | newest simulated frame | the misprediction stays in the timeline, so a desync is expected; one `net: cannot roll back` line per session |
-| Snapshot refused — buffer could not be grown, `MELEE_NET_SIM_OOM_FRAME` fired, or this platform has no state region (`snap_predicted`) | `INT32_MAX` | lockstep for the rest of the session (`net: out of memory for snapshots` / the linker message above) |
+
+Snapshot failure does **not** raise this barrier. It sets a separate lockstep
+flag, waits for the current frame's real input, and preserves earlier snapshots
+until outstanding predictions have been corrected. This also applies during
+re-simulation. Platforms without a snapshot region select lockstep at connect;
+`MELEE_NET_ROLLBACK=off` may still pin the barrier at `INT32_MAX` at connect,
+when no speculative frames exist.
 
 Aurora still exports `aurora_dvd_inflight()`/`aurora_arq_inflight()`
 (`dvd.cpp:687`, `AR.cpp:174`) but the engine no longer consults them: the
@@ -219,7 +247,7 @@ offset sample per received packet = `sendTime − myLastSendTime + 16683·(myFra
 > 10 ms → stall ≤ 5 frames; behind > 26.7 ms → advance (2 ticks in one
 present) ≤ 3 frames, 1 per 5 frames. Continuous nudging: ±0.5–1 % on the
 `SDL_DelayPrecise` target in `vi.c:171-175` instead of emu speed. Hard stall
-when remote lags > 7 frames; disconnect after 7 s stalled.
+when remote lags > 7 frames; disconnect after 3 s stalled.
 
 **Desync detection.** Each input packet carries `(ck_frame, ck)` of the newest
 finalised frame (`confirmed_frame`, `src/pc/net.c:185-193`), compared in
@@ -524,6 +552,107 @@ Reproduce: `python3 tools/net_determinism.py --frames 2400` (all rows, ~12 min),
 Work directory `/tmp/net_determinism`; Android and macOS print the exact
 invocation they would use next to the missing prerequisite.
 
+### 5.2 Android (aarch64) against Linux (x86-64): what actually diverges
+
+Measured on real hardware — a Pixel 8 Pro (Tensor G3) and an SM-T505
+(Snapdragon), both against this x86-64 Linux box. Nearly every candidate is
+dead, and the two that were real are not arithmetic at all.
+
+**Ruled out, each by measurement, not argument:**
+
+| Class | How it was killed |
+|---|---|
+| FMA contraction | `llvm-objdump` of the shipped `libmelee.so`: 1571 `fmadd` in the binary, **0** in any of its 9392 game symbols. `-ffp-contract=off` reaches every sim TU on both targets |
+| Platform libm | `atan2f`/`asinf`/`acosf` are decomp code (`src/melee/lb/lbtrigf.c:22,45,61`), defined inside the binary, so the PLT binds locally. Linking the REAL build objects from each target into one probe and running 200k inputs on each machine gives identical hashes for `atan2f`/`asinf`/`acosf`/`pc_sinf`/`pc_cosf`/`pc_atanf`. (glibc and bionic *do* differ on those functions — 22334/200000 inputs for `atan2f` — which is why the vendored trig exists, but the game never calls them) |
+| float→int UB | All 986 melee_game TUs rebuilt with `-fsanitize=float-cast-overflow,float-divide-by-zero`: **zero** reports over 3526 match frames, against an injected control that fires every run. The shapes genuinely differ per ISA (aarch64 `fcvtzs` saturates, x86 `cvttss2si` yields INT_MIN) but the simulation never feeds one an out-of-range value |
+| `long double` | Zero uses in the tree |
+| NaN sign/payload, min/max, signed zero, denormals | Identical on both; and the state log over 4001 frames contains no NaN, inf or denormal in any checksummed field |
+| Runtime FP mode | FPCR on the device is `0x0` (FZ and DN off) after Vulkan init; MXCSR `0x1f80`. Zero `msr fpcr` in the shipped library |
+| Compile flags | Identical on both targets for every sim TU, including `-fexec-charset=CP932`, which `tools/gcc_launcher.py:108` adds unconditionally even though CMake records Android's compiler as Clang and omits it from `build.ninja` |
+
+**The two real causes, both fixed.** Neither is a floating-point problem:
+they are the seed itself (`net_snapshot.c:148` folds it, and outside a fight
+the checksum is *only* the pads and the seed).
+
+1. `gmTitle_801A165C` stirred the RNG once per wall-clock second-of-minute.
+   Two machines reaching the title eight seconds apart stirred 41 times
+   against 49. Suppressed under `pc_net_deterministic()`.
+2. Scene-enter draws (stage init, CPU AI init in `Fighter_Create`) land on
+   different frames on machines of different speed. `seed_out_of_tick_check`
+   restores the seed a tick starts from, netplay only.
+
+**Scene entry is not frame-aligned; mostly fixed, not closed.** A load spans
+a device-dependent number of SIMULATED frames, because the game polls a
+read's completion once per tick: a peer whose file cache is warm finishes in
+one tick while the other spends hundreds. Both peers then enter the same
+scene on different `net.frame` values and their sims run different code with
+nothing wrong in the arithmetic.
+
+Caught end to end on a real tablet<->PC match (SM-T505 P1 vs this PC P2,
+driven through the genuine online flow: lobby -> CSS -> SSS -> match, with
+`sss: picks P1=14 P2=14 -> 14` on both). The tablet was in the fight at
+frame 39470 and the PC was not — identical seed `cc8a2134`, identical pads —
+and `net: DESYNC` followed at once, because `frame_checksum` folds fighter
+fields only while `in_fight()`. The two logs realigned 883 frames (~15 s)
+later, which is how far apart the peers entered the scene. The tablet
+prewarms 42 archives at boot; this PC read them cold.
+
+`dvd_settle()` (src/pc/net.c) now drains `aurora_dvd_inflight()` and
+`aurora_arq_inflight()` at the top of every netplay tick, so a read
+completes inside the tick that issued it and the poll succeeds on the same
+tick for both peers. Measured on the same pairing: the scene-entry gap fell
+from **883 frames to about 30** (fight entered at 4412 on the PC, 4442 on
+the tablet), which is a 30x improvement but still a desync.
+
+The residual is the remaining deliverable, and it now reproduces on this one
+machine in about five minutes, with no phone:
+
+```sh
+python3 tools/net_test.py --lan --state-log --minutes 1   # add --cold-cache
+```
+
+What differs between the peers is not speed, it is *where in the tick* a
+read completes. A warm/warm pair on one machine hits it: measured on
+`b445723b7`, A left the SSS for the match at frame **3169** and B at
+**3168**, and `net: DESYNC` fired on the frame the first peer started
+folding fighter fields. The same pairing with A slowed to 1.5 ms per disc
+read (`--cold-cache`, which also disables its prewarm) entered every scene
+on the same frame and passed - a uniformly slow peer is *more* aligned than
+a peer that is merely different, because every one of its reads then spans
+a tick boundary instead of racing it.
+
+`net: scene N -> M at frame F` (src/pc/net.c) is the line to diff, and
+`--state-log` writes `<work>/a.state` and `b.state` for the field-by-field
+comparison.
+
+Two fixes at the I/O layer were tried and both are dead, each for a reason
+worth keeping:
+
+1. **Deliver a completion only at a tick boundary** (worker parks until the
+   game thread opens a gate in `dvd_settle`). Wedges the CSS load: the game
+   polls a block's status inside a tick, so a completion that waits for the
+   next tick is never reached.
+2. **Run disc commands inline on the caller's thread** so a read costs zero
+   ticks everywhere. Wedges in the same place for the opposite reason:
+   `HSD_DevComDVDWakeUp` (src/sysdolphin/baselib/devcom.c:346-389) sets its
+   busy flag `HSD_DevCom_804D77F5 = 1` *after* `DVDReadAsyncPrio` returns.
+   On hardware interrupts are off there so the callback cannot run first; an
+   inline callback clears the flag and the outer call then re-sets it, and
+   the queue never wakes again.
+
+What both attempts prove is that the load's tick cost cannot be equalised
+from underneath. The transition frame has to be agreed instead, the way the
+lobby already hands over to the CSS: each peer announces "ready to leave
+scene X at frame N" and both leave at `max(Na, Nb)`
+(`gm_Scene_OnlineLobby_OnFrame` + `pc_lan_start_frame` is the pattern). The
+hook is the break path of `gm_801A4D34` (src/melee/gm/gmscene.c:379-390):
+scene loads run inside that tick loop, which is why their cost is counted in
+frames at all, and it is the one place every scene exit passes through.
+
+Separately, the residual single-field desync around frame 3200 of the
+`--lan` row reproduces on the PRE-fix binary and on two identical PCs, so it
+is not cross-architecture either.
+
 ## 6. Transport and protocol
 
 UDP only, one socket shared by DHT, game and lobby traffic (keeps the NAT
@@ -549,23 +678,33 @@ The table below is the target protocol for M4+. What is on the wire today
 
 Every multi-byte field is big-endian on the wire (`be16/be32/be64`,
 `net_wire.c:46-132`); the packed structs are the exact wire image. Sizes are
-pinned by `_Static_assert` (`net_internal.h:211-219`).
+pinned by `_Static_assert` (`net_internal.h:211-219`). The sizes below are the
+*message*; from v8 every datagram is that message followed by an 8-byte
+authentication tag (`NET_MAC_LEN`, §6.4a), so a `Bye` is 8 bytes of message in
+a 16-byte datagram. `recv_inputs` checks the tag, then hands `n -
+NET_MAC_LEN` to everything below it, which is why no length in this table
+moved.
 
 | Struct | Magic | Layout (bytes) | Size | Notes |
 |---|---|---|---|---|
-| `Hdr` | — | `u8 magic, u8 version, u32 session, u8 player` | 7 | prefixes every datagram (`net_internal.h:121-126`). `version` = `PC_NET_PROTO_VERSION` (`net.h:20`, currently **5**). `session` is picked by the host at connect (`net.c:1121`), 0 on the guest until the host's first packet (`net.c:603`). `player` is the sender's port (0/1) |
+| `Hdr` | — | `u8 magic, u8 version, u32 session, u8 player` | 7 | prefixes every datagram (`net_internal.h:121-126`). `version` = `PC_NET_PROTO_VERSION` (`net.h:20`, currently **8**). `session` is picked by the host at connect (`net.c:1121`), 0 on the guest until the host's first packet (`net.c:603`). `player` is the sender's port (0/1) |
 | `WirePad` | — | `u16 button, s8 stickX, stickY, substickX, substickY, u8 triggerLeft, triggerRight` | 8 | Slippi's fields; sticks clamped to 0 within ±2 before sending (`at_rest`, `net_wire.c:10-24`) |
 | `Packet` | `'M'` | `Hdr, u16 seq, s32 newest, s32 first, s32 ck_frame, u32 ck, u8 count, WirePad pads[count]` | 26 + 8·count, count ≤ 16 (`REDUNDANCY`) | `pads[i]` is frame `first+i`; everything since the last ack is repeated, the repeat width scaled by measured loss and rollback depth, with a floor that the resume phase raises (`net_internal.h:128-138`, `send_inputs` `net.c:295-318`). `seq` is the per-session send counter: an exact duplicate is dropped and an out-of-order one still processed (`seq_check`, `net.c:373`), and the ack echoing it is the RTT sample. Sent every tick and again from the 4 ms timer; an empty one every 500 ms is the keepalive while the game thread is loading |
 | `Ack` | `'A'` | `Hdr, u16 seq, s32 frame` | 13 | `frame` = newest contiguous remote frame the sender holds, ignored unless `≤ s_wrote` (a frame we actually sent: a higher one would leave `send_inputs` shipping nothing at all, `on_ack` `net.c:454-460`); `seq` echoes the acked packet, consumed once from a 64-slot ring so a late duplicate cannot skew the RTT (`net.c:462-474`) |
-| `Rel` | `'R'` | `Hdr, u8 seq, u8 type, u16 len, u8 payload[len]` | 11 + len, len ≤ 256 | reliable channel, two stop-and-wait lanes (`net_reliable.c:1-16`). `seq` bit 7 is the lane, bits 0-6 the lane's sequence. Lane 0 = `type < 0x10`, the handshake (`0x01 RULES`, `0x02 READY`, `net_handshake.c:98-99`), consumed inline. Lane 1 = everything else: `0x10` is `MELEE_NET_HANDSHAKE_TEST` (`net_handshake.c:421`), `0x11` the LAN lobby's READY_BARRIER (empty payload, `net_lan.c:87`, `:955`), `0x12` `REL_RESUME` (§6.5 — consumed inside `net.c`, never queued for the caller, `net_reliable.c:134-135`), `0x13+` reach `pc_net_recv_reliable` |
+| `Rel` | `'R'` | `Hdr, u8 seq, u8 type, u16 len, u8 payload[len]` | 11 + len, len ≤ 256 | reliable channel, two stop-and-wait lanes (`net_reliable.c:1-16`). `seq` bit 7 is the lane, bits 0-6 the lane's sequence. Lane 0 = `type < 0x10`, the handshake (`0x01 RULES`, `0x02 READY`, `net_handshake.c:98-99`), consumed inline. Lane 1 = everything else: `0x10` is unused (it was the `MELEE_NET_HANDSHAKE_TEST` ping, removed with that hook), `0x11` the LAN lobby's READY_BARRIER (empty payload, `net_lan.c:87`, `:955`), `0x12` `REL_RESUME` (§6.5 — consumed inside `net.c`, never queued for the caller, `net_reliable.c:134-135`), `0x13+` reach `pc_net_recv_reliable` |
 | `RelAck` | `'K'` | `Hdr, u8 seq` | 8 | acks `seq` including its lane bit; the next expected seq is accepted and acked, one of the 8 before it is re-acked (its ack was lost), anything else is dropped with one log line (`on_rel`, `net_reliable.c:125-157`) |
 | `Bye` | `'B'` | `Hdr, u8 reason` | 8 | `reason` is a `PC_NET_PEER_*` value, now including `PC_NET_PEER_RESUME` (`net.c:546`); sent twice, unacked, from `pc_net_disconnect` |
 | `Rules` | payload of `Rel` type `0x01` (`net_internal.h:168-180`) | `u32 seed` @0, `s32 start_frame` @4, `u64 nonce` @8, `GameRules game` @16 (24 B), `u8 item_freq` @40, `u64 item_mask` @41, `u32 stage_mask` @49, `u8 frozen_stadium` @53, `u32 unlock_hash` @54, `u32 hash` @58 | 62 (`16 + sizeof(GameRules) + 22`, `net_internal.h:217`), datagram 73 | `nonce` is the host's per-session nonce; `unlock_hash` is new in v5 (below); `hash` is FNV-1a over everything before it **with the session id folded in** (§6.4). The guest rejects a set whose hash, nonce, unlock state, `start_frame` (in `[0, now + 256]`) or values (`mode ≤ 3`, `time ≤ 99`, `stocks ≤ 99`, `damage_ratio 5..20`, `item_freq ≤ 5`, `stage_mask ≠ 0`) are off (`rules_invalid`, `net_handshake.c`) |
 | `Ready` | payload of `Rel` type `0x02` (`net_internal.h:185-190`) | `u64 nonce` @0 (the guest's), `u64 echo` @8 (`Rules.nonce` as received), `u32 unlock_hash` @16, `u32 hash` @20 | 24 (`net_internal.h:218`), datagram 35 | READY was a zero-length payload before v4 and gained `unlock_hash` in v5, so the host refuses a guest whose forced unlock state differs instead of desyncing on it later. A READY whose hash or echo is wrong is dropped, not failed (§6.4) |
 | `Resume` | payload of `Rel` type `0x12` (`net_internal.h:193-199`) | `u32 session` @0, `u32 seed` @4, `s32 newest` @8, `s32 have` @12, `s32 frame` @16 | 20 (`net_internal.h:219`), datagram 31 | new in v4. All five fields are 32-bit, so `net.c` byte-swaps the image as one array (`wire_resume`, `net.c:677`) instead of field by field. §6.5 |
+| `MAC` | — | `u8 tag[8]` | 8 | suffixes every datagram from v8; keyed BLAKE2b over the whole message in front of it, header included (`net_mac_stamp`/`net_mac_ok`, `net_wire.c`). Zero-filled while no session key exists. §6.4a |
 
-Receive-side validation, in order (`recv_inputs`, `net.c:559-626`): source
-address must be the peer's (`:589`); `version` must match, else
+Receive-side validation, in order (`recv_inputs`, `net.c`): the datagram must
+be at least `sizeof(Hdr) + NET_MAC_LEN` and the right shape for its magic;
+then, from v8, its tag must verify under the session key, before anything
+else is read (§6.4a) — nothing below this line can be reached by a datagram
+that is not the peer's. Then source address must be the peer's (`:589`);
+`version` must match, else
 `PEER_INCOMPATIBLE` and the peer is treated as gone (`:594-601`); `session`
 must match, the guest adopting the first non-zero one (`:603-610`); `player`
 must be the remote's. Each reject logs once per session (`net: dropped …`).
@@ -588,6 +727,9 @@ type `≥ 0x13` the other side ignores does not need a bump. Bump the version,
 not the magic letters. This batch bumped it twice: v4 added the `Rules` nonce,
 the `Ready` payload and the session fold into both handshake hashes; **v5**
 added `unlock_hash` to both.
+**v8** appends the per-datagram tag (§6.4a). It is a layout change on every
+message at once, so a v7 peer and a v8 peer refuse each other at the first
+packet, which is the intended outcome: v7 cannot authenticate anything.
 
 **Unlock state is session state now (v5).** §5.1's class — a save-data
 predicate gating an RNG draw — is closed on the wire rather than left to two
@@ -603,16 +745,46 @@ save. Two builds that disagree about what "all unlocked" *means* therefore
 refuse the handshake, which is the intended failure: an incompatibility at
 connect time rather than a desync at the first in-fight frame.
 
+### 6.1a Which address the peer really answers on
+
+The lobby's address is a hint, not the identity. A dual-stack peer is
+announced over both A and AAAA records, and whichever arrives first is what
+the election dials — so one side can dial an IPv6 link-local while the
+other's socket answers over IPv4, and every datagram is then rejected as
+"from an address other than the peer's" while both sides run their connect
+timeout down to nothing. Measured phone↔PC, with the host logging
+`dropped a datagram from 192.168.1.129 (the peer is
+fe80::c0ef:34ff:fe21:910b%3)`.
+
+`recv_inputs()` therefore validates the header *before* the address: the
+identity of a datagram is its protocol version, session id and player
+number. Until the peer has been heard (`s_heard`), a datagram that passes
+those is accepted and `net.peer` follows its source; afterwards the address
+is pinned and a stranger is dropped as before. The host additionally
+accepts one session-0 datagram from an unheard peer, because a guest stamps
+0 until it has seen a packet of ours — if our packets are going to an
+address it never answers on, that is the only way it can ever be heard.
+This also covers a NAT that remaps the port between the announcement and
+the first packet.
+
 ### 6.2 Timeout policy
+
+> **Corrected 2026-09-22.** `faf888914` deliberately shortened the stall
+> and reconnect windows from 7 s/15 s to 3 s/3 s ("with watchdog heartbeats"),
+> which puts the whole outage tolerance at ~6 s rather than the ~22 s the
+> narratives below were written against. The table above and the defaults in
+> `net.c` are corrected here; the measured runs quoted further down are left
+> as they were measured, at the values that were in force when they ran.
 
 | State | Limit | Where | On expiry |
 |---|---|---|---|
-| Connected, no packet from the peer yet | 60 s (`CONNECT_TIMEOUT_MS`) | `net_internal.h:101`, `wait_remote` `net.c:863` | `PEER_TIMEOUT`, `net: peer silent for 60000 ms`, disconnect. Never resumed: there is nothing to resume to |
-| Stall on an established session (remote more than the window behind, or lockstep waiting) | 7 s (`STALL_TIMEOUT_MS`) | `net_internal.h:100`, `net.c:863-868` | opens the reconnect phase (§6.5); if that is disabled or the session is not established, `PEER_TIMEOUT` and `net: peer silent for 7000 ms at frame N, leaving netplay` |
-| Reconnect phase | 15 s (`RECONNECT_MS`, `MELEE_NET_RECONNECT_MS`) | `net.c:80`, `resume_poll` | `net: resume window of 15000 ms expired at frame N`, then the unchanged silence lines and `PEER_TIMEOUT` |
+| Connected, no packet from the peer yet | 60 s (`CONNECT_TIMEOUT_MS`), or 10 s (`MATCH_CONNECT_TIMEOUT_MS`) when matchmaking handed the session over (`net.connect_timeout_ms`) | `net_internal.h:115`/`:118`, `wait_remote` | `PEER_TIMEOUT`, `net: peer silent for 60000 ms`, disconnect. Never resumed: there is nothing to resume to |
+| Stall on an established session (remote more than the window behind, or lockstep waiting) | 3 s (`STALL_TIMEOUT_MS`) **of silence, counted from the last datagram** (`s_last_rx_ns`, stamped in `rx_dispatch`) | `net_internal.h:114`, `wait_remote` | opens the reconnect phase (§6.5); if that is disabled or the session is not established, `PEER_TIMEOUT` and `net: peer silent for 3000 ms at frame N, leaving netplay` |
+| Peer that keeps sending but never advances (it is loading) | 120 s (`NO_PROGRESS_TIMEOUT_MS`), measured from the last forward progress, not from the start of a wait (`s_progress_ns`) | `wait_remote` | `PEER_TIMEOUT` and `net: peer still sending but stuck at frame N for 120000 ms, leaving netplay`. No reconnect phase: nothing was ever interrupted |
+| Reconnect phase | 3 s (`RECONNECT_MS`, `MELEE_NET_RECONNECT_MS`) | `net.c:97`, `resume_poll` | `net: resume window of 3000 ms expired at frame N`, then the unchanged silence lines and `PEER_TIMEOUT` |
 | While stalled: resend our inputs | every 16 ms | `net.c:869-872` | — |
 | Stall longer than 500 ms | marks `s_stall_frame` | `net.c:882-884` | `pc_net_quality()` reports 2 for the next 120 frames (`net.c:1016`) |
-| Keepalive while the game thread is not ticking | empty input packet every 500 ms | `tx_timer`, `net.c:283-292` | keeps the peer's silence timer and NAT mapping fresh |
+| Liveness while the game thread is not ticking (a load) | the newest input packet again every 7 ms | `tx_timer`, `net.c:286-293` | keeps the peer's silence clock and the NAT mapping fresh, which is what makes a load distinguishable from a lost peer. (A separate 500 ms empty-packet keepalive used to sit here; the 7 ms resend refreshes the same timestamp, so it could never fire and is gone) |
 | Reliable message unacked | resend every 250 ms (`REL_RESEND_NS`) | `net_reliable.c:24`, `rel_service` `:66` | resends until acked or disconnect; no separate give-up |
 | Match handshake (RULES → READY) | 15 s (`HS_TIMEOUT_MS`) | `net_handshake.c:100`, `:344` | `pc_net_handshake_state()` = 3, lobby fails with "handshake failed" (`net_lan.c:982`) |
 | Handshake lead | 120 frames (`HS_LEAD_FRAMES`) | `net_handshake.c:101`, `:372` | `start_frame` = host frame + 120 so READY has 2 s to arrive |
@@ -701,6 +873,28 @@ a property of stop-and-wait, not of this change. Refusals log once per class
 per session (`hs_drop`, `net_handshake.c:219-224`), cleared in
 `rules_restore` (`:175-180`), which `pc_net_disconnect` calls.
 
+**Who runs it.** Every session, not only a lobby one. `MELEE_NET=host:port`
+used to run no handshake at all unless `MELEE_NET_HANDSHAKE_TEST=1` was set,
+which meant two peers could start a direct session with different rules,
+different unlock progress, a different `MELEE_SEED` and different builds, and
+the transport would exchange inputs between two simulations that were never
+going to agree. `handshake_direct()` (`net_handshake.c`) now drives the same
+exchange from the frame loop for any session `pc_net_init()` opened, so the
+same validation refuses the same disagreements and the seed is the host's
+rather than each side's own. Who hosts costs no round trip:
+`MELEE_NET_PLAYER` already names the sides and player 1 (`net.local` 0) is
+the host everywhere else in the netcode — it names the session id, a lobby
+connects its host as player 0, and it announces the auto delay. It fires when
+the game has filled its own `GameRules`/`GamePrefs` in rather than at
+connect, because `pc_net_init()` runs before
+`gmMainLib_DefaultGameRules` is installed (`gmmain.c:194`) and the zeroed
+struct fails `rules_invalid`'s own value ranges; the peers boot in lockstep,
+so they cross that point within the input delay of each other. A failure ends
+the session (`PC_NET_PEER_INCOMPATIBLE`, `net: refusing this session …`)
+because there is no lobby to report it to. Direct sessions therefore also
+derive a §6.4a session key from the two nonces, instead of depending on
+`MELEE_NET_KEY`.
+
 **Randomness.** `csprng` (`net_handshake.c:42-96`): `BCryptGenRandom` with
 `BCRYPT_USE_SYSTEM_PREFERRED_RNG` under `MELEE_USE_BCRYPT` (`CMakeLists.txt:81-84`),
 otherwise `getrandom(2)` with a `/dev/urandom` fallback for a pre-3.17 kernel
@@ -712,15 +906,18 @@ before the lobby calls `pc_net_guest_wait_match` and because keying on the
 session id means a second session can never inherit the first one's nonce.
 0 doubles as "not drawn yet"; a genuine all-zero draw (2⁻⁶⁴) is drawn again.
 
-**What this is not.** Freshness, not authentication. The nonces travel in the
-clear, so an on-path attacker who can read the traffic can still forge either
-side; and the session id is a `SDL_GetPerformanceCounter() ^ pid` mix, not a
-secret, so the off-path bar rises only to "must guess 64 bits of nonce".
-What it closes: replay of a captured RULES/READY into any later session, a
-stale process at the peer's address driving the handshake with an old payload,
-and a late or conflicting RULES/READY overwriting rules already in force. Real
-peer identity is the M5 ed25519 work in §9 — signed RULES/READY under a
-long-term key; Monocypher is not vendored and none of that exists yet.
+**What this is, and what it became.** On its own this is freshness, not
+authentication: the nonces travel in the clear, so an on-path attacker who
+can read the traffic can still forge either side, and the session id is a
+`SDL_GetPerformanceCounter() ^ pid` mix, not a secret, so the off-path bar
+rises only to "must guess 64 bits of nonce". What it closes by itself:
+replay of a captured RULES/READY into any later session, a stale process at
+the peer's address driving the handshake with an old payload, and a late or
+conflicting RULES/READY overwriting rules already in force. What it turned
+out to be good for is the rest of the transport: two 64-bit CSPRNG draws
+that an off-path attacker never sees are exactly a session key, and §6.4a
+derives one from them. Real peer *identity* is still the M5 ed25519 work in
+§9 — signed RULES/READY under a long-term key — and that does not exist yet.
 
 *Verified:* `tools/test_net_handshake.c` plays both ends in one process
 (including the real `net_wire.c`) over ten cases — a correct exchange, a
@@ -737,6 +934,92 @@ unexercised — this is a Linux machine — and nothing here was run against two
 live instances; the end-to-end path is covered only by the acceptance runs,
 whose assertions key on the unchanged `net: handshake done …` line.
 
+### 6.4a Per-datagram authentication (v8, `src/pc/net_wire.c`)
+
+Before v8 nothing on the wire was authenticated. The session id is guessable
+(`SDL_GetPerformanceCounter() ^ pid << 20`), so anyone who could send to the
+peer's ip:port could inject an input packet, an ack, a reliable control
+message — a delay change or a scene exit, neither of which had any integrity
+of its own, so even a bit flip could become one — or a `BYE` that ends the
+session. v8 appends `NET_MAC_LEN` = 8 bytes of keyed BLAKE2b to every
+datagram, over the header and the body together.
+
+**The key.** `net_key_session()` is `crypto_blake2b` (Monocypher, already
+vendored for §9's identities) over the label `melee-pc netplay session key
+v1`, the 4-byte session id, the host's nonce and the guest's, in that order
+on both sides — host first whichever side is deriving, since local/remote is
+the one ordering the two peers disagree about. Both peers hold all three
+values at the end of §6.4's exchange, so the key costs no extra message. The
+tag is `crypto_blake2b_keyed` truncated to 8 bytes, compared without an early
+exit so a resend cannot be timed into a byte-at-a-time search. 8 bytes is the
+tradeoff: a blind forgery is 2⁻⁶⁴ per try against a receiver that answers
+nothing it rejects, and a wider tag would cost another 8 bytes on each of the
+~120 datagrams a second a session sends. The key is `crypto_wipe`d in
+`pc_net_disconnect` and at every `session_reset`.
+
+**Replay, including across a restart.** The seq window (`seq_check`) still
+drops an exact duplicate inside 64 packets. A datagram captured from an
+*earlier* session cannot verify at all: both nonces are redrawn per session,
+so the key differs even in the 2⁻³² case where the host picks the same
+session id again. What the tag does not do is make a replay of *this*
+session's own traffic distinguishable beyond the seq window — a packet older
+than 64 seqs is processed as a reorder, exactly as before, and the frame
+range checks in `on_inputs` are what bound it.
+
+**The bootstrap window, stated honestly.** The key does not exist until the
+handshake, and the two peers get it one leg apart: the guest when it accepts
+RULES, the host when it accepts the READY that answers it. So a datagram that
+does not verify is treated as a peer that has not keyed yet *until the first
+one that does verify*, and from that moment nothing unauthenticated is
+accepted again for the rest of the session (`s_mac_seen`, `recv_inputs`).
+The upgrade is one round trip wide and is never given back. Before it, the
+lobby traffic is unauthenticated: input packets, and the lane-1 reliable
+messages (chat, matcher, `REL_RESUME`) are forgeable by anyone who guesses
+the session id, as they were in v7. A forged `BYE` is not — it is refused
+until the peer has been heard from and pinned (`rx_dispatch`) — and RULES and
+READY are refused by §6.4's own nonce and hash checks. Shrinking the window
+further needs a nonce exchange at connect rather than at match start, which
+is a new handshake message and was out of scope here; the DHT rendezvous
+nonces (§9) are no help, because they are stored in public DHT items.
+
+**Direct sessions.** `MELEE_NET=host:port` runs the handshake too now (§6.4),
+so it derives the same key from the same two nonces — but only when that
+handshake completes, which is a few hundred frames into boot rather than one
+round trip after connect, so its bootstrap window is the wider one. It says
+so, once, at connect: `this MELEE_NET session is UNAUTHENTICATED until its
+handshake completes`. `MELEE_NET_KEY=<secret>`, the same string on both
+peers, closes that window from the first packet (`net_key_direct`) and pins
+the key for the whole session — a pinned key is never replaced by a
+handshake-derived one, because two peers cannot rekey on the same frame and
+every datagram that straddled the change would be dropped.
+`tools/net_test.py` sets one for every direct fixture, so the acceptance
+matrix runs authenticated from frame 0; `tools/net_fuzz.py` derives the same
+key and tags its garbage with it, which is the only way its datagrams still
+reach the body validators below the gate.
+
+A session that holds a key and sees `MAC_QUIET_MAX` (120) datagrams without
+one of them verifying logs one line saying it is running unauthenticated.
+That is the two-different-keys case (a stale `MELEE_NET_KEY` on one side is
+how), and the alternative is a session that looks protected in the log and is
+not.
+
+*Cost, measured:* stamping and verifying a 155-byte input packet (16 pads)
+cost 584 ns and 576 ns on this machine (i7-155H, `gcc -O2 -DNDEBUG`, best of
+seven runs of 400 000); a 13-byte ack costs ~405 ns each way, because keyed
+BLAKE2b always compresses the 128-byte key block first. Two sends and two
+receives a frame is ~2.3 µs of a 16.67 ms budget. It runs inside `tx()` and
+at the top of `recv_inputs`, neither of which takes a lock for it.
+
+*Verified:* `tools/test_net_resume.c` case `mac` drives the real socket —
+an authenticated ack lands, one with a flipped tag bit is counted in
+`bad_mac` and changes nothing, an untagged one is refused as the wrong shape,
+the same ack with its tag intact lands (the positive control), and a tag made
+with another key is refused; injection-validated by forcing the gate open,
+which fails exactly that case. `tools/test_net_handshake.c` check 1 asserts
+both sides derive the identical 32-byte key, that a tag verifies, and that
+flipping a tag bit, a body bit, or the session id in the derivation all fail
+it.
+
 ### 6.5 Resume after an interruption (`MELEE_NET_RECONNECT_MS`)
 
 A silence longer than `STALL_TIMEOUT_MS` used to end the session outright, so
@@ -751,6 +1034,25 @@ window still sets `PC_NET_PEER_TIMEOUT` and still logs `net: peer silent for
 (status 2)`, and `MELEE_NET_RECONNECT_MS=0` restores the old behaviour bit for
 bit.
 
+What counts as silence is the other half of this, and it was wrong for
+longer: the stall clock used to run from the start of the wait, so a peer
+that was talking the whole time but not *advancing* looked identical to one
+that had vanished. A game thread inside a load is exactly that peer — it
+cannot tick, so no new frame is ever written, while `tx_timer` keeps the
+newest input packet going out every 7 ms. Every load longer than 7 s
+therefore opened a reconnect phase that the loading peer could not answer
+(its reliable rx also runs on the parked thread), and every load longer
+than `STALL_TIMEOUT_MS + RECONNECT_MS` ended the match. Measured on
+phone↔PC: both peers froze on "NOW LOADING" at the CSS→match hand-off, the
+host logged `peer silent 7000 ms` in the same window it reported
+`loss 0% (2938 tx 2936 rx)`, and the session died 22 s later.
+`wait_remote()` now times silence from `s_last_rx_ns` — stamped in
+`rx_dispatch()` for every accepted datagram — and bounds the alive-but-stuck
+case separately with `NO_PROGRESS_TIMEOUT_MS`. `tools/net_test.py
+--load-stall SECONDS` is the regression: it parks B's game thread with
+`MELEE_NET_STALL_TEST=frame:ms` while its sender runs, and fails the row if
+either peer so much as opens a reconnect phase.
+
 `s_rc` has three states and only ever moves on the stall path: `RSM_NONE` →
 `RSM_ACTIVE` (`resume_begin`, from `wait_remote` when we have heard the peer,
 the window is non-zero and the session is *established*) → `RSM_NONE` again on
@@ -764,11 +1066,12 @@ runs on the very thread parked inside `wait_remote()`, so holding a phase open
 through a handshake that will never finish turns a 7 s "connect failed" into a
 22 s hang — exactly the `host_dies` regression `tools/net_lan_test.py` caught.
 The condition is on the handshake state, not the session id: `HS_DONE` is
-established (`hs_done` has pinned seed, start frame and `ck_from`),
-`HS_PENDING`/`HS_FAILED` are not, and `HS_IDLE` counts only after
-`RESUME_LOBBY_GRACE` (8) frames, because the `MELEE_NET` path never runs a
-handshake and stays idle for the whole session while a lobby session claims
-the handshake on its first poll.
+established (`hs_done` has pinned seed, start frame and `ck_from`) and
+`HS_PENDING`/`HS_FAILED`/`HS_IDLE` are not. It used to need a
+`RESUME_LOBBY_GRACE` (8) frame allowance for `HS_IDLE`, because the
+`MELEE_NET` path ran no handshake and stayed idle for the whole session;
+`handshake_direct` (§6.4) gave direct sessions the same handshake, so idle
+means "nothing agreed yet" for every session and the allowance is gone.
 
 While `RSM_ACTIVE` the socket stays open, `net.active` stays true so the 4 ms
 timer keeps resending, and `wait_remote()`'s own 16 ms `send_inputs()` keeps
@@ -939,8 +1242,9 @@ separate sockets on 5353 for IPv4 and IPv6, whichever open (`pc_lan_start`,
 `net_lan.c:816-827`). Every instance announces once a second
 (`ANNOUNCE_NS`) with PTR + SRV + TXT + A/AAAA and answers PTR queries; TXT
 carries `v=<proto> rev=<build> disc=<game image id> id=<install id>
-name=<host> port=<game udp port> state=lobby|ready|starting gen=<start
-attempt>` plus `host=<ip:port> peer=<guest id>` while starting
+name=<host> port=<game udp port> state=lobby|ready|starting|joining gen=<start
+attempt>` plus `host=<ip:port> peer=<chosen peer id>` while starting or joining,
+and `offer=<host generation>` while joining
 (`net_lan.c:5-13`, `announce_on` `:199-243`).
 Peers are keyed by id and connected to at the datagram's source address,
 IPv4 preferred when seen on both families (`:16-18`); our own looped-back
@@ -959,12 +1263,16 @@ record to `state=ready` and bumps `gen` (`pc_lan_start_match`, `:1075-1085`).
 lower id is visible, it hosts and we wait for its `starting` record to name
 us (`:930-934`, `:1022-1029`); otherwise we host, picking the lowest ready id,
 else the lowest compatible id (`:934-938`), flip to `state=starting
-peer=<their id>`, bump `gen` and open the netplay session as P1
-(`connect_as_host`, `:889-906`). While the host's game thread blocks in the
-first lockstep wait that record is repeated from a 500 ms SDL timer
-(`:254-257`, `:900`). A guest only follows a `starting` record whose `gen`
-is newer than the last one it joined on, so a stale record from an earlier
-attempt cannot re-trigger a connect (`:1024-1026`). The id is
+peer=<their id>` and bump `gen`. With protocol 6, this is a proposal, not yet
+an open P1 session. The guest acknowledges with `state=joining`, the host's ID
+in `peer`, and the proposal's generation in `offer`, then opens P2. A 500 ms
+timer repeats that acknowledgement while P2 waits for P1. The host opens P1
+only after the matching acknowledgement and starts a fresh handshake timeout.
+Two simultaneous proposals converge on the lower install ID while both peers
+can still poll discovery; a stale acknowledgement cannot open a new proposal.
+A guest only follows a `starting` record whose `gen` is newer than the last one
+it joined on. Announcement timers are stopped and drained before state changes.
+The id is
 `pc_install_id() ^ (game_port << 48)` (`:830-832`): the install id is a
 random 64-bit value written to `launcher.cfg` as `install_id` on first run
 (`launcher.cpp:885-886`, `launcher_data.cpp:379-380`, `405-406`), so the
@@ -976,7 +1284,9 @@ state 2 only once the peer's arrived (`poll_connecting`, `:945-972`), so
 we host as P1, guest …` / `… hosts, joining as P2` (`:896`, `:909`), then
 `lan: match start seed=… start_frame=… as P<n>` (`:966`).
 
-**Compatibility.** A peer is `compatible` only if its TXT `v` equals our
+**Compatibility.** Protocol 6 is required for sequenced scene exits and the
+acknowledged election. Protocol-5 builds must not connect as compatible peers.
+A peer is `compatible` only if its TXT `v` equals our
 `PC_NET_PROTO_VERSION`, its `rev` equals `pc_app_rev()` (the app version,
 `pc.h:66-67`) **and its `disc` equals ours** (`net_lan.c:513-514`).
 Incompatible peers are listed (`PcLanPeer.compatible` →
@@ -1351,12 +1661,12 @@ Ordered by expected gain per line of code:
 | M | Deliverable | Acceptance (all runnable, no project-wide suites) | State |
 |---|---|---|---|
 | M0 Determinism | §5 items 1–4, record/replay harness | Same recording replays bit-identical on Linux x86-64, Windows (native), Android; injected 1-ULP libm change is caught | **met between Linux and Windows.** One canonical 2400-frame recording replays identical on both, with a `linux-record` row so a recording defect cannot pass as a platform result, and the injected 1-ULP change is caught at exactly the injected frame (§5, §5.1). Android and macOS could not be run here at all — no device, no host |
-| M1 Local rollback | `gm_RunSimTick`, snapshot ring, resim flag, SFX/music/rumble gates, frame index | "Sync test" mode (`MELEE_NET_SYNCTEST=k`): every frame restore k frames back and re-sim with identical inputs; per-frame checksum equals the straight run for a 5-minute 4-player CPU match; resim cost logged (< 8 ms for 7 frames) | **done on Linux**, and re-simulation fidelity is now audited directly: 32 forced re-runs, 0 checksum mismatches, including ten with a deliberately mispredicted pass first (§13). The sync test's remaining residue is pad bookkeeping the rollback path deliberately does not rewind. Rumble gate still missing; no rollback at all on Windows/Apple, by construction (§4) |
-| M2 Two-player direct | UDP transport, input sync, time sync, desync checksum, `GM_ONLINE` lobby via `MELEE_NET=ip:port` | Two processes on one machine finish a full set (lobby→CSS→SSS→VS→results→CSS) with `tc netem delay 60ms loss 2%` and zero desyncs; HUD shows ping/delay | **most of the way.** Matches at 50 ms constant delay and at 100 ms asymmetric delay now run ~18 700 frames with 1600–2600 rollbacks at depth 8 and no desync, after the two defects of §13; 100/200 ms and long runs still hit a narrower residual defect. The full *set* is blocked separately, game-side, at the SSS (below) |
+| M1 Local rollback | `gm_RunSimTick`, snapshot ring, resim flag, SFX/music/rumble gates, frame index | "Sync test" mode (`MELEE_NET_SYNCTEST=k`): every frame restore k frames back and re-sim with identical inputs; per-frame checksum equals the straight run for a 5-minute 4-player CPU match; resim cost logged (< 8 ms for 7 frames) | Implemented RNG, rumble and render-independent magnifier corrections. Linux regressions pass; Windows GNU x86-64 PE fixture passes under Wine. Apple and Windows ARM64 snapshot sections are implemented and cross-link verified; Android restore fixtures pass. Full platform gameplay acceptance remains separate. |
+| M2 Two-player direct | UDP transport, input sync, time sync, desync checksum, `GM_ONLINE` lobby via `MELEE_NET=ip:port` | Two processes on one machine finish a full set (lobby→CSS→SSS→VS→results→CSS) with `tc netem delay 60ms loss 2%` and zero desyncs; HUD shows ping/delay | Shared SSS and two-player setup implemented. Full scene sequence observed on both peers; final corrected-build live verdict recorded in the checkpoint below. |
 | M3 LAN | mDNS lobby, counter screen, host-owns-rules, barriers, halt-together | Two machines on Wi-Fi find each other without typing anything; unplugging one shows the halt screen on the other within 10 s | **done between two instances on this one machine**, including the lobby-failure paths. *Two physically separate machines have never been tried* — there is only one here — so the Wi-Fi half of the acceptance is unproven |
-| M4 Internet | DHT (jech/dht + BEP 42/44), topics, simultaneous open, Direct + Unranked queues, connect codes | Two home NATs (different ISPs) connect via Direct code with no port forwarding; unranked queue pairs two clients within 60 s; symmetric-NAT failure re-queues with a message | not started |
-| M5 Ranked | identity, Weng-Lin, signed records, BEP 44 publish/verify, ranked set flow, tiers UI | After a Bo3 both clients hold identical rating bits; opponent's published item verifies; a tampered local history is rejected by the peer | not started; §6.4's nonces are freshness, not identity |
-| M6 Latency polish | §11 items 2–4, 7; SFX log dedupe; quick chat; label textures | Measured button→photon latency (LED + high-speed camera or photodiode) at delay 1 ≤ Slippi at delay 2 on the same hardware | not started |
+| M4 Internet | DHT (jech/dht + BEP 42/44), topics, simultaneous open, Direct + Unranked queues, connect codes | Two home NATs (different ISPs) connect via Direct code with no port forwarding; unranked queue pairs two clients within 60 s; symmetric-NAT failure re-queues with a message | Implemented. Real public bootstrap and authenticated BEP44 PUT/GET passed; signed local UDP pairing passes. Two-home-NAT acceptance remains unverified. |
+| M5 Ranked | identity, Weng-Lin, signed records, BEP 44 publish/verify, ranked set flow, tiers UI | After a Bo3 both clients hold identical rating bits; opponent's published item verifies; a tampered local history is rejected by the peer | Implemented with proof-gated pairing, deterministic rules, dual signatures, durable-save confirmation and retriable publication. Session/transport fixtures and Linux/Windows rating bit comparison pass; full live ranked set remains unverified. |
+| M6 Latency polish | §11 items 2–4, 7; SFX log dedupe; quick chat; label textures | Measured button→photon latency (LED + high-speed camera or photodiode) at delay 1 ≤ Slippi at delay 2 on the same hardware | Late local polling implemented; early/repeated sends and audio journal already exist. Quick chat/native display and opponent HUD implemented. Optional just-in-time pacing and XFB wait diagnostics added; physical button-to-photon comparison remains unmeasured. |
 
 ### 12.1 Retracted numbers
 
@@ -1406,7 +1716,7 @@ retracted here or labelled with what it actually measured.
   snapshot ring of 8 taken before every predicted tick, restore + re-tick
   via `pc_net_after_tick()` when the real input differs, window 7 then a
   hard stall, which now opens the reconnect phase of §6.5 instead of ending
-  the session (`MELEE_NET_RECONNECT_MS`, default 15 s, `0` = the old hard
+  the session (`MELEE_NET_RECONNECT_MS`, default 3 s, `0` = the old hard
   drop). Inputs sent every tick and again 8 ms
   later from a 4 ms SDL timer, everything since the last ack (cap 16); the
   ack echoes the packet's sequence number, which is the ping sample. Time sync is
@@ -1455,23 +1765,22 @@ VS → results → lobby) reached from the VS submenu's new ONLINE entry (SIS te
 over the 6th slot; texture is the follow-up). Verified: two instances navigate
 the real menus into the lobby, see "1 players found", Start on one → both
 enter Link vs Mario on the same frame, 7200 frames, 0 desync, ping 13 ms —
-pre-gate, see §12.1. Test aids: `MELEE_LAN_TEST=1|host`,
-`MELEE_NET_HANDSHAKE_TEST=1`, `MELEE_KEY_FIFO=<fifo>` (focus-free key
-injection: `echo "Return 150" > fifo`).
+pre-gate, see §12.1. Test aids: `MELEE_LAN_TEST=1|host`, `MELEE_KEY_FIFO=<fifo>`
+(focus-free key injection: `echo "Return 150" > fifo`).
 
 ### 12.2 Harnesses
 
 | Harness | What it covers | Last state |
 |---|---|---|
-| `tools/net_test.py` | two instances through a real match on this machine, asserting on both logs (both reach `net: test done`, exit 0, no DESYNC, no `peer silent`, no lost rollback), link simulator standing in for `tc`; `--lan` walks the real menus, `--scenes` the flow to the SSS, `--oom FRAME` the snapshot-failure path, `--disconnect [a\|b]` the hard drop (with `a` as its own injection), `--stall SECONDS` and `--reconnect-ms` the resume phase | clean and OOM rows pass on the rebuilt binary; the flow row is bounded by a game-side defect, below |
+| `tools/net_test.py` | two instances through a real match on this machine, asserting on both logs (both reach `net: test done`, exit 0, no DESYNC, no `peer silent`, no lost rollback), link simulator standing in for `tc`; `--lan` walks the real menus, `--scenes` the flow to the SSS, `--oom FRAME` the snapshot-failure path, `--disconnect [a\|b]` the hard drop (with `a` as its own injection), `--stall SECONDS` and `--reconnect-ms` the resume phase, `--load-stall SECONDS` a peer whose game thread is parked while its sender runs (a load: must not interrupt at all) | clean, OOM, disconnect, stall and load-stall rows pass on the rebuilt binary; the flow row is bounded by a game-side defect, below |
 | `tools/net_acceptance.py` | the same over the link matrix (loss 0/1/5/20 %, one-way 50/100/200 ms, burst, reorder, jitter, dup, asymmetric rx) plus the flow, OOM, disconnect, resume and soak rows; `--only "name,name"`, `--table` to print without running, per-row persistence in `<work>/rows.json`, and every row stamped with the binary's md5 | rows inherit the match precondition; the full matrix and the 60-minute soak were still running when this was written |
 | `tools/net_lan_test.py` | lobby paths a match run never reaches, on the menu-less fixtures: simultaneous Start (exactly one host), direct connect with no discovery, a peer SIGKILLed mid-lobby (`lan: lost` inside the 5 s TTL), the elected host SIGKILLed while the guest connects (`lan: failed:` in ~7 s, which is the `session_established()` gate of §6.5) | all four pass |
 | `tools/net_determinism.py` | M0: one canonical recording replayed per platform, plus a `linux-record` row so a recording defect cannot pass as a platform divergence; two independent verdicts per row, a mandatory byte-flip sensitivity check, and `--state-log` for field-level localisation (§5.1) | linux-record and linux identical, linux-flip caught at exactly the injected frame, **windows diverges at frame 479**, Android/macOS SKIPPED |
-| `tools/net_fuzz.py` | malformed game datagrams at every edge of §6.1, plus the deterministic `--attack ack-overshoot` starvation probe (§6.6) | passed against the pre-rebuild `build/melee` (proto 3); not re-run since |
+| `tools/net_fuzz.py` | malformed game datagrams at every edge of §6.1, each carrying the v8 tag so it reaches the body validators (§6.4a), plus the deterministic `--attack ack-overshoot` starvation probe (§6.6) | passed against the pre-rebuild `build/melee` (proto 3); not re-run since the v8 tag was added |
 | `tools/net_lan_fuzz.py` | crafted mDNS/DNS-SD frames at the discovery socket, 24 cases + mutations, contained with `IP_MULTICAST_TTL 0` (§6.6) | passed against the pre-rebuild `build/melee`; not re-run since |
 | `tools/net_lan_txt_test.py`, `tools/test_net_lan_txt.c` | the TXT parser and peer table, offline against the real `on_record()` and live against a running instance (§8) | C harness passes all 17 rejection classes; the live half's `disc` cases are still SKIP because it has not been re-run since the rebuild |
-| `tools/test_net_handshake.c` | both ends of the v4 handshake in one process, ten cases (§6.4) | passes, three injections |
-| `tools/test_net_resume.c` | both ends of the resume phase on a virtual clock, fifteen cases (§6.5) | passes, fifteen injections |
+| `tools/test_net_handshake.c` | both ends of the v4 handshake in one process, ten cases plus the session-key derivation (§6.4, §6.4a) | passes, three injections |
+| `tools/test_net_resume.c` | both ends of the resume phase on a virtual clock, fifteen cases (§6.5) plus the datagram authentication gate through a real socket (§6.4a) | passes, sixteen injections |
 | `tools/test_net_reliable.c` | both lanes of the reliable channel in one process, including `REL_RESUME` | passes |
 
 **The match precondition**, which every row now inherits, is the load-bearing
@@ -1498,8 +1807,17 @@ into a submenu; the way back to a known state is three B presses to the title
 `MELEE_NET_EXIT_AFTER_FRAMES` ends both sides: the instance that reaches the
 frame first sends BYE, and its peer — a frame or two behind on the synced
 clock — takes that BYE within 16 frames of its own target as the same end
-(`exit_if_test_done`, `net.c:997-1003`), which is what lets a passing run exit
+(`exit_if_test_done`, `net.c:1048-1054`), which is what lets a passing run exit
 0 on both sides instead of being killed at the title.
+
+There are two paths that notice a BYE, and until now only one of them honoured
+that: `recv_inputs()` inside `fresh_tick` (`net.c:1678-1681`), and the bail-out
+when the game thread is parked in `wait_remote()` (`net.c:906-907`, handled at
+`net.c:1695-1711`). Once one-way delay is high enough to stall nearly every
+frame, the BYE almost always lands in the stall loop, so the stalling side ran
+past its own target, never printed `net: test done`, and was SIGKILLed — which
+the harness reports identically to a netplay failure. That is what the
+`--delay 100` row was measuring. Both paths now call `exit_if_test_done()`.
 
 **Row status.** Two things have to be read together here, because the batch
 fixed two defects mid-flight: the 19-row matrix below was run on the rebuilt
@@ -1585,7 +1903,7 @@ under this Xwayland session returned the opening movie and a bare CSS
 starfield while the logs showed a live session on the CSS.
 
 **Rows beyond the flow.** `disconnect` SIGKILLs B mid-match with no BYE and
-requires A to report `peer silent for 7000 ms … leaving netplay`, then
+requires A to report `peer silent for 3000 ms … leaving netplay`, then
 `disconnected … (status 2)`, then to keep its frame loop running for another
 10 s with no DESYNC and no `peer left`. `resume 11 s` and `resume expiry 30 s`
 are §6.5 from the outside: an interruption inside the window must log
@@ -1720,6 +2038,18 @@ to the objdump gate allowlist in `tools/package_windows.sh`).
   destructive precondition still occurred 751 times in a passing run and no
   longer costs an input.
 
+  *Re-measured after the BYE fix above.* `--delay 100` was NOT a desync: it
+  ran 15 600 frames, 1834/1854 rollbacks at max depth 8, zero lost, zero
+  DESYNC on either side, and failed only because the stalling peer was killed
+  at shutdown. It passes now. `--delay 200` is a real desync and still is:
+  11 400 frames, 2250/2258 rollbacks, zero lost, then DESYNC at frame 11377
+  (a) / 11378 (b) at ~405 ms ping. So the defect is real but was over-scoped:
+  it needs roughly twice the latency and four times the frames that were
+  previously attributed to it, which also means every run that "reproduced" it
+  quickly was probably reproducing the shutdown race instead. Re-confirm the
+  one-unit `dmg.x1830_percent` signature against a 200 ms capture before
+  trusting it.
+
   *What is left, precisely:* `--delay 100`, `--delay 200`, `reorder` and the
   clean row under heavy load still desync, always with `pad slips 0`, and six
   captures across every link profile share **one signature**: a fighter at
@@ -1802,7 +2132,7 @@ to the objdump gate allowlist in `tools/package_windows.sh`).
   the synctest is comparing state the engine is not supposed to restore. It
   should be excluded from that comparison or documented there, because as it
   stands it makes the sync test look permanently broken.
-- **No rollback on Windows or Apple** (§4): `melee_state.ld` is ELF-only, so
+- **Historical finding, superseded by the cross-platform implementation above: no rollback on Windows or Apple** (§4): `melee_state.ld` is ELF-only, so
   those sessions are lockstep for their whole life. That is a linker
   limitation with a named upgrade path, not a design decision, and it is the
   first thing a Windows player will notice as extra input delay.
@@ -1843,7 +2173,7 @@ to the objdump gate allowlist in `tools/package_windows.sh`).
 - **Android**: PC layer is clang, game code is GCC; the audio/mtx FP fixes in §5 cover it, and the LAN path now compiles for `aarch64-none-linux-android26`, but nothing has run on a device (§8) and M0's cross-platform replay is still the gate before promising Android↔desktop play. Local Network Protections (Android 17 / SDK 37) will require `ACCESS_LOCAL_NETWORK` or a different discovery UX.
 - **DHT dependence on public bootstrap routers** — mitigated by persisted nodes + shipped seed list; LAN peers also seed.
 - **Rating honesty** — §9 is explicit: verifiable, not cheat-proof. Don't market it as anti-cheat.
-- **Handshake identity** — §6.4 is freshness only. An on-path attacker can still forge either side until the M5 signed handshake exists.
+- **Handshake identity** — internet pairing now verifies Ed25519 signatures and pins the selected full key/endpoint/nonce. Compact friend codes contain only 20 key bits; they are rendezvous identifiers, not independently verified contact identities. Legacy LAN/IP retains its original trust model.
 - **Menu lockstep feel** at high RTT (CSS at ~6 frames delay). Slippi's lock-in UI is the fallback if it feels bad.
 - **Memory-card/unlock state** must not diverge mid-match; only results-time writes are allowed while synced.
 - **Long-run behaviour is unmeasured**: the 60-minute soak has never been run (§12.2), so nothing is known about drift, leaks or snapshot cost over an hour.
@@ -1856,3 +2186,80 @@ to the objdump gate allowlist in `tools/package_windows.sh`).
 - Double Dash: `doldecomp/mkdd` `configure.py` L571-574, L620-646, L1245-1269; `src/Osako/NetGateApp.cpp`, `LANSelectMode.cpp`; `include/Osako/NetGameMgr.h`; Nintendo MKDD LAN guide (nintendo.ca PDF).
 - Rating: Weng & Lin, "A Bayesian Approximation Method for Online Ranking", JMLR 2011 (OpenSkill). TrueSkill patent US7050868 (expired 2025-01-24).
 - Libraries: libjuice README (MPL-2.0, MinGW/Android), ENet `CMakeLists.txt`, Monocypher `LICENCE.md`, mjansson/mdns README, Android `WifiManager.MulticastLock`.
+
+## 15. Implementation verification, 2026-09-20
+
+The magnifier correction addresses both earlier observed failures: offscreen
+1% damage depended on a render-written flag while rollback skips rendering.
+The regression fails with that old predicate and passes with simulation-camera
+geometry. The corrected game completed these sequential local tests:
+
+| Test | Evidence | Result |
+|---|---|---|
+|50ms outgoing delay,2% loss | `/tmp/netplay-finish-delay3`: over 12,200 in-match frames on both peers; 902/1,155 rollbacks; no lost rollback or desync | PASS |
+|Full scene flow and rematch | `/tmp/netplay-finish-scenes3`: both peers CSS 140, SSS 873, VS 1265, RESULTS 4600, CSS 5057, SSS 5827, VS 6264; completes 16,200-frame budget | PASS |
+|Public mutable storage | `/tmp/melee-dht-item-probe.log`: five PUT acknowledgements; independent authenticated GET of exact 36-byte value,sequence 1 | PASS |
+|Public immutable storage | Random temporary value, six PUT acknowledgements; independent exact 69-byte GET by target | PASS |
+|Windows section restore | `tools/test_pe_snapshot.py --wine`: normal/per-symbol data/BSS, relocated pointers and excluded engine/audio state | PASS |
+
+The final combined build, including late input polling, quick chat and
+ranked-history changes, also passed the full 16,200-frame scene/rematch run
+(`/tmp/netplay-finish-scenes-fixed`). A Results-transition crash exposed by an
+earlier combined run was fixed by validating chat text ownership after SIS
+pool resets, with a dedicated lifecycle regression. The final binary also passed
+a 10,800-frame run with 50 ms delay and 2% injected loss
+(`/tmp/netplay-finish-delay-final`), with 741/756 rollbacks and no desync or lost
+rollback. Original acceptance still requires
+two home NATs, complete Windows/Android/Apple platform runs where applicable,
+a long soak, and physical button-to-photon measurement. A successful public
+DHT probe is not evidence of NAT traversal or a complete ranked game.
+
+Ranked remains a community rating. Public state authenticity does not prove
+all historical claims from a previously unknown identity, and collusion and
+new identities remain possible. Known double-signed results are used to reject
+rollback or forked peer history. New unreleased record/history format 2 uses a
+BEP44 immutable target padded to 32 bytes as its chain locator; incompatible
+older files are rejected rather than silently migrated or reset.
+
+Automatic delay is sized per scene, 1–4 frames, with manual 0–4 available: a
+lockstep menu gets `ceil((rtt/2 + jitter) / frame)`, which is what it needs to
+run at 60 Hz, and a fight gets two frames less, because the rollback window
+pays that part of the trip instead of the player's hands. The change is
+announced by one side on the reliable lane and applied by frame number, so
+both peers switch on the same frame. `MELEE_NET_DEBUG=1` reports XFB wait time
+rather than bypassing the queue. Native text supplies menu labels and chat
+instructions.
+
+
+## 16. All-platform rollback follow-up, 2026-09-20
+
+Supported Linux, Windows x86-64/ARM64, macOS Intel/Apple Silicon, iOS ARM64,
+and Android ARM64/x86-64 builds now provide simulation snapshot ranges. The
+build requires this support and checks representative included game globals
+and excluded audio/engine globals in every final image. Runtime allocation
+failure and the explicit rollback-off debug switch retain their safe fallback;
+menus and scene transitions still deliberately wait for synchronized inputs.
+
+Apple compiler output is relabeled in place into `__DATA,__melee_data` and
+`__DATA,__melee_bss`; no object contents, offsets, relocation records or symbol
+ordinals change. Linker section boundaries automatically follow ASLR. Both
+thin and universal 64-bit objects are supported. Common allocations and
+unhandled writable/thread-local sections fail the compile. The existing GCC
+bridge remains responsible for on-disc scalar storage order.
+
+Windows ARM64 uses the same sorted PE ranges as x86-64. Its compiler bridge now
+preserves `.local` + `.comm` as local allocated BSS rather than accidentally
+creating global common symbols. The LLVM COFF adapter changes only section
+header names, since LLVM objcopy cannot perform COFF section renaming.
+
+Android already enabled rollback through ELF ranges. Its compiler launcher now
+selects the x86-64 GCC/sysroot for the x86-64 preset instead of always emitting
+ARM64 objects. NDK-linked restore fixtures exercise both architectures, with
+QEMU used only for the ARM64 fixture. This is not device gameplay evidence.
+
+`tools/test_snapshot_platforms.py` checks real objects, compiler bridges,
+CMake integration, link-time boundaries, exclusions, universal-object byte
+preservation and Android restore. Native macOS restore is added to the macOS
+build workflow and requires that runner; Windows x86-64 restore still passes
+under Wine. Full matches on Apple, Windows ARM64 and Android devices remain
+acceptance work requiring those platforms.

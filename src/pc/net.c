@@ -4,16 +4,16 @@
  * a remote input that has not arrived yet is predicted as "repeat last", a
  * snapshot is taken before every predicted tick, and when the real input
  * turns out different the state is restored and the frames since re-run.
- * Both peers must boot with the same disc and no memory card; the env path
- * below needs the same MELEE_SEED too, the lobby path agrees the seed in
- * the match handshake. Sessions can also be opened at runtime through
- * pc_net_connect() (src/pc/net_lan.h).
+ * Both peers must boot with the same disc and no memory card; every session
+ * agrees the rest -- seed, rules and unlock state -- in the match handshake,
+ * the env path below included (net_handshake.c's handshake_direct). Sessions
+ * can also be opened at runtime through pc_net_connect() (src/pc/net_lan.h).
  *
  *   MELEE_NET=host:port          peer address (enables netplay at boot)
  *   MELEE_NET_PORT=n             local UDP port (default 41000)
  *   MELEE_NET_PLAYER=0|1         which controller port the local player drives
  *   MELEE_NET_DELAY=n|auto       input delay in frames (default auto: from ping and jitter)
- *   MELEE_NET_RECONNECT_MS=ms    resume an interrupted session for this long (default 15000, 0 off)
+ *   MELEE_NET_RECONNECT_MS=ms    resume an interrupted session for this long (default 3000, 0 off)
  *   MELEE_NET_SIM_LOSS=percent   drop that share of outgoing packets
  *   MELEE_NET_SIM_DELAY_MS=ms    hold every outgoing packet that long
  *   MELEE_NET_SIM_DELAY_RX_MS=ms hold every incoming packet that long (asymmetric links)
@@ -22,7 +22,6 @@
  *   MELEE_NET_SIM_DUP=pct        send that share of packets twice
  *   MELEE_NET_SIM_BURST=n        every 5 s drop n consecutive outgoing packets
  *   (the simulator's PRNG is seeded from MELEE_NET_PORT, so runs repeat)
- *   MELEE_NET_HANDSHAKE_TEST=1   run the lobby handshake at frame 300 without a lobby
  *
  * This file is the session, the socket and the rollback loop; the wire
  * codec, link simulator, reliable channel, handshake, time sync and
@@ -30,8 +29,10 @@
 #include "compat.h"
 #include "pc/net_internal.h"
 
+#include <dolphin/ar.h>
 #include <dolphin/os.h>
 #include <dolphin/vi.h>
+#include <melee/gm/gmvsmelee.h>
 #include <melee/lb/lb_0195.h>
 #include <sysdolphin/baselib/controller.h>
 #include <sysdolphin/baselib/random.h>
@@ -59,10 +60,28 @@ static int32_t s_remote_ck_frame = -1;
 static uint32_t s_remote_ck;
 static uint32_t s_ck_ring[RING]; /* our checksum entering each frame */
 static bool s_heard;             /* any packet from the peer yet */
-static PADStatus s_raw_last;     /* newest physical sample (port 0) */
-static int s_status;             /* pc_net_peer_status(); kept until the next connect */
-static bool s_peer_left;         /* BYE received or version mismatch: stop waiting */
-static bool s_warn_src, s_warn_sess, s_warn_bad; /* one reject line each per session */
+static uint64_t s_last_rx_ns;    /* when the last accepted datagram arrived */
+/* When the contiguous remote mark last moved, 0 before the first time. The
+ * no-progress bound is measured from here, not from the start of a wait:
+ * wait_remote's own clock restarts on every call, so a peer that advanced one
+ * frame just under the bound each time kept the game frozen for ever. */
+static uint64_t s_progress_ns;
+static bool s_no_progress; /* the wait ended on a talking peer that never advanced */
+/* Session-local seed history must not survive a reconnect. */
+static uint32_t s_seed_after_tick;
+static bool s_seed_have;
+static bool s_lockstep;      /* snapshot failure: stop predicting, retain older corrections */
+static PADStatus s_raw_last; /* newest physical sample (port 0) */
+static int s_status;         /* pc_net_peer_status(); kept until the next connect */
+static bool s_peer_left;     /* BYE received or version mismatch: stop waiting */
+static bool s_warn_src, s_warn_sess, s_warn_bad, s_warn_mac; /* one reject line each per session */
+/* One authenticated datagram has arrived, so the peer holds the session key
+ * and nothing unauthenticated is accepted from here on (recv_inputs). Until
+ * then s_mac_quiet counts what was let through for want of one, so a pair
+ * that never agrees on a key says so instead of looking protected. */
+static bool s_mac_seen;
+static int s_mac_quiet;
+#define MAC_QUIET_MAX 120 /* ~2 s of a peer's traffic at 60 Hz */
 
 static unsigned s_stalls, s_advances, s_rollbacks, s_rb_lost;
 static int s_rb_depth_max;
@@ -72,14 +91,15 @@ static unsigned s_ping_n;
 static uint32_t s_rtt_min, s_rtt_max; /* this stats window */
 static unsigned s_rx_pkts;            /* datagrams this stats window */
 static unsigned s_rx_acks;            /* every input packet earns one ack: the gap is loss */
-static int s_loss_pct;                /* round-trip loss of the last window */
-static int s_rb_depth_cur, s_rb_depth_recent; /* deepest rollback this second / the last */
-static int32_t s_stall_frame = -1000;         /* frame that ended a stall > 500 ms */
+static int s_loss_pct;                /* round-trip loss, one-second window */
+static unsigned s_loss_tx_mark, s_loss_ack_mark; /* counters at that window's start */
+static int s_rb_depth_cur, s_rb_depth_recent;    /* deepest rollback this second / the last */
+static int32_t s_stall_frame = -1000;            /* frame that ended a stall > 500 ms */
 
 /* Reconnect phase; the machine and the numbers are down in "resume after an
  * interruption", these live here because send_inputs and fresh_tick read
  * them. MELEE_NET_RECONNECT_MS overrides the window at connect. */
-#define RECONNECT_MS 15000
+#define RECONNECT_MS 3000
 /* RSM_, not RC_: mingw-w64's wingdi.h defines RC_NONE as an empty macro
  * (raster capabilities), so RC_NONE broke the whole enum on Windows. */
 enum { RSM_NONE, RSM_ACTIVE, RSM_FAILED };
@@ -122,6 +142,8 @@ static unsigned s_rx_dups, s_rx_reorders; /* this stats window */
  * a hard one is logged once per session and counted. */
 static unsigned s_sock_err;
 static bool s_warn_sock;
+static unsigned s_rx_malformed, s_rx_bad_src, s_rx_bad_sess, s_rx_bad_player, s_tx_would_block;
+static unsigned s_rx_bad_mac; /* datagrams refused by the authentication gate */
 
 /* Adaptive redundancy: unacked frames repeated per input packet, clamped to
  * loss and rollback depth; the value in force is reported as `red`. The
@@ -131,11 +153,12 @@ static bool s_warn_sock;
 static int s_red_target = REDUNDANCY;
 static int s_red_floor = REDUNDANCY_FLOOR;
 
-/* Rollback re-run budget: at most RESIM_BUDGET re-run ticks per present, the
- * rest spill to the next present (snapshot's s_resim_splits). A full pad
- * queue during a re-run forces reuse of a live sample (s_resim_eat). */
-#define RESIM_BUDGET 6
-static int s_resim_run;         /* re-run ticks this present */
+/* Rollback re-run cost: every re-run tick of a rollback happens inside the
+ * one present that started it, so a deep correction lands as a long frame.
+ * The count is reported (snap_stats_report's "resim/present max") so that
+ * cost is visible rather than assumed. A full pad queue during a re-run
+ * forces reuse of a live sample (s_resim_eat). */
+static int s_resim_run;         /* re-run ticks in the present now running */
 static unsigned s_resim_eat;    /* live-sample reuses this window */
 static bool s_resim_eat_logged; /* one log per session */
 static bool s_timer_tried;      /* SDL_AddTimer attempted this session */
@@ -148,9 +171,10 @@ static bool s_timer_tried;      /* SDL_AddTimer attempted this session */
  *     some frames later, and the match's own loads trail into its first
  *     frames. aurora's in-flight counters cannot narrow that window: the
  *     audio thread streams music through the same path all match;
- *   - a lost rollback (rb_lost) or a snapshot that could not be taken, to
- *     the newest simulated frame;
- *   - INT32_MAX when snapshot memory ran out (lockstep for the session). */
+ *   - a lost rollback (rb_lost), to the newest simulated frame.
+ *
+ * Snapshot failure uses s_lockstep instead: earlier predicted frames must
+ * remain eligible for correction. */
 static int s_scene_last = -1; /* scene_kind() at the last fresh tick */
 static bool s_rb_lost_logged; /* rb_lost: one log per session */
 
@@ -165,7 +189,8 @@ static void barrier_raise(int32_t f) {
  * snapshot covers, so those do not count. */
 void pc_net_note_io(void) {
     if (SDL_GetCurrentThreadID() == s_game_thread) {
-        barrier_raise(net.frame + IO_QUIET);
+        int lead = in_fight() ? 2 : IO_QUIET;
+        barrier_raise(net.frame + lead);
     }
 }
 
@@ -173,6 +198,11 @@ extern struct GameSceneInfo* gm_804D6720; /* current scene, gmscene.c */
 
 int scene_kind(void) {
     return gm_804D6720 != NULL ? gm_804D6720->scene_kind : -1;
+}
+
+bool pc_net_chat_available(void) {
+    int scene = scene_kind();
+    return net.active && (scene == GS_CSS || scene == GS_RESULTS || scene == GS_ONLINE_LOBBY);
 }
 
 bool in_fight(void) {
@@ -245,7 +275,9 @@ int net_sendto(const void* buf, size_t len) {
         (int)sendto(net.sock, (const char*)buf, len, 0, (struct sockaddr*)&net.peer, net.peer_len);
     if (r < 0) {
         int e = sock_last_err();
-        if (!sock_would_block(e) && !sock_transient(e)) {
+        if (sock_would_block(e)) {
+            s_tx_would_block++;
+        } else if (!sock_transient(e)) {
             sock_err_note("sendto", e);
         }
     }
@@ -281,36 +313,52 @@ static Uint32 SDLCALL tx_timer(void* ud, SDL_TimerID id, Uint32 interval) {
     tx_flush();
     rel_service();
     uint64_t now = SDL_GetTicksNS();
-    if (s_last_valid && now - s_last_send_ns >= 7000000ull) {
+    /* Mid-frame resend pacing:
+     * On clean links (low loss, low jitter, low rollback depth), disable redundant
+     * mid-frame retransmissions to prevent bufferbloat and network congestion.
+     * Re-enable immediately when packet loss, jitter spikes, or rollbacks occur.
+     * If the game thread is stalled in an asset load or DVD read (now - s_last_send_ns >= 16 ms),
+     * keep sending keepalives every 7 ms so neither peer times out. */
+    bool game_thread_quiet = (now - s_last_send_ns >= 16000000ull);
+    bool need_resend = (s_loss_pct >= 2 || jitter_us() >= 4000 || s_rb_depth_recent >= 2);
+    if (s_last_valid && (now - s_last_send_ns >= 7000000ull) && (game_thread_quiet || need_resend))
+    {
         send_packet(&s_last_pkt);
         s_last_send_ns = now;
     }
-    if (s_last_valid && now - s_last_send_ns >= 500000000ull) {
-        /* Keepalive while the game thread is not ticking (a load): an empty
-         * input packet keeps the peer's silence timer and NAT mapping fresh. */
-        Packet ka = s_last_pkt;
-        ka.count = 0;
-        send_packet(&ka);
-        s_last_send_ns = now;
-    }
+    int32_t seen = net.frame;
     SDL_UnlockMutex(net.tx_lock);
+    /* Outside the lock: the log write must not hold up the sender, and the
+     * stuck thread it signals may itself be waiting on this mutex. */
+    net_watchdog_tick(seen);
     return interval;
 }
 
 static void send_inputs(void) {
+    /* The local sample taken at frame f is the input for frame f + delay. */
+    int32_t newest = s_wrote;
+    if (newest < 0) {
+        return; /* do not send input packets until the first local frame exists */
+    }
     Packet pk;
     memset(&pk, 0, sizeof pk);
     pk.h = hdr('M');
-    /* The local sample taken at frame f is the input for frame f + delay. */
-    int32_t newest = s_wrote;
     /* Everything the peer has not acked yet, oldest first so its contiguous
-     * mark can always advance; the cap only bites when acks are starved. */
-    int32_t first = s_last_acked + 1;
+     * mark can always advance; the cap only bites when acks are starved.
+     *
+     * Computed in 64 bits. The values are all frame numbers, and while a
+     * session is bounded well below the point where a frame number could
+     * overflow (see SESSION_MAX_FRAMES), `s_last_acked + 1` and
+     * `newest - first + 1` are the expressions that would do it first, and
+     * signed overflow is undefined rather than merely wrong. Widening costs
+     * nothing here and removes the class. */
+    int64_t newest64 = newest;
+    int64_t first = (int64_t)s_last_acked + 1;
     if (first < 0) {
         first = 0;
     }
-    if (first <= newest - RING) {
-        first = newest - RING + 1;
+    if (first <= newest64 - RING) {
+        first = newest64 - RING + 1;
     }
     /* Repeat only as many unacked frames as loss and rollback depth warrant,
      * clamped to REDUNDANCY: a clean link ships the floor, a lossy or bursty
@@ -325,22 +373,27 @@ static void send_inputs(void) {
         target = REDUNDANCY;
     }
     s_red_target = target;
-    int32_t count = newest - first + 1;
+    int64_t count = newest64 - first + 1;
     if (count > target) {
         count = target;
     }
     if (count < 1) {
         count = 0;
-        first = newest > 0 ? newest : 0; /* keep first <= newest so the peer accepts it */
+        first = newest64;
     }
     for (int32_t i = 0; i < count; i++) {
         pk.pads[i] = s_local_ring[(first + i) & (RING - 1)];
     }
     pk.count = (uint8_t)count;
-    pk.first = first;
+    pk.first = (int32_t)first;
     pk.newest = newest;
     pk.ck_frame = confirmed_frame();
     pk.ck = pk.ck_frame >= 0 ? s_ck_ring[pk.ck_frame & (RING - 1)] : 0;
+    /* How far this simulation has run past the newest input the peer has
+     * given us. The peer compares it with its own and only the side that is
+     * further ahead gives a frame back (net_sync.c time_sync). */
+    int32_t adv = net.frame - 1 - s_remote_have;
+    pk.adv = (int8_t)(adv < -127 ? -127 : adv > 127 ? 127 : adv);
     uint64_t now = SDL_GetTicksNS();
     SDL_LockMutex(net.tx_lock);
     tx_flush();
@@ -409,10 +462,15 @@ static void on_inputs(const Packet* pk, int n) {
      * cannot overflow the comparisons. */
     int64_t first = pk->first, newest = pk->newest, ckf = pk->ck_frame;
     int64_t last = first + count - 1;
-    if (n < (int)(offsetof(Packet, pads) + (size_t)count * sizeof(WirePad)) || first < 0 ||
-        newest < first || last > newest || newest > (int64_t)net.frame + RING / 2 || ckf < -1 ||
-        ckf > newest)
+
+    /* A keepalive packet sent before local frame 0 exists has count 0 and newest -1. */
+    bool is_keepalive = (count == 0 && newest == -1 && first == 0 && ckf == -1);
+
+    if (!is_keepalive && (n < (int)(offsetof(Packet, pads) + (size_t)count * sizeof(WirePad)) ||
+                             first < 0 || newest < first || last > newest ||
+                             newest > (int64_t)net.frame + RING / 2 || ckf < -1 || ckf > newest))
     {
+        s_rx_malformed++;
         if (!s_warn_bad) {
             s_warn_bad = true;
             pc_log_line("net: dropped malformed input packet (len %d first %d count %d newest %d "
@@ -421,10 +479,13 @@ static void on_inputs(const Packet* pk, int n) {
         }
         return;
     }
+    if (is_keepalive) {
+        return;
+    }
     /* Only contiguous data is taken; the ack below tells the peer what to
      * resend, so a gap never has to be tracked. */
     if (count > 0 && pk->first <= s_remote_have + 1 && last > s_remote_have &&
-        last < net.frame + RING / 2)
+        last < (int64_t)net.frame + RING / 2)
     {
         int32_t upto = simulated_upto();
         for (int32_t f = s_remote_have + 1; f <= last; f++) {
@@ -439,23 +500,31 @@ static void on_inputs(const Packet* pk, int n) {
             *slot = pad;
         }
         s_remote_have = last;
+        s_progress_ns = SDL_GetTicksNS();
     }
     if (pk->ck_frame > s_remote_ck_frame) {
         s_remote_ck_frame = pk->ck_frame;
         s_remote_ck = pk->ck;
     }
     send_ack(s_remote_have, pk->seq);
+    /* The peer's frame advantage against ours. Both are measured the same
+     * way against data that actually arrived, so their DIFFERENCE is the
+     * phase error with nothing estimated in it -- no shared clock, no round
+     * trip, and no assumption that the two directions are equally fast.
+     *
+     * The estimator this replaces asked "what time was it when the peer
+     * sent this", which needs the one-way trip, and the only handles on that
+     * are round trips measured through a socket this thread drains once per
+     * frame. That quantisation inflates every sample by most of a frame on
+     * BOTH peers, so the error is common-mode: it survives the trimmed mean
+     * and moves both peers the same way. Measured here, an averaged trip put
+     * both peers 7 ms behind each other (nobody corrects, and the pair keeps
+     * whatever phase it started with -- 6 rollbacks on one side against 724
+     * on the other), and a minimum-filtered trip put both 16 ms ahead of
+     * each other (both slow down, and the pair runs at 59.4 Hz). */
+    adv_note(pk->adv, net.frame - 1 - s_remote_have);
     if (pk->newest > s_remote_newest) {
         s_remote_newest = pk->newest;
-        if (s_send_frame >= 0 && s_ping_n > 0) {
-            /* Clocks are not shared, so the peer's send time is estimated as
-             * now - ping/2 (Slippi); the frame difference is in our units. */
-            int64_t now_us = (int64_t)(SDL_GetTicksNS() / 1000);
-            int64_t their_send_us = now_us - net.ping_us / 2;
-            int64_t off = their_send_us - (int64_t)(s_send_ns / 1000) +
-                          (int64_t)FRAME_US * (s_send_frame - pk->newest);
-            offset_note((int32_t)off);
-        }
     }
 }
 
@@ -514,7 +583,14 @@ static void rx_dispatch(void* buf, int n) {
         wire_packet(&u->pk);
         switch (seq_check(u->pk.seq)) {
         case SEQ_DUP:
-            s_rx_dups++; /* exact copy: the original was already processed and acked */
+            /* An exact copy means the peer has not seen an ack for it. The
+             * original was processed, but the ack itself may be what went
+             * missing, and dropping the duplicate silently leaves the peer
+             * resending until the redundancy in a later packet happens to
+             * cover the gap. Re-ack it: the ack carries our contiguous mark,
+             * so it is correct whenever it arrives and costs one datagram. */
+            s_rx_dups++;
+            send_ack(s_remote_have, u->pk.seq);
             break;
         case SEQ_REORDER:
             s_rx_reorders++; /* older but new: still process, its pads may fill a gap */
@@ -547,7 +623,12 @@ static void rx_dispatch(void* buf, int n) {
         on_rel_ack(&u->rack);
         break;
     case 'B':
-        if (n != (int)sizeof(Bye) || s_peer_left) {
+        /* Only a peer we have already heard from can end the session. Before
+         * pinning, the source address is not a usable filter (a dual-stack
+         * peer answers from either family), so without this any host that
+         * knows the published port could kill a connecting session with one
+         * forged 8-byte datagram. */
+        if (n != (int)sizeof(Bye) || s_peer_left || !s_heard) {
             return;
         }
         s_peer_left = true;
@@ -558,17 +639,84 @@ static void rx_dispatch(void* buf, int n) {
         return;
     }
     s_heard = true;
+    s_last_rx_ns = SDL_GetTicksNS();
+}
+
+/* Reject unknown/truncated datagrams before they can select a peer or fail
+ * compatibility. Body fields remain in wire order here. */
+static bool packet_shape(const void* buf, int n) {
+    const Hdr* h = buf;
+    switch (h->magic) {
+    case 'M': {
+        const Packet* p = buf;
+        return n >= (int)offsetof(Packet, pads) && p->count <= REDUNDANCY &&
+               n == (int)(offsetof(Packet, pads) + p->count * sizeof(WirePad));
+    }
+    case 'A':
+        return n == (int)sizeof(Ack);
+    case 'R': {
+        const Rel* r = buf;
+        return n >= (int)offsetof(Rel, payload) && ntohs(r->len) <= REL_MAX &&
+               n == (int)(offsetof(Rel, payload) + ntohs(r->len));
+    }
+    case 'K':
+        return n == (int)sizeof(RelAck);
+    case 'B':
+        return n == (int)sizeof(Bye);
+    default:
+        return false;
+    }
 }
 
 /* Drain the socket. A datagram is dropped, with one log line per session
  * and reason, unless it comes from the peer's address, carries our protocol
  * version and session id (the guest learns the id from the host's first
  * packet) and names the remote player. */
+/* Hardware output is deliberately outside game snapshots. Compare against
+ * the last command actually emitted, not the interpreter's rewound status. */
+void pc_net_rumble_command(unsigned port, unsigned command) {
+    static int motor[4] = {-1, -1, -1, -1};
+    if (port >= 4 || net.resim || motor[port] == (int)command)
+        return;
+    PADControlMotor(port, command);
+    motor[port] = (int)command;
+}
+
+static PcNetDatagramHandler s_datagram_handler;
+void pc_net_set_datagram_handler(PcNetDatagramHandler handler) {
+    s_datagram_handler = handler;
+}
+
+bool pc_net_send_datagram(const void* data, size_t size, uint32_t address, uint16_t port) {
+    if (!net.tx_lock || !data || size > 512)
+        return false;
+    struct sockaddr_in to;
+    memset(&to, 0, sizeof to);
+    to.sin_family = AF_INET;
+    to.sin_addr.s_addr = address;
+    to.sin_port = htons(port);
+    SDL_LockMutex(net.tx_lock);
+    int n = net.active ? (int)sendto(net.sock, (const char*)data, (int)size, 0,
+                             (struct sockaddr*)&to, sizeof to) :
+                         -1;
+    SDL_UnlockMutex(net.tx_lock);
+    return n == (int)size;
+}
+
+/* One call's worth of datagrams. The peer sends an input packet per frame,
+ * a mid-frame resend, an ack per packet received and the odd reliable
+ * message: a couple of dozen per frame at the very worst. Without a cap the
+ * drain is a livelock -- anything that fills the socket faster than the loop
+ * empties it parks the game thread here for as long as it keeps arriving,
+ * and this runs on the frame loop and inside wait_remote(). The remainder
+ * stays queued for the next call. */
+#define RX_BUDGET 128
+
 void recv_inputs(void) {
-    for (;;) {
+    for (int budget = RX_BUDGET; budget > 0; budget--) {
         union {
             Hdr h;
-            uint8_t raw[sizeof(Rel)];
+            uint8_t raw[512];
         } u;
         struct sockaddr_storage from;
         socklen_t from_len = sizeof from;
@@ -587,30 +735,116 @@ void recv_inputs(void) {
         if (n == 0) {
             continue; /* empty datagram: nothing to parse */
         }
+        if (s_datagram_handler && from.ss_family == AF_INET) {
+            const struct sockaddr_in* a = (const struct sockaddr_in*)&from;
+            if (s_datagram_handler(&u, (size_t)n, a->sin_addr.s_addr, ntohs(a->sin_port)))
+                continue;
+        }
         s_rx_pkts++;
-        if (n < (int)sizeof(Hdr)) {
+        if (n < (int)(sizeof(Hdr) + NET_MAC_LEN)) {
+            s_rx_malformed++;
             continue;
         }
-        if (!addr_eq(&from, &net.peer)) {
-            if (!s_warn_src) {
-                s_warn_src = true;
-                pc_log_line("net: dropped a datagram from an address other than the peer's");
+        /* Everything downstream measures the message, not the datagram: the
+         * tag is checked here and then left behind, so every length test and
+         * every body parser below stays the one it was. */
+        int body = n - NET_MAC_LEN;
+        if (!packet_shape(&u, body)) {
+            s_rx_malformed++;
+            continue;
+        }
+        /* The authentication gate, ahead of every other check: a datagram
+         * that cannot prove it belongs to this session must not pin the peer
+         * address, teach us the session id, fail our protocol version or
+         * reach rx_dispatch.
+         *
+         * A handshake-derived key does not exist until the handshake, and
+         * the two peers get it one leg apart -- the guest when it accepts
+         * RULES, the host when it accepts the READY that answers it. Until a
+         * datagram has actually verified, one that does not is taken as a
+         * peer that has not keyed yet rather than as an attack; from the
+         * first tag that checks out, nothing unauthenticated is accepted
+         * again for the rest of the session. That upgrade is one round trip
+         * wide and it is never given back, so the window is the bootstrap
+         * one that already existed rather than a downgrade an attacker can
+         * reopen.
+         *
+         * A key pinned from MELEE_NET_KEY gets no such grace: both peers
+         * hold it from connect, so there is no leg to wait out and the first
+         * untagged datagram is already a forgery. Without this the knob
+         * would authenticate nothing at all -- an attacker who never sends a
+         * valid tag would simply keep the grace open forever. */
+        if (net_key_ready() && net_mac_ok(&u, (size_t)body)) {
+            s_mac_seen = true;
+        } else if (s_mac_seen || net_key_pinned()) {
+            s_rx_bad_mac++;
+            if (!s_warn_mac) {
+                s_warn_mac = true;
+                pc_log_line("net: dropped a datagram with a bad MAC (magic %c len %d) at frame %d",
+                    u.h.magic >= 32 && u.h.magic < 127 ? u.h.magic : '?', n, net.frame);
             }
             continue;
+        } else if (net_key_ready() && ++s_mac_quiet == MAC_QUIET_MAX) {
+            /* We hold a key and two seconds of the peer's traffic has gone by
+             * without one tag of it verifying. That is not the handshake leg
+             * the upgrade above allows for; it is two peers holding different
+             * keys -- a stale MELEE_NET_KEY on one side is how -- and the
+             * session is running unauthenticated. Said once, out loud,
+             * because the alternative is a session that looks protected in
+             * the log and is not. */
+            pc_log_line("net: %d datagrams from the peer and none of them authenticate; this "
+                        "session is UNAUTHENTICATED (the two sides hold different keys)",
+                MAC_QUIET_MAX);
         }
         wire_hdr(&u.h);
-        if (u.h.version != WIRE_VERSION) {
-            if (!s_peer_left) {
-                s_peer_left = true;
-                s_status = PC_NET_PEER_INCOMPATIBLE;
-                pc_log_line("net: peer speaks protocol %u, we speak %u", u.h.version, WIRE_VERSION);
+        bool same_addr = addr_eq(&from, &net.peer);
+        /* Once pinned, unrelated traffic cannot change any session state.
+         *
+         * Before pinning, the address is NOT a usable filter: the two sides
+         * pick their own for each other, and a dual-stack LAN peer routinely
+         * answers from a different family than the one the lobby handed us
+         * (measured PC<->tablet: we dialled its IPv6 link-local, it answered
+         * from 192.168.1.109). Requiring a match there breaks the handshake
+         * outright. What IS gated on the address is the one datagram that
+         * needs no session state to do damage -- see the BYE in rx_dispatch:
+         * before pinning, a forged one from anywhere would otherwise end the
+         * session on its own. */
+        if (s_heard && !same_addr) {
+            s_rx_bad_src++;
+            if (!s_warn_src) {
+                char got[80] = "?", want[80] = "?";
+                net_addr_text((const struct sockaddr*)&from, got, sizeof got);
+                net_addr_text((const struct sockaddr*)&net.peer, want, sizeof want);
+                s_warn_src = true;
+                pc_log_line("net: dropped a datagram from %s (the peer is %s)", got, want);
             }
             continue;
         }
-        if (net.session == 0 && net.local == 1 && u.h.session != 0) {
-            net.session = u.h.session; /* the host picked it */
+        if (u.h.player != net.remote) {
+            s_rx_bad_player++;
+            continue;
         }
-        if (u.h.session != net.session || u.h.player != net.remote) {
+        /* Learning the session id is how the guest finds the host without the
+         * lobby having told it one -- and it is also the one piece of session
+         * state a stranger could set with a single well-shaped datagram,
+         * because the MAC gate above is a grace window while no key exists.
+         * A 16-byte RelAck carrying someone else's session id used to win that
+         * race, after which every genuine host datagram failed the session
+         * check for the rest of the session (learn_session requires
+         * net.session == 0, so there is no second chance) and the match died
+         * on the handshake timeout. Only the message that carries the session
+         * in the first place -- a well-formed RULES -- may establish it. */
+        bool is_rules;
+        {
+            /* packet_shape has already proved this is a 'R' carrying at least
+             * a header, so the Rel view is in bounds here. */
+            const Rel* rel = (const Rel*)&u;
+            is_rules = u.h.magic == 'R' && rel->type == REL_RULES;
+        }
+        bool learn_session = net.session == 0 && net.local == 1 && u.h.session != 0 && is_rules;
+        bool guest_preamble = !s_heard && net.local == 0 && u.h.session == 0;
+        if (u.h.session != net.session && !learn_session && !guest_preamble) {
+            s_rx_bad_sess++;
             if (!s_warn_sess) {
                 s_warn_sess = true;
                 pc_log_line(
@@ -619,9 +853,34 @@ void recv_inputs(void) {
             }
             continue;
         }
+        if (u.h.version != WIRE_VERSION) {
+            if (same_addr && !s_peer_left) {
+                s_peer_left = true;
+                s_status = PC_NET_PEER_INCOMPATIBLE;
+                pc_log_line("net: peer speaks protocol %u, we speak %u", u.h.version, WIRE_VERSION);
+            }
+            continue;
+        }
+        if (learn_session) {
+            SDL_LockMutex(net.tx_lock);
+            net.session = u.h.session;
+            SDL_UnlockMutex(net.tx_lock);
+        }
+        if (!s_heard && !addr_eq(&from, &net.peer)) {
+            char got[80] = "?", want[80] = "?";
+            net_addr_text((const struct sockaddr*)&from, got, sizeof got);
+            net_addr_text((const struct sockaddr*)&net.peer, want, sizeof want);
+            pc_log_line("net: peer answers from %s, not %s; following it", got, want);
+            SDL_LockMutex(net.tx_lock);
+            memcpy(&net.peer, &from, sizeof net.peer);
+            net.peer_len = from_len;
+            SDL_UnlockMutex(net.tx_lock);
+        }
         if (net.sim_rx_delay_ns == 0) {
-            rx_dispatch(&u, n);
-        } else if (held_put(s_rx_held, &u, (size_t)n, SDL_GetTicksNS() + net.sim_rx_delay_ns) < 0) {
+            rx_dispatch(&u, body);
+        } else if (held_put(s_rx_held, &u, (size_t)body, SDL_GetTicksNS() + net.sim_rx_delay_ns) <
+                   0)
+        {
             continue; /* simulator queue full: one more loss */
         }
     }
@@ -660,10 +919,19 @@ static void dump_rings_around(int32_t f) {
             s_ck_ring[i & (RING - 1)], s_sim_n[i & (RING - 1)],
             i > s_remote_have ? " predicted" : "");
     }
-    char rb[16 * 8 + 1];
+    /* Sized for the worst case (16 frames of up to 10 digits, SESSION_MAX_FRAMES
+     * is 1e8) and still guarded: snprintf returns the length it WOULD have
+     * written, so accumulating its return value past the end makes the next
+     * size argument wrap and the next write land outside the buffer. */
+    char rb[16 * 11 + 1];
     int n = 0;
     for (unsigned i = s_rb_recent_n > 16 ? s_rb_recent_n - 16 : 0; i < s_rb_recent_n; i++) {
-        n += snprintf(rb + n, sizeof rb - (size_t)n, "%d ", s_rb_recent[i % 16]);
+        int w = snprintf(rb + n, sizeof rb - (size_t)n, "%d ", s_rb_recent[i % 16]);
+        if (w < 0 || w >= (int)(sizeof rb - (size_t)n)) {
+            n = (int)sizeof rb - 1;
+            break;
+        }
+        n += w;
     }
     rb[n > 0 ? n - 1 : 0] = '\0';
     pc_log_line("net: ring have %d newest %d wrote %d delay %d barrier %d rb_frame %d resim %d, "
@@ -715,10 +983,12 @@ static void check_desync(void) {
  * a parked peer stops producing input).
  *
  * MELEE_NET_RECONNECT_MS bounds the phase. The default is RECONNECT_MS: a
- * Wi-Fi roam, a DHCP renew or a hotspot handover completes well inside
- * 10 s, and 15 s keeps the whole outage (7 s stall timeout + window) near
- * 22 s, about as long as a player waits before quitting anyway. 0 disables
- * resume, i.e. the hard disconnect this file did before. */
+ * Wi-Fi roam or a hotspot handover completes well inside it, and the whole
+ * outage (STALL_TIMEOUT_MS to notice plus this window) stays near 6 s, which
+ * is about as long as a player waits before quitting anyway. Both were 7 s
+ * and 15 s until faf888914 shortened them, trading a longer outage tolerance
+ * for much faster "the peer is gone" detection; 0 disables resume, i.e. the
+ * hard disconnect this file did before. */
 
 /* Resume payload in wire order (big-endian, like every wire field). The
  * codec's be32() is private to net_wire.c and every field here is 32 bits,
@@ -761,22 +1031,15 @@ static void resume_fail(void) {
  * handshake there is also nothing to resume: no agreed seed, no agreed start
  * frame, and rings holding a couple of menu frames.
  *
- * HS_DONE is the lobby's own "established" (net_handshake.c's hs_done()
- * pins seed, start_frame and ck_from); HS_PENDING and HS_FAILED mean the
- * parameters are still unagreed, whether or not the guest has adopted the
- * host's session id. The MELEE_NET path runs no handshake at all and stays
- * HS_IDLE for the whole session, so there idleness cannot mean "not yet" --
- * except in a lobby session's first frames, before pc_lan_poll() has
- * claimed the handshake. The lobby claims it on its first poll, so a
- * session still idle RESUME_LOBBY_GRACE frames in has no lobby behind it.
- * session_reset() starts every session at frame 0, so net.frame is its age. */
-#define RESUME_LOBBY_GRACE 8 /* ~130 ms: the lobby polls every frame */
-
+ * HS_DONE is "established" everywhere now (net_handshake.c's hs_done() pins
+ * seed, start_frame and ck_from); HS_PENDING, HS_FAILED and HS_IDLE all mean
+ * the parameters are still unagreed, whether or not the guest has adopted
+ * the host's session id. This used to need a grace period, because a direct
+ * MELEE_NET session ran no handshake and stayed HS_IDLE for its whole life,
+ * so idleness could not be read as "not yet"; it runs the same handshake as
+ * the lobby now (handshake_direct), so the state means one thing again. */
 static bool session_established(void) {
-    if (net.hs != HS_IDLE) {
-        return net.hs == HS_DONE;
-    }
-    return net.frame > RESUME_LOBBY_GRACE;
+    return net.hs == HS_DONE;
 }
 
 /* The peer's RESUME (net_reliable.c dispatches it here; game thread).
@@ -890,7 +1153,23 @@ static void resume_end(uint64_t now) {
  *
  * An established session that falls silent past the stall timeout enters the
  * reconnect phase above rather than ending; before the peer's first packet
- * there is nothing to resume, so that wait keeps its own timeout. */
+ * there is nothing to resume, so that wait keeps its own timeout.
+ *
+ * "Silent" is measured from the last datagram the peer sent, NOT from the
+ * start of this wait. A peer whose game thread is inside a load -- a stage,
+ * a character, a first-time shader compile on a phone -- stops advancing for
+ * seconds while tx_timer keeps its input window flowing every 7 ms. Timing
+ * that out as silence killed the session on every slow load and froze the
+ * transition screen ("NOW LOADING") until the reconnect window expired.
+ * A peer that talks but never advances still has to end somewhere, so a
+ * no-progress cap bounds the wait; it is minutes, not seconds, because a
+ * cold-cache load on a phone is legitimately tens of seconds. */
+#define NO_PROGRESS_TIMEOUT_MS 120000
+/* The connect wait, with a floor: a session that never went through
+ * connect_impl (a fixture, a future caller) must not read as "wait zero". */
+static int connect_timeout_ms(void) {
+    return net.connect_timeout_ms > 0 ? net.connect_timeout_ms : CONNECT_TIMEOUT_MS;
+}
 static bool wait_remote(int32_t need) {
     if (s_remote_have >= need) {
         return true;
@@ -906,15 +1185,31 @@ static bool wait_remote(int32_t need) {
         if (s_peer_left) {
             return false;
         }
+        net_watchdog_heartbeat();
         uint64_t now = SDL_GetTicksNS();
         if (s_rc != RSM_NONE) {
             if (!resume_poll(now)) {
                 return false;
             }
-        } else if (now - t0 > (s_heard ? STALL_TIMEOUT_MS : CONNECT_TIMEOUT_MS) * 1000000ull) {
-            if (!s_heard || !resume_begin(now)) {
-                s_status = PC_NET_PEER_TIMEOUT;
-                return false;
+        } else {
+            /* Before the first packet there is no rx clock, so the connect
+             * wait is still measured from t0. */
+            uint64_t quiet = s_heard ? now - s_last_rx_ns : now - t0;
+            uint64_t limit = (s_heard ? STALL_TIMEOUT_MS : connect_timeout_ms()) * 1000000ull;
+            /* Measured from the last forward progress, not from the start of
+             * this wait: t0 restarts with every wait_remote() call, so a peer
+             * that advanced the contiguous mark one frame just under the bound
+             * each time kept the game frozen for ever while looking healthy.
+             * Before the first advance there is nothing to measure from, and
+             * t0 is the connect wait's own clock anyway. */
+            uint64_t since = s_progress_ns ? s_progress_ns : t0;
+            bool stuck = now - since > NO_PROGRESS_TIMEOUT_MS * 1000000ull;
+            if (quiet > limit || stuck) {
+                s_no_progress = stuck && quiet <= limit;
+                if (!s_heard || s_no_progress || !resume_begin(now)) {
+                    s_status = PC_NET_PEER_TIMEOUT;
+                    return false;
+                }
             }
         }
         if (now - last_send > 16000000ull) {
@@ -942,19 +1237,206 @@ bool pc_net_active(void) {
     return net.active;
 }
 
+/* True when this run's simulation has to be reproducible on another machine:
+ * a netplay session, a recording, a replay, or a sync test. Game code uses
+ * it to suppress the handful of retail behaviours that are deliberately
+ * seeded from the local machine (see gmTitle_801A165C). Offline play keeps
+ * every one of them. */
+bool pc_net_deterministic(void) {
+    return net.active || record_active() || net.synctest;
+}
+
 int pc_net_local_player(void) {
     return net.local;
 }
 
-/* Back to frame 0 with empty rings; called with the timer parked (net.active
- * false), so only the game thread is looking. */
+/* ---- scene hand-off -------------------------------------------------
+ *
+ * A scene ends when its own code asks to, and how many TICKS it takes to
+ * get there depends on the machine: the loads a scene waits on are polled
+ * once per tick and the pad queue turns the wait into simulated frames, so
+ * the peer that reads an archive faster leaves the scene earlier. Both then
+ * run the next scene from different frames, which is a real divergence and
+ * not an arithmetic one (docs/netcode-plan.md section 5.2).
+ *
+ * So the exit frame is agreed instead of inferred: each peer announces the
+ * frame its scene asked to end on, and both leave on the later of the two
+ * plus a lead that covers the reliable round trip. This is the pattern the
+ * lobby already uses to hand over to the CSS (pc_lan_start_frame). */
+#define SCENE_HANDOFF 20 /* frames of lead: ~330 ms, menus are lockstep */
+#define SCENE_SLOTS 8    /* announcements kept: the peer may be a scene ahead */
+/* How long a scene may wait for the other half of a hand-off before the
+ * session is declared dead. Five seconds is far longer than any real
+ * hand-off (the announcement is one reliable round trip on top of
+ * SCENE_HANDOFF) and short enough that a peer which never answers does not
+ * leave the player in a scene they cannot leave. */
+#define SCENE_HOLD_MAX 300
+
+/* Defined below; pc_net_scene_hold() is the one caller ahead of it. */
+void pc_net_disconnect(void);
+
+/* Every hand-off carries the count of scene exits the sender has made, and a
+ * peer's frame is only ever paired with the exit of the same number. Without
+ * it a late retransmit or an early announcement is indistinguishable from
+ * this scene's answer: one peer then agrees a frame from the PREVIOUS scene,
+ * releases immediately while the other is still waiting, and the sims part
+ * on the frame that peer enters the next scene (measured tablet<->PC, "peer
+ * 121" against an exit asked at 5775). */
+static uint32_t s_scene_seq;                     /* exits we have completed */
+static int32_t s_scene_exit_local = -1;          /* frame our scene asked to end on */
+static int32_t s_scene_exit_at = -1;             /* agreed frame, once both are in */
+static int32_t s_scene_wait_since = -1;          /* frame the incomplete wait began */
+static int32_t s_scene_exit_remote[SCENE_SLOTS]; /* the peer's, by its own seq */
+
+void net_scene_rel(const void* payload, int len) {
+    SceneMsg m;
+    if (len != (int)sizeof m) {
+        pc_log_line("net: REL_SCENE of %d bytes ignored", len);
+        return;
+    }
+    memcpy(&m, payload, sizeof m);
+    int64_t f = (int32_t)ntohl(m.frame);
+    /* A correct peer announces its own frame, which tracks ours to within the
+     * few frames the hand-off is built for. Anything else is a corrupt or
+     * hostile message, and pc_net_scene_hold() would turn it into a scene the
+     * game can never leave (a far-future frame) or an exit taken alone (a
+     * frame near INT32_MAX, where later + SCENE_HANDOFF overflows negative
+     * and this side walks out while the peer is still waiting). */
+    if (f < 0 || f > (int64_t)net.frame + RING) {
+        pc_log_line("net: REL_SCENE for frame %d ignored (we are at %d)", (int32_t)f, net.frame);
+        return;
+    }
+    /* The sequence is the peer's count of completed exits, so the only ones
+     * that can be about a scene either side still cares about are the one we
+     * are in and its immediate neighbours: the peer may be a scene ahead if
+     * it left first, and a retransmit of the previous one may still arrive.
+     * Anything further is stale or invented, and taking it would alias into
+     * a live slot through the modulo -- an exit frame from eight scenes ago,
+     * or a far-future one planted deliberately, landing in the slot the
+     * current hand-off reads. */
+    uint32_t seq = ntohl(m.seq);
+    int64_t ahead = (int64_t)seq - (int64_t)s_scene_seq;
+    if (ahead < -1 || ahead > 1) {
+        pc_log_line("net: REL_SCENE seq %u ignored (we are on %u)", seq, s_scene_seq);
+        return;
+    }
+    s_scene_exit_remote[seq % SCENE_SLOTS] = (int32_t)f;
+}
+
+static void scene_handoff_reset(void) {
+    s_scene_seq = 0;
+    s_scene_exit_local = s_scene_exit_at = -1;
+    s_scene_wait_since = -1;
+    for (int i = 0; i < SCENE_SLOTS; i++) {
+        s_scene_exit_remote[i] = -1;
+    }
+}
+
+/* True while the caller must keep ticking the scene it has asked to leave.
+ * Offline, and once the peer is gone, it never holds. */
+bool pc_net_scene_hold(void) {
+    if (!net.active) {
+        /* Replaying a netplay recording: the scene has to end where the
+         * recorded pair agreed, not where this run's own code asks to. */
+        return record_replay_scene_hold(net.frame);
+    }
+    int32_t* remote = &s_scene_exit_remote[s_scene_seq % SCENE_SLOTS];
+    if (s_scene_exit_local < 0) {
+        SceneMsg m = {htonl(s_scene_seq), htonl((uint32_t)net.frame)};
+        /* Only latch the frame if the announcement actually went out. The
+         * lane is stop-and-wait four deep and shares itself with the resume,
+         * delay, chat, stage-pick and ranked messages, so it can be full at
+         * the instant a scene ends; latching anyway drops the announcement
+         * for good, the peer waits on an exit frame it never gets, and the
+         * two sims end up in different scenes. Retry on the next tick, the
+         * way resume_send() already does. */
+        if (pc_net_send_reliable(REL_SCENE, &m, sizeof m)) {
+            s_scene_exit_local = net.frame;
+        }
+    }
+    /* A hand-off that never completes is otherwise silent: the scene simply
+     * never ends and the session stays healthy around it, which is
+     * indistinguishable from a scene that has not asked yet. Say so once a
+     * second while waiting, naming which half is missing -- and stop waiting
+     * eventually. The peer keeps sending inputs, so neither the stall timeout
+     * nor the watchdog notices a peer that has simply stopped answering this
+     * exchange, and the player is left in a scene they cannot leave. */
+    if (s_scene_exit_local < 0 || *remote < 0) {
+        static int32_t said;
+        if (s_scene_wait_since < 0) {
+            s_scene_wait_since = net.frame;
+        }
+        if (net.frame - s_scene_wait_since >= SCENE_HOLD_MAX) {
+            pc_log_line("net: scene %u hand-off never completed in %d frames (ours %d, peer "
+                        "%d); leaving netplay",
+                s_scene_seq, SCENE_HOLD_MAX, s_scene_exit_local, *remote);
+            s_status = PC_NET_PEER_TIMEOUT;
+            pc_net_disconnect();
+            return false; /* the session is over: the scene ends here */
+        }
+        if (net.frame - said >= 60) {
+            said = net.frame;
+            pc_log_line("net: scene %u hand-off waiting at frame %d (ours %d, peer %d)",
+                s_scene_seq, net.frame, s_scene_exit_local, *remote);
+        }
+        return true; /* the peer is still in the scene: wait for its frame */
+    }
+    s_scene_wait_since = -1;
+    if (s_scene_exit_at < 0) {
+        int32_t later = *remote > s_scene_exit_local ? *remote : s_scene_exit_local;
+        s_scene_exit_at = later + SCENE_HANDOFF;
+        /* Nothing may still be predicted when the scene goes: the next
+         * scene's first tick raises the barrier past every outstanding
+         * frame, and snapshot_unusable() rejects those snapshots anyway, so
+         * a correction arriving then is dropped and the peers finish the
+         * match on different remote inputs. Running the last frames of the
+         * scene lockstep costs nothing -- they are the frames after the
+         * match has already been decided -- and it is the same thing the
+         * entry side does. */
+        barrier_raise(s_scene_exit_at);
+        pc_log_line("net: scene %u ends at frame %d (asked %d, peer %d)", s_scene_seq,
+            s_scene_exit_at, s_scene_exit_local, *remote);
+    }
+    if (net.frame < s_scene_exit_at) {
+        return true;
+    }
+    *remote = -1;
+    s_scene_exit_local = s_scene_exit_at = -1;
+    s_scene_seq++;
+    return false;
+}
+
+/* True when the newest local sample holds no stick deflection and no button.
+ * A whole-frame correction taken while the player is mid-input costs them
+ * that frame of it; taken at rest it costs nothing anyone can feel. The
+ * sample is the one already quantised for the wire, so idle stick noise
+ * (at_rest) does not read as movement. */
+bool net_local_idle(void) {
+    if (s_wrote < 0) {
+        return true;
+    }
+    const WirePad* p = &s_local_ring[s_wrote & (RING - 1)];
+    return p->button == 0 && p->stickX == 0 && p->stickY == 0 && p->substickX == 0 &&
+           p->substickY == 0 && p->triggerLeft == 0 && p->triggerRight == 0;
+}
+
+static void audio_journal_reset(void);
+static void pad_stats_reset(void);
+static void seed_stats_reset(void);
+static void audit_reset(void);
 static bool s_seen_remote;
 
 static void session_reset(void) {
+    scene_handoff_reset();
+    s_seed_have = false;
+    s_lockstep = snapshot_state_region_missing() != NULL;
     s_seen_remote = false;
     memset(s_local_ring, 0, sizeof s_local_ring);
     memset(s_remote_ring, 0, sizeof s_remote_ring);
     memset(s_ck_ring, 0, sizeof s_ck_ring);
+    memset(s_sim_n, 0, sizeof s_sim_n);
+    memset(s_rb_recent, 0, sizeof s_rb_recent);
+    s_rb_recent_n = 0;
     sim_reset();
     memset(s_rx_held, 0, sizeof s_rx_held);
     net.frame = 0;
@@ -962,8 +1444,15 @@ static void session_reset(void) {
     net.resim = false;
     s_remote_have = s_remote_newest = s_last_acked = s_rb_frame = s_remote_ck_frame = -1;
     s_remote_ck = 0;
-    net.desync_reported = s_heard = s_peer_left = false;
-    s_warn_src = s_warn_sess = s_warn_bad = false;
+    net.desync_reported = s_heard = s_peer_left = s_no_progress = false;
+    s_last_rx_ns = 0;
+    s_progress_ns = 0;
+    s_warn_src = s_warn_sess = s_warn_bad = s_warn_mac = false;
+    /* A fresh session starts with no key and trusting nothing it has not
+     * yet authenticated; the key arrives with the handshake. */
+    net_key_clear();
+    s_mac_seen = false;
+    s_mac_quiet = 0;
     s_status = PC_NET_PEER_OK;
     s_rc = RSM_NONE;
     s_rc_sent = false;
@@ -984,6 +1473,8 @@ static void session_reset(void) {
     s_rx_dups = s_rx_reorders = 0;
     s_sock_err = 0;
     s_warn_sock = false;
+    s_rx_malformed = s_rx_bad_src = s_rx_bad_sess = s_rx_bad_player = s_tx_would_block = 0;
+    s_rx_bad_mac = 0;
     s_red_target = REDUNDANCY;
     s_red_floor = REDUNDANCY_FLOOR;
     s_resim_run = 0;
@@ -991,7 +1482,12 @@ static void session_reset(void) {
     s_resim_eat_logged = false;
     s_timer_tried = false;
     s_loss_pct = 0;
+    s_loss_tx_mark = s_loss_ack_mark = 0;
     sync_reset();
+    audio_journal_reset();
+    pad_stats_reset();
+    seed_stats_reset();
+    audit_reset();
     s_wrote = -1;
     s_send_ns = 0;
     s_send_frame = -1;
@@ -1002,6 +1498,7 @@ static void session_reset(void) {
     rel_reset();
     net.hs = HS_IDLE;
     net.hs_host = false;
+    net.direct = false; /* pc_net_init() sets it back for a MELEE_NET session */
     net.seed = 0;
     net.start_frame = -1;
     net.ck_from = 0;
@@ -1019,19 +1516,32 @@ void pc_net_disconnect(void) {
         SDL_RemoveTimer(s_timer);
         s_timer = 0;
     }
-    SDL_LockMutex(net.tx_lock);
     if (!s_peer_left) {
-        /* Tell the peer why so it need not wait out the 7 s silence; sent
-         * twice, unacked (the timeout is the fallback). */
+        /* Tell the peer why so it need not wait out the silence; sent
+         * as a 5-packet burst so NAT/firewall drops are tolerated. */
         uint8_t why = s_status == PC_NET_PEER_OK ? PC_NET_PEER_LEFT : (uint8_t)s_status;
         net.sim_hold = false; /* straight out: the held queue dies with the socket */
-        send_bye(why);
-        send_bye(why);
+        for (int i = 0; i < 5; i++) {
+            SDL_LockMutex(net.tx_lock);
+            send_bye(why);
+            SDL_UnlockMutex(net.tx_lock);
+            SDL_Delay(4);
+        }
+        if (s_status == PC_NET_PEER_OK) {
+            s_status = PC_NET_PEER_LEFT;
+        }
     }
+    SDL_LockMutex(net.tx_lock);
     net.active = false;
+    net.resim = false;
     sock_close(net.sock);
     net.sock = SOCK_INVALID;
     net.hs = HS_IDLE;
+    /* After the BYE burst above, which still needed the key to be accepted:
+     * the nonces it was derived from are dead with the session, so the key
+     * does not outlive it in this process's memory either. */
+    net_key_clear();
+    s_mac_seen = false;
     rules_restore();
     HSD_PadLibData.qtype = 0;
     SDL_UnlockMutex(net.tx_lock);
@@ -1057,6 +1567,14 @@ int pc_net_peer_status(void) {
     return s_status;
 }
 
+bool pc_net_desync(void) {
+    return net.active && net.desync_reported;
+}
+
+void pc_net_peer_status_clear(void) {
+    s_status = PC_NET_PEER_OK;
+}
+
 int pc_net_quality(void) {
     if (!net.active) {
         return 0;
@@ -1064,7 +1582,9 @@ int pc_net_quality(void) {
     if (s_rc == RSM_ACTIVE) {
         return 3; /* reconnecting; RSM_FAILED is one tick from the disconnect */
     }
-    if (s_peer_left || net.frame - s_stall_frame < 120) {
+    /* A desync is as bad as a stall and never recovers, so it reads as at
+     * least 2 however healthy the link looks around it. */
+    if (s_peer_left || net.desync_reported || net.frame - s_stall_frame < 120) {
         return 2;
     }
     if (s_loss_pct >= 5 || s_rb_depth_recent >= 4 || jitter_us() >= 8000) {
@@ -1073,7 +1593,36 @@ int pc_net_quality(void) {
     return 0;
 }
 
-bool pc_net_connect(const char* ip, uint16_t port, int player, uint32_t seed) {
+static int s_configured_delay = -1;
+void pc_net_set_input_delay(int frames) {
+    s_configured_delay = frames >= 0 && frames <= 4 ? frames : -1;
+}
+
+/* Is this a destination a peer could answer from? A network, broadcast or
+ * multicast address is never a host, and a session pointed at one can only
+ * time out -- which, with the connect wait parking the render thread, used to
+ * present as a crash rather than as a failure to connect. Seen in the wild
+ * (issue #87): a pairing dialled a /8 network base -- the peer's first octet
+ * with the other three zeroed -- instead of the address its datagrams had
+ * actually arrived from. */
+static bool addr_is_host(const struct sockaddr* sa) {
+    if (sa->sa_family == AF_INET) {
+        const struct sockaddr_in* a = (const struct sockaddr_in*)sa;
+        uint32_t ip = ntohl(a->sin_addr.s_addr);
+        return a->sin_port != 0 && ip != 0 && ip != 0xffffffffu && (ip >> 28) < 14 &&
+               (ip & 0xffffffu) != 0;
+    }
+    if (sa->sa_family == AF_INET6) {
+        const struct sockaddr_in6* a = (const struct sockaddr_in6*)sa;
+        static const uint8_t any[16] = {0};
+        return a->sin6_port != 0 && memcmp(&a->sin6_addr, any, sizeof any) != 0 &&
+               a->sin6_addr.s6_addr[0] != 0xff;
+    }
+    return false;
+}
+
+static bool connect_impl(
+    sock_t supplied, const char* ip, uint16_t port, int player, uint32_t seed) {
     if (net.tx_lock == NULL) {
         net.tx_lock = SDL_CreateMutex();
         sock_startup();
@@ -1083,10 +1632,15 @@ bool pc_net_connect(const char* ip, uint16_t port, int player, uint32_t seed) {
     snprintf(portstr, sizeof portstr, "%u", port);
     struct addrinfo hints, *res = NULL;
     memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family = supplied == SOCK_INVALID ? AF_UNSPEC : AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
     if (getaddrinfo(ip, portstr, &hints, &res) != 0 || res == NULL) {
         pc_log_line("net: cannot resolve %s:%u", ip, port);
+        return false;
+    }
+    if (!addr_is_host(res->ai_addr)) {
+        pc_log_line("net: refusing to connect to %s:%u -- not a unicast host address", ip, port);
+        freeaddrinfo(res);
         return false;
     }
     memcpy(&net.peer, res->ai_addr, res->ai_addrlen);
@@ -1094,7 +1648,7 @@ bool pc_net_connect(const char* ip, uint16_t port, int player, uint32_t seed) {
     int family = res->ai_family;
     freeaddrinfo(res);
 
-    sock_t sock = socket(family, SOCK_DGRAM, 0);
+    sock_t sock = supplied == SOCK_INVALID ? socket(family, SOCK_DGRAM, 0) : supplied;
     if (sock == SOCK_INVALID) {
         pc_log_line("net: socket() failed");
         return false;
@@ -1115,15 +1669,27 @@ bool pc_net_connect(const char* ip, uint16_t port, int player, uint32_t seed) {
         a->sin_port = htons(bind_port);
         local_len = sizeof *a;
     }
-    if (bind(sock, (struct sockaddr*)&local, local_len) != 0) {
-        pc_log_line("net: bind(%u) failed", bind_port);
+    if (supplied == SOCK_INVALID && bind(sock, (struct sockaddr*)&local, local_len) != 0) {
+        /* The reason matters: "address already in use" is another instance
+         * (or one still tearing down) holding the port, and the session then
+         * silently does not happen at all -- which looks exactly like two
+         * peers playing unconnected games side by side. */
+        pc_log_line("net: bind(%u) failed, error %d (in use by another instance?)", bind_port,
+            sock_last_err());
         sock_close(sock);
         return false;
     }
     if (!sock_nonblock(sock)) {
         pc_log_line("net: could not put the socket in non-blocking mode");
-        sock_close(sock);
+        if (supplied == SOCK_INVALID)
+            sock_close(sock);
         return false;
+    }
+    if (supplied != SOCK_INVALID) {
+        struct sockaddr_in bound;
+        socklen_t length = sizeof bound;
+        if (getsockname(sock, (struct sockaddr*)&bound, &length) == 0)
+            bind_port = ntohs(bound.sin_port);
     }
     /* Ask the network for expedited forwarding (DSCP EF / 46): low-latency
      * queueing where the path honours it, harmless where it does not. */
@@ -1150,9 +1716,17 @@ bool pc_net_connect(const char* ip, uint16_t port, int player, uint32_t seed) {
     HSD_PadLibData.qtype = 2;
     net.local = player ? 1 : 0;
     net.remote = 1 - net.local;
+    /* A hand-typed address may be a peer the user has not started yet, so it
+     * keeps the long wait. One handed over from matchmaking (pc_net_connect_
+     * socket, the only caller that passes a socket) belongs to a peer that
+     * answered a signed offer seconds ago: if it says nothing now, the
+     * destination is dead, and 60 s of a parked render thread looks exactly
+     * like the crash in issue #87. */
+    net.connect_timeout_ms =
+        supplied == SOCK_INVALID ? CONNECT_TIMEOUT_MS : MATCH_CONNECT_TIMEOUT_MS;
     const char* delay = getenv("MELEE_NET_DELAY");
-    net.delay_auto = delay == NULL || strcmp(delay, "auto") == 0;
-    net.delay = net.delay_auto ? 2 : atoi(delay);
+    net.delay_auto = delay ? strcmp(delay, "auto") == 0 : s_configured_delay < 0;
+    net.delay = net.delay_auto ? 2 : delay ? atoi(delay) : s_configured_delay;
     if (net.delay < 0 || net.delay >= RING / 2) {
         net.delay = 2;
     }
@@ -1189,6 +1763,20 @@ bool pc_net_connect(const char* ip, uint16_t port, int player, uint32_t seed) {
     if (seed != 0) {
         *HSD_RandSeedPtr = seed;
     }
+    /* MELEE_NET_KEY: one secret typed by whoever starts both instances. The
+     * handshake derives a key of its own from the two nonces, but only once
+     * it completes, so this is what covers the bootstrap window before that
+     * -- and it is all a peer has if the two never agree. It pins the key
+     * for the whole session -- a handshake later on will not replace it --
+     * because rekeying in flight would drop every datagram that straddled
+     * the change, and the two peers cannot make that change on the same
+     * frame. */
+    const char* key = getenv("MELEE_NET_KEY");
+    if (key != NULL && key[0] != '\0') {
+        net_key_direct(key);
+        pc_log_line("net: datagrams authenticated from MELEE_NET_KEY (the handshake will not "
+                    "rekey this session)");
+    }
     SDL_LockMutex(net.tx_lock);
     net.sock = sock;
     net.active = true;
@@ -1201,7 +1789,35 @@ bool pc_net_connect(const char* ip, uint16_t port, int player, uint32_t seed) {
         net.session, WIRE_VERSION, net.sim_loss, (int)(net.sim_delay_ns / 1000000),
         (int)(net.sim_rx_delay_ns / 1000000), net.sim_jitter_ms, net.sim_reorder, net.sim_dup,
         net.sim_burst);
+    /* The FP control word, from inside the shipped process. Flush-to-zero or
+     * a non-default rounding mode on one peer and not the other silently
+     * changes every result; it was measured IEEE-default on both targets,
+     * but only ever in a shell process, because a release APK cannot be
+     * ptraced. Two peers' logs now answer it directly. */
+    {
+        uint64_t fp = 0;
+#if defined(__aarch64__)
+        __asm__ volatile("mrs %0, fpcr" : "=r"(fp));
+#elif defined(__x86_64__) || defined(__i386__)
+        uint32_t mxcsr = 0;
+        __asm__ volatile("stmxcsr %0" : "=m"(mxcsr));
+        fp = mxcsr;
+#endif
+        pc_log_line("net: fp control word %08" PRIx64 " (0 = IEEE default on aarch64; "
+                    "x86 default 1f80)",
+            fp);
+    }
     return true;
+}
+
+bool pc_net_connect(const char* ip, uint16_t port, int player, uint32_t seed) {
+    return connect_impl(SOCK_INVALID, ip, port, player, seed);
+}
+bool pc_net_connect_socket(
+    intptr_t socket, const char* ip, uint16_t port, int player, uint32_t seed) {
+    if (socket == -1)
+        return false;
+    return connect_impl((sock_t)socket, ip, port, player, seed);
 }
 
 void pc_net_init(void) {
@@ -1220,11 +1836,45 @@ void pc_net_init(void) {
     host[colon - peer] = '\0';
     const char* player = getenv("MELEE_NET_PLAYER");
     const char* seed = getenv("MELEE_SEED");
-    if (seed == NULL) {
-        pc_log_line("net: MELEE_SEED not set; peers will diverge at the first random call");
+    if (!pc_net_connect(host, (uint16_t)atoi(colon + 1), player && player[0] == '1',
+            seed ? (uint32_t)strtoul(seed, NULL, 0) : 0))
+    {
+        return;
     }
-    pc_net_connect(host, (uint16_t)atoi(colon + 1), player && player[0] == '1',
-        seed ? (uint32_t)strtoul(seed, NULL, 0) : 0);
+    /* No lobby agreed this match, so the session agrees it itself: the same
+     * RULES/READY exchange a lobby session runs, hosted by player 1, fired
+     * from the frame loop once the game has filled its own rules in
+     * (handshake_direct, net_handshake.c). Everything match-affecting is
+     * therefore validated rather than assumed, including the seed -- the
+     * host's wins, so MELEE_SEED no longer has to be set, or set equal, on
+     * both peers. */
+    net.direct = true;
+    /* Said plainly rather than left to be inferred from a missing line: the
+     * key arrives with the handshake, so until it completes there is nothing
+     * to authenticate these datagrams with and anything that can reach this
+     * port can inject input, acks, a delay change or a BYE. A shared secret
+     * closes that window from the first packet. */
+    const char* key = getenv("MELEE_NET_KEY");
+    if (key == NULL || key[0] == '\0') {
+        pc_log_line("net: this MELEE_NET session is UNAUTHENTICATED until its handshake "
+                    "completes; set the same MELEE_NET_KEY on both peers to authenticate its "
+                    "datagrams from the first one");
+    }
+}
+
+int32_t pc_net_start_frame(void) {
+    return net.active ? net.start_frame : -1;
+}
+
+void pc_net_poll(void) {
+    if (!net.active) {
+        return;
+    }
+    recv_inputs();
+    send_inputs(); /* includes reliable retransmits while simulation is parked */
+    if (s_peer_left) {
+        pc_net_disconnect();
+    }
 }
 
 int32_t pc_net_frame(void) {
@@ -1336,6 +1986,16 @@ void pc_net_audio_deaf_note(bool live) {
     }
 }
 
+static void audio_journal_reset(void) {
+    memset(s_aj, 0, sizeof s_aj);
+    s_aj_i = 0;
+    s_aj_on = false;
+    s_aj_over = 0;
+    s_aj_replays = 0;
+    s_deaf_asks = 0;
+    s_deaf_true = 0;
+}
+
 /* Only the sound path asks (axdriver.c AXDriver_8038CFF4, lbaudio_ax.c
  * lbAudioAx_80023F28): a re-simulated frame must not start its sounds a
  * second time. That choke is the one thing a re-simulated frame does
@@ -1349,6 +2009,35 @@ bool pc_net_resim(void) {
         choke = e != NULL && e[0] == '1' ? 0 : 1;
     }
     return choke != 0 && (net.resim || net.synctest);
+}
+
+/* Every input wait, including a failed snapshot, has the same disconnect
+ * handling. A failed snapshot must not allow a speculative tick to run. */
+static bool wait_input(int32_t need) {
+    if (wait_remote(need)) {
+        return true;
+    }
+    /* A refused resume logged its own reason, and the peer was not
+     * silent at all: its answer was simply unusable. */
+    if (!s_peer_left && s_rc != RSM_FAILED) {
+        if (s_no_progress) {
+            pc_log_line("net: peer still sending but stuck at frame %d for %d ms, leaving netplay",
+                s_remote_newest, NO_PROGRESS_TIMEOUT_MS);
+        } else {
+            pc_log_line("net: peer silent for %d ms at frame %d, leaving netplay",
+                s_heard ? STALL_TIMEOUT_MS : connect_timeout_ms(), net.frame);
+        }
+    }
+    /* The BYE can arrive while the game thread is parked in
+     * wait_remote() rather than in recv_inputs() above, and that is the
+     * usual case once one-way delay is high enough to stall every
+     * frame. Without this the stalling side never ends the test and the
+     * harness kills it, which reads as a netplay failure. */
+    if (s_peer_left) {
+        exit_if_test_done();
+    }
+    pc_net_disconnect();
+    return false;
 }
 
 /* ---- rollback ---------------------------------------------------------
@@ -1365,22 +2054,23 @@ static void predict(int32_t f) {
 
 /* Snapshot before a predicted frame. Behind the barrier nothing is taken
  * (the frame cannot be rolled back to anyway); when the buffer cannot be
- * grown the session drops to lockstep for good rather than mispredicting
- * into a desync. */
-static void snap_predicted(int32_t f) {
+ * grown, disable further prediction without invalidating older snapshots.
+ * The caller must wait for real input before running this frame. */
+static bool snap_predicted(int32_t f) {
     Snapshot* s = snap_slot(f);
-    if (f <= net.rb_barrier) {
-        s->frame = -1;
-        return;
+    if (s_lockstep || f <= net.rb_barrier) {
+        return false;
     }
     if (!snapshot_take(s, f)) {
         /* Out of memory, or a platform whose linker cannot bracket the
          * decomp's statics at all (net_snapshot.c). */
         const char* why = snapshot_state_region_missing();
-        barrier_raise(INT32_MAX);
+        s_lockstep = true;
         pc_log_line("net: %s at frame %d, lockstep from here",
             why != NULL ? why : "out of memory for snapshots", f);
+        return false;
     }
+    return true;
 }
 
 /* MELEE_NET_RESIM_AUDIT_POISON=1: the audit's discarded pass runs with a
@@ -1438,6 +2128,16 @@ static uint8_t s_head_qread, s_head_qwrite, s_head_qcount;
 static uint32_t s_head_retrace; /* frame boundaries seen at the write */
 static unsigned s_pad_slips, s_pad_full, s_tick_idle;
 static uint8_t s_qdepth_max;
+
+static void pad_stats_reset(void) {
+    s_pad_slips = 0;
+    s_pad_full = 0;
+    s_tick_idle = 0;
+    s_qdepth_max = 0;
+    s_head_frame = -1;
+    net.pad_reuse = 0;
+    net.pad_empty = 0;
+}
 
 static void head_note(const PADStatus* head, int32_t f) {
     const PadLibData* p = &HSD_PadLibData;
@@ -1539,10 +2239,14 @@ static PADStatus* unconsume(void) {
 
 /* Set up the re-run of frame f: refresh its snapshot if it is still
  * predicted (the old one holds the discarded timeline), then feed it. */
-static void resim_prepare(int32_t f) {
+static bool resim_prepare(int32_t f) {
     if (f > s_remote_have) {
-        predict(f);
-        snap_predicted(f);
+        if (!snap_predicted(f) && !wait_input(f)) {
+            return false;
+        }
+        if (f > s_remote_have) {
+            predict(f);
+        }
     }
     PADStatus* head = unconsume();
     if (head == NULL) {
@@ -1566,13 +2270,17 @@ static void resim_prepare(int32_t f) {
     s_ck_ring[f & (RING - 1)] = frame_checksum(head);
     /* The state ring is the last simulation of each frame, which is the
      * confirmed timeline (the desync dump and the audit's field-level diff
-     * both read it); without this it held first-pass values only. */
+     * both read it); without this it held first-pass values only. The
+     * recording wants the same treatment: this re-run replaces the staged
+     * record for f, so what reaches the file is the pass that stood. */
     record_state(head, f);
+    record_frame(head, s_ck_ring[f & (RING - 1)], f);
     if (s_sim_n[f & (RING - 1)] < 255) {
         s_sim_n[f & (RING - 1)]++;
     }
     net.tick_frame = f;
     audio_journal_begin(f); /* the re-run replays this frame's audio answers */
+    return true;
 }
 
 static bool rollback_to(int32_t f) {
@@ -1604,6 +2312,9 @@ static bool rollback_to(int32_t f) {
     memcpy(queue, pad.queue, qn * sizeof *queue);
     snapshot_restore(s);
     memcpy(pad.queue, queue, qn * sizeof *queue);
+    /* Rumble nodes and active heads were rewound: their free-list head must
+     * come from that same snapshot, not the discarded live timeline. */
+    pad.rumble_info = HSD_PadLibData.rumble_info;
     HSD_PadLibData = pad;
     OSRestoreInterrupts(intr);
     s_rollbacks++;
@@ -1615,8 +2326,7 @@ static bool rollback_to(int32_t f) {
         s_rb_depth_cur = depth;
     }
     net.resim = true;
-    resim_prepare(f);
-    return true;
+    return resim_prepare(f);
 }
 
 /* ---- per-tick entry --------------------------------------------------- */
@@ -1638,10 +2348,40 @@ static int seed_steps(uint32_t from, uint32_t to) {
  * by the start of the next one: everything between those two points is
  * outside every tick (the render phase, the audio thread), so a draw there
  * is state the rollback re-run can never reproduce. */
-static uint32_t s_seed_after_tick;
-static bool s_seed_have;
 static unsigned s_seed_out_draws, s_seed_out_frames;
 
+static void seed_stats_reset(void) {
+    s_seed_out_draws = 0;
+    s_seed_out_frames = 0;
+}
+
+/* Called at the top of a tick. The seed is folded into the netplay checksum
+ * (net_snapshot.c:148) and outside a fight the checksum is ONLY the pads and
+ * this seed, so a draw between two ticks that happens on one peer and not
+ * the other is by itself a desync.
+ *
+ * Two separate causes, both measured, both fixed:
+ *
+ * 1. The wall clock. gmtitle.c:161-170 stirred the RNG once per
+ *    seconds-of-minute, so two machines that reached the title eight
+ *    wall-seconds apart stirred 41 times against 49 (phone<->PC). Fixed at
+ *    the source, because no repair here can invent the draws the other peer
+ *    made.
+ *
+ * 2. Scene timing. The rest are scene-enter draws -- stage init, CPU AI init
+ *    inside Fighter_Create -- backtraced across three 9900-frame sessions
+ *    and never paced by rendering. Two peers of similar speed make them on
+ *    the same frame, but a slow device does not: an SM-T505 against this PC
+ *    drew at frame 232 where the PC drew later, and desynced there. The seed
+ *    a tick starts from must therefore be the seed the last tick ended with,
+ *    whatever the gap between them contained.
+ *
+ * Netplay only (`net.active`). A recording leg must NOT do this: whether a
+ * draw falls inside or outside a tick depends on load timing, so rewriting
+ * the seed makes a recording that only replays on a machine of the same
+ * speed -- measured, it moved the replay divergence to frame 1. Netplay is
+ * the opposite case: both peers run one frame stream and the repair is
+ * applied identically on each, which is what makes them agree. */
 static void seed_out_of_tick_check(void) {
     if (!s_seed_have) {
         return;
@@ -1654,8 +2394,99 @@ static void seed_out_of_tick_check(void) {
     s_seed_out_frames++;
     s_seed_out_draws += steps > 0 ? (unsigned)steps : 0;
     if (s_seed_out_frames <= 3) {
-        pc_log_line("net: seed moved outside the tick at frame %d: %08x -> %08x (%d draws)",
-            net.frame, s_seed_after_tick, now, steps);
+        pc_log_line("net: seed moved outside the tick at frame %d: %08x -> %08x (%d draws)%s",
+            net.frame, s_seed_after_tick, now, steps, net.active ? ", restoring" : "");
+    }
+    if (net.active) {
+        *HSD_RandSeedPtr = s_seed_after_tick;
+    }
+}
+
+/* How many TICKS a load costs must not depend on this machine's disc speed.
+ * The game polls a read's completion once per tick, so a peer whose file
+ * cache is warm finishes in one tick while the other spends hundreds --
+ * measured tablet<->PC on a real match: the tablet entered the fight at
+ * frame 39470 and this PC at 40353, 883 frames (~15 s) later, with an
+ * identical seed and identical pads, and the session desynced on the first
+ * frame `frame_checksum` folded fighter fields for (it folds them only while
+ * in_fight()). Draining the queue before the tick makes the read complete
+ * inside the tick that issued it, so the poll succeeds on the same tick for
+ * both peers.
+ *
+ * Netplay only, and bounded: a wedged read must not hang the game, and while
+ * this blocks, the peer simply sees the stall that wait_remote() is built to
+ * ride out. */
+static void dvd_settle(void) {
+    if (aurora_dvd_inflight() <= 0 && aurora_arq_inflight() <= 0) {
+        return;
+    }
+    const uint64_t t0 = SDL_GetTicksNS();
+    static bool warned;
+    while (aurora_dvd_inflight() > 0 || aurora_arq_inflight() > 0) {
+        if (SDL_GetTicksNS() - t0 > 5000000000ull) {
+            /* The transfer is not going to settle in time. Letting the tick
+             * run here was the dangerous half of this: past this point the
+             * two peers can be simulating the same frame with different I/O
+             * completed, and nothing downstream would notice until the
+             * checksum happened to cover whatever the load changed. Run on,
+             * because parking the game thread indefinitely is worse, but
+             * take rollback off the table for a while: a lockstep frame is
+             * still the same frame on both sides, and it cannot be re-run
+             * from a snapshot that may predate the completion. */
+            barrier_raise(net.frame + IO_QUIET);
+            if (!warned) {
+                warned = true;
+                pc_log_line("net: disc/ARAM transfer still in flight after 5 s at frame %d; "
+                            "running on in lockstep to frame %d",
+                    net.frame, net.rb_barrier);
+            }
+            return;
+        }
+        /* This thread is alive and spinning, not wedged: say so, or the
+         * watchdog's 5 s threshold is exactly this loop's own 5 s cap and a
+         * disc drain reports a healthy thread (and dumps a stack from inside
+         * whatever it happens to hold). */
+        net_watchdog_heartbeat();
+        SDL_DelayNS(200000);
+    }
+}
+
+/* MELEE_NET_STALL_TEST=frame[:ms] (fixture): park the game thread mid-match,
+ * standing in for a load the netcode cannot shorten -- a stage, a character,
+ * a first-time shader compile. Only the guest does it, so one exported value
+ * stalls exactly one side of a two-process run. tx_timer keeps sending
+ * throughout, which is the condition wait_remote() has to tell apart from a
+ * peer that is actually gone. */
+static void stall_test(void) {
+    static bool parsed;
+    static int32_t at = -1;
+    static int ms = 10000;
+    if (!parsed) {
+        parsed = true;
+        const char* s = getenv("MELEE_NET_STALL_TEST");
+        if (s != NULL) {
+            const char* colon = strchr(s, ':');
+            at = (int32_t)atoi(s);
+            if (colon != NULL) {
+                ms = atoi(colon + 1);
+            }
+        }
+    }
+    if (at >= 0 && net.frame == at && net.local == 1) {
+        pc_log_line("net: stall test: game thread asleep %d ms at frame %d", ms, at);
+        SDL_Delay((Uint32)ms);
+    }
+}
+
+/* Read the latest published hardware state immediately before input is
+ * sent. Extra time-sync ticks and rollback must reuse their recorded sample;
+ * they must never sample hardware a second time. Physical port zero is the
+ * local controller even when matchmaking assigned this peer player two. */
+static void capture_local_sample(bool fresh) {
+    if (fresh) {
+        PADStatus pads[4];
+        PADRead(pads);
+        s_raw_last = pads[0];
     }
 }
 
@@ -1664,16 +2495,42 @@ static void seed_out_of_tick_check(void) {
  * time-sync advance adds, which reuses the last physical sample. */
 static void fresh_tick(PADStatus* head, bool raw) {
     if (net.active) {
-        if (raw) {
-            s_raw_last = head[0];
+        /* Part cleanly rather than run the frame counter toward the end of
+         * its range; every ring index and every wire field is an absolute
+         * int32 frame, and there is no wrap strategy behind them. */
+        if (net.frame >= SESSION_MAX_FRAMES) {
+            pc_log_line("net: session frame limit reached at %d, disconnecting", net.frame);
+            pc_net_disconnect();
+            return;
         }
+        stall_test();
+        static int timing_debug = -1;
+        static uint64_t sample_send_total, sample_send_max;
+        static unsigned sample_send_count;
+        if (timing_debug < 0)
+            timing_debug = getenv("MELEE_NET_DEBUG") != NULL;
+        uint64_t sampled_at = timing_debug && raw ? SDL_GetTicksNS() : 0;
+        capture_local_sample(raw);
         /* One slot per tick; a delay change (delay_auto) leaves a gap to fill
          * with the same sample, or already-sent frames that must not move. */
-        for (int32_t w = s_wrote + 1; w <= net.frame + net.delay; w++) {
+        int64_t target_w = (int64_t)net.frame + net.delay;
+        for (int32_t w = s_wrote + 1; (int64_t)w <= target_w; w++) {
             to_wire(&s_local_ring[w & (RING - 1)], &s_raw_last);
             s_wrote = w;
         }
         send_inputs();
+        if (sampled_at) {
+            uint64_t elapsed = SDL_GetTicksNS() - sampled_at;
+            sample_send_total += elapsed;
+            if (elapsed > sample_send_max)
+                sample_send_max = elapsed;
+            if (++sample_send_count == 600) {
+                pc_log_line("net timing: input poll-to-send mean %.3f max %.3f ms at frame %d",
+                    sample_send_total / 600000000.0, sample_send_max / 1000000.0, net.frame);
+                sample_send_count = 0;
+                sample_send_total = sample_send_max = 0;
+            }
+        }
         recv_inputs();
         if (s_peer_left) {
             exit_if_test_done();
@@ -1684,30 +2541,45 @@ static void fresh_tick(PADStatus* head, bool raw) {
          * it can be restored, and its loads trail into the next frames. */
         int scene = scene_kind();
         if (scene != s_scene_last) {
+            /* Both peers must enter a scene on the SAME frame; when they do
+             * not, the sims are running different code and the checksum
+             * says so a frame later (docs/netcode-plan.md section 5.2). Two
+             * peers' logs diffed on this line give the gap directly, which
+             * is the measurement any fix for it has to move. */
+            pc_log_line("net: scene %d -> %d at frame %d", s_scene_last, scene, net.frame);
             s_scene_last = scene;
-            barrier_raise(net.frame + IO_QUIET);
+            int lead = in_fight() ? 10 : IO_QUIET;
+            barrier_raise(net.frame + lead);
         }
         /* Predict at most WINDOW frames past the remote, and only in a
          * fight past the barrier (plan §10.4: menus lockstep, rollback
-         * armed in GS_VS once the match's own loads have gone quiet). */
-        bool lockstep = !in_fight() || net.frame <= net.rb_barrier;
-        int32_t need = lockstep ? net.frame : net.frame - WINDOW;
-        if (!wait_remote(need)) {
-            /* A refused resume logged its own reason, and the peer was not
-             * silent at all: its answer was simply unusable. */
-            if (!s_peer_left && s_rc != RSM_FAILED) {
-                pc_log_line("net: peer silent for %d ms at frame %d, leaving netplay",
-                    s_heard ? STALL_TIMEOUT_MS : CONNECT_TIMEOUT_MS, net.frame);
-            }
-            pc_net_disconnect();
+         * armed in GS_VS once the match's own loads have gone quiet).
+         *
+         * Slow (or fast) motion is lockstep as well. A re-run tick calls
+         * lb_80019900 again, and its frame-skip accumulator lives in
+         * lb_0195.c, which the snapshot deliberately excludes (melee_state.ld)
+         * because rewinding the pad alarm makes it queue catch-up ticks. The
+         * accumulator is only idempotent per tick while the tick period
+         * equals the step, i.e. at game speed 1.0; Slo-Mo Melee halves it
+         * (gmslomo.c sets game_speed 0.5 and declares itself GS_VS), so
+         * after a rollback of odd depth the two peers advance the scene on
+         * opposite ticks -- one simulates a frame the other skips. */
+        bool lockstep = s_lockstep || !in_fight() || net.frame <= net.rb_barrier ||
+                        gmVsMelee_StartData.rules.game_speed != 1.0F;
+        int32_t need = lockstep ? net.frame : (net.frame >= WINDOW ? net.frame - WINDOW : 0);
+        if (!wait_input(need)) {
             return;
         }
         if ((net.frame % SYNC_INTERVAL) == 0 && net.frame > 0) {
             time_sync();
         }
         if (s_remote_have < net.frame) {
-            predict(net.frame);
-            snap_predicted(net.frame);
+            if (!snap_predicted(net.frame) && !wait_input(net.frame)) {
+                return;
+            }
+            if (s_remote_have < net.frame) {
+                predict(net.frame);
+            }
         }
         /* Re-resolve the slot the next HSD_PadRenewMasterStatus will read.
          * The pointer this tick started with was taken before wait_remote
@@ -1734,20 +2606,41 @@ static void fresh_tick(PADStatus* head, bool raw) {
     if (net.active) {
         check_desync(); /* reports and dumps both rings on the first mismatch */
     }
-    record_frame(head, ck);
+    record_frame(head, ck, net.frame);
+    /* Everything the peer has acknowledged can no longer be rolled back, so
+     * its staged record is final and can go to the file in frame order. */
+    record_confirm(confirmed_frame());
 
     if ((net.frame % 60) == 0) {
         s_rb_depth_recent = s_rb_depth_cur; /* pc_net_quality: deepest rollback last second */
         s_rb_depth_cur = 0;
+        /* Loss over the last second, smoothed over three. Both consumers of
+         * this react to a burst -- send_inputs() widens the redundancy and
+         * tx_timer() turns the mid-frame resend back on -- so the ten-second
+         * window this replaces could answer a burst after it was over.
+         *
+         * The smoothing is symmetric on purpose. A one-second window is only
+         * ~60 acks, so its binomial spread is wide; taking the rise
+         * immediately and decaying slowly latches onto the top of that
+         * spread instead of its mean, which measured 6% on a link losing 1%
+         * and is enough on its own to make pc_net_quality() call a good
+         * connection bad. */
+        int sent = (int)(net.tx_inputs - s_loss_tx_mark);
+        int acked = (int)(s_rx_acks - s_loss_ack_mark);
+        s_loss_tx_mark = net.tx_inputs;
+        s_loss_ack_mark = s_rx_acks;
+        if (sent > 0) {
+            int now_pct = sent > acked ? 100 * (sent - acked) / sent : 0;
+            s_loss_pct = (s_loss_pct * 2 + now_pct) / 3;
+        }
     }
     if ((net.frame % 600) == 0 && net.frame > 0 && net.active) {
-        s_loss_pct = net.tx_inputs > s_rx_acks && net.tx_inputs > 0 ?
-                         (int)(100 * (net.tx_inputs - s_rx_acks) / net.tx_inputs) :
-                         0;
         pc_log_line("net: frame %d, rollbacks %u (max depth %d, lost %u), stalls %u (worst "
                     "%.1f ms), skips %u, advances %u, ping %u ms (avg %.0f, min %u, max %u, "
                     "jitter %.1f), loss %d%% (%u tx %u rx), offset %+.1f ms, remote behind %d, "
                     "barrier %d, quality %d, dup %u reorder %u sock_err %u resim_eat %u red %d, "
+                    "drops (bad_src %u bad_sess %u bad_player %u bad_mac %u malformed %u "
+                    "would_block %u), "
                     "pad reuse %u empty %u, audio replayed %u over %u, seed out-of-tick %u draws "
                     "in %u frames, pad slips %u (queue worst %u, full at write %u), idle ticks %u, "
                     "audio liveness asked %u (engine would say yes %u)",
@@ -1756,16 +2649,20 @@ static void fresh_tick(PADStatus* head, bool raw) {
             s_ping_n ? s_ping_sum / 1000.0 / s_ping_n : 0.0, s_rtt_min / 1000, s_rtt_max / 1000,
             jitter_us() / 1000.0, s_loss_pct, net.tx_pkts, s_rx_pkts, net.offset_last / 1000.0,
             net.frame - 1 - s_remote_have, net.rb_barrier, pc_net_quality(), s_rx_dups,
-            s_rx_reorders, s_sock_err, s_resim_eat, s_red_target, net.pad_reuse, net.pad_empty,
-            s_aj_replays, s_aj_over, s_seed_out_draws, s_seed_out_frames, s_pad_slips, s_qdepth_max,
-            s_pad_full, s_tick_idle, s_deaf_asks, s_deaf_true);
+            s_rx_reorders, s_sock_err, s_resim_eat, s_red_target, s_rx_bad_src, s_rx_bad_sess,
+            s_rx_bad_player, s_rx_bad_mac, s_rx_malformed, s_tx_would_block, net.pad_reuse,
+            net.pad_empty, s_aj_replays, s_aj_over, s_seed_out_draws, s_seed_out_frames,
+            s_pad_slips, s_qdepth_max, s_pad_full, s_tick_idle, s_deaf_asks, s_deaf_true);
         snap_stats_report();
         s_stall_ns_max = 0;
         s_ping_sum = 0;
         s_ping_n = 0;
         s_rtt_min = s_rtt_max = 0;
         net.tx_pkts = s_rx_pkts = net.tx_inputs = s_rx_acks = 0;
+        s_loss_tx_mark = s_loss_ack_mark = 0; /* the marks index those counters */
         s_rx_dups = s_rx_reorders = s_sock_err = s_resim_eat = 0;
+        s_rx_bad_src = s_rx_bad_sess = s_rx_bad_player = s_rx_malformed = s_tx_would_block = 0;
+        s_rx_bad_mac = 0;
     }
 #ifdef MELEE_FP_PERTURB_NAME
     if ((net.frame % 600) == 0 && net.frame > 0) {
@@ -1806,6 +2703,18 @@ static uint32_t s_audit_ck[RING], s_audit_ck1[RING]; /* checksums of pass 1 / re
 static char s_audit_state[SNAPS][320]; /* their state lines, for the field-level diff */
 static char s_audit_state1[SNAPS][320];
 static int32_t s_audit_done = -1; /* frame the last audit ran at */
+
+static void audit_reset(void) {
+    memset(&s_audit_after, 0, sizeof s_audit_after);
+    memset(&s_audit_run1, 0, sizeof s_audit_run1);
+    memset(&s_audit_now, 0, sizeof s_audit_now);
+    s_audit_running = false;
+    s_audit_pass = 0;
+    s_audit_done = -1;
+    s_audit_runs = 0;
+    s_audit_ck_bad = 0;
+    s_audit_pure_bad = 0;
+}
 
 void pc_net_sync(void) {
     static bool opened;
@@ -1849,7 +2758,14 @@ void pc_net_sync(void) {
         SDL_UnlockMutex(net.tx_lock);
     }
     if (net.active) {
-        pad_qtype_hold(); /* HSD_PadInit wipes it; the tick depends on it */
+        net_watchdog_arm(); /* this is the thread that must keep moving */
+        pad_qtype_hold();   /* HSD_PadInit wipes it; the tick depends on it */
+        dvd_settle();
+    }
+    if (net.active || record_active()) {
+        /* Also on the record/replay legs: a recording made with a seed that
+         * drifts with the frame rate cannot replay identically anywhere,
+         * which is the M0 claim (docs/netcode-plan.md section 5). */
         seed_out_of_tick_check();
     }
     if (net.synctest) {
@@ -1872,10 +2788,13 @@ void pc_net_sync(void) {
     if (p->qcount == 0) {
         net.pad_empty++;
     }
-    if (net.sync_mode != SYNC_ON) {
+    if (net.sync_mode == SYNC_LEGACY) {
         fresh_tick(&p->queue->stat[p->qread * 4], true); /* pre-fix path, net_sync.c */
         return;
     }
+    /* SYNC_OFF measures the link and never acts on it (net_sync.c), so it
+     * keeps the normal input path: a control run has to differ from the run
+     * under test in the time sync alone, not in how pads reach the tick. */
     PADStatus* head = p->qcount > 0 ? &p->queue->stat[p->qread * 4] : unconsume();
     fresh_tick(head != NULL ? head : &p->queue->stat[p->qread * 4], fresh);
 }
@@ -2003,13 +2922,22 @@ static void audit_after_run2(void) {
         s_audit_from, s_audit_k, s_audit_ck_bad, s_audit_pure_bad, s_audit_runs);
 }
 
-bool pc_net_after_tick(void) {
+bool pc_net_after_tick(bool scene_ending) {
     s_aj_on = false; /* the tick is over: later audio queries are not its own */
     head_check();    /* did this tick consume the inputs write_head wrote? */
     if (net.synctest) {
         return synctest_after_tick();
     }
     if (!net.active) {
+        /* The record/replay leg never reaches the arming at the bottom, so
+         * without this s_seed_have stays false and the check above is a
+         * permanent no-op there -- a recording whose seed was stirred by the
+         * wall clock could never replay identically anywhere, which is the
+         * whole M0 claim (docs/netcode-plan.md section 5). */
+        if (record_active()) {
+            s_seed_after_tick = *HSD_RandSeedPtr;
+            s_seed_have = true;
+        }
         return false;
     }
     recv_inputs();
@@ -2017,15 +2945,18 @@ bool pc_net_after_tick(void) {
         int32_t f = s_rb_frame;
         s_rb_frame = -1;
         if (rollback_to(f)) {
+            s_resim_run = 0;
             return true;
         }
     }
     if (net.resim) {
         if (net.tick_frame + 1 < net.frame) {
-            resim_prepare(net.tick_frame + 1);
-            return true;
+            s_resim_run++;
+            return resim_prepare(net.tick_frame + 1);
         }
         net.resim = false;
+        resim_note(s_resim_run + 1); /* the tick that just ran was a re-run too */
+        s_resim_run = 0;
         if (s_audit_running) {
             bool more = s_audit_pass == 0 ? audit_after_poison() :
                         s_audit_pass == 1 ? audit_after_run1() :
@@ -2064,8 +2995,22 @@ bool pc_net_after_tick(void) {
         }
     }
     check_desync();
-    handshake_test();
-    if (net.advance_left > 0 && (net.frame % 5) == 0) {
+    handshake_direct();
+    if (net.direct && net.hs == HS_FAILED) {
+        /* A direct session has no lobby to report a refusal to, so it ends
+         * itself. Whichever check failed has already logged why; what this
+         * adds is that the session is over rather than about to play on and
+         * desync a minute later. INCOMPATIBLE rides the BYE, so the peer
+         * reports the same class even when its own side of the exchange was
+         * still waiting. */
+        s_status = PC_NET_PEER_INCOMPATIBLE;
+        pc_log_line("net: refusing this session at frame %d, the peers did not agree on the "
+                    "match parameters",
+            net.frame);
+        pc_net_disconnect();
+        return false;
+    }
+    if (!scene_ending && net.advance_left > 0 && (net.frame % 5) == 0) {
         /* Behind the peer: one extra tick this present, once per 5 frames. */
         PADStatus* head = unconsume();
         if (head != NULL) {

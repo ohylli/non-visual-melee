@@ -1,9 +1,9 @@
 # melee-pc
 
 **Beta, for testing only.** "melee-pc" is a working name. Online play with
-rollback netcode is in development: on this branch two copies play over a
-LAN or a direct IP (see [Netplay](#netplay-lan-and-direct-ip-prototype));
-internet matchmaking is **not implemented yet**.
+rollback netcode is in development. This branch includes LAN, internet friend
+codes, Unranked matchmaking and ranked best-of-three sets. See
+[Netplay](#netplay-lan-and-direct-ip-prototype) for setup and verification limits.
 
 A native PC port of Super Smash Bros. Melee (NTSC-U 1.02), built from
 [doldecomp/melee](https://github.com/doldecomp/melee) on top of
@@ -96,7 +96,7 @@ table is right and the other one is stale.
 | High-refresh interpolation | planned | |
 | Training tools (hitboxes, savestates, frame advance) | planned | |
 | Replay recording (`.slp`) | planned | `src/pc/slp.h` defines the hook points; nothing implements them. |
-| Online play (rollback, DHT matchmaking) | planned | Not implemented. |
+| Online play (LAN / direct IP) | partial | LAN/direct-IP plus signed internet Direct, Unranked and Ranked implemented. Public DHT storage verified; two-NAT and live ranked acceptance remain pending. See platform matrix below. |
 | RetroAchievements | planned | |
 
 The phases behind the planned rows, and why they are ordered that way, are in
@@ -233,14 +233,18 @@ Both must run the same build **and the same game image**, with no memory card
 (`--no-card`). The LAN lobby announces a 32-bit id of the disc it booted
 (region, revision, file-table shape and the DOL, so a code mod counts), and a
 peer on a different image is listed as incompatible before a single game
-packet is exchanged — same as a different build version. Direct connect does
-not check either: there is no lobby record to read them from.
+packet is exchanged — same as a different build version. Internet friend-code
+pairing also binds build and disc identity; the legacy direct-IP environment
+path retains its older protocol-version-only check.
 
 In the menus: VS Mode → ONLINE → LAN PLAY finds other
 copies on the local network by mDNS and the first Start elects a host
-(lowest install id wins a tie); DIRECT CONNECT takes the other machine's
-`ip:port` and needs no discovery, which is also the way past Wi-Fi client
-isolation. The game port is UDP 41000 by default and discovery uses UDP
+(lowest install id wins a tie). In the launcher or F1 Online tab, set your name
+and your friend's `NAME#XXXX` code, then choose DIRECT CONNECT. UNRANKED searches
+for an opponent; RANKED runs a rated best-of-three set. PROFILE shows your code
+and locally verified rating. Internet discovery may take about 30 seconds to
+bootstrap and some NATs cannot support a direct peer connection. Legacy
+`MELEE_LAN_DIRECT=ip:port` remains available for direct-IP sessions. The game port is UDP 41000 by default and discovery uses UDP
 5353 multicast; allow both through the firewall (Windows asks on first
 launch). The install id used for the election is `install_id` in
 `launcher.cfg`.
@@ -251,6 +255,15 @@ comes back within 15 s and neither side's 64-frame input ring has been
 outrun. The lobby shows "reconnecting"; a failure that cannot be resumed says
 "Could not resume" instead of "Connection timed out".
 
+A peer that is *loading* is not a peer that is gone. Silence is measured from
+the last datagram the peer sent, not from how long this side has been
+waiting: a machine whose game thread is inside a stage load, a character
+load or a first-time shader compile keeps its sender running, so the link
+carries it however long it takes and the transition screen simply waits.
+Before that distinction existed, any load over 7 s froze both games on "NOW
+LOADING" and one over ~22 s ended the session outright, which is what a
+phone's first match cost.
+
 **What works where.** Only Linux x86-64 has played real matches, but a Linux
 recording now replays bit-identical on Windows, so the two builds compute the
 same game.
@@ -258,20 +271,27 @@ same game.
 | Platform | Netplay | Rollback | Notes |
 |---|---|---|---|
 | Linux x86-64 | yes | yes | the configuration everything below was measured on; longest run 36 minutes and 126k frames of match |
-| Windows | yes, but lockstep | **no** | the snapshot region is named by an ELF linker script, which PE/COFF cannot use, so the session never predicts and input delay has to cover the whole round trip. Determinism against Linux is proven by replay; two machines actually playing has not been tried |
-| macOS / iOS | builds, never run | no | same linker limitation; no macOS hardware here to try it on |
-| Android | builds, never run on a device | yes, in principle | LAN discovery needs the Wi-Fi multicast lock, which the app now holds only while the lobby is open |
+| Windows x86-64 / ARM64 | implemented | enabled | PE ranges cover both supported toolchains. x86-64 restore runs under Wine; ARM64 compiler-bridge and linked-range checks pass. Full Windows rollback gameplay remains unverified |
+| macOS / iOS | builds; online gameplay unverified | enabled | Mach-O simulation sections support Intel/Apple Silicon macOS and ARM64 iOS. Cross-link/bridge checks pass; native restore is a macOS CI check. Device gameplay remains unverified |
+| Android | runs on a device; found and joined a PC over LAN | enabled; gameplay unverified | Measured on a Pixel 8 Pro against Linux x86-64: mDNS discovery, election, handshake and 1800+ frames of synced menus at 10-16 ms ping and 0 % loss, both peers entering the CSS on the same frame. No match has been played to the end yet. New ARM64/x86-64 NDK-linked restore fixtures pass (ARM64 under QEMU), but device rollback gameplay is still unproven. The lobby holds the Wi-Fi multicast lock while it is open |
+
+All supported builds require simulation snapshot sections and verify their
+boundaries after linking. Audio/worker state remains excluded. Menus and scene
+loading still synchronize without prediction; matches use rollback by default.
+Allocation failure and the explicit debugging switch can still fall back to
+lockstep. Unsupported compilers are rejected rather than producing a silently
+lockstep-only platform build.
 
 | Variable | Effect |
 |---|---|
-| `MELEE_NET=<host:port>` | Connect to that peer at boot, no lobby (`MELEE_NET_PLAYER` and the same `MELEE_SEED` on both sides). |
+| `MELEE_NET=<host:port>` | Connect to that peer at boot, no lobby (`MELEE_NET_PLAYER` on both sides). The session runs the same RULES/READY handshake a lobby one does, hosted by `MELEE_NET_PLAYER=0`, so the seed, rules and unlock state are agreed rather than assumed and a disagreement refuses the session instead of desyncing later. `MELEE_SEED` is optional, and only the host's is used. |
 | `MELEE_NET_PORT=<n>` | Local UDP game port (default 41000). Two copies on one machine need different ports. |
 | `MELEE_NET_PLAYER=0\|1` | Controller port the local player drives with `MELEE_NET`: 0 = P1/host, 1 = P2. |
 | `MELEE_NET_DELAY=<n>\|auto` | Input delay in frames (default `auto`: 1–4 from ping and jitter, re-evaluated every 600 frames, changed only between matches). |
 | `MELEE_NET_RECONNECT_MS=<ms>` | How long a broken link may take to resume (default 15000). `0` disables the reconnect phase: the session drops 7 s after the peer goes quiet, as it used to. Anything negative or unparseable falls back to the default. |
 | `MELEE_LAN_TEST=1\|host` | LAN lobby without the menu; `host` presses Start once the title is up. Both set to `host` exercises a simultaneous Start. |
 | `MELEE_LAN_DIRECT=<ip:port>` | Direct connect without the menu, at frame 300; set on both sides with the other's address. The lower `ip:port` hosts. |
-| `MELEE_NET_HANDSHAKE_TEST=1` | Run the RULES/READY handshake at frame 300 with `MELEE_NET`, no lobby. |
+| `MELEE_NET_STALL_TEST=<frame>[:<ms>]` | Park the guest's game thread for `ms` at that frame (default 10000), standing in for a load the netcode cannot shorten. The sender keeps running, so this is the "peer is loading, not gone" case; only player 1 does it, so one exported value stalls exactly one side. |
 | `MELEE_NET_RECORD=<file>` | Write the seed, then per frame the four pad states simulated and a state checksum. |
 | `MELEE_NET_REPLAY=<file>` | Feed a recording back in; reports the first frame whose checksum differs (`net: REPLAY DIVERGED`). Solo only. |
 | `MELEE_NET_STATE_LOG=<file>` | Write two lines per frame to that file: the readable state line, and the raw float bits of exactly the fields the checksum covers. Only meaningful with `MELEE_NET_RECORD`/`MELEE_NET_REPLAY`; this is how two platforms' runs are diffed down to the field that differs. |
