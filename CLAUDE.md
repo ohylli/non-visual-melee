@@ -8,7 +8,7 @@ Use the vocabulary in `CONTEXT.md` (base port, decomp layer, port layer, hook, a
 
 - `origin` is this fork (`ohylli/non-visual-melee`). `upstream` is the base port, fetch-only: its push URL is disabled on purpose.
 - `master` is the fork's own branch. Topic branches hold uncertain work. A `dev` branch gets added once a first alpha is released from `master`.
-- A base merge is `git fetch upstream` then `git merge upstream/master` on `master`, conflicts resolved locally. `upstream/master` is the base port's only live branch; `upstream/main` and `upstream/testing` are stale.
+- A base merge is `git fetch upstream` then `git merge upstream/master` on `master`, conflicts resolved locally; the `/base-merge` skill runs it and writes the digest of upstream changes. `upstream/master` is the base port's only live branch; `upstream/main` and `upstream/testing` are stale.
 - All GitHub activity targets this fork. Pull requests, issues and pushes toward the base port happen only when the maintainer asks for that one explicitly. GitHub's "Sync fork" button stays unused: it can discard the fork's commits.
 - Fixes unrelated to accessibility are welcome on `master`, kept in their own commits.
 
