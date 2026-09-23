@@ -31,6 +31,15 @@ Base merges conflict wherever the fork edits a base port file, so the fork's foo
 - Fork settings live in fork-owned storage, read and written by fork code. They are meant to appear in the port menu eventually; revisit storage when that feature is specced.
 - Cues use the game's own audio path where possible (`lbAudioAx_800237A8(sfx_id, volume, pan)` plays any game sound with pan; the software mixer is `src/pc/audio.c`).
 
+## Online compatibility
+
+Fork builds are meant to play online against base port builds of the same release; untested so far, since base port online play is itself unverified on Windows.
+
+- Two copies pair when their protocol version, app version string and disc image id match. The fork keeps the base port's version string (`MELEE_APP_VERSION`, `src/pc/version.cpp`), including in fork releases.
+- Rollback (online netcode that re-runs recent frames when a late input arrives) needs both machines to simulate identical frames, so fork code reads game state and leaves the simulation untouched.
+- Speech is gated in fork code: check `pc_net_resim()` in `hooks.cpp` and stay silent while it is true, so a re-run frame never repeats an announcement.
+- Cues are not gated. The base port journals each frame's sound-start results in call order and replays them on re-runs, so a cue call must happen on every simulation of a frame; skipping it on a re-run shifts the journal and hands the game's own sounds the wrong voice ids.
+
 ## Build and run (Windows)
 
 Windows is the only supported target for fork work; keep code portable in principle by confining platform specifics to the screen reader bridge (see `docs/a11y/speech.md`).
