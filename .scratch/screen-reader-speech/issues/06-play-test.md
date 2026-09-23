@@ -1,6 +1,6 @@
 # 06 Play-test the proof-of-life build by ear
 
-Status: ready-for-human
+Status: resolved (2026-09-23)
 Type: task
 Blocked by: 03, 05
 
@@ -13,3 +13,7 @@ Maintainer, with NVDA. Report what you hear for each; the agent then reads the `
 5. NVDA restart while the game runs: cannot be tested yet, since only the startup announcement exists. Carry this case into the first native menu narration feature.
 
 Anything unexpected becomes a new issue in this directory.
+
+## Comments
+
+2026-09-23: the maintainer ran cases 1 to 4 by ear and reports that all of them work as described. Case 5 (NVDA restart while the game runs) moves to the first native menu narration feature. The agent separately checked `MELEE_A11Y_LOG=0`: combined with `MELEE_A11Y=0`, a bounded run writes no `[a11y]` lines to the log or the console.

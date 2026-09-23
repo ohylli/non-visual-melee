@@ -1,6 +1,6 @@
 # 04 Speech unit test with a fake bridge
 
-Status: ready-for-agent
+Status: resolved (2026-09-23)
 Type: task
 Blocked by: 03
 

@@ -33,11 +33,12 @@ Base merges conflict wherever the fork edits a base port file, so the fork's foo
 
 ## Build and run (Windows)
 
-Windows is the only supported target for fork work; keep code portable in principle by confining platform specifics to the speech wrapper.
+Windows is the only supported target for fork work; keep code portable in principle by confining platform specifics to the screen reader bridge (see `docs/a11y/speech.md`).
 
 - Toolchain: MSYS2 UCRT64 (GCC, CMake, Ninja) with its `bin` directory on `PATH`. GCC is required by the decomp layer.
 - Configure once with `cmake -B build -G Ninja`, then `cmake --build build`. The result is `build/melee.exe`, with its DLLs and `resources/` copied beside it. Every decomp file compiles through a Python wrapper that marks rollback-snapshot sections, so a full rebuild takes a while; the link ends with a "Rollback sections" verification line.
-- On Windows the game writes `melee-pc.log` beside `melee.exe`; `MELEE_LOG_FILE` overrides the path.
+- On Windows the game writes `melee-pc.log` in the working directory, not beside `melee.exe`; `MELEE_LOG_FILE` overrides the path.
+- The first configure downloads the pinned Prism release into `build/prism-<tag>/` and needs network access; later configures reuse it.
 - The base port documents itself in `docs/building.md`, `docs/testing.md`, `docs/debugging.md`, `docs/architecture.md` and `docs/porting-notes.md`. Read the relevant one before exploring the code.
 
 ## Verification
@@ -47,15 +48,15 @@ The players cannot see the screen, the agent cannot hear the game or drive its m
 - Every announcement and cue is also written through `pc_log_line` with an `[a11y]` prefix into the log, interleaved with game events. This logging is a developer setting, default on.
 - The agent's own check after a change: it builds, and a bounded run exits cleanly and logs the expected `[a11y]` lines. A bounded run boots straight into a scene and exits after a fixed frame count:
   `SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0 SDL_AUDIO_DRIVER=dummy MELEE_BOOT_SCENE=<title|vs|classic|training> MELEE_EXIT_AFTER_FRAMES=<n> MELEE_LOG_FILE=<path> build/melee.exe --no-card <disc>`
-  Capture stdout too: the `boot scene:` progress lines go there, not to the log file. The `vs` scene reaches the match within 600 frames; the evidence is `boot scene: state 1 scene 2` in stdout (the fight scene was entered), and the other scenes' evidence lines are in the `SCENES` table of `tools/smoke_test.py`. A `Device lost ... Device was destroyed` warning at exit is normal shutdown. `MELEE_BOOT_SCENE` also accepts `unranked`, `direct` and `ranked`, which boot into the online lobby and need a peer. Add `MELEE_NO_ATTRACT=1` to a `title` run longer than 600 frames, otherwise the title screen drops into the attract-mode demo fight.
-- `SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0` keeps the game window from taking focus away from a running screen reader, `SDL_AUDIO_DRIVER=dummy` sends the game's audio to SDL's silent driver so the run makes no sound (the mixer still runs; `MELEE_AUDIO_DUMP=<file>` captures the mix if it needs inspecting), and `--no-card` keeps the run off the real memory card. Use all three on every agent-started run. Screenshots are fine when they help.
+  Capture stdout too: the `boot scene:` progress lines go there, not to the log file. The `vs` scene reaches the match within 600 frames; the evidence is `boot scene: state 1 scene 2` in stdout (the fight scene was entered), and the other scenes' evidence lines are in the `SCENES` table of `tools/smoke_test.py`. A `title` run's expected `[a11y]` lines are `speech backend: <name>` and `speak interrupt: "Non-Visual Melee ready"`, ending with `speech shutdown`. A `Device lost ... Device was destroyed` warning at exit is normal shutdown. `MELEE_BOOT_SCENE` also accepts `unranked`, `direct` and `ranked`, which boot into the online lobby and need a peer. Add `MELEE_NO_ATTRACT=1` to a `title` run longer than 600 frames, otherwise the title screen drops into the attract-mode demo fight.
+- `SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0` keeps the game window from taking focus away from a running screen reader, `SDL_AUDIO_DRIVER=dummy` sends the game's audio to SDL's silent driver so the run makes no sound (the mixer still runs; `MELEE_AUDIO_DUMP=<file>` captures the mix if it needs inspecting), and `--no-card` keeps the run off the real memory card. Use all three on every agent-started run. A run with speech on talks through the maintainer's screen reader and interrupts it; add `MELEE_A11Y=0` when the run is not checking speech itself (the log still records each announcement, marked `(off)`). Screenshots are fine when they help.
 - Native menus, the port menu and the launcher are out of reach of bounded runs; they depend on the maintainer play-testing, after which the agent reads the `[a11y]` lines against what they report. "Works" is reserved for what a blind tester has confirmed by ear.
-- Base port tests: `cmake --build build --target unit_tests` then `ctest --test-dir build -L melee`. On Windows the suite is `launcher_data`, `version`, `endian` and `thp`; the netplay tests are Linux-only. `launcher_data` currently fails on Windows, a base port bug in the test's file handling. `tools/smoke_test.py` runs on Windows only as `MELEE_BIN=<full path to melee.exe> python tools/smoke_test.py --no-disc`; its disc cases isolate save data on Linux only and would touch the real memory card here.
+- Base port tests: `cmake --build build --target unit_tests` then `ctest --test-dir build -L melee`. On Windows the suite is `launcher_data`, `version`, `endian`, `thp` and the fork's `speech`; the netplay tests are Linux-only. `launcher_data` currently fails on Windows, a base port bug in the test's file handling (it can pass on a first run). `tools/smoke_test.py` runs on Windows only as `MELEE_BIN=<full path to melee.exe> python tools/smoke_test.py --no-disc`; its disc cases isolate save data on Linux only and would touch the real memory card here.
 - A debug control server (state queries, pause, input injection over localhost) is a possible future direction, not a commitment.
 
 ## Style and lint
 
-Fork code follows `docs/CODING_STYLE.md`. Before committing, run `python tools/check_style.py` (clang-format, banned bare `long`, whitespace; covers `src/pc/` only). It needs `clang-format` on `PATH`.
+Fork code follows `CODING_STYLE.md` at the repo root. Before committing, run `python tools/check_style.py` (clang-format, banned bare `long`, whitespace; covers `src/pc/` only). It needs `clang-format` on `PATH`.
 
 ## Docs
 
@@ -63,7 +64,9 @@ Primers that explain a subsystem in plain terms ("how native menus work", "the a
 
 ## Accessibility status
 
-Nothing shipped yet. Add one line per feature as it lands: what it does, where it lives.
+Add one line per feature as it lands: what it does, where it lives.
+
+- Speech (`src/pc/a11y/`, primer `docs/a11y/speech.md`): the subsystem every feature hands announcements to, speaking through Prism, with the proof-of-life announcement "Non-Visual Melee ready" at startup. Switches `MELEE_A11Y` and `MELEE_A11Y_LOG`. Play-tested by ear with NVDA and the Windows voice fallback; whether speech resumes after an NVDA restart is still untested.
 
 ## Agent skills
 

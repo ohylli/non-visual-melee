@@ -1,6 +1,6 @@
 # 01 Prism build wiring in a11y.cmake
 
-Status: ready-for-agent
+Status: resolved (2026-09-23)
 Type: task
 
 Create `src/pc/a11y/a11y.cmake` and include it from the root `CMakeLists.txt` with a single line, next to the other `include(cmake/...)` lines. The base port's file gets no other change.
@@ -20,3 +20,7 @@ Keep the platform choice in one place: a variable such as `A11Y_PRISM_ASSET` (th
 Done when: `cmake -B build -G Ninja` succeeds with and without network on the second run, `cmake --build build` links, `build/prism.dll` exists beside `melee.exe`, and `python tools/check_style.py` passes.
 
 Notes: Prism is MPL-2.0. The fork's toolchain cannot build Prism from source (see ADR-0001 and the spec).
+
+## Comments
+
+2026-09-23, implementation: the zip has no `dist/` level. It is `include/`, `dynamic/{release,debug}/{bin,lib}`, `static/...`, `LICENSES/`, `NOTICE`. `dynamic/release/bin/prism.dll` imports only Windows system DLLs, so it is the only runtime file copied (the zip's `tolk.dll` is a compatibility shim nothing needs). GNU ld links the MSVC `prism.lib` directly, so no `gendef`/`dlltool`. The include line sits at the end of the root `CMakeLists.txt`, not next to the other `include(cmake/...)` lines: `a11y.cmake` needs both the `melee` and `unit_tests` targets, and `unit_tests` is created near the end. The sha256 was computed from the release download on 2026-09-23; Prism publishes no checksum file.

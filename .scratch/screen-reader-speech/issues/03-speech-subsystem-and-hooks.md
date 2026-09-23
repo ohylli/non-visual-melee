@@ -1,6 +1,6 @@
 # 03 Speech subsystem, hooks and the proof-of-life announcement
 
-Status: ready-for-agent
+Status: resolved (2026-09-23)
 Type: task
 Blocked by: 02
 
@@ -25,3 +25,7 @@ SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0 SDL_AUDIO_DRIVER=dummy MELEE_BOOT_SCENE=title M
 ```
 
 exits cleanly and the log contains `[a11y] speech backend:` and `[a11y] speak interrupt: "Non-Visual Melee ready"` and `[a11y] speech shutdown`; a second run with `MELEE_A11Y=0` logs `speech off` and the `(off)` line; `grep -rn pc_a11y_ src --exclude-dir=a11y` shows exactly the three lines in `main.c`; `python tools/check_style.py` passes.
+
+## Comments
+
+2026-09-23, implementation: `announce` checks the thread first and remembers the announcement only on the game thread. Writing `m_last` from another thread would be a data race, so an off-thread call is logged and nothing else. `pc_a11y_shutdown()` sits right after the `done` guard in `pc_shutdown_once()`, not above it; the hook is idempotent either way. `hooks.cpp` holds speech in a namespace-scope `std::unique_ptr`, which starts out empty (no constructor runs before `main`) and is reset at shutdown, so Prism is shut down before static destructors run.
