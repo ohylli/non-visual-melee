@@ -50,6 +50,16 @@ _Avoid_: Beep, sound effect, SFX, earcon
 The developer-facing record of every announcement and cue, written as it happens.
 _Avoid_: TTS log, debug output
 
+### How speech is produced
+
+**Speech**:
+The fork's subsystem that takes announcements from every feature, writes the speech log and honours the accessibility switch. The only part of the fork that knows a screen reader exists.
+_Avoid_: TTS, narrator, announcer (the game has its own announcer voice: "Ready, go!")
+
+**Screen reader bridge**:
+The thin layer inside speech that talks to the screen reader library and holds every platform-specific detail. Nothing else in the fork touches the library.
+_Avoid_: Prism wrapper, TTS backend, speech backend
+
 ### The three user interfaces
 
 Never say plain "menu"; always say which of these is meant.
