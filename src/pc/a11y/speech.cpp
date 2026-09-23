@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "speech.hpp"
 #include "pc/pc.h"
+#include <cstdarg>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <utility>
@@ -37,19 +39,15 @@ Speech::Speech(Config config, std::unique_ptr<ScreenReaderBridge> bridge)
 void Speech::init() {
     m_thread = std::this_thread::get_id();
     if (!m_config.enabled) {
-        if (m_config.log) {
-            pc_log_line("[a11y] speech off (MELEE_A11Y=0)");
-        }
+        log("speech off (MELEE_A11Y=0)");
         return;
     }
     const std::string backend = m_bridge->init();
     m_bridge_initialized = true;
-    if (m_config.log) {
-        if (backend.empty()) {
-            pc_log_line("[a11y] speech backend: none (silent)");
-        } else {
-            pc_log_line("[a11y] speech backend: %s", backend.c_str());
-        }
+    if (backend.empty()) {
+        log("speech backend: none (silent)");
+    } else {
+        log("speech backend: %s", backend.c_str());
     }
 }
 
@@ -58,43 +56,49 @@ void Speech::shutdown() {
         m_bridge->shutdown();
         m_bridge_initialized = false;
     }
-    if (m_config.log) {
-        pc_log_line("[a11y] speech shutdown");
-    }
+    log("speech shutdown");
 }
 
 void Speech::announce(std::string_view text, Mode mode) {
     /* Checked first, so another thread never writes m_last or reaches the
      * bridge, neither of which is thread-safe. The log line is the one thing
-     * it still touches: a bug report worth the small risk of a garbled line.
-     * A call before init also lands here. */
+     * it still touches: a bug report worth the small risk of a garbled line. */
+    if (m_thread == std::thread::id()) {
+        log("speech called before init, dropped: \"%.*s\"", text_length(text), text.data());
+        return;
+    }
     if (!initialized_on_this_thread()) {
-        if (m_config.log) {
-            pc_log_line("[a11y] speech called off the game thread, dropped: \"%.*s\"",
-                text_length(text), text.data());
-        }
+        log("speech called off the game thread, dropped: \"%.*s\"", text_length(text), text.data());
         return;
     }
     m_last = Announcement{std::string(text), mode};
     if (!m_config.enabled) {
-        if (m_config.log) {
-            pc_log_line(
-                "[a11y] speak %s (off): \"%.*s\"", mode_name(mode), text_length(text), text.data());
-        }
+        log("speak %s (off): \"%.*s\"", mode_name(mode), text_length(text), text.data());
         return;
     }
-    if (m_config.log) {
-        pc_log_line("[a11y] speak %s: \"%.*s\"", mode_name(mode), text_length(text), text.data());
-    }
+    log("speak %s: \"%.*s\"", mode_name(mode), text_length(text), text.data());
     const std::string error = m_bridge->output(text, mode == Mode::interrupt);
-    if (!error.empty() && m_config.log) {
-        pc_log_line(
-            "[a11y] speak failed (%s): \"%.*s\"", error.c_str(), text_length(text), text.data());
+    if (!error.empty()) {
+        log("speak failed (%s): \"%.*s\"", error.c_str(), text_length(text), text.data());
     }
 }
 
 bool Speech::initialized_on_this_thread() const {
     return m_thread == std::this_thread::get_id();
+}
+
+/* Formats here because pc_log_line has no va_list variant. Same buffer size as
+ * pc_log_line, so this adds no truncation of its own. */
+void Speech::log(const char* fmt, ...) const {
+    if (!m_config.log) {
+        return;
+    }
+    char line[512];
+    va_list ap;
+    va_start(ap, fmt);
+    std::vsnprintf(line, sizeof(line), fmt, ap);
+    va_end(ap);
+    pc_log_line("[a11y] %s", line);
 }
 
 }  // namespace a11y

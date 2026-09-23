@@ -23,7 +23,7 @@ Use the vocabulary in `CONTEXT.md` (base port, decomp layer, port layer, hook, a
 Base merges conflict wherever the fork edits a base port file, so the fork's footprint there is one-line hooks and nothing else.
 
 - All fork code lives in `src/pc/a11y/`: C++20 internals, built through the fork-owned `src/pc/a11y/a11y.cmake`, which the root `CMakeLists.txt` includes with a single line. Third-party wiring (the Prism screen reader library) goes in that file too.
-- A hook is one call to a `pc_a11y_*` function, placed at the semantic transition ("cursor moved", "match started"), the same idiom the base port uses for `pc_is_unlock_all_enabled()`. Fork code decides what to say. Every hook function is declared in the single C-compatible header `src/pc/a11y/a11y_hooks.h`, so that header plus `grep -rn pc_a11y_ src --exclude-dir=a11y` is the full inventory of the fork's footprint.
+- A hook is one call to a `pc_a11y_*` function, placed at the semantic transition ("cursor moved", "match started"), the same idiom the base port uses for `pc_is_unlock_all_enabled()`. Fork code decides what to say. Every hook function is declared in the single C-compatible header `src/pc/a11y/a11y_hooks.h`, so that header plus `grep -rn a11y src CMakeLists.txt --exclude-dir=a11y` (the hook calls, the header include and the cmake include) is the full inventory of the fork's footprint.
 - Prefer a hook at the transition over polling game state each frame; poll only where a screen would otherwise need many hooks.
 - Native menus draw most labels as images, so spoken text comes from fork-owned string tables keyed by the game's own identifiers.
 - Compose each announcement as one text (setting name and value together).

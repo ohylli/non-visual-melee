@@ -44,6 +44,10 @@ public:
     bool initialized_on_this_thread() const;
 
 private:
+    /* One speech log line, prefixed "[a11y] "; nothing when the log switch is
+     * off. */
+    void log(const char* fmt, ...) const __attribute__((format(printf, 2, 3)));
+
     Config m_config;
     std::unique_ptr<ScreenReaderBridge> m_bridge;
     bool m_bridge_initialized = false;

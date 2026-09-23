@@ -49,20 +49,23 @@ All the line shapes:
 
 | Line | Meaning |
 | --- | --- |
-| `speech backend: <name>` | Prism picked this backend at startup. |
+| `speech backend: <name>` | Prism picked this backend at startup. "Backend" is Prism's word for the screen reader or voice it drives (NVDA, JAWS, SAPI); it is not the fork's screen reader bridge. |
 | `speech backend: none (silent)` | Prism found nothing to speak through. |
 | `speech off (MELEE_A11Y=0)` | The accessibility switch is off. |
 | `speak interrupt: "<text>"`, `speak queue: "<text>"` | An announcement went to the screen reader. |
 | `speak interrupt (off): "<text>"` | An announcement was made while the switch is off; nothing was spoken. |
 | `speak failed (<Prism error>): "<text>"` | Prism refused the text. |
+| `speech called before init, dropped: "<text>"` | A bug: a hook fired before `pc_a11y_init`. |
 | `speech called off the game thread, dropped: "<text>"` | A bug: see the threading rule. |
 | `speech shutdown` | Speech stopped at exit. |
 
 This log is how the fork is verified without hearing it: a bounded run (see CLAUDE.md, "Verification") ends with these lines in the log file, and after a play-test the log is read against what the tester heard.
 
+The port's `pc_log_line` formats each line into 512 bytes, so a very long announcement is cut short in the log. The spoken text is not affected.
+
 ## Threading rule
 
-Speech runs on the game thread only, the thread that called `pc_a11y_init`. Prism's backends are not thread-safe and neither is the port's logger. Every feature planned so far runs on the game thread anyway. Prism's output call returns as soon as speech starts, so it never holds up a frame.
+Speech runs on the game thread only, the thread that called `pc_a11y_init`. Prism's backends are not thread-safe and neither is the port's logger. Every feature planned so far runs on the game thread anyway. Prism's output call is expected to hand the text over and return, not wait for speech to finish, so it should not hold up a frame. That is an assumption from Prism's API, not a measurement; the Windows voice fallback (SAPI) is the path most worth timing if a hitch is ever noticed.
 
 A call from any other thread is a bug. It is logged as `speech called off the game thread, dropped`, not spoken, and not remembered as the last announcement. If a feature on another thread ever needs to speak (the netplay timer thread is the likely one), a queue inside speech can hand announcements over to the game thread without changing any feature.
 
