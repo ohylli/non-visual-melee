@@ -75,7 +75,7 @@ All fork code under `src/pc/a11y/`, C++20 internals, namespace `a11y`.
 | `a11y_hooks.h` | The single C-compatible header of every `pc_a11y_*` hook function. |
 | `hooks.cpp` | `extern "C"` implementations of the hooks, delegating to the subsystem. |
 | `speech.hpp`, `speech.cpp` | Speech: announce, switch, speech log, last announcement, thread check. Talks to the bridge through a small interface so a fake can replace it. |
-| `screen_reader_bridge.hpp`, `screen_reader_bridge.cpp` | Screen reader bridge: the only file that includes `prism.h`. Windows body plus a stub for other platforms. |
+| `screen_reader_bridge.hpp`, `screen_reader_bridge.cpp` | Screen reader bridge: the only file that includes `prism.h`. Real body when `a11y.cmake` defines `A11Y_HAVE_PRISM` (Windows today), stub otherwise. Gated on that macro, not on `_WIN32`, so a macOS or Linux port is a cmake branch only. |
 | `test_speech.cpp` | Unit test with a fake bridge. |
 
 Hooks in this feature, both one line in `src/pc/main.c`:
@@ -110,3 +110,4 @@ Hooks in this feature, both one line in `src/pc/main.c`:
 - Repeat-last key binding: with input handling.
 - Re-acquire on NVDA restart: only with play-test evidence.
 - Off-thread announcements (netplay timer thread): a queue inside the subsystem, if ever needed.
+- macOS: a cmake branch for `prism-macos-universal.zip` plus a VoiceOver play-test on a borrowed Mac. Bundling and ad-hoc signing are already handled by the base port's packaging script. Plan in `.scratch/macos-port/spec.md`.

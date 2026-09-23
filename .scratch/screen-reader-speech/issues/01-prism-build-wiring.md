@@ -11,8 +11,11 @@ On Windows, `a11y.cmake`:
 - Verify the zip's layout at implementation time (expected: `dist/{dynamic,static}/{release,debug}` plus `include/`). Use the dynamic release variant: the static one needs delay loading on the consumer side, which MinGW lacks.
 - Adds the include directory, links `melee` against the import library from the zip (GCC's linker accepts MSVC import libraries; if it does not for this file, generate one with `gendef` and `dlltool` from the DLL, both in MSYS2), and copies `prism.dll` beside `melee.exe` with a POST_BUILD `copy_if_different`, the same idiom the root file uses for `nod.dll`.
 - Adds the fork sources (`hooks.cpp`, `speech.cpp`, `screen_reader_bridge.cpp`) to the `melee` target with `target_sources`, and `src/pc/a11y` to its include path.
+- Defines `A11Y_HAVE_PRISM` on the `melee` target (`target_compile_definitions`). This macro, not `_WIN32`, is what selects the real bridge body in issue 02.
 
-On other platforms: fork sources are still added, no download, no link; the bridge compiles as a stub (issue 02).
+On other platforms: fork sources are still added, no download, no link, no `A11Y_HAVE_PRISM`; the bridge compiles as a stub (issue 02).
+
+Keep the platform choice in one place: a variable such as `A11Y_PRISM_ASSET` (the zip name, `prism-windows-x64.zip` today) set per platform at the top of the file, empty when the platform has no Prism wiring yet. Prism publishes `prism-macos-universal.zip`, `prism-linux-x64.zip` and `prism-linux-arm64.zip` for the same tag, so a later macOS or Linux port should be a new branch that sets the asset, the library file name and the runtime copy destination (the macOS app bundle's Frameworks folder), with no change to the fork's C++.
 
 Done when: `cmake -B build -G Ninja` succeeds with and without network on the second run, `cmake --build build` links, `build/prism.dll` exists beside `melee.exe`, and `python tools/check_style.py` passes.
 

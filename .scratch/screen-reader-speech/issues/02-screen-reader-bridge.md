@@ -21,10 +21,12 @@ public:
 std::unique_ptr<ScreenReaderBridge> make_screen_reader_bridge();
 ```
 
-Windows body: `prism_config_init`, `prism_init`, `prism_registry_create_best`, `prism_backend_output`, `prism_backend_free`, `prism_shutdown`. Look up the backend-name call in the pinned `prism.h` (the header is the source of truth; the API changed between v0.13 and v0.18). Never call `prism_backend_initialize` after `create_best`: Prism reports "Already initialized".
+Real body, compiled when `A11Y_HAVE_PRISM` is defined (issue 01 defines it wherever Prism was downloaded; today that is Windows only): `prism_config_init`, `prism_init`, `prism_registry_create_best`, `prism_backend_output`, `prism_backend_free`, `prism_shutdown`. Look up the backend-name call in the pinned `prism.h` (the header is the source of truth; the API changed between v0.13 and v0.18). Never call `prism_backend_initialize` after `create_best`: Prism reports "Already initialized".
 
-Other platforms: a stub whose `init` returns empty.
+Stub body, compiled otherwise: `init` returns empty, the other calls do nothing.
+
+Gate on `A11Y_HAVE_PRISM`, never on `_WIN32`, and keep the real body free of Windows headers and Windows-only calls. Prism's C API is the same on every platform it ships for, so a later macOS or Linux port should need only the cmake branch from issue 01, and this file should compile unchanged there.
 
 Do not add re-acquire logic on failure (spec: play-test first).
 
-Done when: it compiles on Windows against the downloaded header, and the stub compiles when `WIN32` is off (check by reading, a non-Windows build is not available here).
+Done when: it compiles on Windows against the downloaded header, and the stub compiles when `A11Y_HAVE_PRISM` is undefined (check by reading, a non-Windows build is not available here).
