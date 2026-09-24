@@ -1,4 +1,9 @@
 #include "gx.hpp"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <memory>
+#include "../gfx/pipeline_cache.hpp"
+#endif
 
 #include "pipeline.hpp"
 #include "texture.hpp"
@@ -41,6 +46,11 @@ absl::flat_hash_map<u32, std::pair<wgpu::BindGroupLayout, wgpu::BindGroupLayout>
 wgpu::BindGroupLayout sTextureBindGroupLayout;
 wgpu::BindGroupLayout sSamplerBindGroupLayout;
 wgpu::PipelineLayout sPipelineLayout;
+#ifdef __EMSCRIPTEN__
+// Browser rendering and these callbacks share one realm. Keep pending results
+// separate until the pipeline cache can bind a fully compiled pipeline.
+absl::flat_hash_map<gfx::PipelineRef, std::shared_ptr<wgpu::RenderPipeline>> sBrowserPipelines;
+#endif
 
 std::atomic<int> sPendingViewportPolicy{-1};
 std::atomic<float> sPendingPresentationAspect{-1.f};
@@ -326,15 +336,17 @@ void set_render_scissor(const gfx::ClipRect& scissor) noexcept {
 
 const gfx::TextureBind& get_texture(GXTexMapID id) noexcept { return g_gxState.textures[static_cast<size_t>(id)]; }
 
-wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, ArrayRef<wgpu::VertexBufferLayout> vtxBuffers,
-                                    wgpu::ShaderModule shader, const char* label) noexcept {
+wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, const gfx::RenderTargetLayout& layout,
+                                    ArrayRef<wgpu::VertexBufferLayout> vtxBuffers, wgpu::ShaderModule shader,
+                                    const char* label) noexcept {
   ZoneScoped;
   const float depthBias = (UseReversedZ ? -1.0f : 1.0f) * std::bit_cast<float>(config.polygonOffsetBits);
   const float depthBiasSlopeScale = (UseReversedZ ? -1.0f : 1.0f) * std::bit_cast<float>(config.polygonOffsetScaleBits);
   const float depthBiasClamp = webgpu::g_hasCoreFeatures ? std::bit_cast<float>(config.polygonOffsetClampBits) : 0.0f;
+  const bool writesDepth = config.depthCompare && config.depthUpdate;
   const wgpu::DepthStencilState depthStencil{
-      .format = g_graphicsConfig.depthFormat,
-      .depthWriteEnabled = config.depthCompare && config.depthUpdate,
+      .format = layout.depthStencilFormat,
+      .depthWriteEnabled = writesDepth,
       .depthCompare = config.depthCompare ? to_compare_function(config.depthFunc) : wgpu::CompareFunction::Always,
       .depthBias = round_away_from_zero<int32_t>(depthBias),
       .depthBiasSlopeScale = depthBiasSlopeScale,
@@ -342,15 +354,21 @@ wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, ArrayRef<wgpu:
   };
   const auto blendState =
       to_blend_state(config.blendMode, config.blendFacSrc, config.blendFacDst, config.blendOp, config.dstAlpha);
-  const std::array colorTargets{wgpu::ColorTargetState{
-      .format = g_graphicsConfig.surfaceConfiguration.format,
-      .blend = &blendState,
-      .writeMask = to_write_mask(config.colorUpdate, config.alphaUpdate),
-  }};
+  std::array<wgpu::ColorTargetState, gfx::MaxColorAttachments> colorTargets{};
+  for (uint32_t i = 0; i < layout.colorAttachmentCount; ++i) {
+    colorTargets[i] = {
+        .format = layout.colorAttachments[i].format,
+        .writeMask = layout.colorAttachments[i].semantic == gfx::ColorAttachmentSemantic::Normal && writesDepth
+                         ? wgpu::ColorWriteMask::All
+                         : wgpu::ColorWriteMask::None,
+    };
+  }
+  colorTargets[gfx::SceneColorAttachmentIndex].blend = &blendState;
+  colorTargets[gfx::SceneColorAttachmentIndex].writeMask = to_write_mask(config.colorUpdate, config.alphaUpdate);
   const wgpu::FragmentState fragmentState{
       .module = shader,
       .entryPoint = "fs_main",
-      .targetCount = colorTargets.size(),
+      .targetCount = layout.colorAttachmentCount,
       .targets = colorTargets.data(),
   };
   const wgpu::RenderPipelineDescriptor descriptor{
@@ -364,15 +382,39 @@ wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, ArrayRef<wgpu:
               .buffers = vtxBuffers.data(),
           },
       .primitive = to_primitive_state(config.cullMode),
-      .depthStencil = &depthStencil,
-      .multisample =
-          wgpu::MultisampleState{
-              .count = config.msaaSamples,
-          },
+      .depthStencil = layout.depthStencilFormat != wgpu::TextureFormat::Undefined ? &depthStencil : nullptr,
+      .multisample = wgpu::MultisampleState{.count = layout.sampleCount},
       .fragment = &fragmentState,
   };
+#ifdef __EMSCRIPTEN__
+  // Same key as the pipeline cache's runtime ref (resolve_pipeline).
+  const auto ref = xxh3_hash(layout.key, xxh3_hash(config, static_cast<HashType>(gfx::ShaderType::GX)));
+  auto pending = std::make_shared<wgpu::RenderPipeline>();
+  sBrowserPipelines[ref] = pending;
+  g_device.CreateRenderPipelineAsync(&descriptor, wgpu::CallbackMode::AllowSpontaneous,
+      [pending](wgpu::CreatePipelineAsyncStatus status, wgpu::RenderPipeline pipeline, wgpu::StringView) {
+        if (status == wgpu::CreatePipelineAsyncStatus::Success) {
+          *pending = std::move(pipeline);
+        } else {
+          Log.error("Browser GPU pipeline compilation failed");
+          EM_ASM({ Module.onAbort?.('GPU pipeline compilation failed'); });
+        }
+      });
+  return {};
+#else
   return g_device.CreateRenderPipeline(&descriptor);
+#endif
 }
+
+#ifdef __EMSCRIPTEN__
+bool take_browser_pipeline(gfx::PipelineRef ref, wgpu::RenderPipeline& pipeline) {
+  const auto it = sBrowserPipelines.find(ref);
+  if (it == sBrowserPipelines.end() || !*it->second) return false;
+  pipeline = std::move(*it->second);
+  sBrowserPipelines.erase(it);
+  return true;
+}
+#endif
 
 void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXVtxFmt fmt) noexcept {
   ZoneScoped;
@@ -465,7 +507,6 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   const auto cullMode = config.shaderConfig.lineMode == 0 ? g_gxState.cullMode : GX_CULL_NONE;
   const auto [polygonOffset, polygonOffsetScale] = polygon_offset_for_cull_mode(cullMode);
   config = {
-      .msaaSamples = gfx::get_sample_count(),
       .shaderConfig = config.shaderConfig,
       .depthFunc = g_gxState.depthFunc,
       .cullMode = cullMode,
@@ -584,18 +625,26 @@ void initialize() noexcept {
         gfx::detail::resources().staticBindGroupLayout,
         gfx::detail::resources().uniformBindGroupLayout,
         sTextureBindGroupLayout,
+#ifdef __EMSCRIPTEN__
+        gfx::detail::resources().uniformBindGroupLayout,
+#endif
     };
     const wgpu::PipelineLayoutDescriptor desc{
         .label = "GX Pipeline Layout",
         .bindGroupLayoutCount = layouts.size(),
         .bindGroupLayouts = layouts.data(),
+#ifndef __EMSCRIPTEN__
         .immediateSize = sizeof(DrawImmediateData),
+#endif
     };
     sPipelineLayout = g_device.CreatePipelineLayout(&desc);
   }
 }
 
 void shutdown() noexcept {
+#ifdef __EMSCRIPTEN__
+  sBrowserPipelines.clear();
+#endif
   // TODO we should probably store this all in g_state.gx instead
   sSamplerBindGroupLayout = {};
   sTextureBindGroupLayout = {};

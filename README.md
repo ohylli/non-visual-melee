@@ -79,6 +79,7 @@ table is right and the other one is stale.
 | Android arm64 | done | Drawn on-screen GameCube overlay with opacity, deadzone and haptics settings; hides itself when a physical gamepad is connected. |
 | iOS arm64 | partial | Sideloadable IPA on Metal, cross-built from Linux. Touch input is fixed invisible screen regions (stick on the left half, face buttons bottom right) with no drawn overlay, no calibration and no gamepad auto-hide -- the Android overlay is Android-only. |
 | macOS Apple Silicon / Intel | partial | Apple Silicon tested; the Intel job is `continue-on-error` in CI, so a release can ship without an Intel build and none has been run on Intel hardware. |
+| Browser (WebGPU) | partial | [Play in the browser](https://999sian.github.io/melee-pc/play/) with your own raw GALE01 rev 2 image; tested in Chrome. No online play, no gamepad remapping. Build: `tools/browser/build.py`. |
 | PAL disc (GALP01) | partial | Experimental: USA game code on PAL data, English (UK) text, NTSC 60 Hz. Trophy tables are stubbed out rather than read, and there is no reference hash, so PAL images always verify as unknown. |
 | Widescreen 16:9 / window aspect | partial | VS, Sudden Death and Training only; menus, results and cutscenes stay at the original 73:60. |
 | Wide HUD anchoring | done | Separate on/off toggle from the aspect setting, and only moves anything while widescreen is on. Anchors the timer and the 2-4 player HUD groups (damage, stocks, tags); a 1-player HUD keeps its original placement. No configurable margins. |
@@ -147,9 +148,15 @@ Dawn's per-backend floor:
 
 On Windows that means any Intel Gen8 (Broadwell, 2014) or newer, AMD GCN or
 newer, NVIDIA Fermi or newer runs on Direct3D 12. Direct3D 11 is a
-compatibility path, not a performance one (FXC shaders, no DXC). OpenGL is not
-built. The log records every backend that was skipped and why, then one summary
-line with the adapter and driver.
+compatibility path, not a performance one (FXC shaders, no DXC). OpenGL is
+never picked automatically: `MELEE_BACKEND=opengl` exists, but Dawn needs
+desktop GL 4.4 for it, it draws with wrong (washed-out) colours on X11 and
+cannot create a surface on Wayland. The log records every backend that was
+skipped and why, then one summary line with the adapter and driver.
+
+The CPU side is light: any x86-64 (SSE2) or arm64 CPU. A VS match holds a
+steady 60 fps with the whole game pinned to two 2.5 GHz Meteor Lake
+low-power E-cores, using about a third of one core in total.
 
 - Keep `resources/` (and on Windows the DLLs: `webgpu_dawn.dll`,
   `dxcompiler.dll`, `dxil.dll`, `SDL3.dll`, the VC++ runtime) beside the
@@ -273,7 +280,7 @@ same game.
 | Linux x86-64 | yes | yes | the configuration everything below was measured on; longest run 36 minutes and 126k frames of match |
 | Windows x86-64 / ARM64 | implemented | enabled | PE ranges cover both supported toolchains. x86-64 restore runs under Wine; ARM64 compiler-bridge and linked-range checks pass. Full Windows rollback gameplay remains unverified |
 | macOS / iOS | builds; online gameplay unverified | enabled | Mach-O simulation sections support Intel/Apple Silicon macOS and ARM64 iOS. Cross-link/bridge checks pass; native restore is a macOS CI check. Device gameplay remains unverified |
-| Android | runs on a device; found and joined a PC over LAN | enabled; gameplay unverified | Measured on a Pixel 8 Pro against Linux x86-64: mDNS discovery, election, handshake and 1800+ frames of synced menus at 10-16 ms ping and 0 % loss, both peers entering the CSS on the same frame. No match has been played to the end yet. New ARM64/x86-64 NDK-linked restore fixtures pass (ARM64 under QEMU), but device rollback gameplay is still unproven. The lobby holds the Wi-Fi multicast lock while it is open |
+| Android | runs on a device; found and joined a PC over LAN | enabled; gameplay unverified | Measured on a Pixel 8 Pro against Linux x86-64: mDNS discovery, election, handshake and 1800+ frames of synced menus at 10-16 ms ping and 0 % loss, both peers entering the CSS on the same frame. Full matches have since been played to the end phone-to-PC over LAN and over mobile data. New ARM64/x86-64 NDK-linked restore fixtures pass (ARM64 under QEMU), but device rollback gameplay is still unproven. The lobby holds the Wi-Fi multicast lock while it is open |
 
 All supported builds require simulation snapshot sections and verify their
 boundaries after linking. Audio/worker state remains excluded. Menus and scene
@@ -287,7 +294,7 @@ lockstep-only platform build.
 | `MELEE_NET=<host:port>` | Connect to that peer at boot, no lobby (`MELEE_NET_PLAYER` on both sides). The session runs the same RULES/READY handshake a lobby one does, hosted by `MELEE_NET_PLAYER=0`, so the seed, rules and unlock state are agreed rather than assumed and a disagreement refuses the session instead of desyncing later. `MELEE_SEED` is optional, and only the host's is used. |
 | `MELEE_NET_PORT=<n>` | Local UDP game port (default 41000). Two copies on one machine need different ports. |
 | `MELEE_NET_PLAYER=0\|1` | Controller port the local player drives with `MELEE_NET`: 0 = P1/host, 1 = P2. |
-| `MELEE_NET_DELAY=<n>\|auto` | Input delay in frames (default `auto`: 1–4 from ping and jitter, re-evaluated every 600 frames, changed only between matches). |
+| `MELEE_NET_DELAY=<n>\|auto` | Input delay in frames (default `auto`: 1–4 from ping and jitter, at least 2 in a fight, re-evaluated every 600 frames, changed only between matches). |
 | `MELEE_NET_RECONNECT_MS=<ms>` | How long a broken link may take to resume (default 15000). `0` disables the reconnect phase: the session drops 7 s after the peer goes quiet, as it used to. Anything negative or unparseable falls back to the default. |
 | `MELEE_LAN_TEST=1\|host` | LAN lobby without the menu; `host` presses Start once the title is up. Both set to `host` exercises a simultaneous Start. |
 | `MELEE_LAN_DIRECT=<ip:port>` | Direct connect without the menu, at frame 300; set on both sides with the other's address. The lower `ip:port` hosts. |

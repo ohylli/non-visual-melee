@@ -19,8 +19,8 @@ set_target_properties(aurora_core PROPERTIES FOLDER "aurora")
 
 target_compile_definitions(aurora_core PUBLIC AURORA TARGET_PC)
 target_include_directories(aurora_core PUBLIC include)
-target_link_libraries(aurora_core PUBLIC fmt::fmt ${AURORA_SDL3_TARGET} xxhash)
-target_link_libraries(aurora_core PRIVATE absl::btree absl::flat_hash_map sqlite3 TracyClient)
+target_link_libraries(aurora_core PUBLIC fmt::fmt ${AURORA_SDL3_TARGET} xxHash::xxhash)
+target_link_libraries(aurora_core PRIVATE absl::btree absl::flat_hash_map sqlite3 Tracy::TracyClient)
 if (AURORA_ENABLE_GX AND AURORA_CACHE_USE_ZSTD)
     target_compile_definitions(aurora_core PRIVATE AURORA_CACHE_USE_ZSTD)
     target_link_libraries(aurora_core PRIVATE zstd::libzstd)
@@ -60,6 +60,7 @@ if(AURORA_ENABLE_RMLUI)
             lib/rmlui/SystemInterface_Aurora.cpp
             lib/rmlui/FileInterface_SDL.cpp
             lib/rmlui/GlassFilter.cpp
+            lib/rmlui/ImageEffects.cpp
     )
     target_link_libraries(aurora_core PUBLIC rmlui)
 
@@ -67,7 +68,10 @@ if(AURORA_ENABLE_RMLUI)
 endif ()
 
 if (AURORA_ENABLE_GX)
-    target_compile_definitions(aurora_core PUBLIC AURORA_ENABLE_GX WEBGPU_DAWN)
+    target_compile_definitions(aurora_core PUBLIC AURORA_ENABLE_GX $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:WEBGPU_DAWN>)
+    if (EMSCRIPTEN)
+        target_link_options(aurora_core PUBLIC --js-library=${CMAKE_CURRENT_SOURCE_DIR}/lib/gfx/browser_upload.js)
+    endif ()
     target_sources(aurora_core PRIVATE
             lib/webgpu/gpu.cpp
             lib/webgpu/gpu_cache.cpp

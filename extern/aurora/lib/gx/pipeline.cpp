@@ -14,13 +14,12 @@
 
 namespace aurora::gx {
 
-wgpu::RenderPipeline create_pipeline(const PipelineConfig& config) {
+wgpu::RenderPipeline create_pipeline(const PipelineConfig& config, const gfx::RenderTargetLayout& layout) {
   ZoneScoped;
-  const auto shader = build_shader(config.shaderConfig);
-  const auto label =
-      fmt::format("GX Pipeline {:x} shader {:x}", xxh3_hash(config, static_cast<HashType>(gfx::ShaderType::GX)),
-                  xxh3_hash(config.shaderConfig));
-  return build_pipeline(config, {}, shader, label.c_str());
+  const auto shader = build_shader(config.shaderConfig, layout);
+  const auto label = fmt::format("GX Pipeline {:x}",
+                                 xxh3_hash(layout.key, xxh3_hash(config, static_cast<HashType>(gfx::ShaderType::GX))));
+  return build_pipeline(config, layout, {}, shader, label.c_str());
 }
 
 // Diagnostics for the untextured-white-quad artifact in melee-pc:
@@ -104,7 +103,12 @@ void render(const DrawData& data, const wgpu::RenderPassEncoder& pass) {
   }
 
   const auto& resources = gfx::detail::resources();
+#ifdef __EMSCRIPTEN__
+  const std::array immediateOffsets{data.immediateRange.offset};
+  pass.SetBindGroup(3, resources.uniformBindGroup, immediateOffsets.size(), immediateOffsets.data());
+#else
   pass.SetImmediates(0, &data.immediateData, sizeof(data.immediateData));
+#endif
   const std::array offsets{data.uniformRange.offset};
   pass.SetBindGroup(1, resources.uniformBindGroup, offsets.size(), offsets.data());
   if (data.bindGroups.textureBindGroup) {
