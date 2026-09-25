@@ -228,6 +228,11 @@ class Launcher final : public Rml::EventListener {
         e->SetProperty("tab-index", value ? "auto" : "none");
         if (!value)
             e->Blur();
+        else
+            /* Focus() reads the computed focus property, which RmlUi refreshes
+             * only on update: without this, a control enabled and focused in
+             * the same frame refuses the focus. */
+            document->UpdateDocument();
     }
     bool busy() const { return dialog || inspection.valid() || verification.valid(); }
     void status(const std::string& value, bool error = false) {
