@@ -215,6 +215,7 @@ per-device `.controller` files; everything else shares `launcher.cfg`.
 | `MELEE_PIPELINE_JOBS=<n>` | Background shader-pipeline compile threads (default half the hardware threads, 1..8). |
 | `MELEE_UCF=1` | Universal Controller Fix (UCF 0.8x dashback and shield-drop rules); overrides the `ucf` launcher.cfg pref. |
 | `MELEE_GC_ADAPTER=0` | Hand the GameCube adapter (WUP-028) back to SDL's gamepad driver instead of reading it raw. |
+| `MELEE_SLP_DIR=<dir>` | Record every VS match, offline or netplay, as a Slippi replay `<dir>/Game_YYYYMMDDTHHMMSS.slp` (replay format 3.18.0) that Slippi Launcher, slippi-js stats, Clippi and overlays read. Only frames no rollback can change are written, so both netplay peers' files hold the same frames. Off by default. |
 | `--no-card` | Boot without a memory card. |
 | `--dvd <image>` | Explicit form of the positional disc argument. |
 | `--version` | Print the build version and exit. |
@@ -294,7 +295,7 @@ lockstep-only platform build.
 | `MELEE_NET=<host:port>` | Connect to that peer at boot, no lobby (`MELEE_NET_PLAYER` on both sides). The session runs the same RULES/READY handshake a lobby one does, hosted by `MELEE_NET_PLAYER=0`, so the seed, rules and unlock state are agreed rather than assumed and a disagreement refuses the session instead of desyncing later. `MELEE_SEED` is optional, and only the host's is used. |
 | `MELEE_NET_PORT=<n>` | Local UDP game port (default 41000). Two copies on one machine need different ports. |
 | `MELEE_NET_PLAYER=0\|1` | Controller port the local player drives with `MELEE_NET`: 0 = P1/host, 1 = P2. |
-| `MELEE_NET_DELAY=<n>\|auto` | Input delay in frames (default `auto`: 1–4 from ping and jitter, at least 2 in a fight, re-evaluated every 600 frames, changed only between matches). |
+| `MELEE_NET_DELAY=<n>\|auto` | Input delay in frames (default `auto`: 1–4 from ping and jitter, at least 2 in a fight (1 on a LAN under 10 ms ping and 2 ms jitter), re-evaluated every 600 frames, changed only between matches). |
 | `MELEE_NET_RECONNECT_MS=<ms>` | How long a broken link may take to resume (default 15000). `0` disables the reconnect phase: the session drops 7 s after the peer goes quiet, as it used to. Anything negative or unparseable falls back to the default. |
 | `MELEE_LAN_TEST=1\|host` | LAN lobby without the menu; `host` presses Start once the title is up. Both set to `host` exercises a simultaneous Start. |
 | `MELEE_LAN_DIRECT=<ip:port>` | Direct connect without the menu, at frame 300; set on both sides with the other's address. The lower `ip:port` hosts. |
@@ -373,10 +374,10 @@ python3 tools/net_determinism.py --only linux,linux-flip   # ~2 min, no Proton
 
 ## License
 
-Three situations, spelled out in [LICENSE.md](LICENSE.md): the decompiled
+Three situations, spelled out in [LICENSE.md](licenses/LICENSE.md): the decompiled
 game code in `src/melee` and `src/sysdolphin` is **not licensed** and remains
 the property of its copyright holders; the port code in `src/pc`, `tools`,
-`platforms`, `cmake` and `.github` is **GPL-3.0-or-later** ([COPYING](COPYING));
+`platforms`, `cmake` and `.github` is **GPL-3.0-or-later** ([COPYING](licenses/COPYING));
 bundled third-party components keep their own licenses. Because the game code
 cannot be relicensed, the repository as a whole is not distributable under the
 GPL. No game assets are in this repository.

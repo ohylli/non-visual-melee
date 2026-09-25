@@ -187,6 +187,15 @@ void onEnterDebugVs(GameModeState* state)
     start->players[2].slot_type = Gm_PKind_NA;
     start->players[3].slot_type = Gm_PKind_NA;
 #ifdef TARGET_PC
+    /* MELEE_DEBUG_VS_STAGE=<StKind>: the debug match on one stage instead of
+     * the last-used one, so the harness can reach a stage's mid-match loads
+     * (3 is Pokemon Stadium, whose transformations load from disc). */
+    if (getenv("MELEE_DEBUG_VS_STAGE") != NULL) {
+        int st = atoi(getenv("MELEE_DEBUG_VS_STAGE"));
+        if (st > St_Kind_Test && st < St_Kind_Last) {
+            start->rules.stkind = (StKind) st;
+        }
+    }
     if (getenv("MELEE_DEBUG_VS") != NULL && strcmp(getenv("MELEE_DEBUG_VS"), "cpu") == 0) {
         start->players[1].slot_type = Gm_PKind_Cpu;
     } else if (getenv("MELEE_DEBUG_VS") != NULL && strcmp(getenv("MELEE_DEBUG_VS"), "cpu4") == 0) {
@@ -198,6 +207,19 @@ void onEnterDebugVs(GameModeState* state)
         for (i = 0; i < 4; i++) {
             start->players[i].ckind = kinds[i];
             start->players[i].slot_type = Gm_PKind_Cpu;
+        }
+    }
+    /* MELEE_DEBUG_VS_STOCKS=<n>: a stock match instead of an untimed time
+     * one, so a run can end on GAME! with stocks the replay (src/pc/slp.c)
+     * must carry. */
+    if (getenv("MELEE_DEBUG_VS_STOCKS") != NULL) {
+        int stocks = atoi(getenv("MELEE_DEBUG_VS_STOCKS"));
+        if (stocks > 0 && stocks < 100) {
+            start->rules.match_kind = MatchKind_Stock;
+            start->rules.is_stock = true;
+            for (i = 0; i < Gm_Player_NumMax; i++) {
+                start->players[i].stocks = stocks;
+            }
         }
     }
 #endif

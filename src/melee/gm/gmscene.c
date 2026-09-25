@@ -2,6 +2,7 @@
 #ifdef TARGET_PC
 #include "pc/net.h"
 #include "pc/pc.h"
+#include "pc/slp.h"
 #include "pc/widescreen.h"
 #endif
 
@@ -324,7 +325,13 @@ static bool gm_RunSimTick(void (*on_frame)(void), struct gm_80479D58_t* temp_r25
     if (temp_r25->unk_10.pre_gobj_proc != NULL) {
         temp_r25->unk_10.pre_gobj_proc();
     }
+#ifdef TARGET_PC
+    pc_slp_tick_begin();
+#endif
     HSD_GObj_RunProcs();
+#ifdef TARGET_PC
+    pc_slp_tick_end(temp_r25->unk_10.unk_28);
+#endif
     if (temp_r25->unk_0 != -2) {
         temp_r25->unk_0++;
     }
@@ -448,6 +455,9 @@ void gm_801A4D34(void (*on_frame)(void), GameSceneInfo* info)
             break;
         }
 
+#ifdef TARGET_PC
+        pc_net_render_audit(false);
+#endif
         lb_800195D0();
         GXInvalidateVtxCache();
         GXInvalidateTexAll();
@@ -456,6 +466,9 @@ void gm_801A4D34(void (*on_frame)(void), GameSceneInfo* info)
         HSD_Init_803755A8();
         HSD_PerfSetDrawTime();
         HSD_VICopyXFBAsync(HSD_RP_SCREEN);
+#ifdef TARGET_PC
+        pc_net_render_audit(true);
+#endif
         if (temp_r25->unk_4 != -2U) {
             temp_r25->unk_4++;
         }

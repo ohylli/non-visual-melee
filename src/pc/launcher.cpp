@@ -166,7 +166,7 @@ void dialog_done(void* userdata, const char* const* files, int) {
 
 /* Aurora compiles the known pipeline configs ahead of use -- the ~12k-config
  * seed on desktop, on Android the ones this device has built before -- on
- * worker threads from startup, or, without workers (Adreno), in this loop's
+ * worker threads from startup, or, without workers (Android), in this loop's
  * idle time. Until a config is compiled, every draw that needs it is skipped
  * (issue #46), so the drain finishing before a match is the difference between
  * a match that pops and one that does not. The launcher is the one screen
@@ -1024,7 +1024,7 @@ public:
                 aurora_end_frame();
             /* Spend the idle time until the next frame on the pipeline queue:
              * with worker threads this only waits, as a plain delay did;
-             * without them (Adreno) it builds queued pipelines here, the only
+             * without them (Android) it builds queued pipelines here, the only
              * place they are built before a match. */
             const uint64_t idle_start = SDL_GetTicks();
             aurora_wait_pipelines(8);
@@ -1833,10 +1833,25 @@ extern "C" bool pc_is_unlock_all_enabled(void) {
 }
 extern "C" bool pc_is_frozen_stadium_enabled(void) {
     bool unlock_all, frozen;
-    return pc_net_rules(&unlock_all, &frozen) ? frozen : prefs.frozen_stadium;
+    if (pc_net_rules(&unlock_all, &frozen)) {
+        return frozen;
+    }
+    /* MELEE_FROZEN_STADIUM=0|1 overrides the preference, so a test can reach
+     * the transformations whatever the machine's launcher says. The host's
+     * value is what RULES carries, so setting it on the host is enough. */
+    static const char* env = std::getenv("MELEE_FROZEN_STADIUM");
+    return env ? env[0] != '0' : prefs.frozen_stadium;
 }
+/* Free camera and UCF are read by the simulation (camera.c's pause camera
+ * feeds offscreen damage; UCF decides dashbacks and shield drops), so a
+ * local preference must not reach it while the run has to reproduce on
+ * another machine: two peers with different settings would desync on the
+ * first dashback UCF changes. Such a run plays the competitive standard,
+ * which is Slippi's too: UCF on, free camera off. Both peers run the same
+ * build (the handshake binds it), so forcing here keeps them agreed without
+ * a RULES field. */
 extern "C" bool pc_is_free_camera_enabled(void) {
-    return prefs.free_camera;
+    return !pc_net_deterministic() && prefs.free_camera;
 }
 extern "C" uint64_t pc_install_id(void) {
     return prefs.install_id;
@@ -1849,6 +1864,9 @@ extern "C" const char* pc_app_rev(void) {
     return pc::get_app_version().c_str();
 }
 extern "C" bool pc_is_ucf_enabled(void) {
+    if (pc_net_deterministic()) {
+        return true;
+    }
     static const char* env = std::getenv("MELEE_UCF");
     return env ? env[0] != '0' : prefs.ucf;
 }
