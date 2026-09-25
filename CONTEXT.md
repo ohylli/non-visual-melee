@@ -73,8 +73,12 @@ The settings overlay added by the base port, opened with F1 while the game runs.
 _Avoid_: Settings menu, overlay, F1 menu, pause menu
 
 **Launcher**:
-The window the port shows before the game starts, where the disc image is chosen and checked.
+The window the port shows before the game starts: choosing and checking the disc image, settings, and update notices.
 _Avoid_: Startup menu, front end
+
+**Setting**:
+One named option the player can change, with a current value and a line of help text. The same setting can appear in both the launcher and the port menu.
+_Avoid_: Option, preference, config entry
 
 ### Wording
 
