@@ -1,6 +1,6 @@
 # 01 Home view, status lines and the reader's foundation
 
-Status: ready-for-agent
+Status: ready-for-human
 Type: task
 
 The first slice of `.scratch/launcher-accessibility/spec.md`: everything outside the Settings view, plus the machinery that issue 02 builds on. Read the spec, ADR-0002 and the primer `docs/a11y/rmlui-screens.md` first.
@@ -53,3 +53,13 @@ Wording is in the spec. In short:
 7. Pick a wrong file, such as a text file renamed `.iso`. You should hear the error.
 
 ## Comments
+
+### 2026-09-25, implementation (agent)
+
+Implemented; the play-test above is what remains.
+
+- The headless test (`src/pc/a11y/test_launcher_speech.cpp`, ctest `launcher_speech`) worked first time: computed styles, visibility and focus all behave without a window.
+- It found a base port bug. `Element::Focus()` refuses a button whose computed `focus` is `none`, and RmlUi refreshes that only on update, so a button enabled and focused in the same frame stayed unfocused. After choosing a disc, focus stayed parked on the button column instead of reaching Play. The fix is one call in `Launcher::enabled` (`document->UpdateDocument()` after enabling), a base port edit to keep in its own commit.
+- The opening waits for focus to reach a control as well as for the status line to settle, since the start-up disc check parks focus. If focus never reaches a control, the opening is spoken without it a second later.
+- The update banner is followed by its own `display`, so leaving Settings does not announce it again.
+- A launcher run with speech off (no disc argument, killed by `timeout` after 8 s) logged the expected opening: "Melee launcher. Ready to play, Disc not verified. Play Melee, button. Disc: melee.iso, Super Smash Bros. Melee, USA, Revision 2 (1.02)".

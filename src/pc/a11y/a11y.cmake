@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Accessibility fork: speech and its screen reader library, Prism.
+# Accessibility fork: speech, its screen reader library (Prism), and the
+# readers that turn RmlUi pages into speech.
 # Included from the root CMakeLists.txt with one line, after the melee target
 # and the unit_tests target exist. Everything the fork adds to the build lives
 # here, so base merges never touch it.
@@ -27,7 +28,9 @@ endif ()
 target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/hooks.cpp
         ${CMAKE_CURRENT_LIST_DIR}/speech.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/screen_reader_bridge.cpp)
+        ${CMAKE_CURRENT_LIST_DIR}/screen_reader_bridge.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/rmlui_reader.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/launcher_speech.cpp)
 target_include_directories(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 
 if (A11Y_PRISM_ASSET)
@@ -83,4 +86,18 @@ if (TARGET unit_tests)
     add_test(NAME speech COMMAND speech_test)
     set_tests_properties(speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests speech_test)
+
+    # Launcher speech against the real resources/launcher.rml, in an RmlUi
+    # context that draws nothing; also a fake bridge and its own pc_log_line.
+    add_executable(launcher_speech_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_launcher_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/launcher_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/rmlui_reader.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
+    target_include_directories(launcher_speech_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_link_libraries(launcher_speech_test PRIVATE rmlui)
+    target_compile_options(launcher_speech_test PRIVATE -UNDEBUG)
+    add_test(NAME launcher_speech COMMAND launcher_speech_test ${PROJECT_SOURCE_DIR}/resources)
+    set_tests_properties(launcher_speech PROPERTIES LABELS melee)
+    add_dependencies(unit_tests launcher_speech_test)
 endif ()

@@ -16,6 +16,10 @@ void pc_a11y_init(void);
  * closed. */
 void pc_a11y_shutdown(void);
 
+/* Once per turn of the launcher's loop (src/pc/launcher.cpp), after the page
+ * has been drawn. Launcher speech compares the page with the last turn here. */
+void pc_a11y_launcher_frame(void);
+
 #ifdef __cplusplus
 }
 #endif

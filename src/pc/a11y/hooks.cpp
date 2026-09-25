@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "a11y_hooks.h"
+#include "launcher_speech.hpp"
 #include "speech.hpp"
 #include <memory>
 
@@ -19,12 +20,18 @@ extern "C" void pc_a11y_init(void) {
         a11y::config_from_environment(), a11y::make_screen_reader_bridge());
     s_speech->init();
     s_speech->announce("Non-Visual Melee ready", a11y::Mode::interrupt);
+    a11y::launcher_speech_start(*s_speech);
 }
 
 extern "C" void pc_a11y_shutdown(void) {
     if (s_speech == nullptr) {
         return;
     }
+    a11y::launcher_speech_stop();
     s_speech->shutdown();
     s_speech.reset();
+}
+
+extern "C" void pc_a11y_launcher_frame(void) {
+    a11y::launcher_speech_frame(a11y::Clock::now());
 }

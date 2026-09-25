@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "launcher.h"
+#include "a11y/a11y_hooks.h"
 #include "textures.h"
 #include "widescreen.h"
 #include "launcher_data.hpp"
@@ -1027,6 +1028,7 @@ public:
                 break;
             if (aurora_begin_frame())
                 aurora_end_frame();
+            pc_a11y_launcher_frame();
             /* Spend the idle time until the next frame on the pipeline queue:
              * with worker threads this only waits, as a plain delay did;
              * without them (Android) it builds queued pipelines here, the only
