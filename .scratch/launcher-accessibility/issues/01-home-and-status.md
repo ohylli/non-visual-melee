@@ -1,6 +1,6 @@
 # 01 Home view, status lines and the reader's foundation
 
-Status: ready-for-human
+Status: resolved (2026-09-26)
 Type: task
 
 The first slice of `.scratch/launcher-accessibility/spec.md`: everything outside the Settings view, plus the machinery that issue 02 builds on. Read the spec, ADR-0002 and the primer `docs/a11y/rmlui-screens.md` first.
