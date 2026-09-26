@@ -73,6 +73,7 @@ Fork code follows `CODING_STYLE.md` at the repo root. Before committing, run `py
 The code is the source of truth for what the fork does. A doc records what stays true as features land and what the code does not reveal without real digging: invariants, reasons, constraints from outside systems (Prism, rollback, the decomp), gotchas.
 
 - Primers that explain a subsystem in plain terms ("how native menus work", "the audio path") go in `docs/a11y/`, written as the knowledge is gained, each opening with a short mental model. They name files and functions and leave the details to the code: no line numbers, current call sites, log line formats or test lists. A short illustrative snippet is fine.
+- Native menu work starts from `docs/a11y/native-menus.md`: how the game's menus run, where their words come from, a screen inventory and candidate hook points.
 - A reason or procedure tied to one spot in the code is a comment at that spot.
 - A decision with its rejected alternatives is an ADR in `docs/adr/`.
 - Specs and issues under `.scratch/` are snapshots of the plan when written. Later work supersedes them, and the code wins where they disagree.
