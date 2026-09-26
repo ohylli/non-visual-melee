@@ -362,7 +362,8 @@ void rmlui_shutdown_before_stop(Rml::Context& context) {
     a11y::Speech speech(a11y::Config{true, false}, std::make_unique<FakeBridge>(outputs));
     speech.init();
     a11y::launcher_speech_start(speech);
-    assert(context.LoadDocument(s_resources + "/launcher.rml") != nullptr);
+    Rml::ElementDocument* document = context.LoadDocument(s_resources + "/launcher.rml");
+    assert(document != nullptr);
     Rml::Shutdown();
     a11y::launcher_speech_frame(a11y::Clock::time_point() + a11y::kSettleTime * 2);
     a11y::launcher_speech_stop();
