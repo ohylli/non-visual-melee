@@ -707,6 +707,7 @@ public:
         document->AddEventListener(Rml::EventId::Click, this);
         document->AddEventListener(Rml::EventId::Keydown, this);
         document->AddEventListener(Rml::EventId::Change, this);
+        document->AddEventListener(Rml::EventId::Blur, this, true);
         document->Show();
         text("app-version", pc::get_app_version());
         text("check-status", "Current version: " + pc::get_app_version());
@@ -726,6 +727,7 @@ public:
         document->RemoveEventListener(Rml::EventId::Click, this);
         document->RemoveEventListener(Rml::EventId::Keydown, this);
         document->RemoveEventListener(Rml::EventId::Change, this);
+        document->RemoveEventListener(Rml::EventId::Blur, this, true);
         auto* context = document->GetContext();
         document->Close();
         context->Update();
@@ -776,6 +778,15 @@ public:
             } else
                 return;
             save();
+        } else if (event.GetId() == Rml::EventId::Blur) {
+            // Leaving a text field shows what was stored: letters in upper
+            // case, and the old value back if the entry was rejected.
+            auto* target = event.GetTargetElement();
+            if (target && (target->GetId() == "net-name" || target->GetId() == "net-target")) {
+                quiet = true;
+                refresh_online(document);
+                quiet = false;
+            }
         } else if (event.GetId() == Rml::EventId::Keydown) {
             auto key = event.GetParameter<int>("key_identifier", 0);
             if (key == Rml::Input::KI_UP || key == Rml::Input::KI_DOWN) {
