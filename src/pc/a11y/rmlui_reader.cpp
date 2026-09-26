@@ -49,6 +49,12 @@ std::string collapse_whitespace(std::string_view text) {
     return out;
 }
 
+/* Another element of the same document, by id. */
+const Rml::Element* find_in_document(const Rml::Element& element, const Rml::String& id) {
+    Rml::ElementDocument* document = element.GetOwnerDocument();
+    return document != nullptr ? document->GetElementById(id) : nullptr;
+}
+
 /* A setting row: a description (heading and help sentence) beside a control. */
 const Rml::Element* row_of(const Rml::Element& element) {
     for (const Rml::Element* e = element.GetParentNode(); e != nullptr; e = e->GetParentNode()) {
@@ -98,14 +104,15 @@ std::string form_value(const Rml::Element& element) {
 
 void describe_tab(const Rml::Element& tab, Control& control) {
     control.role = Role::tab;
-    control.selected = tab.IsClassSet("selected");
+    TabPlace& place = control.tab;
+    place.selected = tab.IsClassSet("selected");
     const Rml::Element* strip = tab.GetParentNode();
     for (int i = 0; strip != nullptr && i < strip->GetNumChildren(); ++i) {
         const Rml::Element* sibling = strip->GetChild(i);
         if (sibling->IsClassSet("tab")) {
-            ++control.count;
+            ++place.count;
             if (sibling == &tab) {
-                control.position = control.count;
+                place.position = place.count;
             }
         }
     }
@@ -152,11 +159,7 @@ Control describe_control(const Rml::Element& element) {
             control.role = Role::slider;
             /* The span beside a slider shows its value as the player reads it
              * ("80%", "Auto"); the slider's own value is a bare number. */
-            Rml::ElementDocument* document = element.GetOwnerDocument();
-            if (const Rml::Element* shown = document != nullptr ?
-                                                document->GetElementById(element.GetId() + "-val") :
-                                                nullptr)
-            {
+            if (const Rml::Element* shown = find_in_document(element, element.GetId() + "-val")) {
                 control.value = element_text(*shown);
             }
         } else if (type == "text" || type == "password") {
@@ -169,6 +172,10 @@ Control describe_control(const Rml::Element& element) {
 void make_action(Control& control) {
     control.role = Role::button;
     control.name = control.name.empty() ? control.value : control.name + ": " + control.value;
+}
+
+std::string field_value(const Control& control) {
+    return control.value.empty() ? "blank" : control.value;
 }
 
 std::string focus_announcement(const Control& control) {
@@ -197,14 +204,14 @@ std::string focus_announcement(const Control& control) {
         break;
     case Role::edit:
         add("edit");
-        add(control.value.empty() ? "blank" : control.value);
+        add(field_value(control));
         break;
     case Role::tab:
         add("tab");
-        if (control.selected) {
+        if (control.tab.selected) {
             add("selected");
         }
-        add(std::to_string(control.position) + " of " + std::to_string(control.count));
+        add(std::to_string(control.tab.position) + " of " + std::to_string(control.tab.count));
         hint = "Left and right to switch tabs";
         break;
     case Role::other:
@@ -226,11 +233,10 @@ std::string focus_announcement(const Control& control) {
 
 std::string tab_page_text(const Rml::Element& tab) {
     const Rml::String& id = tab.GetId();
-    Rml::ElementDocument* document = tab.GetOwnerDocument();
-    if (id.rfind("tab-", 0) != 0 || document == nullptr) {
+    if (id.rfind("tab-", 0) != 0) {
         return "";
     }
-    const Rml::Element* page = document->GetElementById("page-" + id.substr(4));
+    const Rml::Element* page = find_in_document(tab, "page-" + id.substr(4));
     std::string text;
     for (int i = 0; page != nullptr && i < page->GetNumChildren(); ++i) {
         const Rml::Element* row = page->GetChild(i);

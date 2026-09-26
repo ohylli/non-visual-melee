@@ -22,6 +22,13 @@ enum class Role {
     other,
 };
 
+/* A tab's place in its strip. */
+struct TabPlace {
+    bool selected = false;
+    int position = 0; /* 1-based */
+    int count = 0;
+};
+
 /* A focusable control as the player hears it. */
 struct Control {
     Role role = Role::other;
@@ -29,9 +36,7 @@ struct Control {
     std::string value; /* what a value change speaks: a label, a slider's shown value */
     std::string help;  /* the setting row's help sentence; empty outside a row */
     bool disabled = false;
-    bool selected = false; /* tabs only */
-    int position = 0;      /* tabs only: 1-based place in the strip, and its size */
-    int count = 0;
+    TabPlace tab; /* tabs only */
 };
 
 /* The visible text inside an element, whitespace collapsed and trimmed. */
@@ -47,6 +52,9 @@ Control describe_control(const Rml::Element& element);
  * preset", "Apply"). The page does not mark them, so the caller's override
  * table does: its name becomes "Performance preset: Apply". */
 void make_action(Control& control);
+
+/* A text field's value as spoken: "blank" when it is empty. */
+std::string field_value(const Control& control);
 
 /* "Choose disc, button", "Vertical sync, On, Enter to change. <help>",
  * "Master volume, slider, 80%. Left and right to adjust. <help>". */

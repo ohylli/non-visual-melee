@@ -30,7 +30,7 @@ constexpr std::chrono::milliseconds kOpeningFocusWait{1000};
  * value, so they are read as "Performance preset: Apply, button". */
 constexpr std::string_view kActionButtons[] = {"performance", "check-now", "settings-discord"};
 
-Control describe(const Rml::Element& element) {
+Control describe_with_overrides(const Rml::Element& element) {
     Control control = describe_control(element);
     for (const std::string_view id : kActionButtons) {
         if (element.GetId() == id) {
@@ -75,19 +75,19 @@ std::optional<Percent> find_percent(std::string_view text) {
  * and progress rules. */
 struct WatchedText {
     const char* id;
-    const char* silent = nullptr; /* a text never spoken */
-    std::string seen;             /* the text on the last frame, empty while hidden */
-    Clock::time_point since;      /* when `seen` last changed */
-    bool pending = false;         /* `seen` waits to settle before it is spoken */
-    int progress_level = -1;      /* last step reached in a run of progress, -1 outside one */
-    bool in_view = false;         /* for observe_in_view */
+    const char* resting_text = nullptr; /* the region's idle text, never spoken */
+    std::string seen;                   /* the text on the last frame, empty while hidden */
+    Clock::time_point since;            /* when `seen` last changed */
+    bool pending = false;               /* `seen` waits to settle before it is spoken */
+    int progress_level = -1;            /* last step reached in a run of progress, -1 outside one */
+    bool in_view = false;               /* the region was in view on the last frame */
 
     /* Takes one frame's text; returns what to speak, if anything. */
     std::optional<std::string> observe(const std::string& text, Clock::time_point now) {
         if (text == seen) {
             if (pending && now - since >= kSettleTime) {
                 pending = false;
-                if (silent == nullptr || seen != silent) {
+                if (resting_text == nullptr || seen != resting_text) {
                     return seen;
                 }
             }
@@ -215,20 +215,29 @@ private:
         }
         if (focus != m_focus.get()) {
             std::string text = entering_settings ? "Settings" : "";
-            /* A text field just left after typing: what it holds now, which
-             * the launcher has put back to the stored value, so a rejected
-             * entry is heard as the old value. */
-            if (const Rml::Element* left = m_focus.get(); left != nullptr && m_edited) {
-                if (const Control field = describe(*left); field.role == Role::edit) {
-                    text = field.name + ", " + (field.value.empty() ? "blank" : field.value);
-                }
-            }
+            append_sentence(text, left_field_text());
             append_sentence(text, remember_focus(*focus));
             say(text, Mode::interrupt);
             return;
         }
-        const Control control = describe(*focus);
-        /* Typed characters are not echoed yet. */
+        follow_value(describe_with_overrides(*focus));
+    }
+
+    /* A text field just left after typing: its name and what it holds now,
+     * which the launcher has put back to the stored value, so a rejected entry
+     * is heard as the old value. Empty after any other control. */
+    std::string left_field_text() const {
+        const Rml::Element* left = m_focus.get();
+        if (left == nullptr || !m_edited) {
+            return "";
+        }
+        const Control field = describe_with_overrides(*left);
+        return field.role == Role::edit ? field.name + ", " + field_value(field) : "";
+    }
+
+    /* The focused control's value, spoken when it changes. Typed characters
+     * are not echoed yet; typing is only noted for left_field_text. */
+    void follow_value(const Control& control) {
         if (control.role == Role::edit) {
             m_edited = m_edited || control.value != m_focus_value;
             return;
@@ -241,7 +250,7 @@ private:
 
     /* Makes `focus` the known control and returns its focus announcement. */
     std::string remember_focus(Rml::Element& focus) {
-        const Control control = describe(focus);
+        const Control control = describe_with_overrides(focus);
         m_focus = focus.GetObserverPtr();
         m_focus_value = control.value;
         m_edited = false;
