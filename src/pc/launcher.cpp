@@ -1029,6 +1029,28 @@ public:
             if (aurora_begin_frame())
                 aurora_end_frame();
             pc_a11y_launcher_frame();
+            if (dialog) {
+                /* The native file dialog runs on SDL's dialog thread with
+                 * this window as its owner, so its modal bookkeeping and the
+                 * synchronous queries screen readers make about the owner
+                 * (UI Automation pings every top-level window of the process
+                 * on each focus change) wait for this thread's message pump.
+                 * Pumping once per rendered frame made NVDA lag for seconds
+                 * in the dialog; while it is open, pump every millisecond and
+                 * render only a few times a second. (a11y: fork change kept
+                 * here rather than upstreamed; not a hook.) */
+                auto dialog_ready = [this] {
+                    std::lock_guard lock(dialog->mutex);
+                    return dialog->ready;
+                };
+                for (const uint64_t start = SDL_GetTicks();
+                    !dialog_ready() && SDL_GetTicks() - start < 100;)
+                {
+                    SDL_PumpEvents();
+                    SDL_Delay(1);
+                }
+                continue;
+            }
             /* Spend the idle time until the next frame on the pipeline queue:
              * with worker threads this only waits, as a plain delay did;
              * without them (Android) it builds queued pipelines here, the only
