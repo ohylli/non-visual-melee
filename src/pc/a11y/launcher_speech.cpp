@@ -9,11 +9,13 @@
 #include <RmlUi/Core/Input.h>
 #include <RmlUi/Core/Plugin.h>
 #include <RmlUi/Core/Core.h>
+#include <algorithm>
 #include <charconv>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace a11y {
 namespace {
@@ -22,6 +24,21 @@ namespace {
  * start-up disc check is over. If the page never focuses one, the opening is
  * spoken without it after this long. */
 constexpr std::chrono::milliseconds kOpeningFocusWait{1000};
+
+/* The fork's overrides, for controls whose shape the generic reader gets
+ * wrong. These buttons sit in a setting row but act instead of cycling a
+ * value, so they are read as "Performance preset: Apply, button". */
+constexpr std::string_view kActionButtons[] = {"performance", "check-now", "settings-discord"};
+
+Control describe(const Rml::Element& element) {
+    Control control = describe_control(element);
+    for (const std::string_view id : kActionButtons) {
+        if (element.GetId() == id) {
+            make_action(control);
+        }
+    }
+    return control;
+}
 
 bool is_launcher(const Rml::ElementDocument& document) {
     const Rml::String& url = document.GetSourceURL();
@@ -58,17 +75,21 @@ std::optional<Percent> find_percent(std::string_view text) {
  * and progress rules. */
 struct WatchedText {
     const char* id;
-    std::string seen;        /* the text on the last frame, empty while hidden */
-    Clock::time_point since; /* when `seen` last changed */
-    bool pending = false;    /* `seen` waits to settle before it is spoken */
-    int progress_level = -1; /* last step reached in a run of progress, -1 outside one */
+    const char* silent = nullptr; /* a text never spoken */
+    std::string seen;             /* the text on the last frame, empty while hidden */
+    Clock::time_point since;      /* when `seen` last changed */
+    bool pending = false;         /* `seen` waits to settle before it is spoken */
+    int progress_level = -1;      /* last step reached in a run of progress, -1 outside one */
+    bool in_view = false;         /* for observe_in_view */
 
     /* Takes one frame's text; returns what to speak, if anything. */
     std::optional<std::string> observe(const std::string& text, Clock::time_point now) {
         if (text == seen) {
             if (pending && now - since >= kSettleTime) {
                 pending = false;
-                return seen;
+                if (silent == nullptr || seen != silent) {
+                    return seen;
+                }
             }
             return std::nullopt;
         }
@@ -97,6 +118,23 @@ struct WatchedText {
         return std::nullopt;
     }
 
+    /* For a region that is out of view at times: text that changes while it
+     * is out of view, or together with its coming into view, is taken without
+     * being spoken, as the view's own announcement covers it. */
+    std::optional<std::string> observe_in_view(
+        const std::string& text, bool visible, Clock::time_point now) {
+        const bool appeared = visible && !in_view;
+        in_view = visible;
+        if (visible && !appeared) {
+            return observe(text, now);
+        }
+        seen = text;
+        since = now;
+        pending = false;
+        progress_level = -1;
+        return std::nullopt;
+    }
+
     bool settled(Clock::time_point now) const { return now - since >= kSettleTime; }
 };
 
@@ -114,22 +152,36 @@ public:
             open(focus, now);
             return;
         }
-        follow_focus(focus);
-        if (std::optional<std::string> text = m_status.observe(text_of(m_status.id), now)) {
-            say(*text, Mode::queue);
+        const bool settings_shown = displayed("preferences");
+        follow_focus(focus, settings_shown && !m_settings_shown);
+        m_settings_shown = settings_shown;
+
+        /* Queued in this order; a text two regions show at once, such as
+         * "Checking for updates...", is spoken once. */
+        std::vector<std::string> spoken;
+        const auto add = [&spoken](std::optional<std::string> text) {
+            if (text && std::find(spoken.begin(), spoken.end(), *text) == spoken.end()) {
+                spoken.push_back(std::move(*text));
+            }
+        };
+        add(m_status.observe(text_of(m_status.id), now));
+        /* Watched while Settings is shown, whichever tab: an update check's
+         * result still arrives after the player has moved on. */
+        for (WatchedText* watch : {&m_settings_status, &m_check_status}) {
+            add(watch->observe_in_view(text_of(watch->id), settings_shown, now));
         }
         /* The banner's own display, not whether Home is the view shown, so
          * coming back from Settings does not announce it again. */
         const bool update_shown = displayed("update-card");
         if (update_shown && !m_update_shown) {
-            say("Update available: " + text_of("update-tag"), Mode::queue);
+            add("Update available: " + text_of("update-tag"));
         }
         m_update_shown = update_shown;
         for (WatchedText* watch : {&m_update_title, &m_update_desc}) {
-            const std::string text = update_shown ? text_of(watch->id) : std::string();
-            if (std::optional<std::string> spoken = watch->observe(text, now)) {
-                say(*spoken, Mode::queue);
-            }
+            add(watch->observe(update_shown ? text_of(watch->id) : std::string(), now));
+        }
+        for (const std::string& text : spoken) {
+            say(text, Mode::queue);
         }
     }
 
@@ -157,15 +209,30 @@ private:
     /* A new control gets its focus announcement; a new value on the same one
      * gets the value alone. Focus parked off any control, as while a button
      * is disabled, keeps the last control, so returning to it is silent. */
-    void follow_focus(Rml::Element* focus) {
+    void follow_focus(Rml::Element* focus, bool entering_settings) {
         if (focus == nullptr) {
             return;
         }
         if (focus != m_focus.get()) {
-            say(remember_focus(*focus), Mode::interrupt);
+            std::string text = entering_settings ? "Settings" : "";
+            /* A text field just left after typing: what it holds now, which
+             * the launcher has put back to the stored value, so a rejected
+             * entry is heard as the old value. */
+            if (const Rml::Element* left = m_focus.get(); left != nullptr && m_edited) {
+                if (const Control field = describe(*left); field.role == Role::edit) {
+                    text = field.name + ", " + (field.value.empty() ? "blank" : field.value);
+                }
+            }
+            append_sentence(text, remember_focus(*focus));
+            say(text, Mode::interrupt);
             return;
         }
-        const Control control = describe_control(*focus);
+        const Control control = describe(*focus);
+        /* Typed characters are not echoed yet. */
+        if (control.role == Role::edit) {
+            m_edited = m_edited || control.value != m_focus_value;
+            return;
+        }
         if (control.value != m_focus_value) {
             m_focus_value = control.value;
             say(control.value, Mode::interrupt);
@@ -174,10 +241,16 @@ private:
 
     /* Makes `focus` the known control and returns its focus announcement. */
     std::string remember_focus(Rml::Element& focus) {
-        const Control control = describe_control(focus);
+        const Control control = describe(focus);
         m_focus = focus.GetObserverPtr();
         m_focus_value = control.value;
+        m_edited = false;
         std::string text = focus_announcement(control);
+        /* Rows with no control, which focus never reaches, are read with
+         * their tab: the connect code, the Controls page. */
+        if (control.role == Role::tab) {
+            append_sentence(text, tab_page_text(focus));
+        }
         /* Play is the only way to hear the disc card, which focus never reaches. */
         if (focus.GetId() == "play") {
             std::string disc = text_of("disc-name");
@@ -216,8 +289,12 @@ private:
     bool m_opened = false;
     Rml::ObserverPtr<Rml::Element> m_focus;
     std::string m_focus_value;
+    bool m_edited = false; /* the focused text field's value has changed */
     bool m_update_shown = false;
+    bool m_settings_shown = false;
     WatchedText m_status{"status"};
+    WatchedText m_settings_status{"settings-status", "Saved automatically."};
+    WatchedText m_check_status{"check-status"};
     WatchedText m_update_title{"update-title"};
     WatchedText m_update_desc{"update-desc"};
 };

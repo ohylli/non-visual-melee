@@ -1,6 +1,6 @@
 # 02 Settings view
 
-Status: ready-for-agent
+Status: resolved (2026-09-26)
 Type: task
 Blocked by: 01
 
@@ -49,3 +49,21 @@ If a row's shape defeats the generic reader, add the case to the fork override t
 7. Escape and Back to launcher both land on "Settings, button".
 
 ## Comments
+
+### 2026-09-26, implementation (agent)
+
+Implemented; the play-test above is what remains.
+
+- **Text fields needed a base port fix.** RmlUi sends `change` on every keystroke, and the launcher stores only an entry that passes its rules, but the field kept showing whatever was typed, so the stored value was nowhere on the page. On leaving a text field the launcher now writes the stored value back into it (a Blur listener in `launcher.cpp`, its own commit, unmarked, since a sighted player was misled too: typed "otto" is stored as "OTTO"). Leaving after typing then speaks "Player name, OTTO." before the next focus announcement; leaving without typing adds nothing (first play-test: hearing the field's value on every Up and Down was confusing).
+- **Override table.** Action rows (Performance preset, Check for updates now, the Settings Discord button) cannot be told from cycling settings by shape; `kActionButtons` in `launcher_speech.cpp` lists them.
+- **Settings' regions** are watched only while Settings is shown, on any tab, and whatever they show as Settings opens is taken silently. A text both status lines show in one frame ("Checking for updates...") is spoken once. If Settings is opened while the start-up update check is still running, its result is spoken when it arrives.
+- The Controls page's `<br/>` reads as a comma, and " → " (in "Open Online → Direct Connect") joins the separators turned into commas.
+- The headless test walks every control in `launcher.rml` (43) and asserts each has a name and a known role.
+- For the play-test, wording worth an ear: "Anti-aliasing RESTART, ..." (badge read straight after the name), "left/right" in Master volume's help, and the en dash in "1–8 letters or digits".
+
+### 2026-09-26, play-test (maintainer)
+
+Every step above works as specified, by ear with NVDA. Two areas work as the spec says but need a better design, now separate issues:
+
+- The Controls tab's text, read as one announcement, would be better reviewed line by line: `03-reading-text-line-by-line.md`.
+- Editing the Online text fields is rough: `04-text-field-editing.md`.

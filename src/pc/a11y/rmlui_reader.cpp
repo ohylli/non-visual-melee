@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "rmlui_reader.hpp"
 #include <RmlUi/Core/Element.h>
+#include <RmlUi/Core/ElementDocument.h>
 #include <RmlUi/Core/ElementText.h>
 #include <RmlUi/Core/Elements/ElementFormControl.h>
 
@@ -11,6 +12,11 @@ void collect_text(const Rml::Element& element, std::string& out) {
     if (const auto* text = dynamic_cast<const Rml::ElementText*>(&element)) {
         out += text->GetText();
         out += ' ';
+        return;
+    }
+    /* A line break reads as a pause, not as two words run together. */
+    if (element.GetTagName() == "br") {
+        out += ", ";
         return;
     }
     for (int i = 0; i < element.GetNumChildren(); ++i) {
@@ -33,30 +39,76 @@ std::string collapse_whitespace(std::string_view text) {
             space = !out.empty();
             continue;
         }
-        if (space) {
+        /* No space before a comma a line break added. */
+        if (space && c != ',') {
             out += ' ';
-            space = false;
         }
+        space = false;
         out += c;
     }
     return out;
 }
 
-std::string role_of(const Rml::Element& element) {
+/* A setting row: a description (heading and help sentence) beside a control. */
+const Rml::Element* row_of(const Rml::Element& element) {
+    for (const Rml::Element* e = element.GetParentNode(); e != nullptr; e = e->GetParentNode()) {
+        if (e->IsClassSet("setting")) {
+            return e;
+        }
+    }
+    return nullptr;
+}
+
+/* The text of the first descendant with the tag, empty if there is none. */
+std::string first_text(const Rml::Element& element, const char* tag) {
+    Rml::ElementList found;
+    const_cast<Rml::Element&>(element).GetElementsByTagName(found, tag);
+    return found.empty() ? std::string() : element_text(*found.front());
+}
+
+bool has_control(const Rml::Element& element) {
+    if (is_control(element)) {
+        return true;
+    }
+    for (int i = 0; i < element.GetNumChildren(); ++i) {
+        if (has_control(*element.GetChild(i))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Headings and paragraphs, each as its own sentence: "Keyboard. WASD...". */
+void collect_sentences(const Rml::Element& element, std::string& out) {
     const Rml::String& tag = element.GetTagName();
-    if (tag == "button") {
-        return "button";
+    if (tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" || tag == "p") {
+        append_sentence(out, element_text(element));
+        return;
     }
-    if (tag == "input") {
-        const Rml::String type = element.GetAttribute<Rml::String>("type", "text");
-        if (type == "range") {
-            return "slider";
-        }
-        if (type == "text" || type == "password") {
-            return "edit";
+    for (int i = 0; i < element.GetNumChildren(); ++i) {
+        collect_sentences(*element.GetChild(i), out);
+    }
+}
+
+/* GetValue is not const in RmlUi, though it only reads. */
+std::string form_value(const Rml::Element& element) {
+    auto* form = dynamic_cast<Rml::ElementFormControl*>(const_cast<Rml::Element*>(&element));
+    return form != nullptr ? collapse_whitespace(form->GetValue()) : std::string();
+}
+
+void describe_tab(const Rml::Element& tab, Control& control) {
+    control.role = Role::tab;
+    control.selected = tab.IsClassSet("selected");
+    const Rml::Element* strip = tab.GetParentNode();
+    for (int i = 0; strip != nullptr && i < strip->GetNumChildren(); ++i) {
+        const Rml::Element* sibling = strip->GetChild(i);
+        if (sibling->IsClassSet("tab")) {
+            ++control.count;
+            if (sibling == &tab) {
+                control.position = control.count;
+            }
         }
     }
-    return "";
 }
 
 }  // namespace
@@ -74,16 +126,49 @@ bool is_control(const Rml::Element& element) {
 
 Control describe_control(const Rml::Element& element) {
     Control control;
-    control.role = role_of(element);
     control.disabled = element.IsPseudoClassSet("disabled");
-    /* GetValue is not const in RmlUi, though it only reads. */
-    if (auto* form = dynamic_cast<Rml::ElementFormControl*>(const_cast<Rml::Element*>(&element))) {
-        control.value = collapse_whitespace(form->GetValue());
-    } else {
+    if (const Rml::Element* row = row_of(element)) {
+        control.name = first_text(*row, "h3");
+        control.help = first_text(*row, "p");
+    }
+    const Rml::String& tag = element.GetTagName();
+    if (tag == "button") {
         control.value = element_text(element);
-        control.name = control.value;
+        if (element.IsClassSet("tab")) {
+            describe_tab(element, control);
+            control.name = control.value;
+        } else if (!control.name.empty()) {
+            control.role = Role::setting;
+        } else {
+            control.role = Role::button;
+            control.name = control.value;
+        }
+        return control;
+    }
+    control.value = form_value(element);
+    if (tag == "input") {
+        const Rml::String type = element.GetAttribute<Rml::String>("type", "text");
+        if (type == "range") {
+            control.role = Role::slider;
+            /* The span beside a slider shows its value as the player reads it
+             * ("80%", "Auto"); the slider's own value is a bare number. */
+            Rml::ElementDocument* document = element.GetOwnerDocument();
+            if (const Rml::Element* shown = document != nullptr ?
+                                                document->GetElementById(element.GetId() + "-val") :
+                                                nullptr)
+            {
+                control.value = element_text(*shown);
+            }
+        } else if (type == "text" || type == "password") {
+            control.role = Role::edit;
+        }
     }
     return control;
+}
+
+void make_action(Control& control) {
+    control.role = Role::button;
+    control.name = control.name.empty() ? control.value : control.name + ": " + control.value;
 }
 
 std::string focus_announcement(const Control& control) {
@@ -97,18 +182,68 @@ std::string focus_announcement(const Control& control) {
         }
         text += part;
     };
-    add(control.role);
-    if (control.value != control.name) {
+    std::string_view hint;
+    switch (control.role) {
+    case Role::button:
+        add("button");
+        break;
+    case Role::setting:
         add(control.value);
+        break;
+    case Role::slider:
+        add("slider");
+        add(control.value);
+        hint = "Left and right to adjust";
+        break;
+    case Role::edit:
+        add("edit");
+        add(control.value.empty() ? "blank" : control.value);
+        break;
+    case Role::tab:
+        add("tab");
+        if (control.selected) {
+            add("selected");
+        }
+        add(std::to_string(control.position) + " of " + std::to_string(control.count));
+        hint = "Left and right to switch tabs";
+        break;
+    case Role::other:
+        if (control.value != control.name) {
+            add(control.value);
+        }
+        break;
     }
     if (control.disabled) {
         add("unavailable");
+    } else if (control.role == Role::setting) {
+        add("Enter to change");
+    } else {
+        append_sentence(text, hint);
+    }
+    append_sentence(text, control.help);
+    return text;
+}
+
+std::string tab_page_text(const Rml::Element& tab) {
+    const Rml::String& id = tab.GetId();
+    Rml::ElementDocument* document = tab.GetOwnerDocument();
+    if (id.rfind("tab-", 0) != 0 || document == nullptr) {
+        return "";
+    }
+    const Rml::Element* page = document->GetElementById("page-" + id.substr(4));
+    std::string text;
+    for (int i = 0; page != nullptr && i < page->GetNumChildren(); ++i) {
+        const Rml::Element* row = page->GetChild(i);
+        if (!has_control(*row)) {
+            collect_sentences(*row, text);
+        }
     }
     return text;
 }
 
 std::string clean_text(std::string_view text) {
-    static constexpr std::string_view kSeparators[] = {" / ", " \xC2\xB7 "}; /* "/", "·" */
+    static constexpr std::string_view kSeparators[] = {
+        " / ", " \xC2\xB7 ", " \xE2\x86\x92 "}; /* "/", "·", "→" */
     std::string out;
     size_t i = 0;
     while (i < text.size()) {

@@ -85,7 +85,7 @@ The code is the source of truth for what the fork does. A doc records what stays
 Add one line per feature as it lands: what it does, where it lives.
 
 - Speech (`src/pc/a11y/`, primer `docs/a11y/speech.md`): the subsystem every feature hands announcements to, speaking through Prism, with the proof-of-life announcement "Non-Visual Melee ready" at startup. Switches `MELEE_A11Y` and `MELEE_A11Y_LOG`. Play-tested by ear with NVDA and the Windows voice fallback; whether speech resumes after an NVDA restart is still untested.
-- Launcher, Home and status (`src/pc/a11y/launcher_speech.cpp` and `rmlui_reader.cpp`, primer `docs/a11y/rmlui-screens.md`): an RmlUi plugin and the `pc_a11y_launcher_frame` hook read the launcher page aloud: the opening, Home and update banner buttons, the disc on Play, button label changes, the status line with settle and progress rules, and Tab as Down. Play-tested by ear with NVDA. Settings is still unread (issue 02).
+- Launcher (`src/pc/a11y/launcher_speech.cpp` and `rmlui_reader.cpp`, primer `docs/a11y/rmlui-screens.md`): an RmlUi plugin and the `pc_a11y_launcher_frame` hook read the launcher page aloud: the opening, Home and update banner buttons, the disc on Play, button label changes, the status line with settle and progress rules, and Tab as Down. Settings reads tabs with their control-less rows, settings with name, value and help, sliders, text fields and the Settings status lines. Play-tested by ear with NVDA. Open: reading page text line by line (issue 03) and text field editing (issue 04).
 
 ## Agent skills
 
