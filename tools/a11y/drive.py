@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 r"""Drive a game run with scripted controller input and print what it logged.
 
-Windows only. Launches build/melee.exe without taking focus, feeds it input
-through the base port's MELEE_KEY_FIFO test driver (src/pc/keyboard.c) over a
-named pipe, and prints the [a11y] and "boot scene" lines interleaved with the
-script's steps. The whole output (stdout and stderr) is saved to --out.
+Windows only. Launches build/melee.exe, silent and without taking focus
+unless --sound or --focus says otherwise, feeds it input through the base
+port's MELEE_KEY_FIFO test driver (src/pc/keyboard.c) over a named pipe, and
+prints the [a11y] and "boot scene" lines interleaved with the script's steps.
+The whole output (stdout and stderr) is saved to --out.
 
   python tools/a11y/drive.py [options] SCRIPT_FILE
   python tools/a11y/drive.py [options] -c "press Start; wait 'scene 1'"
@@ -74,6 +75,15 @@ for fn, res, argtypes in (
     (user32.ReleaseDC, ctypes.c_int, [wt.HWND, wt.HDC]),
     (user32.PrintWindow, wt.BOOL, [wt.HWND, wt.HDC, wt.UINT]),
     (user32.PostMessageW, wt.BOOL, [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]),
+    (user32.GetForegroundWindow, wt.HWND, []),
+    (user32.GetWindowThreadProcessId, wt.DWORD, [wt.HWND, ctypes.POINTER(wt.DWORD)]),
+    (user32.AttachThreadInput, wt.BOOL, [wt.DWORD, wt.DWORD, wt.BOOL]),
+    (user32.SetForegroundWindow, wt.BOOL, [wt.HWND]),
+    (user32.BringWindowToTop, wt.BOOL, [wt.HWND]),
+    (user32.ShowWindow, wt.BOOL, [wt.HWND, ctypes.c_int]),
+    (user32.SwitchToThisWindow, None, [wt.HWND, wt.BOOL]),
+    (user32.keybd_event, None, [wt.BYTE, wt.BYTE, wt.DWORD, ctypes.c_size_t]),
+    (kernel32.GetCurrentThreadId, wt.DWORD, []),
     (gdi32.CreateCompatibleDC, wt.HDC, [wt.HDC]),
     (gdi32.CreateCompatibleBitmap, wt.HBITMAP, [wt.HDC, ctypes.c_int, ctypes.c_int]),
     (gdi32.SelectObject, wt.HGDIOBJ, [wt.HDC, wt.HGDIOBJ]),
@@ -85,6 +95,10 @@ for fn, res, argtypes in (
 INVALID_HANDLE_VALUE = wt.HANDLE(-1).value
 PW_CLIENTONLY = 0x1
 PW_RENDERFULLCONTENT = 0x2
+SW_RESTORE = 9
+VK_MENU = 0x12
+KEYEVENTF_EXTENDEDKEY = 0x1
+KEYEVENTF_KEYUP = 0x2
 
 
 class BITMAPINFOHEADER(ctypes.Structure):
@@ -244,6 +258,55 @@ def game_windows(pid):
     return found
 
 
+def focus_window(proc, timeout):
+    """Wait for the game window and bring it to the front; returns how, or
+    None. Windows ignores SetForegroundWindow from a process that is not in
+    the foreground (as when an agent launches the run), so try the ways around
+    that from the least intrusive: sharing input state with the foreground
+    window's thread (fails when that is a console), Alt+Tab's own call, and
+    last a synthetic Alt press, which counts as this process's input."""
+    deadline = time.monotonic() + timeout
+    while not (windows := game_windows(proc.pid)):
+        if proc.poll() is not None or time.monotonic() > deadline:
+            raise ScriptError("no game window to focus")
+        time.sleep(0.1)
+    hwnd = windows[0]
+    user32.ShowWindow(hwnd, SW_RESTORE)
+
+    def focused():
+        time.sleep(0.1)
+        return user32.GetForegroundWindow() == hwnd
+
+    def attach():
+        ours = kernel32.GetCurrentThreadId()
+        theirs = user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), None)
+        attached = theirs != ours and user32.AttachThreadInput(ours, theirs, True)
+        try:
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
+        finally:
+            if attached:
+                user32.AttachThreadInput(ours, theirs, False)
+
+    def switch():
+        user32.SwitchToThisWindow(hwnd, True)
+
+    def alt_key():
+        # Alt goes down before the switch and up after it, so the old window
+        # never sees a lone Alt press and opens its menu bar.
+        user32.keybd_event(VK_MENU, 0, KEYEVENTF_EXTENDEDKEY, 0)
+        try:
+            user32.SetForegroundWindow(hwnd)
+        finally:
+            user32.keybd_event(VK_MENU, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, 0)
+
+    for how, attempt in (("thread attach", attach), ("SwitchToThisWindow", switch), ("Alt key", alt_key)):
+        attempt()
+        if focused():
+            return how
+    return None
+
+
 def screenshot(pid, path):
     """Save the game window's client area as a PNG. PrintWindow asks the
     window to render itself, so this works behind other windows and needs
@@ -315,8 +378,6 @@ def run(args, steps):
     env = dict(os.environ)
     pipe_name = rf"\\.\pipe\melee-drive-{os.getpid()}"
     env.update({
-        "SDL_WINDOW_ACTIVATE_WHEN_SHOWN": "0",
-        "SDL_AUDIO_DRIVER": "dummy",
         "MELEE_KEY_FIFO": pipe_name,
         "MELEE_INPUT_TRACE": "1",
         "MELEE_BOOT_SCENE": args.scene,
@@ -326,6 +387,10 @@ def run(args, steps):
     })
     if not args.speech:
         env["MELEE_A11Y"] = "0"
+    if not args.sound:
+        env["SDL_AUDIO_DRIVER"] = "dummy"
+    if not args.focus:
+        env["SDL_WINDOW_ACTIVATE_WHEN_SHOWN"] = "0"
     exe = os.path.join(REPO, "build", "melee.exe")
     disc = os.path.join(REPO, args.disc)
 
@@ -343,6 +408,10 @@ def run(args, steps):
             out_file.write(f">> {msg}\n")
 
         try:
+            if args.focus:
+                step("focus the game window")
+                how = focus_window(proc, args.timeout)
+                step(f"focused by {how}" if how else "warning: Windows kept the game window in the background")
             for words in steps:
                 if proc.poll() is not None:
                     raise ScriptError(f"the game exited early with code {proc.returncode}")
@@ -398,6 +467,10 @@ def main():
     ap.add_argument("--out", default=os.path.join(REPO, "build", "drive", "last.log"),
                     help="full output transcript (default build/drive/last.log)")
     ap.add_argument("--speech", action="store_true", help="speak through the screen reader (off by default)")
+    ap.add_argument("--sound", action="store_true", help="play the game's audio (silent by default)")
+    ap.add_argument("--focus", action="store_true",
+                    help="bring the game window to the front once shown, e.g. for a sighted observer "
+                         "(interrupts the screen reader; keys typed into the window reach the game too)")
     ap.add_argument("--all", action="store_true", help="print every game line, not just [a11y] and boot scene")
     ap.add_argument("--timeout", type=float, default=30, help="default wait timeout in seconds")
     ap.add_argument("--max-frames", type=int, default=60 * 60 * 10,
