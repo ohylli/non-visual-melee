@@ -476,6 +476,9 @@ def main():
     ap.add_argument("--max-frames", type=int, default=60 * 60 * 10,
                     help="MELEE_EXIT_AFTER_FRAMES backstop (default 10 minutes)")
     args = ap.parse_args()
+    # Game text can hold Japanese, which a console's code page may lack;
+    # --out keeps the exact line.
+    sys.stdout.reconfigure(errors="replace")
     if sys.platform != "win32":
         ap.error("Windows only; on Linux use MELEE_KEY_FIFO with a mkfifo pipe")
     if (args.script is None) == (args.inline is None):
