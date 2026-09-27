@@ -1,0 +1,10 @@
+# Title screen to the main menu, "1P Mode" highlighted. Run with the default
+# --scene title. Other scripts can start by copying these steps.
+wait "state 0 scene 0$"
+# The title screen ignores Start for its first moments, so press until it
+# leaves.
+press Start until "boot scene: game mode"
+# Unlock notices come first: with no memory card the base port builds a save
+# with everything unlocked but no notice marked as seen (gmmain_lib.c), so
+# every run shows them. A dismisses each one.
+press A until "boot scene: state 0 scene 1$"
