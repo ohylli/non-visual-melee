@@ -1,6 +1,6 @@
 # 02 Tree screens speak
 
-Status: ready-for-agent
+Status: resolved (2026-09-27)
 Type: task
 Blocked by: 01
 
@@ -53,3 +53,17 @@ Wording and rules are in the spec, sections "Tree screen announcements", "Leaf s
 - CLAUDE.md: one "Accessibility status" line; the drive script mentioned in "Verification"; the `--no-card` note about All-Star and Sound Test.
 
 ## Comments
+
+### 2026-09-27, implementation (agent)
+
+Implemented; hearing it is issue 04.
+
+- The reader is `MenuSpeech` in `src/pc/a11y/menu_speech.cpp`, the string table `menu_names.cpp`. The snapshot is `A11yMenuState`, filled by `a11y_game_menu_state()` in `game_access.c` with the same precedence as the game's own description line: the base port's plain text first, then SdMenu's string by number, read only while font slot 0 holds `SIS_MenuData`. The reader decodes a description only when it speaks it.
+- `menu_kinds.h` mirrors `MenuKind` and the tree screens' selection enums the way `scene_kinds.h` mirrors the scene kinds; `game_access.c` checks every number at compile time, so a renumbering fails the build.
+- `mnMain_Scene_OnFrame` runs before the menu's objects update in a frame (`gm_RunSimTick` calls the scene's frame function, then `HSD_GObj_RunProcs`), so the poll sees what the think functions left the frame before. The hook sits at the top, ahead of the L+R+Start check.
+- The scene hook tells the reader to forget; the return from character select is announced ("VS. Mode. Melee. A standard Smash battle for 1 to 4 players.").
+- Screenshots of every leaf screen and of Melee Records matched the spec's names except one: the random stage switch's title is "Random Stage". The spec's table notes are corrected. Snapshots shows a memory card prompt under `--no-card`, which its "No speech yet." does not cover.
+- `tools/a11y/tree_walk.drive` walks all eleven tree screens with wraps both ways, Online, Melee Records, Rumble as a leaf screen, and character select and back: 96 announcements, no gap logged. The menu ignores input for its first 20 frames, so the script waits a second after arriving.
+- Wrapped descriptions read as one line, for example "Single-Button Mode. The player uses only the A Button and the Control Stick. Great for beginners." No description on the tree screens has a font glyph, so no glyph was left out.
+- `MELEE_A11Y_TEXT_DUMP=1` now dumps on the menu scene's first frame: 1604 strings, as before.
+- The bounded `title` run exits cleanly. Unit tests: 9 of 9 pass, including the new `menu_speech`. `python tools/check_style.py` passes.

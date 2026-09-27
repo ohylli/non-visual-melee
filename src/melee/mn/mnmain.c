@@ -833,7 +833,6 @@ static void mn_80229A7C(MainMenuData* data, MenuKind menu_kind, int selection)
         text->font_size.x = 0.0521f;
         text->font_size.y = 0.0521f;
         HSD_SisLib_803A6368(text, sis_idx[selection]);
-        pc_a11y_menu_description(menu_kind, selection, text);
     }
 }
 
@@ -2869,6 +2868,7 @@ void mn_8022DB10(HSD_GObj* gp)
 void mnMain_Scene_OnFrame(void)
 {
     MenuExitData* data;
+    pc_a11y_menu_frame(); /* runs before the menu's objects update this frame */
     if (mn_8022F218() && mn_804A04F0.cur_menu != MENU_KIND_MAIN) {
         lbAudioAx_80023694();
         sfxBack();

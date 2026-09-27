@@ -66,7 +66,7 @@ Menu sounds go through one function, `lbAudioAx_80024030(kind)` (`src/melee/lb/l
 - 0, back (wrapped as `sfxBack()` in `src/melee/mn/inlines.h`);
 - 1, forward or confirm (`sfxForward()`);
 - 2, move (`sfxMove()`);
-- 3, refused: pressed on a locked entry or something that cannot be done;
+- 3, refused: pressed on something that cannot be done (the main menu tree never plays it: its locked entries are absent);
 - 5, pause.
 
 Nearly every native menu uses these, inside and outside `src/melee/mn/`. So the game already tells a blind player *that* the cursor moved, a choice was confirmed or refused; what it cannot tell them is *what*. That makes the sound function a useful signal for the fork (see [Candidate hook points](#candidate-hook-points)).
@@ -96,7 +96,7 @@ Most game text passes through those three functions, but not all. `HSD_SisLib_80
 
 ### Decoding game text
 
-The first experiment decoded every string of `SdMenu.usd` on an NTSC-U disc, all 1604 of them, and the description line as the player moves through the main menu tree. Run it with `MELEE_A11Y_TEXT_DUMP=1` and a drive to the main menu; the whole table is logged when the first description appears.
+The first experiment decoded every string of `SdMenu.usd` on an NTSC-U disc, all 1604 of them, and the description line as the player moves through the main menu tree. Run it with `MELEE_A11Y_TEXT_DUMP=1` and a drive to the main menu; the whole table is logged on the menu scene's first frame.
 
 - **The English text decodes.** Every string came out as the screen shows it, with no command the decoder did not know; the decoder follows the jump and call commands and skips colour, scale, spacing, alignment and timing by their operand sizes, as the renderer (`HSD_SisLib_803A84BC`) does.
 - **The atlas table is exact.** The encoder's two tables (`lbl_8040C8C0`, Shift-JIS per entry, and `HSD_SisLib_8040C680`, glyph code per entry) pair up one to one over all 287 atlas glyphs: digits, Latin letters, kana, punctuation and 23 kanji. The decoder keeps its own copy, since PAL rewrites `HSD_SisLib_8040C680` at startup.
@@ -106,13 +106,13 @@ The first experiment decoded every string of `SdMenu.usd` on an NTSC-U disc, all
 - **A table has no length.** It is an array of pointers with nothing marking its end; the first slot that resolves outside game memory ends the dump, which is a heuristic that gave a plausible last string here.
 - **Unverified on PAL.** PAL glyphs are one byte, the printable ASCII range decodes by rule, and the accented letters after it are unmapped.
 
-The description line itself is rebuilt by `mn_80229A7C` (`mnmain.c`) each time the hovered entry changes on a tree screen that has descriptions (main menu, 1P, VS, Trophies, Options, Data, Regular Match, Stadium, Special Melee, Records) and when such a screen appears, so it doubles as a "hovered entry changed" signal for those screens.
+The description line itself is rebuilt by `mn_80229A7C` (`mnmain.c`) each time the hovered entry changes on a tree screen that has descriptions (main menu, 1P, VS, Trophies, Options, Data, Regular Match, Stadium, Special Melee, Records) and when such a screen appears. As a "hovered entry changed" signal it has gaps: it is never reached for Online or the Online entry of VS. Mode, whose text the base port draws in a branch that returns first, and a move made while a screen slides in is not rebuilt, so the screen can briefly show the previous entry's description. The fork therefore looks descriptions up itself, from `mn_803EB6B0[menu].description_indices[selection]`, through `pc_region_sis_index()`.
 
 ## Kinds of native menu
 
 The screens fall into a handful of interaction patterns. The names are working names; see [Candidate vocabulary](#candidate-vocabulary). [Screen inventory](#screen-inventory) places most screens in one of these kinds; a few large ones (snapshots, tournament, trophies) mix several.
 
-- **Tree menus**: a vertical list of entries. Up and Down move, Confirm enters a submenu or starts a mode, Back goes up a level. Locked entries are skipped. The main menu tree is made of these.
+- **Tree menus**: a vertical list of entries. Up and Down move, Confirm enters a submenu or starts a mode, Back goes up a level. Lists wrap at both ends. The main menu tree is made of these; its locked entries (All-Star and Sound Test until unlocked) and its three removed ones are absent, not refused: not drawn, skipped by the cursor, and no refused sound.
 - **Setting rows**: a list of rows, each with a value. Up and Down pick a row, Left and Right change the value. Some rows open a sub-screen instead.
 - **Toggle grids**: a grid of on/off items with a moving highlight, where A toggles the highlighted item.
 - **Free-cursor screens**: a cursor moved with the analog stick over a 2D layout, with the selection decided by hit testing. These are the hardest to make accessible: positions are continuous, there is empty space between targets, and on character select up to four cursors move at once.
@@ -199,7 +199,9 @@ Everything a sighted player reads here is a picture except numbers (rules header
 Speculative: places the code offers, not decisions.
 
 - **Scene changed**: `gm_801A4014` in `gm_1A3F.c`, right after the scene's enter function. One hook sees every scene change in the game, with the scene's kind, and can announce the scene or hand over to a screen-specific reader.
-- **Main menu tree, tree screens**: the tree screens in `mnmain.c` keep the current screen and highlighted entry in the global `mn_804A04F0` (`MenuFlow`, `src/melee/mn/mnmain.h`: `cur_menu`, `prev_menu`, `hovered_selection`). There is no single function for "selection moved" or "screen changed": each tree screen has its own think function that writes `cur_menu` inline both ways, and `mn_80229894` is what leaf screens call to return to the tree (and what the base port uses to open Online). Polling `cur_menu` and `hovered_selection` once a frame catches all of it; this is the case the isolation rule allows polling for. The poll has to be scoped to the scenes that use this state (`GS_MENU`, and `GS_CSS` while one of its sub-screens is open).
+- **Main menu tree, tree screens**: the tree screens in `mnmain.c` keep the current screen and highlighted entry in the global `mn_804A04F0` (`MenuFlow`, `src/melee/mn/mnmain.h`: `cur_menu`, `prev_menu`, `hovered_selection`). There is no single function for "selection moved" or "screen changed": each tree screen has its own think function that writes `cur_menu` inline both ways, and `mn_80229894` is what leaf screens call to return to the tree (and what the base port uses to open Online). Polling `cur_menu` and `hovered_selection` once a frame catches all of it; this is the case the isolation rule allows polling for, and the fork does so from `mnMain_Scene_OnFrame` (`pc_a11y_menu_frame`), which runs before the menu's objects update in a frame. The poll is scoped to `GS_MENU`; the rules screen, item switch and name keyboard inside `GS_CSS` would need a second call site. The alternatives, and why the poll won, are in `docs/adr/0003-main-menu-tree-is-polled.md`:
+  - two choke points in `mnmain.c`: `mn_8022B3A0` builds every tree screen, and the selection-changed branch of `fn_8022AFEC` sees every hover change. They cover the tree screens exactly, but no leaf screen passes through either, so every leaf screen would need its own hook;
+  - the description line (`mn_80229A7C`), which misses Online and moves made during a slide (see [Decoding game text](#decoding-game-text)).
 - **Main menu tree, leaf screens**: the screens at the ends of the tree need per-screen readers, because where they keep their state varies:
   - rules, additional rules, the item and stage switches, the name list, the name keyboard and the records table use `hovered_selection` too (the records table packs row and column into it), with a value in `confirmed_selection` or their own struct;
   - Sound, Screen display, Language and Multi-Man keep their cursor in the generic `Menu` struct;
@@ -248,5 +250,4 @@ Terms this document uses that may deserve a place in `CONTEXT.md`:
 - Does decoding game text by number work for all English strings? For the main menu's table it does (see [Decoding game text](#decoding-game-text)); still to check are the other archives (character select, training, results, trophies, message windows), their font glyphs, and a PAL disc.
 - Where a string table entry is patched at runtime, is its number still a usable key?
 - How should the fork decide which controller is the blind player's on character select?
-- Is a poll of `mn_804A04F0` plus per-screen readers the right split for the main menu tree, or would per-screen hooks at each think function read better?
 - How much of the trophy, snapshot and tournament code is worth reading before those screens are in scope?

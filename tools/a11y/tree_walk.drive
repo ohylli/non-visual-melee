@@ -1,0 +1,248 @@
+# Walks every tree screen of the main menu tree and waits on each
+# announcement, so a missing or changed line fails the run. Also opens one
+# leaf screen (Rumble) and goes into character select and back. Run with the
+# default --scene title:
+#   python tools/a11y/drive.py tools/a11y/tree_walk.drive
+# Each wait matches the start of the spoken text, the screen's and entry's
+# names; the description follows them.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+wait '"Main Menu\. 1-P Mode\. '
+# The menu ignores input for its first 20 frames, and the arrival is spoken
+# on the first.
+sleep 1
+
+# Main Menu: down through every entry, the wrap, and back up across it.
+press Down
+wait '"VS\. Mode\. '
+press Down
+wait '"Trophies\. '
+press Down
+wait '"Options\. '
+press Down
+wait '"Data\. '
+press Down
+wait '"1-P Mode\. '
+press Up
+wait '"Data\. '
+press Down
+wait '"1-P Mode\. '
+
+# 1-P Mode.
+press A
+wait '"1-P Mode\. Regular Match\. '
+sleep 0.3
+press Down
+wait '"Event Match\. '
+press Down
+wait '"Stadium\. '
+press Down
+wait '"Training\. '
+press Down
+wait '"Regular Match\. '
+
+# Regular Match. All-Star is unlocked: with no memory card the base port
+# unlocks everything once Start is pressed on the title screen.
+press A
+wait '"Regular Match\. Classic\. '
+sleep 0.3
+press Down
+wait '"Adventure\. '
+press Down
+wait '"All-Star\. '
+press Down
+wait '"Classic\. '
+press B
+wait '"1-P Mode\. Regular Match\. '
+sleep 0.3
+
+# Stadium.
+press Down
+wait '"Event Match\. '
+press Down
+wait '"Stadium\. '
+press A
+wait '"Stadium\. Target Test\. '
+sleep 0.3
+press Down
+wait '"Home-Run Contest\. '
+press Down
+wait '"Multi-Man Melee\. '
+press Down
+wait '"Target Test\. '
+press B
+wait '"1-P Mode\. Stadium\. '
+sleep 0.3
+press B
+wait '"Main Menu\. 1-P Mode\. '
+sleep 0.3
+
+# VS. Mode, with the base port's Online entry.
+press Down
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press Down
+wait '"Tournament Melee\. '
+press Down
+wait '"Special Melee\. '
+press Down
+wait '"Custom Rules\. '
+press Down
+wait '"Name Entry\. '
+press Down
+wait '"Online\. Play against other players over the network\."'
+press Down
+wait '"Melee\. '
+press Up
+wait '"Online\. '
+
+# Online: labels and descriptions from the base port.
+press A
+wait '"Online\. LAN play\. Play another player on your local network\."'
+sleep 0.3
+press Down
+wait '"Direct connect\. Connect to a friend using a connect code\."'
+press Down
+wait '"Ranked\. Play a rated best-of-three set\."'
+press Down
+wait '"Unranked\. Find an opponent over the internet\."'
+press Down
+wait '"Profile\. View your player identity and connect code\."'
+press Down
+wait '"LAN play\. '
+press B
+wait '"VS\. Mode\. Online\. '
+sleep 0.3
+
+# Special Melee.
+press Up
+wait '"Name Entry\. '
+press Up
+wait '"Custom Rules\. '
+press Up
+wait '"Special Melee\. '
+press A
+wait '"Special Melee\. Camera Mode\. '
+sleep 0.3
+press Down
+wait '"Stamina Mode\. '
+press Down
+wait '"Super Sudden Death\. '
+press Down
+wait '"Giant Melee\. '
+press Down
+wait '"Tiny Melee\. '
+press Down
+wait '"Invisible Melee\. '
+press Down
+wait '"Fixed-Camera Mode\. '
+press Down
+wait '"Single-Button Mode\. '
+press Down
+wait '"Lightning Melee\. '
+press Down
+wait '"Slo-Mo Melee\. '
+press Down
+wait '"Camera Mode\. '
+press B
+wait '"VS\. Mode\. Special Melee\. '
+sleep 0.3
+press B
+wait '"Main Menu\. VS\. Mode\. '
+sleep 0.3
+
+# Trophies.
+press Down
+wait '"Trophies\. '
+press A
+wait '"Trophies\. Gallery\. '
+sleep 0.3
+press Down
+wait '"Lottery\. '
+press Down
+wait '"Collection\. '
+press Down
+wait '"Gallery\. '
+press B
+wait '"Main Menu\. Trophies\. '
+sleep 0.3
+
+# Options, and one leaf screen without a reader.
+press Down
+wait '"Options\. '
+press A
+wait '"Options\. Rumble\. '
+sleep 0.3
+press Down
+wait '"Sound\. '
+press Down
+wait '"Screen Display\. '
+press Down
+wait '"Language\. '
+press Down
+wait '"Erase Data\. '
+press Down
+wait '"Rumble\. '
+press A
+wait '"Rumble\. No speech yet\."'
+sleep 1
+press B
+wait '"Options\. Rumble\. '
+sleep 0.3
+press B
+wait '"Main Menu\. Options\. '
+sleep 0.3
+
+# Data, with Melee Records under it. Sound Test is unlocked like All-Star.
+press Down
+wait '"Data\. '
+press A
+wait '"Data\. Snapshots\. '
+sleep 0.3
+press Down
+wait '"Archives\. '
+press Down
+wait '"Sound Test\. '
+press Down
+wait '"Melee Records\. '
+press A
+wait '"Melee Records\. VS\. Records\. '
+sleep 0.3
+press Down
+wait '"Bonus Records\. '
+press Down
+wait '"Misc\. Records\. '
+press Down
+wait '"VS\. Records\. '
+press B
+wait '"Data\. Melee Records\. '
+sleep 0.3
+press Down
+wait '"Special\. '
+press Down
+wait '"Snapshots\. '
+press B
+wait '"Main Menu\. Data\. '
+sleep 0.3
+
+# Into character select and back: the landing is announced.
+press Up
+wait '"Options\. '
+press Up
+wait '"Trophies\. '
+press Up
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press A
+wait '"Character select\. No speech yet\."'
+sleep 1
+# Character select goes back when B is held; 400 ms is not enough.
+press B 800
+wait '"VS\. Mode\. Melee\. '

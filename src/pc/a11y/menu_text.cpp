@@ -45,25 +45,8 @@ bool log_enabled() {
     return enabled;
 }
 
-/* The table's number for the string starting at bytes, or -1. */
-int string_index(const std::uint8_t* bytes) {
-    for (int i = 0; i < k_max_strings; i++) {
-        const std::uint8_t* entry = a11y_game_string(k_menu_font, i);
-        if (entry == nullptr) {
-            break;
-        }
-        if (entry == bytes) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 void dump_table() {
     const char* symbol = a11y_game_font_symbol(k_menu_font);
-    if (symbol == nullptr) {
-        return;
-    }
     GameTextSource source = game_source();
     int count = 0;
     int unknown = 0;
@@ -84,18 +67,16 @@ void dump_table() {
 
 }  // namespace
 
-void menu_description_shown(int menu_kind, int selection, const std::uint8_t* bytes) {
-    if (!log_enabled()) {
+void menu_text_dump_once() {
+    static const bool wanted = [] {
+        const char* dump = std::getenv("MELEE_A11Y_TEXT_DUMP");
+        return dump != nullptr && std::strcmp(dump, "0") != 0;
+    }();
+    if (!wanted || s_dumped || !log_enabled() || a11y_game_font_symbol(k_menu_font) == nullptr) {
         return;
     }
-    const char* dump = std::getenv("MELEE_A11Y_TEXT_DUMP");
-    if (!s_dumped && dump != nullptr && std::strcmp(dump, "0") != 0) {
-        s_dumped = true;
-        dump_table();
-    }
-    DecodedText decoded = decode_game_text(bytes, game_source());
-    pc_log_line("[a11y] game text: menu %d entry %d, string %d: \"%s\"", menu_kind, selection,
-        string_index(bytes), one_line(decoded).c_str());
+    s_dumped = true;
+    dump_table();
 }
 
 }  // namespace a11y

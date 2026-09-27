@@ -27,10 +27,10 @@ void pc_a11y_launcher_frame(void);
  * GameSceneKind. */
 void pc_a11y_scene_entered(int mode_kind, int scene_kind);
 
-struct HSD_Text;
-/* The main menu tree put up the description line under its highlighted entry
- * (src/melee/mn/mnmain.c), a string from SdMenu. */
-void pc_a11y_menu_description(int menu_kind, int selection, struct HSD_Text* text);
+/* Once a frame of the main menu tree's scene (mnMain_Scene_OnFrame in
+ * src/melee/mn/mnmain.c). Menu speech compares the tree's state with the last
+ * frame here (docs/adr/0003-main-menu-tree-is-polled.md). */
+void pc_a11y_menu_frame(void);
 
 #ifdef __cplusplus
 }

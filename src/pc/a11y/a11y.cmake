@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Accessibility fork: speech, its screen reader library (Prism), and the
-# readers that turn RmlUi pages into speech.
+# readers that turn RmlUi pages and the game's screens into speech.
 # Included from the root CMakeLists.txt with one line, after the melee target
 # and the unit_tests target exist. Everything the fork adds to the build lives
 # here, so base merges never touch it.
@@ -34,6 +34,8 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/scene_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/game_text.cpp
         ${CMAKE_CURRENT_LIST_DIR}/game_access.c
+        ${CMAKE_CURRENT_LIST_DIR}/menu_speech.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/menu_names.cpp
         ${CMAKE_CURRENT_LIST_DIR}/menu_text.cpp)
 target_include_directories(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 
@@ -115,6 +117,20 @@ if (TARGET unit_tests)
     add_test(NAME scene_speech COMMAND scene_speech_test)
     set_tests_properties(scene_speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests scene_speech_test)
+
+    # The menu reader against hand-written snapshots of the main menu tree;
+    # a fake bridge and its own pc_log_line.
+    add_executable(menu_speech_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_menu_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/menu_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/menu_names.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/game_text.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
+    target_include_directories(menu_speech_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(menu_speech_test PRIVATE -UNDEBUG)
+    add_test(NAME menu_speech COMMAND menu_speech_test)
+    set_tests_properties(menu_speech PROPERTIES LABELS melee)
+    add_dependencies(unit_tests menu_speech_test)
 
     # The game text decoder against hand-written byte code.
     add_executable(game_text_test EXCLUDE_FROM_ALL

@@ -122,9 +122,9 @@ Names as drawn, in cursor order. Hidden entries are left out.
 | Melee Records | VS. Records, Bonus Records, Misc. Records |
 | Online | from the base port at runtime |
 
-The Melee Records entries and the titles of leaf screens have not been checked against a screenshot. The implementer checks each against the screen and corrects the table.
+The Melee Records entries and the titles of leaf screens were checked against screenshots on 2026-09-27 (issue 02) and match, except that the random stage switch calls itself "Random Stage".
 
-A leaf screen's name is its title as drawn. Where the title tab shows something else, as on Multi-Man Melee, the name is what the screen calls itself. Until checked, a leaf screen takes the name of the entry that opens it, with these exceptions: "Additional Rules", "Item Switch", "Random Stage Switch".
+A leaf screen's name is its title as drawn. Where the title tab shows something else, as on Multi-Man Melee, the name is what the screen calls itself. Every leaf screen's title is the name of the entry that opens it, with these exceptions: "Additional Rules", "Item Switch", "Random Stage". Custom Rules opens Item Switch; Additional Rules opens Random Stage. The Language screen's title is drawn in Japanese like its entry, and is spoken as "Language".
 
 ### Tree screen announcements
 
