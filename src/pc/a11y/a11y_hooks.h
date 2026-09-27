@@ -20,6 +20,11 @@ void pc_a11y_shutdown(void);
  * has been drawn. Launcher speech compares the page with the last turn here. */
 void pc_a11y_launcher_frame(void);
 
+struct HSD_Text;
+/* The main menu tree put up the description line under its highlighted entry
+ * (src/melee/mn/mnmain.c), a string from SdMenu. */
+void pc_a11y_menu_description(int menu_kind, int selection, struct HSD_Text* text);
+
 #ifdef __cplusplus
 }
 #endif

@@ -23,6 +23,7 @@
 #include "mnsound.h"
 #include "mnsoundtest.h"
 #include "mnvibration.h"
+#include "pc/a11y/a11y_hooks.h"
 #include "types.h"
 #include <dolphin/pad.h>
 #include <melee/gm/gm_unsplit.h>
@@ -832,6 +833,7 @@ static void mn_80229A7C(MainMenuData* data, MenuKind menu_kind, int selection)
         text->font_size.x = 0.0521f;
         text->font_size.y = 0.0521f;
         HSD_SisLib_803A6368(text, sis_idx[selection]);
+        pc_a11y_menu_description(menu_kind, selection, text);
     }
 }
 

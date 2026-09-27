@@ -30,7 +30,10 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/screen_reader_bridge.cpp
         ${CMAKE_CURRENT_LIST_DIR}/rmlui_reader.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/launcher_speech.cpp)
+        ${CMAKE_CURRENT_LIST_DIR}/launcher_speech.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/game_text.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/game_access.c
+        ${CMAKE_CURRENT_LIST_DIR}/menu_text.cpp)
 target_include_directories(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 
 if (A11Y_PRISM_ASSET)
@@ -100,4 +103,14 @@ if (TARGET unit_tests)
     add_test(NAME launcher_speech COMMAND launcher_speech_test ${PROJECT_SOURCE_DIR}/resources)
     set_tests_properties(launcher_speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests launcher_speech_test)
+
+    # The game text decoder against hand-written byte code.
+    add_executable(game_text_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_game_text.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/game_text.cpp)
+    target_include_directories(game_text_test PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(game_text_test PRIVATE -UNDEBUG)
+    add_test(NAME game_text COMMAND game_text_test)
+    set_tests_properties(game_text PROPERTIES LABELS melee)
+    add_dependencies(unit_tests game_text_test)
 endif ()

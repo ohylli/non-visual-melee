@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "a11y_hooks.h"
+#include "game_access.h"
 #include "launcher_speech.hpp"
+#include "menu_text.hpp"
 #include "speech.hpp"
 #include <memory>
 
@@ -34,4 +36,8 @@ extern "C" void pc_a11y_shutdown(void) {
 
 extern "C" void pc_a11y_launcher_frame(void) {
     a11y::launcher_speech_frame(a11y::Clock::now());
+}
+
+extern "C" void pc_a11y_menu_description(int menu_kind, int selection, struct HSD_Text* text) {
+    a11y::menu_description_shown(menu_kind, selection, a11y_game_text_bytes(text));
 }
