@@ -35,6 +35,12 @@ Scene control lives in `src/melee/gm/`. There are two levels:
 
 The tables of modes and scenes are in `src/melee/gm/gmscdata.c`. The machine that runs them is in `src/melee/gm/gm_1A3F.c`: `gm_801A4014` enters one state, calls its scene's enter function, runs the scene's frames until it asks to leave, and calls the exit functions. Every scene change in the game passes through it. The current mode can be read with `gm_GetCurrentGameMode()` and the current state's id with `gm_GetCurrentSceneIndex()`. The state id is a step within the mode, not a `GameSceneKind`. No getter returns the running scene's kind, but the global `gm_804D6720` (set by `gm_801A4B88` in `gmscene.c`, just before the scene's enter function) points at the running scene's `GameSceneInfo`, whose `scene_kind` says which scene it is; the base port already reads it there.
 
+The scene's enter function loads everything the scene needs and blocks while it does; the first frame is drawn after it returns. That return is where the fork names the scene (`pc_a11y_scene_entered`), so the announcement lines up with the first frame the player can act on. The mode passed to `gm_801A4014` is the one being run, which during a memory card interruption differs from `gm_GetCurrentGameMode()`.
+
+A scene's kind does not always name what the player would call the screen. `GS_VS` is the match in VS mode, Classic stages, Target Test, Camera Mode and the attract demo alike; character select, stage select and results are the same scene in every mode.
+
+A normal launch runs the memory card scene (`GS_MEMCARD`), then the opening movie (`GS_MOVIE_OPENING`, `gmopeningmode.c`), then the title screen. The memory card scene passes without showing anything when the save loads, and shows a prompt otherwise (always with `--no-card`); its kind cannot tell which. Start or A early in the movie goes to the title screen. Start late in the movie, once the logo is drawn, goes straight to the main menu and never enters the title scene. `MELEE_BOOT_SCENE` skips all of this: `title` starts on the title screen.
+
 The whole main menu tree, from "1P Mode" down to "Sound", is a single scene (`GS_MENU`, entered through `src/melee/gm/gmmenumode.c`), so moving between its screens is not a scene change. When the player comes back from a mode, `gmmenumode.c` picks which menu screen and entry to land on (leaving Classic lands on the Classic entry), so the first announcement after returning has to read where the player landed rather than assume the top of the menu.
 
 Some screens run inside another scene: character select opens the rules screen (with the item switch under it) and the name keyboard without leaving `GS_CSS`, and they keep their cursor in the same global state (`mn_804A04F0`, see [Candidate hook points](#candidate-hook-points)) as the main menu tree's versions. Its name tag window, where a player picks a saved name, is part of character select itself.
@@ -123,7 +129,8 @@ Grouped by where the player meets them. For each screen, the kind and where its 
 
 - **Memory card prompts** (`src/melee/gm/gmscmemcard.c`, message window in `gm_1ADD.c`): prompts, each a Yes/No toggle; game text (`SdMsgBox`).
 - **Progressive scan prompt** (`src/melee/gm/gmprogressive.c`): a prompt, never shown on PC because the port reports no progressive-scan cable.
-- **Title screen** (`src/melee/gm/gmtitle.c`, `gmtitlemode.c`): "Press Start", no menu. Left alone for 600 frames it plays the attract mode (a demo fight between computer players).
+- **Opening movie** (`src/melee/gm/gmopeningmode.c`, `GS_MOVIE_OPENING`): before the title screen on every normal launch; see [Scenes](#scenes-how-the-game-moves-between-screens) for how Start leaves it.
+- **Title screen** (`src/melee/gm/gmtitle.c`, `gmtitlemode.c`): "Press Start", no menu. Left alone for 600 frames it starts the attract loop: a demo fight, the title again, another demo fight, the how-to-play movie, the special movie.
 
 ### The main menu tree
 
@@ -155,7 +162,7 @@ Every mode's character and stage select is the same screen: the mode is a `CSSMa
 
 - **Pause** (`src/melee/gm/gmvs.c`, overlay in `gmpause.c`): no menu. Start pauses and gives the pausing player a free camera; L+R+A+Start quits the match as a no-contest.
 - **Training menu** (`src/melee/gm/gm_1884.c`): shown while training is paused. Setting rows (speed, item, number of CPUs, CPU behaviour, damage, camera, reset, exit, and one hidden row the cursor skips; A on the item row spawns the item); the row is `gm_80473814.x00`, the values `gm_80473814.menu_values`. Values are pictures; only the chosen item's name and a pause notice are game text.
-- **Camera mode** (`src/melee/gm/gmcamera.c`, `GS_CAMERA_VS`): the Special Melee match for taking snapshots, with its own on-screen controls in game text (`SdVsCam`).
+- **Camera mode** (`src/melee/gm/gmcameramode.c`): the Special Melee match for taking snapshots. Before character select, a notice screen (`GS_CAMERA_VS`, `gmcamera.c`) explains the controls in game text (`SdVsCam`); the match itself is an ordinary `GS_VS` scene.
 
 ### After a match and between matches
 

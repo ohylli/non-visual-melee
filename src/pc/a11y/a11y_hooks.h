@@ -20,6 +20,13 @@ void pc_a11y_shutdown(void);
  * has been drawn. Launcher speech compares the page with the last turn here. */
 void pc_a11y_launcher_frame(void);
 
+/* A scene has loaded (gm_801A4014 in src/melee/gm/gm_1A3F.c, after the
+ * scene's enter function returns) and its first frame is next. mode_kind is
+ * the GameModeKind of the mode being run, which during a memory card
+ * interruption differs from gm_GetCurrentGameMode(); scene_kind is the
+ * GameSceneKind. */
+void pc_a11y_scene_entered(int mode_kind, int scene_kind);
+
 struct HSD_Text;
 /* The main menu tree put up the description line under its highlighted entry
  * (src/melee/mn/mnmain.c), a string from SdMenu. */

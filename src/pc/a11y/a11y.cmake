@@ -31,6 +31,7 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/screen_reader_bridge.cpp
         ${CMAKE_CURRENT_LIST_DIR}/rmlui_reader.cpp
         ${CMAKE_CURRENT_LIST_DIR}/launcher_speech.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/scene_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/game_text.cpp
         ${CMAKE_CURRENT_LIST_DIR}/game_access.c
         ${CMAKE_CURRENT_LIST_DIR}/menu_text.cpp)
@@ -103,6 +104,17 @@ if (TARGET unit_tests)
     add_test(NAME launcher_speech COMMAND launcher_speech_test ${PROJECT_SOURCE_DIR}/resources)
     set_tests_properties(launcher_speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests launcher_speech_test)
+
+    # The scene table against a fake bridge; its own pc_log_line.
+    add_executable(scene_speech_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_scene_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/scene_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
+    target_include_directories(scene_speech_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(scene_speech_test PRIVATE -UNDEBUG)
+    add_test(NAME scene_speech COMMAND scene_speech_test)
+    set_tests_properties(scene_speech PROPERTIES LABELS melee)
+    add_dependencies(unit_tests scene_speech_test)
 
     # The game text decoder against hand-written byte code.
     add_executable(game_text_test EXCLUDE_FROM_ALL

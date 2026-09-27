@@ -1,6 +1,6 @@
 # 01 Scene announcements
 
-Status: ready-for-agent
+Status: resolved (2026-09-27)
 Type: task
 
 The first slice of `.scratch/main-menu-tree/spec.md`: the player hears which scene they have arrived in. It is small on purpose. It proves a hook in a decomp layer file, and it gives issue 02 the signal that a scene was entered. Read the spec and the primer `docs/a11y/native-menus.md` (section "Scenes") first.
@@ -34,3 +34,13 @@ The spec's section "Scene announcements" has the three groups and the wording: s
 - CLAUDE.md: one "Accessibility status" line, and the `title` run's expected `[a11y]` lines in "Verification" updated.
 
 ## Comments
+
+### 2026-09-27, implementation (agent)
+
+Implemented; hearing it is issue 04.
+
+- The table is `src/pc/a11y/scene_speech.cpp`, keyed by `SceneKind`, a copy of `GameSceneKind` in `scene_kinds.h`, since fork C++ does not include decomp headers. `game_access.c` checks every number of the copy against the decomp at compile time, and the table has a compile-time check that it lists every kind once, silent ones included. A base merge that renumbers scenes fails the build; a kind appended at the end is "not in the scene table" and silent, logged once.
+- The rollback gate is `game_hook_may_speak()` in `hooks.cpp`, for every later hook from game code.
+- A drive into VS. Mode, Melee logged "Character select. No speech yet.", and holding B went back to the menu with no scene announcement. B needs a hold of 800 ms; 400 ms is not enough.
+- The opening movie turned out cheap to check: `drive.py --scene ""` gives a plain boot. With `--no-card` it first stops on the memory card prompt ("There is no Memory Card in Slot A", then "Continue without saving or loading Game Data?"), silent as planned; two A presses later the log has "Opening movie. Press Start to skip." On the maintainer's machine with a readable save that prompt should pass unseen, but a blind player without a card meets a silent prompt at every launch until its reader lands.
+- The first unlock notice after the title screen now says "Unlock notice. No speech yet." once for the whole run of notices, since they are one scene.

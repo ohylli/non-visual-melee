@@ -5,6 +5,7 @@
 #include "gmmain_lib.h"
 #include "gmscdata.h"
 #include "gmscene.h"
+#include "pc/a11y/a11y_hooks.h"
 #include "types.h"
 #include <dolphin/vi.h>
 #include <melee/db/db.h>
@@ -189,6 +190,7 @@ void gm_801A4014(GameMode* mode)
     if (scene->on_enter != NULL) {
         scene->on_enter(info->enter_data);
     }
+    pc_a11y_scene_entered(mode->kind, info->scene_kind);
     gm_801A4D34(scene->on_frame, info);
     if (!gmMainLib_8046B0F0.resetting && scene->on_exit != NULL) {
         scene->on_exit(info->exit_data);

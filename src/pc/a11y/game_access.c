@@ -3,7 +3,15 @@
 #include "pc/compat.h"
 #include "game_access.h"
 #include "pc/pc.h"
+#include "scene_kinds.h"
+#include <melee/gm/forward.h>
 #include <sysdolphin/baselib/sislib.h>
+
+/* The fork's copy of the scene kinds against the decomp's (scene_kinds.h). */
+#define A11Y_CHECK_SCENE_KIND(name, number)                                                        \
+    _Static_assert(name == (number), #name " no longer has the number scene_kinds.h gives it");
+A11Y_SCENE_KINDS(A11Y_CHECK_SCENE_KIND)
+#undef A11Y_CHECK_SCENE_KIND
 
 const uint8_t* a11y_game_resolve(uint32_t slot) {
     uintptr_t addr = (uintptr_t)pc_resolve_dp(slot);
