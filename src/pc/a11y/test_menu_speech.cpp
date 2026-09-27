@@ -49,7 +49,33 @@ constexpr int kVs = 2;
 constexpr int kSettings = 4;
 constexpr int kReg = 6;
 constexpr int kRumble = 19;
+constexpr int kSound = 20;
+constexpr int kDisplay = 21;
+constexpr int kMultiMan = 33;
 constexpr int kOnline = 34;
+
+/* Centre texts by their NTSC-U numbers, and their game text. */
+constexpr int kChannel = 187;
+constexpr int kVolume = 188;
+constexpr int kDeflicker = 189;
+constexpr int k10Man = 171;
+constexpr int k100Man = 172;
+constexpr int k3Minute = 173;
+constexpr int kCruel = 176;
+constexpr const char* kChannelText = "Choose between Stereo\nand Mono sound.";
+constexpr const char* kVolumeText = "Adjust music and sound\neffect volume balance.";
+constexpr const char* kDeflickerText =
+    "ON: Display will be smoother and softer.\nOFF: Display will be sharper and harder.";
+
+/* What a leaf screen with a reader shows: its centre text and the settings
+ * it changes. Stereo, centred and deflickered unless a test says otherwise. */
+struct Leaf {
+    int center_text = -1;
+    const char* text = nullptr;
+    bool mono = false;
+    int balance = 0;
+    bool deflicker = true;
+};
 
 using Bytes = std::vector<std::uint8_t>;
 
@@ -77,6 +103,10 @@ Bytes game_text(const char* text) {
             glyph(0x2024 + (c - 'a'));
         } else if (c == '.') {
             glyph(0x20E7);
+        } else if (c == ':') {
+            glyph(0x20E9);
+        } else if (c == '?') {
+            glyph(0x20EB);
         } else {
             assert(c == '!');
             glyph(0x20EC);
@@ -106,6 +136,18 @@ struct Fixture {
         state.menu = menu;
         state.hovered = hovered;
         state.description = description != nullptr ? bytes.data() : nullptr;
+        this->menu.frame(state);
+    }
+
+    void leaf_frame(int menu, const Leaf& leaf) {
+        Bytes bytes = leaf.text != nullptr ? game_text(leaf.text) : Bytes{};
+        A11yMenuState state{};
+        state.menu = menu;
+        state.center_text = leaf.center_text;
+        state.center_text_string = leaf.text != nullptr ? bytes.data() : nullptr;
+        state.mono = leaf.mono;
+        state.balance = leaf.balance;
+        state.deflicker = leaf.deflicker;
         this->menu.frame(state);
     }
 
@@ -257,6 +299,113 @@ void missing_description_speaks_the_name() {
     assert(count_logged("[a11y] menu 0 entry 1: no description") == 1);
 }
 
+void sound_opens_on_the_channel_row() {
+    Fixture f;
+    f.frame(kSettings, 1, "Adjust sound settings.");
+    f.spoken();
+    f.leaf_frame(kSound, Leaf{kChannel, kChannelText});
+    assert((f.spoken() == Texts{"Sound. Channel: Stereo. Left and right to change. Choose between "
+                                "Stereo and Mono sound."}));
+}
+
+void sound_row_changes_both_ways() {
+    Fixture f;
+    f.leaf_frame(kSound, Leaf{kChannel, kChannelText});
+    f.spoken();
+    f.leaf_frame(kSound, Leaf{kVolume, kVolumeText});
+    f.leaf_frame(kSound, Leaf{kChannel, kChannelText});
+    assert((f.spoken() == Texts{"Volume: centre. Adjust music and sound effect volume balance.",
+                              "Channel: Stereo. Choose between Stereo and Mono sound."}));
+}
+
+void sound_channel_changes_and_stays() {
+    Fixture f;
+    Leaf leaf{kChannel, kChannelText};
+    f.leaf_frame(kSound, leaf);
+    f.spoken();
+    leaf.mono = true;
+    f.leaf_frame(kSound, leaf);
+    /* Right on Mono changes nothing. */
+    f.leaf_frame(kSound, leaf);
+    leaf.mono = false;
+    f.leaf_frame(kSound, leaf);
+    assert((f.spoken() == Texts{"Mono", "Stereo"}));
+}
+
+void sound_balance_says_the_distance_and_the_side() {
+    Fixture f;
+    Leaf leaf{kVolume, kVolumeText};
+    f.leaf_frame(kSound, leaf);
+    f.spoken();
+    /* Repeats are presses at an end, which change nothing. */
+    for (int balance : {5, 0, -5, -40, -100, -100, 95, 100, 100}) {
+        leaf.balance = balance;
+        f.leaf_frame(kSound, leaf);
+    }
+    assert((f.spoken() == Texts{"5 toward sounds", "Centre", "5 toward music", "40 toward music",
+                              "100 toward music", "95 toward sounds", "100 toward sounds"}));
+}
+
+void sound_opens_with_the_balance_off_centre() {
+    Fixture f;
+    Leaf leaf{kVolume, kVolumeText};
+    leaf.balance = -15;
+    f.leaf_frame(kSound, leaf);
+    assert((f.spoken() == Texts{"Sound. Volume: 15 toward music. Left and right to change. Adjust "
+                                "music and sound effect volume balance."}));
+}
+
+void screen_display_turns_off_and_on() {
+    Fixture f;
+    Leaf leaf{kDeflicker, kDeflickerText};
+    f.leaf_frame(kDisplay, leaf);
+    leaf.deflicker = false;
+    f.leaf_frame(kDisplay, leaf);
+    leaf.deflicker = true;
+    f.leaf_frame(kDisplay, leaf);
+    assert((f.spoken() == Texts{"Screen Display. Deflicker: On. A to change. ON: Display will be "
+                                "smoother and softer. OFF: Display will be sharper and harder.",
+                              "Off", "On"}));
+}
+
+void multi_man_choices_change_and_wrap() {
+    Fixture f;
+    f.leaf_frame(kMultiMan, Leaf{k10Man, "How fast can you defeat 10 opponents?"});
+    f.leaf_frame(kMultiMan, Leaf{k100Man, "100 enemies! Can you defeat them all?"});
+    f.leaf_frame(kMultiMan, Leaf{kCruel, "Just try to survive!"});
+    f.leaf_frame(kMultiMan, Leaf{k10Man, "How fast can you defeat 10 opponents?"});
+    assert((f.spoken() == Texts{"Multi-Man Melee. 10-Man Melee. Left and right to choose. How fast "
+                                "can you defeat 10 opponents?",
+                              "100-Man Melee. 100 enemies! Can you defeat them all?",
+                              "Cruel Melee. Just try to survive!",
+                              "10-Man Melee. How fast can you defeat 10 opponents?"}));
+}
+
+void multi_man_opens_on_the_mode_just_played() {
+    Fixture f;
+    /* The match ended; the menu scene opens straight on Multi-Man Melee. */
+    f.menu.forget();
+    f.leaf_frame(kMultiMan, Leaf{k3Minute, "How many can you defeat in 3 minutes?"});
+    assert((f.spoken() == Texts{"Multi-Man Melee. 3-Minute Melee. Left and right to choose. How "
+                                "many can you defeat in 3 minutes?"}));
+}
+
+void reader_screen_leaves_to_the_tree() {
+    Fixture f;
+    f.leaf_frame(kDisplay, Leaf{kDeflicker, kDeflickerText});
+    f.spoken();
+    f.frame(kSettings, 2, "Adjust screen settings.");
+    assert((f.spoken() == Texts{"Options. Screen Display. Adjust screen settings."}));
+}
+
+void unknown_centre_text_is_spoken_and_logged() {
+    Fixture f;
+    f.leaf_frame(kSound, Leaf{191, nullptr});
+    assert((f.spoken() == Texts{"Sound. Unknown row 191. Left and right to change."}));
+    assert(count_logged("[a11y] menu 20 centre text 191: not in the menu names table") == 1);
+    assert(count_logged("[a11y] menu 20 centre text 191: no description") == 1);
+}
+
 void plain_capitals_keeps_abbreviations() {
     assert(a11y::plain_capitals("DIRECT CONNECT") == "Direct connect");
     assert(a11y::plain_capitals("LAN PLAY") == "LAN play");
@@ -290,6 +439,16 @@ int main() {
     description_lines_are_joined();
     unknown_glyphs_are_left_out_and_logged();
     missing_description_speaks_the_name();
+    sound_opens_on_the_channel_row();
+    sound_row_changes_both_ways();
+    sound_channel_changes_and_stays();
+    sound_balance_says_the_distance_and_the_side();
+    sound_opens_with_the_balance_off_centre();
+    screen_display_turns_off_and_on();
+    multi_man_choices_change_and_wrap();
+    multi_man_opens_on_the_mode_just_played();
+    reader_screen_leaves_to_the_tree();
+    unknown_centre_text_is_spoken_and_logged();
     plain_capitals_keeps_abbreviations();
     std::cout << "menu_speech: all tests passed\n";
     return 0;

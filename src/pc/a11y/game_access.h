@@ -3,6 +3,7 @@
  * C can include. Fork-internal: hooks live in a11y_hooks.h. Everything here
  * only reads. */
 #pragma once
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -37,9 +38,22 @@ typedef struct A11yMenuState {
      * (mnOnline_Label, mnOnline_Description), or NULL. */
     const char* pc_label;
     const char* pc_description;
+    /* The centre text a leaf screen last set, by its NTSC-U SdMenu number
+     * (pc_a11y_menu_center_text), or -1 before any; and that text as game
+     * text, or NULL. Stale on screens that set none. */
+    int center_text;
+    const uint8_t* center_text_string;
+    /* The settings Sound and Screen display change, as saved at each press:
+     * the channel (Mono or Stereo), the balance from -100 (music only) to
+     * +100 (sounds only), and the deflicker preference. */
+    bool mono;
+    int balance;
+    bool deflicker;
 } A11yMenuState;
 
-void a11y_game_menu_state(A11yMenuState* out);
+/* Fills the snapshot from game memory; center_text is the number the hook
+ * last passed, or -1. */
+void a11y_game_menu_state(int center_text, A11yMenuState* out);
 
 #ifdef __cplusplus
 }

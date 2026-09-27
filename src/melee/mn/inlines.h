@@ -8,6 +8,7 @@
 #include <sysdolphin/baselib/gobj.h>
 #include <sysdolphin/baselib/jobj.h>
 #include <sysdolphin/baselib/sislib.h>
+#include "pc/a11y/a11y_hooks.h"
 
 typedef enum _MenuInput {
     MenuInput_Up = 1 << 0,          ///< 0x0001
@@ -72,6 +73,7 @@ static inline void Menu_InitCenterText(Menu* menu, s32 val)
     text->font_size.x = 0.0521F;
     text->font_size.y = 0.0521F;
     HSD_SisLib_803A6368(text, val);
+    pc_a11y_menu_center_text(val);
 }
 
 /// @todo One of these inlines is probably correct

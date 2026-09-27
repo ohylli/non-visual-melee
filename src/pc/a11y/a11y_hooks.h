@@ -32,6 +32,13 @@ void pc_a11y_scene_entered(int mode_kind, int scene_kind);
  * frame here (docs/adr/0003-main-menu-tree-is-polled.md). */
 void pc_a11y_menu_frame(void);
 
+/* A leaf screen of the main menu tree set its centre text (Menu_InitCenterText
+ * in src/melee/mn/inlines.h, used by Sound, Screen display, Language and
+ * Multi-Man Melee). string_number is the SdMenu string's NTSC-U number, as the
+ * game's code passes it; it names the Sound row or the Multi-Man Melee choice,
+ * which those screens keep in private state. The next menu frame reads it. */
+void pc_a11y_menu_center_text(int string_number);
+
 #ifdef __cplusplus
 }
 #endif

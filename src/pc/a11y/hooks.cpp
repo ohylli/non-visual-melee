@@ -18,6 +18,10 @@ namespace {
 std::unique_ptr<a11y::Speech> s_speech;
 std::unique_ptr<a11y::SceneSpeech> s_scene_speech;
 std::unique_ptr<a11y::MenuSpeech> s_menu_speech;
+/* The centre text a leaf screen last set, kept across scenes: a screen the
+ * menu scene opens on, as Multi-Man Melee after its match, sets it before
+ * the scene hook runs. */
+int s_center_text = -1;
 
 /* The gate every hook from game code passes through. While rollback re-runs
  * frames (pc_net_resim), each hook is reached again for a frame that was
@@ -77,6 +81,12 @@ extern "C" void pc_a11y_menu_frame(void) {
         return;
     }
     A11yMenuState state;
-    a11y_game_menu_state(&state);
+    a11y_game_menu_state(s_center_text, &state);
     s_menu_speech->frame(state);
+}
+
+extern "C" void pc_a11y_menu_center_text(int string_number) {
+    /* Read by the next menu frame, which also sees the screen the same
+     * press opened; nothing is spoken here. */
+    s_center_text = string_number;
 }

@@ -1,6 +1,6 @@
 # 03 Three leaf screens: Sound, Screen display, Multi-Man Melee
 
-Status: ready-for-agent
+Status: resolved (2026-09-27)
 Type: task
 Blocked by: 02
 
@@ -45,3 +45,19 @@ Wording is in the spec, section "Leaf screens with a reader". In short:
 - CLAUDE.md: the "Accessibility status" line of issue 02 extended, or a line added.
 
 ## Comments
+
+### 2026-09-27, implementation (agent)
+
+Implemented; hearing it is issue 04.
+
+- The hook `pc_a11y_menu_center_text` sits at the end of `Menu_InitCenterText`; `inlines.h` includes `a11y_hooks.h`, and every file including it builds. `hooks.cpp` keeps the last number across scenes: after a Multi-Man match the menu scene opens on that screen inside its enter function, before the scene hook runs, so clearing it there would lose the choice.
+- The snapshot gains the centre text number and its game text, the channel, the balance and the deflicker preference. Opening, row and value changes all come from comparing snapshots, as issue 02's tree screens do.
+- Values change at the press, so no extra hook was needed. The balance: Right adds 5. See the correction below: it leans toward sounds. Screen display's preference is written at each A press (`gmMainLib_8015F4F4`), not only on leaving. The channel is read through `HSD_SynthGetSoundMode`, not `lbAudioAx_80024BD0`, which also writes lbaudio_ax.c's copy of the mode; the fork only reads.
+- The game's text for Screen display is "ON : Display will be smoother and softer. OFF : Display will be sharper and harder.", with a space before each colon; speech keeps it as written. It sounds the same as the spec's "ON:".
+- Multi-Man Melee card names checked against a screenshot: 10-Man, 100-Man, 3-Minute, 15-Minute, Endless and Cruel Melee.
+- `tools/a11y/leaf_screens.drive` opens all three screens, goes Stereo to Mono and back, moves the balance to each side and back to centre, turns deflicker off and on, and wraps the Multi-Man choices both ways without pressing A there. It passes with no gap logged. The tree walk passes unchanged (96 announcements); none of its expected lines were one of the three notices. One tree walk run failed on a press the input driver dropped ("no pad change seen for that press"); the rerun passed.
+- Unit tests: `menu_speech` passes with ten new cases; `launcher_data` fails as before on Windows. The bounded `title` run exits cleanly. `python tools/check_style.py` passes.
+
+### 2026-09-27, balance direction corrected (agent)
+
+The maintainer heard the music get quieter on Right while speech said "toward music". The first implementation took the side from the direction the divider moves. An audio dump (`MELEE_AUDIO_DUMP`) of the menu with the balance at each end: at +100 the music is silent, at -100 it plays at full level. A screenshot at +60 shows the divider moved right, but the SOUNDS part of the bar grown and the MUSIC part shrunk. So Right leans toward sounds, and the issue's "Right moves toward music" was wrong. Speech now says "5 toward sounds" for Right and "5 toward music" for Left; the unit test and `tools/a11y/leaf_screens.drive` follow.

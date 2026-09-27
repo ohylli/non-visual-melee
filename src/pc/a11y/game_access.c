@@ -7,12 +7,14 @@
 #include "pc/region.h"
 #include "scene_kinds.h"
 #include <melee/gm/forward.h>
+#include <melee/gm/gmmain_lib.h>
 #include <melee/mn/forward.h>
 #include <melee/mn/mnmain.h>
 #include <melee/mn/mnonline.h>
 #include <melee/mn/types.h>
 #include <string.h>
 #include <sysdolphin/baselib/sislib.h>
+#include <sysdolphin/baselib/synth.h>
 
 /* The fork's copy of the scene kinds against the decomp's (scene_kinds.h). */
 #define A11Y_CHECK_SCENE_KIND(name, number)                                                        \
@@ -67,7 +69,17 @@ const uint8_t* a11y_game_string(int font_idx, int idx) {
     return a11y_game_resolve(table[idx].v);
 }
 
-void a11y_game_menu_state(A11yMenuState* out) {
+/* A string of the main menu's table by the number the game's code uses (NTSC-U
+ * numbering), or NULL while font slot 0 holds another table. */
+static const uint8_t* menu_string(int number) {
+    const char* symbol = a11y_game_font_symbol(A11Y_MENU_FONT);
+    if (number < 0 || symbol == NULL || strcmp(symbol, "SIS_MenuData") != 0) {
+        return NULL;
+    }
+    return a11y_game_string(A11Y_MENU_FONT, pc_region_sis_index(symbol, number));
+}
+
+void a11y_game_menu_state(int center_text, A11yMenuState* out) {
     MenuKind menu = (MenuKind)mn_804A04F0.cur_menu;
     int hovered = mn_804A04F0.hovered_selection;
 
@@ -76,18 +88,22 @@ void a11y_game_menu_state(A11yMenuState* out) {
     out->description = NULL;
     out->pc_label = mnOnline_Label(menu, hovered);
     out->pc_description = mnOnline_Description(menu, hovered);
+    out->center_text = center_text;
+    out->center_text_string = menu_string(center_text);
+    /* The synth's mode, 1 for stereo, as lbAudioAx_80024BD0 reads it; that
+     * function also writes lbaudio_ax.c's copy of the mode, so it is not
+     * called here. */
+    out->mono = HSD_SynthGetSoundMode() != 1;
+    out->balance = (s8)gmMainLib_8015ED74();
+    out->deflicker = gmMainLib_8015F4E8() != 0;
     /* The same precedence as mn_80229A7C, which draws the description line:
      * the base port's text first, then SdMenu's by the table's number. */
     if (out->pc_description != NULL || (int)menu >= A11Y_MENU_TABLE_LEN) {
         return;
     }
     const MenuKindData* row = &mn_803EB6B0[menu];
-    const char* symbol = a11y_game_font_symbol(A11Y_MENU_FONT);
-    if (row->description_indices == NULL || hovered >= row->selection_count || symbol == NULL ||
-        strcmp(symbol, "SIS_MenuData") != 0)
-    {
+    if (row->description_indices == NULL || hovered >= row->selection_count) {
         return;
     }
-    out->description = a11y_game_string(
-        A11Y_MENU_FONT, pc_region_sis_index(symbol, row->description_indices[hovered]));
+    out->description = menu_string(row->description_indices[hovered]);
 }

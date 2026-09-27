@@ -1,0 +1,114 @@
+# Opens the three leaf screens with a reader (Sound, Screen Display, Multi-Man
+# Melee), changes what each lets the player change, and waits on each
+# announcement, so a missing or changed line fails the run. Sound and Screen
+# Display are put back as they were before leaving. Run with the default
+# --scene title:
+#   python tools/a11y/drive.py tools/a11y/leaf_screens.drive
+# Never press A or Start on Multi-Man Melee: that starts the mode.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+wait '"Main Menu\. 1-P Mode\. '
+# The menu ignores input for its first 20 frames.
+sleep 1
+
+# Options.
+press Down
+wait '"VS\. Mode\. '
+press Down
+wait '"Trophies\. '
+press Down
+wait '"Options\. '
+press A
+wait '"Options\. Rumble\. '
+sleep 0.3
+press Down
+wait '"Sound\. '
+
+# Sound opens on the Channel row. Left on Stereo changes nothing.
+press A
+wait '"Sound\. Channel: Stereo\. Left and right to change\. Choose between Stereo and Mono sound\."'
+sleep 0.5
+press Right
+wait '"Mono"'
+press Left
+wait '"Stereo"'
+press Down
+wait '"Volume: centre\. Adjust music and sound effect volume balance\."'
+press Right
+wait '"5 toward sounds"'
+press Right
+wait '"10 toward sounds"'
+press Left
+wait '"5 toward sounds"'
+press Left
+wait '"Centre"'
+press Left
+wait '"5 toward music"'
+press Right
+wait '"Centre"'
+press Up
+wait '"Channel: Stereo\. '
+press B
+wait '"Options\. Sound\. '
+sleep 0.3
+
+# Screen Display opens as On. A is refused until the screen has slid in. The
+# game's text has a space before each colon: "ON : Display will be ..."
+press Down
+wait '"Screen Display\. '
+press A
+wait '"Screen Display\. Deflicker: On\. A to change\. ON : Display will be smoother'
+sleep 1
+press A
+wait '"Off"'
+press A
+wait '"On"'
+press B
+wait '"Options\. Screen Display\. '
+sleep 0.3
+press B
+wait '"Main Menu\. Options\. '
+sleep 0.3
+
+# Stadium, then Multi-Man Melee: the choices wrap both ways.
+press Up
+wait '"Trophies\. '
+press Up
+wait '"VS\. Mode\. '
+press Up
+wait '"1-P Mode\. '
+press A
+wait '"1-P Mode\. Regular Match\. '
+sleep 0.3
+press Down
+wait '"Event Match\. '
+press Down
+wait '"Stadium\. '
+press A
+wait '"Stadium\. Target Test\. '
+sleep 0.3
+press Down
+wait '"Home-Run Contest\. '
+press Down
+wait '"Multi-Man Melee\. '
+press A
+wait '"Multi-Man Melee\. 10-Man Melee\. Left and right to choose\. '
+sleep 0.5
+press Left
+wait '"Cruel Melee\. '
+press Right
+wait '"10-Man Melee\. '
+press Right
+wait '"100-Man Melee\. '
+press Right
+wait '"3-Minute Melee\. '
+press Right
+wait '"15-Minute Melee\. '
+press Right
+wait '"Endless Melee\. '
+press B
+wait '"Stadium\. Multi-Man Melee\. '
+sleep 0.3

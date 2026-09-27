@@ -146,6 +146,30 @@ constexpr ScreenName kScreens[] = {
     {MenuKind::MENU_KIND_RECORDS_MISC, "Misc. Records", false, {}},
 };
 
+struct CenterTextName {
+    MenuKind menu;
+    int center_text;
+    std::string_view name;
+};
+
+/* Row names are drawn in capitals ("CHANNEL") and written here in normal
+ * capitalisation. The Multi-Man Melee choices are the names on its cards. */
+constexpr CenterTextName kCenterTexts[] = {
+    {MenuKind::MENU_KIND_SETTINGS_SOUND, kTextSoundChannel, "Channel"},
+    {MenuKind::MENU_KIND_SETTINGS_SOUND, kTextSoundVolume, "Volume"},
+    {MenuKind::MENU_KIND_DISPLAY, kTextDisplay, "Deflicker"},
+    {MenuKind::MENU_KIND_MULTI_VS, kTextMultiManFirst, "10-Man Melee"},
+    {MenuKind::MENU_KIND_MULTI_VS, kTextMultiManFirst + 1, "100-Man Melee"},
+    {MenuKind::MENU_KIND_MULTI_VS, kTextMultiManFirst + 2, "3-Minute Melee"},
+    {MenuKind::MENU_KIND_MULTI_VS, kTextMultiManFirst + 3, "15-Minute Melee"},
+    {MenuKind::MENU_KIND_MULTI_VS, kTextMultiManFirst + 4, "Endless Melee"},
+    {MenuKind::MENU_KIND_MULTI_VS, kTextMultiManFirst + 5, "Cruel Melee"},
+};
+
+static_assert(static_cast<int>(MenuKind::MENU_KIND_SETTINGS_SOUND) == kMenuSound);
+static_assert(static_cast<int>(MenuKind::MENU_KIND_DISPLAY) == kMenuDisplay);
+static_assert(static_cast<int>(MenuKind::MENU_KIND_MULTI_VS) == kMenuMultiMan);
+
 const ScreenName* find_screen(int menu) {
     for (const ScreenName& screen : kScreens) {
         if (static_cast<int>(screen.menu) == menu) {
@@ -197,6 +221,35 @@ std::optional<std::string_view> menu_entry_name(int menu, int entry) {
         }
     }
     return std::nullopt;
+}
+
+std::optional<std::string_view> center_text_name(int menu, int center_text) {
+    for (const CenterTextName& name : kCenterTexts) {
+        if (static_cast<int>(name.menu) == menu && name.center_text == center_text) {
+            return name.name;
+        }
+    }
+    return std::nullopt;
+}
+
+std::string_view channel_word(bool mono) {
+    return mono ? "Mono" : "Stereo";
+}
+
+/* The bar is split between a SOUNDS part on the left and a MUSIC part on the
+ * right. Right moves the divider toward the MUSIC label but grows the SOUNDS
+ * part: sound effects louder, music quieter, silent at +100. So a positive
+ * balance leans toward sounds, whichever way the divider moved. */
+std::string balance_words(int balance) {
+    if (balance == 0) {
+        return "centre";
+    }
+    int distance = balance < 0 ? -balance : balance;
+    return std::to_string(distance) + (balance < 0 ? " toward music" : " toward sounds");
+}
+
+std::string_view on_off_word(bool on) {
+    return on ? "On" : "Off";
 }
 
 std::string plain_capitals(std::string_view label) {
