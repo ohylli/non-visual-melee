@@ -1,0 +1,46 @@
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+wait "menu 0 entry 0," 10
+sleep 1.0
+press A
+wait "menu 1 entry 0," 5
+sleep 0.8
+press Down
+wait "menu 1 entry 1," 5
+press Down
+wait "menu 1 entry 3," 5
+sleep 0.5
+press A
+wait "menu 9 entry 0," 5
+sleep 0.8
+press Down
+wait "menu 9 entry 1," 5
+press Down
+wait "menu 9 entry 2," 5
+sleep 0.5
+# into Multi-Man Melee: never A or Start here
+press A
+sleep 2.0
+shot "build/drive/mmm-1-opened.png"
+press Right
+sleep 1.2
+shot "build/drive/mmm-2.png"
+press Right
+sleep 1.2
+shot "build/drive/mmm-3.png"
+press Right
+sleep 1.2
+shot "build/drive/mmm-4.png"
+press Right
+sleep 1.2
+shot "build/drive/mmm-5.png"
+press Right
+sleep 1.2
+shot "build/drive/mmm-6.png"
+press Right
+sleep 1.2
+shot "build/drive/mmm-7-wrap.png"
+press B
+wait "menu 9 entry 2," 8
+sleep 1.0

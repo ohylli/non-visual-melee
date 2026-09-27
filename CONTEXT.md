@@ -77,8 +77,62 @@ The window the port shows before the game starts: choosing and checking the disc
 _Avoid_: Startup menu, front end
 
 **Setting**:
-One named option the player can change, with a current value and a line of help text. The same setting can appear in both the launcher and the port menu.
+One named option of the port that the player can change, with a current value and a line of help text. The same setting can appear in both the launcher and the port menu. What the game itself lets the player change on a leaf screen is a row and its value.
 _Avoid_: Option, preference, config entry
+
+### Native menus
+
+**Scene**:
+One full-screen step of the game's flow, such as the title screen, the main menu tree, character select or a match.
+_Avoid_: Screen (a scene can hold many), stage (the game has stages to fight on), state, mode
+
+**Main menu tree**:
+All the native menu screens reached from the main menu without starting a mode, from "1-P Mode" down to "Sound".
+_Avoid_: Main menu (that is only its top screen), menu system
+
+**Menu screen**:
+One screen of the main menu tree.
+_Avoid_: Submenu, page, menu
+
+**Tree screen**:
+A menu screen that is a list of entries, each leading to another menu screen or starting a mode.
+_Avoid_: Tree menu, list menu, submenu
+
+**Leaf screen**:
+A menu screen at the end of the tree, where the player sets or views something.
+_Avoid_: Settings screen, option screen, sub-screen
+
+**Entry**:
+One line of a tree screen that the player can choose.
+_Avoid_: Item (the game has items in matches), option, row, button
+
+**Hovered entry**:
+The entry the cursor is on, as distinct from one the player has confirmed.
+_Avoid_: Selected entry, focused entry, current entry
+
+**Row**:
+One line of a leaf screen, holding a value the player can change.
+_Avoid_: Setting (that is the port's), option, entry (that belongs to a tree screen)
+
+**Value**:
+What a row is currently set to.
+_Avoid_: State, choice, setting
+
+**Description**:
+The game's own one-line text about the hovered entry or the current row, shown at the bottom of a menu screen.
+_Avoid_: Help text (that belongs to a setting), tooltip, hint
+
+**Picture label**:
+A name or value the game draws as an image, so there is no text to read back and the words come from a string table.
+_Avoid_: Texture label, image text
+
+**Game text**:
+Text the game draws with its own text system, which the fork can read back as words.
+_Avoid_: SIS text, in-game text, strings
+
+**Free-cursor screen**:
+A native menu where a cursor moves freely over a layout and what it points at is decided by position, such as character select and stage select.
+_Avoid_: Free cursor menu, pointer screen
 
 ### Wording
 

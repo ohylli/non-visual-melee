@@ -1,0 +1,177 @@
+# steps of tools/a11y/main_menu.drive
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+sleep 2.5
+# MAIN MENU: 5 entries
+shot "build/drive/shot-main-menu.png"
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+wait "menu 0 entry 0," 3
+# wrap check upward
+press Up
+sleep 0.8
+press Down
+sleep 0.8
+wait "menu 0 entry 0," 3
+# into 1P Mode
+press A
+sleep 1.8
+shot "build/drive/shot-1p-mode.png"
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+wait "menu 1 entry 0," 3
+# into Regular Match
+press A
+sleep 1.8
+shot "build/drive/shot-regular-match.png"
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press B
+sleep 1.8
+# 1P: down to Stadium
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+wait "menu 1 entry 3," 3
+press A
+sleep 1.8
+shot "build/drive/shot-stadium.png"
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press B
+sleep 1.8
+# back to main
+press B
+sleep 1.8
+# main: down to VS
+press Down
+sleep 0.8
+wait "menu 0 entry 1," 3
+press A
+sleep 1.8
+shot "build/drive/shot-vs-mode.png"
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+wait "menu 2 entry 0," 3
+# VS: down to Special Melee
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+wait "menu 2 entry 2," 3
+press A
+sleep 1.8
+shot "build/drive/shot-special-melee.png"
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press B
+sleep 1.8
+# back to main
+press B
+sleep 1.8
+# main: down to Trophies
+press Down
+sleep 0.8
+wait "menu 0 entry 2," 3
+press A
+sleep 1.8
+shot "build/drive/shot-trophies.png"
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press B
+sleep 1.8
+# main: down to Options
+press Down
+sleep 0.8
+wait "menu 0 entry 3," 3
+press A
+sleep 1.8
+shot "build/drive/shot-options.png"
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press B
+sleep 1.8
+# main: down to Data
+press Down
+sleep 0.8
+wait "menu 0 entry 4," 3
+press A
+sleep 1.8
+shot "build/drive/shot-data.png"
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press Down
+sleep 0.8
+press B
+sleep 1.8
+sleep 1
