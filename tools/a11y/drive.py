@@ -30,7 +30,8 @@ Buttons are GameCube names, as in tools/devctl.py: A B X Y Z L R Start,
 Up Down Left Right (main stick), CUp CDown CLeft CRight, DUp DDown DLeft
 DRight. They drive controller port 1, merged with any real controller there.
 
-The run ends with an implicit quit. A failed wait quits too and exits 1.
+The run ends with an implicit quit. A failed wait quits too and exits 1, and
+so does the game exiting before the script ends, as on a crash.
 """
 import argparse
 import ctypes
@@ -67,6 +68,8 @@ kernel32.CreateNamedPipeW.restype = wt.HANDLE
 kernel32.CreateNamedPipeW.argtypes = [wt.LPCWSTR, wt.DWORD, wt.DWORD, wt.DWORD, wt.DWORD,
                                       wt.DWORD, wt.DWORD, wt.LPVOID]
 kernel32.ConnectNamedPipe.argtypes = [wt.HANDLE, wt.LPVOID]
+kernel32.CreateFileW.restype = wt.HANDLE
+kernel32.CreateFileW.argtypes = [wt.LPCWSTR, wt.DWORD, wt.DWORD, wt.LPVOID, wt.DWORD, wt.DWORD, wt.HANDLE]
 kernel32.WriteFile.argtypes = [wt.HANDLE, wt.LPCVOID, wt.DWORD, ctypes.POINTER(wt.DWORD), wt.LPVOID]
 kernel32.CloseHandle.argtypes = [wt.HANDLE]
 gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
@@ -108,6 +111,8 @@ class BITMAPINFOHEADER(ctypes.Structure):
                 ("biClrImportant", wt.DWORD)]
 PIPE_ACCESS_OUTBOUND = 0x2
 ERROR_PIPE_CONNECTED = 535
+GENERIC_READ = 0x80000000
+OPEN_EXISTING = 3
 WM_CLOSE = 0x0010
 
 
@@ -130,15 +135,26 @@ class KeyPipe:
         if kernel32.ConnectNamedPipe(self.handle, None) or ctypes.get_last_error() == ERROR_PIPE_CONNECTED:
             self.connected.set()
 
-    def send(self, line, timeout):
-        if not self.connected.wait(timeout):
-            raise ScriptError("the game never opened the key pipe")
+    def send(self, line, timeout, proc):
+        deadline = time.monotonic() + timeout
+        while not self.connected.wait(0.1):
+            if proc.poll() is not None:
+                raise ScriptError("the game exited")
+            if time.monotonic() > deadline:
+                raise ScriptError("the game never opened the key pipe")
         data = (line + "\n").encode()
         written = wt.DWORD()
         if not kernel32.WriteFile(self.handle, data, len(data), ctypes.byref(written), None):
             raise ScriptError(f"writing to the key pipe failed ({ctypes.get_last_error()})")
 
     def close(self):
+        # CloseHandle blocks while _connect still waits in ConnectNamedPipe,
+        # as it does forever when the game died before opening the pipe;
+        # connecting as the client ends that wait.
+        if not self.connected.is_set():
+            client = kernel32.CreateFileW(self.name, GENERIC_READ, 0, None, OPEN_EXISTING, 0, None)
+            if client != INVALID_HANDLE_VALUE:
+                kernel32.CloseHandle(client)
         kernel32.CloseHandle(self.handle)
 
 
@@ -151,6 +167,7 @@ class Output:
         self.out_file = out_file
         self.show = show
         self.printed = queue.Queue()
+        self.open_streams = 2
         for stream in (proc.stdout, proc.stderr):
             threading.Thread(target=self._read, args=(stream,), daemon=True).start()
 
@@ -164,13 +181,17 @@ class Output:
                 self.cond.notify_all()
             if self.show is None or any(s in line for s in self.show):
                 print(line, flush=True)
+        with self.cond:
+            self.open_streams -= 1
+            self.cond.notify_all()
 
     def mark(self):
         with self.cond:
             return len(self.lines)
 
     def wait_for(self, start, match, timeout):
-        """Index of the first line at or after start that match() accepts."""
+        """Index of the first line at or after start that match() accepts, or
+        None on timeout. Raises once the game has exited without one."""
         deadline = time.monotonic() + timeout
         i = start
         with self.cond:
@@ -179,6 +200,8 @@ class Output:
                     if match(self.lines[i]):
                         return i
                     i += 1
+                if self.open_streams == 0:
+                    raise ScriptError("the game exited")
                 left = deadline - time.monotonic()
                 if left <= 0:
                     return None
@@ -421,7 +444,7 @@ def run(args, steps):
                     keys, hold, until, times = parse_press(rest)
                     cursor = output.mark()
                     for n in range(1, times + 1):
-                        pipe.send(f"{keys} {hold}", args.timeout)
+                        pipe.send(f"{keys} {hold}", args.timeout, proc)
                         if output.wait_for(output.mark(), pad_pressed, 5 + hold / 1000) is None:
                             step("warning: no pad change seen for that press")
                         if until is None:
