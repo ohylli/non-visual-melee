@@ -13,7 +13,7 @@ case "${TARGET_ARCH}" in
         STAGE_DIR="${DIST_DIR}/melee-windows-x86_64"
         ZIP_NAME="Melee-Windows-x86_64.zip"
         TOOLCHAIN_FILE="${ROOT_DIR}/cmake/x86_64-w64-mingw32.cmake"
-        SDL3_PROVIDER="package"
+        SDL3_PROVIDER="vendor"
         DAWN_PROVIDER="package"
         NOD_PROVIDER="package"
         CXX_BIN="${CXX:-x86_64-w64-mingw32-g++}"
@@ -216,6 +216,9 @@ OS_DLLS = {
     # since 2000; it appeared in our import table when LAN discovery landed,
     # which is why the gate started failing on a package that is in fact fine.
     'winhttp.dll', 'iphlpapi.dll',
+    # hid.dll: SDL 3.5's Windows HID API backend links it directly. Present on
+    # a clean Windows install, so it does not need shipping.
+    'hid.dll',
 }
 
 def is_os(name):

@@ -42,6 +42,7 @@
 #include <sysdolphin/baselib/mobj.h>
 #include <sysdolphin/baselib/random.h>
 #include <sysdolphin/baselib/sislib.h>
+#include <sysdolphin/baselib/sislib_font.h>
 
 static u8 mnCharSel_804D50C8[4] = { 1, 2, 4, 8 };
 static u8 mnCharSel_804D50CC[4] = { 1, 0, 0, 2 };
@@ -488,8 +489,7 @@ void mnCharSel_8025BD30(void)
         switch (gmMainLib_GetGameRules()->mode) {
         case Mode_Time:
             if (gmMainLib_GetGameRules()->time_limit != 0) {
-                mnCharSel_8025BC20(kerning,
-                                   gmMainLib_GetGameRules()->time_limit);
+                mnCharSel_8025BC20(kerning, gmMainLib_GetGameRules()->time_limit);
                 HSD_SisLib_803A660C(0, 0x4A, 0x53);
             } else {
                 HSD_SisLib_803A6530(0, 0x4A, 0x51);
@@ -507,8 +507,7 @@ void mnCharSel_8025BD30(void)
             return;
         case Mode_Coin:
             if (gmMainLib_GetGameRules()->time_limit != 0) {
-                mnCharSel_8025BC20(kerning,
-                                   gmMainLib_GetGameRules()->time_limit);
+                mnCharSel_8025BC20(kerning, gmMainLib_GetGameRules()->time_limit);
                 HSD_SisLib_803A660C(0, 0x4A, 0x53);
             } else {
                 HSD_SisLib_803A6530(0, 0x4A, 0x51);
@@ -517,8 +516,7 @@ void mnCharSel_8025BD30(void)
             return;
         case Mode_Bonus:
             if (gmMainLib_GetGameRules()->time_limit != 0) {
-                mnCharSel_8025BC20(kerning,
-                                   gmMainLib_GetGameRules()->time_limit);
+                mnCharSel_8025BC20(kerning, gmMainLib_GetGameRules()->time_limit);
                 HSD_SisLib_803A660C(0, 0x4A, 0x53);
             } else {
                 HSD_SisLib_803A6530(0, 0x4A, 0x51);
@@ -1240,9 +1238,6 @@ static inline bool isDuplicateCostume(int door)
     return false;
 }
 
-#ifdef MUST_MATCH
-#pragma dont_inline on
-#endif
 bool mnCharSel_8025DAA0(int door)
 {
     int num_doors;
@@ -1267,9 +1262,6 @@ bool mnCharSel_8025DAA0(int door)
     }
     return false;
 }
-#ifdef MUST_MATCH
-#pragma dont_inline off
-#endif
 
 static inline void pickUniqueCostume(int door)
 {
@@ -2245,19 +2237,7 @@ s32 mnCharSel_8025FDEC(u8 door)
 
         icons[icon_idx].anim_timer = 0xC;
 
-        {
-            int door_idx = door;
-            if (mnCharSel_8025DAA0(door_idx)) {
-                s8 costume;
-                CSSDoor* selected_door = &mnCharSel_803F0DFC.doors[door_idx];
-                for (costume = 0;; costume++) {
-                    selected_door->costume = costume;
-                    if (!mnCharSel_8025DAA0(door_idx)) {
-                        break;
-                    }
-                }
-            }
-        }
+        pickUniqueCostume(door);
 
         if (mnCharSel_804D6CF6 != 3 && mnCharSel_804D6CF6 != 4) {
             int sel = mnCharSel_803F0DFC.doors[door].sel_icon;
