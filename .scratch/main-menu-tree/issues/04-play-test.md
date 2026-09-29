@@ -1,6 +1,6 @@
 # 04 Play-test the main menu tree by ear
 
-Status: ready-for-human
+Status: resolved (2026-09-29)
 Type: task
 Blocked by: 01, 02, 03
 
@@ -47,3 +47,5 @@ Anything unexpected becomes a new issue in this directory. Words that read badly
 23. `MELEE_A11Y=0` launch. Expected: silence throughout, and the log marks each announcement `(off)`.
 
 ## Comments
+
+2026-09-29: the maintainer ran the play test by ear with NVDA and reports that everything worked fine, including speech resuming after an NVDA restart (case 22, carried over from the speech play test). No new issues.
