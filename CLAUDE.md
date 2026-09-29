@@ -45,9 +45,9 @@ Fork builds are meant to play online against base port builds of the same releas
 Windows is the only supported target for fork work; keep code portable in principle by confining platform specifics to the screen reader bridge (see `docs/a11y/speech.md`).
 
 - Toolchain: MSYS2 UCRT64 (GCC, CMake, Ninja) with its `bin` directory on `PATH`. GCC is required by the decomp layer.
-- Configure once with `cmake -B build -G Ninja`, then `cmake --build build`. The result is `build/melee.exe`, with its DLLs and `resources/` copied beside it. Every decomp file compiles through a Python wrapper that marks rollback-snapshot sections, so a full rebuild takes a while; the link ends with a "Rollback sections" verification line.
+- Configure once with `cmake -B build -G Ninja -DAURORA_SDL3_PROVIDER=vendor`, then `cmake --build build`. The flag builds SDL (the library under windows, input and audio) from source at the commit aurora pins, the same SDL the base port's release packages ship; without it aurora uses an older prebuilt SDL on Windows. The setting stays in the build directory's cache, so only a fresh build directory needs it again. The result is `build/melee.exe`, with its DLLs and `resources/` copied beside it. Every decomp file compiles through a Python wrapper that marks rollback-snapshot sections, so a full rebuild takes a while; the link ends with a "Rollback sections" verification line.
 - On Windows the game writes `melee-pc.log` in the working directory, not beside `melee.exe`; `MELEE_LOG_FILE` overrides the path.
-- The first configure downloads the pinned Prism release into `build/prism-<tag>/` and needs network access; later configures reuse it.
+- The first configure downloads the pinned Prism release into `build/prism-<tag>/` and SDL's source, and needs network access; later configures reuse them until a base merge moves SDL's pinned commit.
 - The base port documents itself in `docs/building.md`, `docs/testing.md`, `docs/debugging.md`, `docs/architecture.md` and `docs/porting-notes.md`. Read the relevant one before exploring the code.
 
 ## Verification
