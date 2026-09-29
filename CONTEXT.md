@@ -134,6 +134,40 @@ _Avoid_: SIS text, in-game text, strings
 A native menu where a cursor moves freely over a layout and what it points at is decided by position, such as character select and stage select.
 _Avoid_: Free cursor menu, pointer screen
 
+**Target**:
+Anything on a free-cursor screen that reacts to the cursor: a portrait, a button, a slider.
+_Avoid_: Hotspot, item, element
+
+### Character select
+
+**Hand**:
+A player's cursor on character select, a white glove carrying the player's badge ("P1").
+_Avoid_: Cursor (the decomp's word), pointer, glove
+
+**Coin**:
+The token a hand carries onto a portrait to choose a character.
+_Avoid_: Token, chip, puck
+
+**Portrait**:
+One character's picture on character select, with the character's name drawn under it.
+_Avoid_: Icon (the decomp's word), character slot, cell
+
+**Player slot**:
+One of the four panels along the bottom of character select, with its HMN/CPU tab and name box.
+_Avoid_: Door (the decomp's word), port, panel
+
+**Steering**:
+The fork moving the hand by generating stick input, as opposed to changing the hand's position in game memory.
+_Avoid_: Auto-move, snapping, warping
+
+**Step**:
+One D-pad press under steering, moving the hand to the neighbouring target.
+_Avoid_: Jump, hop, move
+
+**Glide**:
+The hand's movement to a target under steering.
+_Avoid_: Travel, animation, path
+
 ### Wording
 
 Write "accessibility" in prose. `a11y` appears only in identifiers and paths.

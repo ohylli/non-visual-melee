@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Scene speech: names the scene the player has arrived in, once it has loaded,
  * from a table keyed by the scene's kind. Scenes to operate get their name and
- * "No speech yet.", things to watch their name and the way out, and matches
- * and the main menu tree nothing (.scratch/main-menu-tree/spec.md, "Scene
+ * "No speech yet.", things to watch their name and the way out, and matches,
+ * the main menu tree and character select nothing, since the last two speak
+ * their own opening (.scratch/main-menu-tree/spec.md, "Scene
  * announcements"). */
 #pragma once
 #include "scene_kinds.h"

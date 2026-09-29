@@ -1,0 +1,59 @@
+# Character select with the stick: the opening, the coin jumping into the
+# hand, a portrait under the carried coin, a choice, the costume, B calling
+# the coin back and putting it back, and the coin carried down to clear the
+# character. Run with the default --scene title:
+#   python tools/a11y/drive.py tools/a11y/css_portraits.drive
+# Stick holds move the hand an inexact distance, so waits for a portrait
+# accept any portrait's name. Positions are in the screen's units: the hand
+# starts at (-31, -21.5) and a full push moves it about 1.24 a frame; the
+# carried coin sits 2.7 right of and 2 below the hand.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# VS. Mode, Melee.
+press Down
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press A
+wait '"Character select\. Player 1, no character\."'
+sleep 1
+
+# Up into the portraits: the coin jumps into the hand as it crosses into
+# them, then enters the left column's middle row (Falco) or its neighbours.
+press Up 450
+wait '"Holding your coin'
+wait ': "(Dr\. Mario|Mario|Luigi|Bowser|Peach|Yoshi|DK|C\. Falcon|Ganondorf|Falco|Fox|Ness|Ice Climbers|Kirby|Samus|Zelda|Link|Young Link|Pichu|Pikachu|Jigglypuff|Mewtwo|Mr\. Game & Watch|Marth|Roy)"$'
+sleep 0.5
+
+# A chooses, in silence: the game's announcer names the character. X and Y
+# then change the costume.
+press A
+sleep 1
+press X
+wait '"Costume 2"'
+press Y
+wait '"Costume 1"'
+
+# B calls the coin back into the hand; a push right carries it onto the next
+# portrait, and B puts it back on the choice.
+press B
+wait '"Holding your coin'
+press Right 120
+wait ': "(Dr\. Mario|Mario|Luigi|Bowser|Peach|Yoshi|DK|C\. Falcon|Ganondorf|Falco|Fox|Ness|Ice Climbers|Kirby|Samus|Zelda|Link|Young Link|Pichu|Pikachu|Jigglypuff|Mewtwo|Mr\. Game & Watch|Marth|Roy)"$'
+press B
+wait '"Back to '
+sleep 0.5
+
+# B calls it back again, and carrying it down into the player slots clears
+# the character.
+press B
+wait '"Holding your coin'
+press Down 1000
+wait '"No character"'

@@ -10,6 +10,7 @@
 #include "mnmainrule.h"
 #include "mnname.h"
 #include "mnnamenew.h"
+#include "pc/a11y/a11y_hooks.h"
 #include "types.h"
 #include <melee/gm/gm_1601.h>
 #include <melee/gm/gm_unsplit.h>
@@ -3458,6 +3459,7 @@ void mnCharSel_CursorThink(HSD_GObj* gobj)
 
 update_display:
     updateCursorDisplay(jobj, cursor, &state_jobj, &color_jobj);
+    pc_a11y_css_hand(cursor->x4, cursor->x5, cursor->x6, cursor->xC, cursor->x10);
 }
 static inline int getDoorCount(CSSData* css)
 {
@@ -5496,6 +5498,7 @@ void mnCharSel_Scene_OnFrame(void)
 
     PAD_STACK(8);
 
+    pc_a11y_css_frame(mnCharSel_804D6CB0, &mnCharSel_803F0DFC, icons, mnCharSel_804D6CF5, mnCharSel_804D6CF6); /* runs before the hands update this frame */
     mnCharSel_804D6CEC += 1;
     if (mnCharSel_804D6CF6 <= 1) {
         cache = &lbDvd_GetPreloadCacheScene()->game_cache;

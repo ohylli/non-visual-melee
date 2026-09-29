@@ -241,7 +241,7 @@ press A
 wait '"VS\. Mode\. Melee\. '
 sleep 0.3
 press A
-wait '"Character select\. No speech yet\."'
+wait '"Character select\. Player 1, no character\."'
 sleep 1
 # Character select goes back when B is held; 400 ms is not enough.
 press B 800

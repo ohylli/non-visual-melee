@@ -1,6 +1,6 @@
 # 01 Portraits and the coin speak
 
-Status: ready-for-agent
+Status: resolved (2026-09-29)
 Type: task
 
 The first slice of `.scratch/character-select/spec.md`: the local player hears which portrait their coin is over and what their hand holds, in VS modes. Nothing is written to the game. Read the spec and the primer `docs/a11y/native-menus.md` (section "Character select in detail") first.
@@ -64,3 +64,19 @@ Wording and rules are in the spec, section "Stage 1: announcements". This slice 
 - CLAUDE.md: one "Accessibility status" line, and the scene announcement's new wording where it is quoted.
 
 ## Comments
+
+### 2026-09-29, implementation (agent)
+
+Implemented; hearing it is issue 03.
+
+- Hooks: `pc_a11y_css_frame` at the top of `mnCharSel_Scene_OnFrame`, which runs before the hands update (`gm_RunSimTick` calls the scene's frame function before `HSD_GObj_RunProcs`); `pc_a11y_css_hand` after `updateCursorDisplay` at `update_display`. `mncharsel.c` includes `a11y_hooks.h` itself, though `inlines.h` already brings it in. The hand hook is not reached on the early returns (a hidden hand, A on the rules header); the hidden hand keeps its last report, which is harmless while the reader follows port 1.
+- The snapshot (`a11y_game_css_state`) turns the raw numbers into the local hand's presence, carried coin and position; per slot its kind (human, CPU, closed), portrait, the portrait under a carried coin, character and costume; per portrait its character, locked state and rectangle. The hand hook's reports live in `hooks.cpp` and are cleared on every scene change.
+- **Bitfield layout.** `game_access.c` first read every player's character as Marth, whatever was chosen: `melee_game` compiles with `-mno-ms-bitfields` on Windows, the `melee` target does not, and `StartMeleeRules` (before the players' data) is 136 bytes one way and 144 the other. `a11y.cmake` now gives `game_access.c` the same option, and a static assertion on the rules' size fails the build if the two ever differ again (checked by building once with the wrong option). The base port's own `src/pc/net.c` and `src/pc/slp.c` read the same structs from the `melee` target without the option; not touched here.
+- **Stale character.** On first arrival every slot is closed ("N/A") and player 1's character held Marth with no coin on any portrait. The opening names a character only when the slot is open and its coin rests on a portrait.
+- **Pickup wording.** The frame a coin is picked up still shows where it lay; where it is under the hand shows a frame later. Spoken at once, "Holding your coin" was cut off 16 ms later by the portrait under the hand after B called the coin back. The pickup is now announced a frame later together with that portrait: "Holding your coin. Fox". A coin jumping into the hand over no portrait is "Holding your coin" alone. For the play test to judge.
+- "Back to Fox" is told from a choice by the character: B leaves it unchanged and lands on a portrait other than the one under the coin; A sets it from the portrait under the coin. A choice of a random character in a hidden corner that happens to equal the earlier one would be read as "Back to"; not handled.
+- Names checked against a screenshot with everything unlocked and recorded in the spec. The table also holds Sheik, for a slot that keeps her.
+- Stage select: a drive made player 2 a CPU, chose a character, pressed Start, and on stage select pressed Start without moving; the match started (on Yoshi's Story). The code agrees: nothing is hovered on arrival (cell 30), and Start there rolls a random stage. The scene table now says "Stage select. No speech yet. Press Start for a random stage."
+- `tools/a11y/css_portraits.drive` passes: the opening, the coin jumping in, a portrait, A (silent), X and Y ("Costume 2", "Costume 1"), B ("Holding your coin. Falco"), a push onto the next portrait, B ("Back to Falco"), B again and the coin carried down ("No character"). `tree_walk.drive` and `leaf_screens.drive` pass. The bounded `title` and `vs` runs exit cleanly.
+- Unit tests: `css_speech` covers the issue's list plus a stale character, the online player number, a CPU's coin, a carried coin's costume, single-player modes and a leaving screen; `scene_speech` follows the table. `launcher_data` fails as before on Windows. `python tools/check_style.py` passes.
+- Docs: `CONTEXT.md` has the spec's eight terms (Target under native menus, the rest under a new "Character select" heading). The primer gains the private state, the `0xD` placeholder, the chosen character and the bitfield gotcha, hovering at the coin, the three ways the coin reaches the hand, letting go, the hidden corners (from the code) and the unplugged controller, and loses the answered open question. Rewording "Read, don't steer" is left to issue 04, which brings the steering it describes; the single-player arrows to issue 07.

@@ -16,8 +16,8 @@ struct SceneWords {
  * the play test to judge. */
 constexpr SceneWords kScenes[] = {
     /* Scenes to operate. */
-    {SceneKind::GS_CSS, "Character select. No speech yet."},
-    {SceneKind::GS_SSS, "Stage select. No speech yet."},
+    /* Start with no stage hovered, as on arrival, picks one at random. */
+    {SceneKind::GS_SSS, "Stage select. No speech yet. Press Start for a random stage."},
     {SceneKind::GS_RESULTS, "Results. No speech yet."},
     {SceneKind::GS_TOY_GALLERY, "Trophy gallery. No speech yet."},
     {SceneKind::GS_TOY_LOTTERY, "Trophy lottery. No speech yet."},
@@ -55,8 +55,10 @@ constexpr SceneWords kScenes[] = {
     {SceneKind::GS_REGEND_CONGRATS, "Congratulations"},
     {SceneKind::GS_STAFFROLL, "Credits"},
 
-    /* Silent. The main menu tree speaks its own opening. */
+    /* Silent. The main menu tree and character select speak their own
+     * opening. */
     {SceneKind::GS_MENU, ""},
+    {SceneKind::GS_CSS, ""},
     /* Matches, including the attract demo: the game's announcer speaks. */
     {SceneKind::GS_VS, ""},
     {SceneKind::GS_SUDDEN_DEATH, ""},

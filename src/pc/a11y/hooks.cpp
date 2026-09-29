@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "a11y_hooks.h"
+#include "css_speech.hpp"
 #include "game_access.h"
 #include "game_text.hpp"
 #include "launcher_speech.hpp"
@@ -18,10 +19,14 @@ namespace {
 std::unique_ptr<a11y::Speech> s_speech;
 std::unique_ptr<a11y::SceneSpeech> s_scene_speech;
 std::unique_ptr<a11y::MenuSpeech> s_menu_speech;
+std::unique_ptr<a11y::CssSpeech> s_css_speech;
 /* The centre text a leaf screen last set, kept across scenes: a screen the
  * menu scene opens on, as Multi-Man Melee after its match, sets it before
  * the scene hook runs. */
 int s_center_text = -1;
+/* Character select's hands as the hand hook last reported them, by hand;
+ * cleared on every scene change, so a hand not yet updated reads as unseen. */
+A11yCssHandReport s_css_hands[A11Y_CSS_SLOTS] = {};
 
 /* The gate every hook from game code passes through. While rollback re-runs
  * frames (pc_net_resim), each hook is reached again for a frame that was
@@ -46,6 +51,7 @@ extern "C" void pc_a11y_init(void) {
     game_text.pal = pc_region_pal;
     game_text.resolve = a11y_game_resolve;
     s_menu_speech = std::make_unique<a11y::MenuSpeech>(*s_speech, game_text);
+    s_css_speech = std::make_unique<a11y::CssSpeech>(*s_speech);
     a11y::launcher_speech_start(*s_speech);
 }
 
@@ -54,6 +60,7 @@ extern "C" void pc_a11y_shutdown(void) {
         return;
     }
     a11y::launcher_speech_stop();
+    s_css_speech.reset();
     s_menu_speech.reset();
     s_scene_speech.reset();
     s_speech->shutdown();
@@ -72,6 +79,10 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
     /* Arriving on the screen and entry just left, as when character select
      * goes back, is still an arrival. */
     s_menu_speech->forget();
+    s_css_speech->forget();
+    for (A11yCssHandReport& hand : s_css_hands) {
+        hand = A11yCssHandReport{};
+    }
     s_scene_speech->entered(scene_kind);
 }
 
@@ -89,4 +100,26 @@ extern "C" void pc_a11y_menu_center_text(int string_number) {
     /* Read by the next menu frame, which also sees the screen the same
      * press opened; nothing is spoken here. */
     s_center_text = string_number;
+}
+
+extern "C" void pc_a11y_css_frame(const CSSData* css, const CSSDoorsData* doors,
+    const CSSIcon* icons, int hands, int pending_exit) {
+    if (!game_hook_may_speak()) {
+        return;
+    }
+    /* Online, the local player's controller is always port 1, but they may
+     * be any player in the game. */
+    int local_port = pc_net_active() ? pc_net_local_player() : 0;
+    A11yCssState state;
+    a11y_game_css_state(css, doors, icons, hands, pending_exit, s_css_hands, local_port, &state);
+    s_css_speech->frame(state);
+}
+
+extern "C" void pc_a11y_css_hand(int hand, int state, int held, float x, float y) {
+    if (!game_hook_may_speak() || hand < 0 || hand >= A11Y_CSS_SLOTS) {
+        return;
+    }
+    /* Read by the next frame hook, which sees the player slots this update
+     * left behind; nothing is spoken here. */
+    s_css_hands[hand] = A11yCssHandReport{true, state, held, x, y};
 }

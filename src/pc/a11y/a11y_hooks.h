@@ -39,6 +39,28 @@ void pc_a11y_menu_frame(void);
  * which those screens keep in private state. The next menu frame reads it. */
 void pc_a11y_menu_center_text(int string_number);
 
+/* Character select's state lives in static variables of
+ * src/melee/mn/mncharsel.c, so its hooks hand the fork what it reads. Only
+ * game_access.c looks inside these types. */
+struct CSSData;
+struct CSSDoorsData;
+struct CSSIcon;
+
+/* Once a frame of character select (mnCharSel_Scene_OnFrame), before the
+ * hands update: the screen's data, its four player slots, its table of 25
+ * portraits, the number of hands (4 in VS modes, 1 in single-player modes)
+ * and the pending exit (nonzero once the screen has begun to leave or opened
+ * the rules screen or name entry). Character select speech compares the
+ * screen with the last frame here. */
+void pc_a11y_css_frame(const struct CSSData* css, const struct CSSDoorsData* doors,
+    const struct CSSIcon* icons, int hands, int pending_exit);
+
+/* One hand of character select has updated (the end of
+ * mnCharSel_CursorThink). The raw numbers of the hand's struct, which only
+ * mncharsel.c defines: its index (the port in VS modes), state, what it
+ * holds, and position. The next frame reads them. */
+void pc_a11y_css_hand(int hand, int state, int held, float x, float y);
+
 #ifdef __cplusplus
 }
 #endif

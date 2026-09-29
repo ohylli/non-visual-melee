@@ -210,6 +210,7 @@ The local hand's announcements interrupt. Announcements about other players are 
 ### Where the words come from
 
 - **Characters**: a fork string table keyed by the portrait's character (`CharacterKind`), holding the names as drawn under the portraits, so the blind player hears what the sighted player reads. Capitals are written in normal capitalisation, as on the main menu tree: "Dr. Mario", "DK", "C. Falcon", "Ice Climbers". The names of characters locked in the screenshot are checked against a run with everything unlocked.
+- **The 25 names**, checked against a screenshot of a save with everything unlocked (issue 01), in portrait order. Top row: Dr. Mario, Mario, Luigi, Bowser, Peach, Yoshi, DK, C. Falcon, Ganondorf. Middle row: Falco, Fox, Ness, Ice Climbers, Kirby, Samus, Zelda, Link, Young Link. Bottom row: Pichu, Pikachu, Jigglypuff, Mewtwo, Mr. Game & Watch, Marth, Roy. The screen draws them as "Dr.MARIO", "D K", "C.FALCON", "JIGGLY-PUFF" (over two lines) and "Mr.GAME &WATCH". The table also holds Sheik, who has no portrait.
 - **Player slot kinds**: "human", "CPU" and "closed" for the screen's "HMN", "CPU" and "N/A". These three are spoken as words, not as drawn: "HMN" and "N/A" read badly.
 - **Players**: "Player 1" to "Player 4", for the screen's "P1".
 - **Buttons**: "Teams", "Rules", "Back", "CPU level", "Handicap".

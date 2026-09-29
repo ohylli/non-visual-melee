@@ -62,9 +62,9 @@ std::size_t count_logged(const std::string& line) {
 
 void named_scene_interrupts() {
     Fixture f;
-    f.scenes.entered(kind(a11y::SceneKind::GS_CSS));
-    assert((f.outputs == std::vector<Output>{{"Character select. No speech yet.", true}}));
-    assert(count_logged("[a11y] speak interrupt: \"Character select. No speech yet.\"") == 1);
+    f.scenes.entered(kind(a11y::SceneKind::GS_RESULTS));
+    assert((f.outputs == std::vector<Output>{{"Results. No speech yet.", true}}));
+    assert(count_logged("[a11y] speak interrupt: \"Results. No speech yet.\"") == 1);
 }
 
 void title_screen_names_its_way_out() {
@@ -76,6 +76,7 @@ void title_screen_names_its_way_out() {
 void silent_scene_says_and_logs_nothing() {
     Fixture f;
     f.scenes.entered(kind(a11y::SceneKind::GS_MENU));
+    f.scenes.entered(kind(a11y::SceneKind::GS_CSS));
     f.scenes.entered(kind(a11y::SceneKind::GS_VS));
     assert(f.outputs.empty());
     assert(s_lines.empty());
@@ -94,15 +95,15 @@ void unknown_kind_is_silent_and_logged_once() {
 
 void same_kind_twice_is_announced_twice() {
     Fixture f;
-    f.scenes.entered(kind(a11y::SceneKind::GS_CSS));
-    f.scenes.entered(kind(a11y::SceneKind::GS_CSS));
+    f.scenes.entered(kind(a11y::SceneKind::GS_RESULTS));
+    f.scenes.entered(kind(a11y::SceneKind::GS_RESULTS));
     assert(f.outputs.size() == 2);
     assert(f.outputs[0] == f.outputs[1]);
 }
 
 void lookup_tells_silent_from_unknown() {
-    assert(
-        a11y::scene_announcement(kind(a11y::SceneKind::GS_SSS)) == "Stage select. No speech yet.");
+    assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_SSS)) ==
+           "Stage select. No speech yet. Press Start for a random stage.");
     assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_TRAINING)) == "");
     assert(!a11y::scene_announcement(-1).has_value());
     assert(!a11y::scene_announcement(kind(a11y::SceneKind::GS_ONLINE_LOBBY) + 1).has_value());
