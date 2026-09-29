@@ -21,6 +21,10 @@ struct Config {
  * settings get their own storage. */
 Config config_from_environment();
 
+/* The speech log switch, read once, for features that log lines of their own
+ * ("not in the menu names table"). */
+bool log_enabled();
+
 struct Announcement {
     std::string text;
     Mode mode = Mode::interrupt;

@@ -202,4 +202,11 @@ DecodedText decode_game_text(const std::uint8_t* bytes, const GameTextSource& so
     return out;
 }
 
+std::string one_line(std::string text) {
+    for (std::size_t at = text.find('\n'); at != std::string::npos; at = text.find('\n', at)) {
+        text.replace(at, 1, " / ");
+    }
+    return text;
+}
+
 }  // namespace a11y

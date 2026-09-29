@@ -93,11 +93,6 @@ constexpr bool table_has_every_kind_once() {
 }
 static_assert(table_has_every_kind_once(), "kScenes needs every scene kind, each once");
 
-bool log_enabled() {
-    static const bool enabled = config_from_environment().log;
-    return enabled;
-}
-
 }  // namespace
 
 std::optional<std::string_view> scene_announcement(int scene_kind) {

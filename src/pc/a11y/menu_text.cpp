@@ -28,21 +28,13 @@ GameTextSource game_source() {
     return source;
 }
 
-/* One log line per string, so its breaks are shown as " / ". */
-std::string one_line(const DecodedText& decoded) {
-    std::string line = decoded.text;
-    for (std::size_t at = line.find('\n'); at != std::string::npos; at = line.find('\n', at)) {
-        line.replace(at, 1, " / ");
-    }
+/* One log line per string. */
+std::string dump_line(const DecodedText& decoded) {
+    std::string line = one_line(decoded.text);
     if (decoded.malformed) {
         line += " {malformed}";
     }
     return line;
-}
-
-bool log_enabled() {
-    static const bool enabled = config_from_environment().log;
-    return enabled;
 }
 
 void dump_table() {
@@ -59,7 +51,7 @@ void dump_table() {
         DecodedText decoded = decode_game_text(entry, source);
         unknown += decoded.unknown_glyphs;
         malformed += decoded.malformed ? 1 : 0;
-        pc_log_line("[a11y] game text %s %d: \"%s\"", symbol, count, one_line(decoded).c_str());
+        pc_log_line("[a11y] game text %s %d: \"%s\"", symbol, count, dump_line(decoded).c_str());
     }
     pc_log_line("[a11y] game text %s: %d strings, %d unknown glyphs, %d malformed", symbol, count,
         unknown, malformed);

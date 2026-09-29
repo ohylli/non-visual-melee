@@ -9,11 +9,6 @@
 namespace a11y {
 namespace {
 
-bool log_enabled() {
-    static const bool enabled = config_from_environment().log;
-    return enabled;
-}
-
 /* Parts of one announcement as sentences: "Main Menu. 1-P Mode. Solo
  * Smash!" A part that ends a sentence itself keeps its own mark. */
 void add_sentence(std::string& out, std::string_view part) {
@@ -34,9 +29,10 @@ void add_sentence(std::string& out, std::string_view part) {
  * description joined by a space, the marks of unknown glyphs
  * ("{glyph 4000}") left out. */
 std::string spoken_text(std::string_view text) {
+    constexpr std::string_view kGlyphMark = "{glyph ";
     std::string out;
     for (std::size_t i = 0; i < text.size(); i++) {
-        if (text.substr(i, 7) == "{glyph ") {
+        if (text.substr(i).starts_with(kGlyphMark)) {
             std::size_t close = text.find('}', i);
             if (close != std::string_view::npos) {
                 i = close;
@@ -55,47 +51,40 @@ std::string spoken_text(std::string_view text) {
     return out;
 }
 
-/* Decoded text for a log line, its breaks shown as " / " and its unknown
- * glyphs marked. */
-std::string one_line(std::string text) {
-    for (std::size_t at = text.find('\n'); at != std::string::npos; at = text.find('\n', at)) {
-        text.replace(at, 1, " / ");
-    }
-    return text;
+/* A tree screen's hovered entry, as log lines name it. */
+std::string entry_where(const A11yMenuState& state) {
+    return "[a11y] menu " + std::to_string(state.menu) + " entry " + std::to_string(state.hovered);
 }
 
 /* A leaf screen's centre text, as log lines name it. */
-std::string where_text(const A11yMenuState& state) {
+std::string center_text_where(const A11yMenuState& state) {
     return "[a11y] menu " + std::to_string(state.menu) + " centre text " +
            std::to_string(state.center_text);
 }
 
-/* The key hint of a leaf screen with a reader, spoken once as it opens;
- * nothing for any other screen. */
-std::optional<std::string_view> reader_hint(int menu) {
-    switch (menu) {
-    case kMenuSound:
-        return "Left and right to change.";
-    case kMenuDisplay:
-        return "A to change.";
-    case kMenuMultiMan:
-        return "Left and right to choose.";
-    default:
-        return std::nullopt;
-    }
+/* The reader's row the centre text names; nothing on a screen without a
+ * reader or for a centre text its reader lacks. */
+const ReaderRow* reader_row(const A11yMenuState& state) {
+    const Reader* reader = menu_reader(state.menu);
+    return reader != nullptr ? reader->row(state.center_text) : nullptr;
 }
 
 /* The value on a reader's row, in the screen's words; nothing where the row
- * has none, as for a Multi-Man Melee choice. */
+ * has none, as for a Multi-Man Melee choice, or is unknown. */
 std::optional<std::string> row_value(const A11yMenuState& state) {
-    if (state.menu == kMenuSound && state.center_text == kTextSoundChannel) {
+    const ReaderRow* row = reader_row(state);
+    if (row == nullptr) {
+        return std::nullopt;
+    }
+    switch (row->value) {
+    case RowValue::channel:
         return std::string(channel_word(state.mono));
-    }
-    if (state.menu == kMenuSound && state.center_text == kTextSoundVolume) {
+    case RowValue::balance:
         return balance_words(state.balance);
-    }
-    if (state.menu == kMenuDisplay) {
+    case RowValue::deflicker:
         return std::string(on_off_word(state.deflicker));
+    case RowValue::none:
+        break;
     }
     return std::nullopt;
 }
@@ -112,7 +101,7 @@ std::string capitalised(std::string text) {
 
 void MenuSpeech::frame(const A11yMenuState& state) {
     bool arrived = !m_seen || state.menu != m_menu;
-    bool reader = reader_hint(state.menu).has_value();
+    bool reader = menu_reader(state.menu) != nullptr;
     bool moved = !arrived && state.hovered != m_hovered && is_tree_screen(state.menu);
     bool row_changed = !arrived && reader && state.center_text != m_center_text;
     std::optional<std::string> value = row_value(state);
@@ -128,7 +117,7 @@ void MenuSpeech::frame(const A11yMenuState& state) {
         m_speech.announce(hovered_entry(state), Mode::interrupt);
     } else if (row_changed) {
         std::string out = row(state);
-        add_sentence(out, description(nullptr, state.center_text_string, where_text(state)));
+        add_sentence(out, description(nullptr, state.center_text_string, center_text_where(state)));
         m_speech.announce(out, Mode::interrupt);
     } else if (value_changed) {
         m_speech.announce(capitalised(*value), Mode::interrupt);
@@ -145,10 +134,10 @@ std::string MenuSpeech::opening(const A11yMenuState& state) {
     add_sentence(out, *name);
     if (is_tree_screen(state.menu)) {
         add_sentence(out, hovered_entry(state));
-    } else if (std::optional<std::string_view> hint = reader_hint(state.menu)) {
+    } else if (const Reader* reader = menu_reader(state.menu)) {
         add_sentence(out, row(state));
-        add_sentence(out, *hint);
-        add_sentence(out, description(nullptr, state.center_text_string, where_text(state)));
+        add_sentence(out, reader->hint);
+        add_sentence(out, description(nullptr, state.center_text_string, center_text_where(state)));
     } else {
         add_sentence(out, "No speech yet.");
     }
@@ -162,22 +151,19 @@ std::string MenuSpeech::hovered_entry(const A11yMenuState& state) {
     } else if (std::optional<std::string_view> name = menu_entry_name(state.menu, state.hovered)) {
         add_sentence(out, *name);
     } else {
-        log_once("[a11y] menu " + std::to_string(state.menu) + " entry " +
-                 std::to_string(state.hovered) + ": not in the menu names table");
+        log_once(entry_where(state) + ": not in the menu names table");
         add_sentence(out, "Unknown entry " + std::to_string(state.hovered));
     }
-    add_sentence(out, description(state.pc_description, state.description,
-                          "[a11y] menu " + std::to_string(state.menu) + " entry " +
-                              std::to_string(state.hovered)));
+    add_sentence(out, description(state.pc_description, state.description, entry_where(state)));
     return out;
 }
 
 std::string MenuSpeech::row(const A11yMenuState& state) {
     std::string out;
-    if (std::optional<std::string_view> name = center_text_name(state.menu, state.center_text)) {
-        out = *name;
+    if (const ReaderRow* named = reader_row(state)) {
+        out = named->name;
     } else {
-        log_once(where_text(state) + ": not in the menu names table");
+        log_once(center_text_where(state) + ": not in the menu names table");
         out = "Unknown row " + std::to_string(state.center_text);
     }
     if (std::optional<std::string> value = row_value(state)) {

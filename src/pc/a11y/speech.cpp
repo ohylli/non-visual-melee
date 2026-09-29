@@ -33,6 +33,11 @@ Config config_from_environment() {
     return config;
 }
 
+bool log_enabled() {
+    static const bool enabled = config_from_environment().log;
+    return enabled;
+}
+
 Speech::Speech(Config config, std::unique_ptr<ScreenReaderBridge> bridge)
     : m_config(config), m_bridge(std::move(bridge)) {}
 

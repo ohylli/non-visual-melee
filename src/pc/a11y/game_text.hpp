@@ -30,4 +30,8 @@ struct DecodedText {
  * and calls into other strings. */
 DecodedText decode_game_text(const std::uint8_t* bytes, const GameTextSource& source);
 
+/* Decoded text for a log line, its breaks shown as " / " and its unknown
+ * glyphs left marked. */
+std::string one_line(std::string text);
+
 }  // namespace a11y

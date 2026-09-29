@@ -146,29 +146,35 @@ constexpr ScreenName kScreens[] = {
     {MenuKind::MENU_KIND_RECORDS_MISC, "Misc. Records", false, {}},
 };
 
-struct CenterTextName {
-    MenuKind menu;
-    int center_text;
-    std::string_view name;
-};
-
 /* Row names are drawn in capitals ("CHANNEL") and written here in normal
- * capitalisation. The Multi-Man Melee choices are the names on its cards. */
-constexpr CenterTextName kCenterTexts[] = {
-    {MenuKind::MENU_KIND_SETTINGS_SOUND, kTextSoundChannel, "Channel"},
-    {MenuKind::MENU_KIND_SETTINGS_SOUND, kTextSoundVolume, "Volume"},
-    {MenuKind::MENU_KIND_DISPLAY, kTextDisplay, "Deflicker"},
-    {MenuKind::MENU_KIND_MULTI_VS, kTextMultiManFirst, "10-Man Melee"},
-    {MenuKind::MENU_KIND_MULTI_VS, kTextMultiManFirst + 1, "100-Man Melee"},
-    {MenuKind::MENU_KIND_MULTI_VS, kTextMultiManFirst + 2, "3-Minute Melee"},
-    {MenuKind::MENU_KIND_MULTI_VS, kTextMultiManFirst + 3, "15-Minute Melee"},
-    {MenuKind::MENU_KIND_MULTI_VS, kTextMultiManFirst + 4, "Endless Melee"},
-    {MenuKind::MENU_KIND_MULTI_VS, kTextMultiManFirst + 5, "Cruel Melee"},
+ * capitalisation. The Multi-Man Melee choices are the names on its cards, in
+ * cursor order. */
+constexpr ReaderRow kSoundRows[] = {
+    {187, "Channel", RowValue::channel},
+    {188, "Volume", RowValue::balance},
+};
+constexpr ReaderRow kDisplayRows[] = {
+    {189, "Deflicker", RowValue::deflicker},
+};
+constexpr ReaderRow kMultiManChoices[] = {
+    {171, "10-Man Melee", RowValue::none},
+    {172, "100-Man Melee", RowValue::none},
+    {173, "3-Minute Melee", RowValue::none},
+    {174, "15-Minute Melee", RowValue::none},
+    {175, "Endless Melee", RowValue::none},
+    {176, "Cruel Melee", RowValue::none},
 };
 
-static_assert(static_cast<int>(MenuKind::MENU_KIND_SETTINGS_SOUND) == kMenuSound);
-static_assert(static_cast<int>(MenuKind::MENU_KIND_DISPLAY) == kMenuDisplay);
-static_assert(static_cast<int>(MenuKind::MENU_KIND_MULTI_VS) == kMenuMultiMan);
+struct ScreenReader {
+    MenuKind menu;
+    Reader reader;
+};
+
+constexpr ScreenReader kReaders[] = {
+    {MenuKind::MENU_KIND_SETTINGS_SOUND, {"Left and right to change.", kSoundRows}},
+    {MenuKind::MENU_KIND_DISPLAY, {"A to change.", kDisplayRows}},
+    {MenuKind::MENU_KIND_MULTI_VS, {"Left and right to choose.", kMultiManChoices}},
+};
 
 const ScreenName* find_screen(int menu) {
     for (const ScreenName& screen : kScreens) {
@@ -223,13 +229,22 @@ std::optional<std::string_view> menu_entry_name(int menu, int entry) {
     return std::nullopt;
 }
 
-std::optional<std::string_view> center_text_name(int menu, int center_text) {
-    for (const CenterTextName& name : kCenterTexts) {
-        if (static_cast<int>(name.menu) == menu && name.center_text == center_text) {
-            return name.name;
+const ReaderRow* Reader::row(int center_text) const {
+    for (const ReaderRow& row : rows) {
+        if (row.center_text == center_text) {
+            return &row;
         }
     }
-    return std::nullopt;
+    return nullptr;
+}
+
+const Reader* menu_reader(int menu) {
+    for (const ScreenReader& screen : kReaders) {
+        if (static_cast<int>(screen.menu) == menu) {
+            return &screen.reader;
+        }
+    }
+    return nullptr;
 }
 
 std::string_view channel_word(bool mono) {
