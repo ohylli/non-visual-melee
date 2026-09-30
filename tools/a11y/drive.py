@@ -172,8 +172,9 @@ class KeyPipe:
 class Output:
     """Every stdout and stderr line of the game, in arrival order."""
 
-    def __init__(self, proc, out_file, show):
+    def __init__(self, proc, out_file, show, prefix=""):
         self.lines = []
+        self.prefix = prefix
         self.cond = threading.Condition()
         self.out_file = out_file
         self.show = show
@@ -191,7 +192,7 @@ class Output:
                 self.out_file.flush()
                 self.cond.notify_all()
             if self.show is None or any(s in line for s in self.show):
-                print(line, flush=True)
+                print(self.prefix + line, flush=True)
         with self.cond:
             self.open_streams -= 1
             self.cond.notify_all()
@@ -436,115 +437,143 @@ def quit_game(proc, timeout=15):
     return proc.wait()
 
 
-def run(args, steps):
-    env = dict(os.environ)
-    pipe_name = rf"\\.\pipe\melee-drive-{os.getpid()}"
-    env.update({
-        "MELEE_KEY_FIFO": pipe_name,
-        "MELEE_INPUT_TRACE": "1",
-        # D-pad steering on character select, which speech off would
-        # otherwise switch off.
-        "MELEE_A11Y_STEER": "1",
-        "MELEE_BOOT_SCENE": args.scene,
-        "MELEE_NO_ATTRACT": "1",
-        "MELEE_EXIT_AFTER_FRAMES": str(args.max_frames),
-        "MELEE_LOG_FILE": os.path.abspath(args.out) + ".game.log",
-    })
-    if not args.speech:
-        env["MELEE_A11Y"] = "0"
-    if not args.sound:
-        env["SDL_AUDIO_DRIVER"] = "dummy"
-    if not args.focus:
-        env["SDL_WINDOW_ACTIVATE_WHEN_SHOWN"] = "0"
-    exe = os.path.join(REPO, "build", "melee.exe")
-    disc = os.path.join(REPO, args.disc)
+class Game:
+    """One run of the game: launched silent and in the background unless
+    args say otherwise, fed input over its own key pipe, its output saved to
+    out and printed as it comes. step() runs one script step against it.
+    A name tells two games apart in the printed output and in the pipe's
+    name; env holds settings of this run over the ones every run gets."""
 
-    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
-    pipe = KeyPipe(pipe_name)
-    with open(args.out, "w", encoding="utf-8") as out_file:
-        proc = subprocess.Popen([exe, "--no-card", disc], cwd=REPO, env=env,
-                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        output = Output(proc, out_file, None if args.all else DEFAULT_SHOW)
-        cursor = 0
-        failed = False
-        captured = {}
+    def __init__(self, args, out, env=None, name=None):
+        self.args = args
+        self.name = name
+        self.cursor = 0
+        self.captured = {}
+        full_env = dict(os.environ)
+        pipe_name = rf"\\.\pipe\melee-drive-{os.getpid()}" + (f"-{name}" if name else "")
+        full_env.update({
+            "MELEE_KEY_FIFO": pipe_name,
+            "MELEE_INPUT_TRACE": "1",
+            # D-pad steering on character select, which speech off would
+            # otherwise switch off.
+            "MELEE_A11Y_STEER": "1",
+            "MELEE_BOOT_SCENE": args.scene,
+            "MELEE_NO_ATTRACT": "1",
+            "MELEE_EXIT_AFTER_FRAMES": str(args.max_frames),
+            "MELEE_LOG_FILE": os.path.abspath(out) + ".game.log",
+        })
+        if not args.speech:
+            full_env["MELEE_A11Y"] = "0"
+        if not args.sound:
+            full_env["SDL_AUDIO_DRIVER"] = "dummy"
+        if not args.focus:
+            full_env["SDL_WINDOW_ACTIVATE_WHEN_SHOWN"] = "0"
+        full_env.update(env or {})
+        exe = os.path.join(REPO, "build", "melee.exe")
+        disc = os.path.join(REPO, args.disc)
 
-        def step(msg):
-            print(f">> {msg}", flush=True)
-            out_file.write(f">> {msg}\n")
+        os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+        self.pipe = KeyPipe(pipe_name)
+        self.out_file = open(out, "w", encoding="utf-8")
+        self.proc = subprocess.Popen([exe, "--no-card", disc], cwd=REPO, env=full_env,
+                                     stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.output = Output(self.proc, self.out_file, None if args.all else DEFAULT_SHOW,
+                             f"{name}| " if name else "")
 
-        def press(keys, hold):
-            pipe.send(f"{keys} {hold}", args.timeout, proc)
-            if output.wait_for(output.mark(), pad_pressed(keys), 5 + hold / 1000) is None:
-                step("warning: no pad change seen for that press")
+    def note(self, msg):
+        print(f">> {self.name + ' ' if self.name else ''}{msg}", flush=True)
+        self.out_file.write(f">> {msg}\n")
 
-        def matched(rx, i):
-            """Line i matched rx: keeps its named groups."""
-            captured.update(rx.search(output.lines[i]).groupdict())
-            return i + 1
+    def press(self, keys, hold):
+        self.pipe.send(f"{keys} {hold}", self.args.timeout, self.proc)
+        if self.output.wait_for(self.output.mark(), pad_pressed(keys), 5 + hold / 1000) is None:
+            self.note("warning: no pad change seen for that press")
 
-        try:
-            if args.focus:
-                step("focus the game window")
-                how = focus_window(proc, args.timeout)
-                step(f"focused by {how}" if how else "warning: Windows kept the game window in the background")
-            for words in steps:
-                if proc.poll() is not None:
-                    raise ScriptError(f"the game exited early with code {proc.returncode}")
-                cmd, rest = words[0].lower(), words[1:]
-                step(" ".join(words))
-                if cmd == "press" and rest:
-                    keys, hold, until, times = parse_press(rest, captured)
-                    cursor = output.mark()
-                    for n in range(1, times + 1):
-                        press(keys, hold)
-                        if until is None:
-                            break
-                        i = output.wait_for(cursor, until.search, UNTIL_SETTLE)
-                        if i is not None:
-                            step(f"{until.pattern!r} after {n} press(es)")
-                            cursor = matched(until, i)
-                            break
-                    else:
-                        raise ScriptError(f"no {until.pattern!r} after {times} presses")
-                elif cmd == "search" and len(rest) >= 2:
-                    rx = pattern(rest[0], captured)
-                    presses = parse_search(rest[1:])
-                    cursor = output.mark()
-                    for n, keys in enumerate(presses, 1):
-                        mark = output.mark()
-                        press(keys, 120)
-                        output.wait_for(mark, lambda line: SPEECH in line or rx.search(line), UNTIL_SETTLE)
-                        i = output.wait_for(cursor, rx.search, 0)
-                        if i is not None:
-                            step(f"{rx.pattern!r} after {n} press(es)")
-                            cursor = matched(rx, i)
-                            break
-                    else:
-                        raise ScriptError(f"no {rx.pattern!r} after {len(presses)} presses")
-                elif cmd == "wait" and len(rest) in (1, 2):
-                    timeout = float(rest[1]) if len(rest) == 2 else args.timeout
-                    rx = pattern(rest[0], captured)
-                    i = output.wait_for(cursor, rx.search, timeout)
-                    if i is None:
-                        raise ScriptError(f"timed out after {timeout:g} s waiting for {rest[0]!r}")
-                    cursor = matched(rx, i)
-                elif cmd == "sleep" and len(rest) == 1:
-                    time.sleep(float(rest[0]))
-                elif cmd == "shot" and len(rest) == 1:
-                    screenshot(proc.pid, rest[0])
-                elif cmd == "quit" and not rest:
+    def matched(self, rx, i):
+        """Line i matched rx: keeps its named groups."""
+        self.captured.update(rx.search(self.output.lines[i]).groupdict())
+        return i + 1
+
+    def step(self, words):
+        """Run one script step; True for quit. Raises ScriptError when it
+        fails."""
+        if self.proc.poll() is not None:
+            raise ScriptError(f"the game exited early with code {self.proc.returncode}")
+        output, captured = self.output, self.captured
+        cmd, rest = words[0].lower(), words[1:]
+        self.note(" ".join(words))
+        if cmd == "press" and rest:
+            keys, hold, until, times = parse_press(rest, captured)
+            self.cursor = output.mark()
+            for n in range(1, times + 1):
+                self.press(keys, hold)
+                if until is None:
                     break
-                else:
-                    raise ScriptError(f"bad step: {' '.join(words)}")
-        except ScriptError as e:
-            step(f"FAILED: {e}")
-            failed = True
-        finally:
-            code = quit_game(proc)
-            pipe.close()
-            time.sleep(0.2)  # let the reader threads drain the last lines
-            step(f"game exited with code {code}")
+                i = output.wait_for(self.cursor, until.search, UNTIL_SETTLE)
+                if i is not None:
+                    self.note(f"{until.pattern!r} after {n} press(es)")
+                    self.cursor = self.matched(until, i)
+                    break
+            else:
+                raise ScriptError(f"no {until.pattern!r} after {times} presses")
+        elif cmd == "search" and len(rest) >= 2:
+            rx = pattern(rest[0], captured)
+            presses = parse_search(rest[1:])
+            self.cursor = output.mark()
+            for n, keys in enumerate(presses, 1):
+                mark = output.mark()
+                self.press(keys, 120)
+                output.wait_for(mark, lambda line: SPEECH in line or rx.search(line), UNTIL_SETTLE)
+                i = output.wait_for(self.cursor, rx.search, 0)
+                if i is not None:
+                    self.note(f"{rx.pattern!r} after {n} press(es)")
+                    self.cursor = self.matched(rx, i)
+                    break
+            else:
+                raise ScriptError(f"no {rx.pattern!r} after {len(presses)} presses")
+        elif cmd == "wait" and len(rest) in (1, 2):
+            timeout = float(rest[1]) if len(rest) == 2 else self.args.timeout
+            rx = pattern(rest[0], captured)
+            i = output.wait_for(self.cursor, rx.search, timeout)
+            if i is None:
+                raise ScriptError(f"timed out after {timeout:g} s waiting for {rest[0]!r}")
+            self.cursor = self.matched(rx, i)
+        elif cmd == "sleep" and len(rest) == 1:
+            time.sleep(float(rest[0]))
+        elif cmd == "shot" and len(rest) == 1:
+            screenshot(self.proc.pid, rest[0])
+        elif cmd == "quit" and not rest:
+            return True
+        else:
+            raise ScriptError(f"bad step: {' '.join(words)}")
+        return False
+
+    def close(self):
+        """Quit the game if it still runs; its exit code."""
+        code = quit_game(self.proc)
+        self.pipe.close()
+        time.sleep(0.2)  # let the reader threads drain the last lines
+        self.note(f"game exited with code {code}")
+        self.out_file.close()
+        return code
+
+
+def run(args, steps):
+    game = Game(args, args.out)
+    failed = False
+    try:
+        if args.focus:
+            game.note("focus the game window")
+            how = focus_window(game.proc, args.timeout)
+            game.note(f"focused by {how}" if how else "warning: Windows kept the game window in the background")
+        for words in steps:
+            if game.step(words):
+                break
+    except ScriptError as e:
+        game.note(f"FAILED: {e}")
+        failed = True
+    finally:
+        code = game.close()
     return 1 if failed or code != 0 else 0
 
 

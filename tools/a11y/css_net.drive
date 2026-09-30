@@ -1,0 +1,90 @@
+# Character select steered online, for tools/a11y/drive_net.py: two
+# instances in one session over loopback. Player 1 (instance a) steps with
+# the D-pad to a portrait three columns and one row from the first it
+# reaches, chooses, and steps down to its player slot; player 2 (instance b)
+# chooses by stick. Each hears the other's choice. Then Start into the
+# match.
+#   python tools/a11y/drive_net.py [--delay N] [--sim-delay-ms MS] tools/a11y/css_net.drive
+# Each step waits for its glide to arrive, so the summary lists every glide's
+# frames at the run's delay.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive), once the
+# session is up: both instances walk the menus a's presses move.
+a wait "net: rollback with"
+b wait "net: rollback with"
+a wait "state 0 scene 0$"
+a press Start until "boot scene: game mode"
+a press A until "boot scene: state 0 scene 1$"
+a wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# VS. Mode, Melee.
+a press Down
+a wait '"VS\. Mode\. '
+a press A
+a wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+a press A
+a wait '"Character select\. Player 1, no character\."'
+b wait '"Character select\. Player 2, no character\."'
+sleep 1
+
+# Up from the hand's start to player 1's button, and into the bottom row at
+# Pichu; the coin jumps into the hand on the way.
+a press DUp
+a wait ': "Player 1: closed"$'
+a wait 'glide to "Player 1: closed" ended after \d+ frames: arrived'
+a press DUp
+a wait ': "Pichu"$'
+a wait 'glide to "Pichu" ended after \d+ frames: arrived'
+
+# Three columns right and one row up, to Kirby; A chooses.
+a press DRight
+a wait ': "Pikachu"$'
+a wait 'glide to "Pikachu" ended after \d+ frames: arrived'
+a press DRight
+a wait ': "Jigglypuff"$'
+a wait 'glide to "Jigglypuff" ended after \d+ frames: arrived'
+a press DRight
+a wait ': "Mewtwo"$'
+a wait 'glide to "Mewtwo" ended after \d+ frames: arrived'
+a press DUp
+a wait ': "Kirby"$'
+a wait 'glide to "Kirby" ended after \d+ frames: arrived'
+a press A
+b wait ': "Player 1: Kirby"$'
+sleep 0.5
+
+# Down through the bottom row into the player slots, and left along them to
+# player 1's.
+a press DDown
+a wait ': "Mewtwo"$'
+a wait 'glide to "Mewtwo" ended after \d+ frames: arrived'
+a search ': "Player 1[: ][^"]*"$' DDown DLeft*6
+a wait 'glide to "Player 1[: ][^"]*" ended after \d+ frames: arrived'
+
+# Player 2 pushes the stick up into the portraits, where the coin jumps into
+# the hand and the carried coin names each portrait it enters. Once the
+# hand stops, A chooses, and player 1 hears the choice.
+b press Up 450
+b wait '"Holding your coin'
+sleep 1
+b press A
+a wait ': "Player 2: (Dr\. Mario|Mario|Luigi|Bowser|Peach|Yoshi|DK|C\. Falcon|Ganondorf|Falco|Fox|Ness|Ice Climbers|Kirby|Samus|Zelda|Link|Young Link|Pichu|Pikachu|Jigglypuff|Mewtwo|Mr\. Game & Watch|Marth|Roy)(\. Ready to fight\. Press Start\.)?"$'
+b wait 'Ready to fight\. Press Start\.'
+sleep 1
+
+# Start leaves for stage select. Online each player picks a stage there, and
+# a coin flip on the session's seed chooses between the two picks; Start is
+# a random stage.
+a press Start
+a wait '"Stage select\. '
+b wait '"Stage select\. '
+sleep 1
+a press Start
+a wait "sss: we picked"
+b press Start
+b wait "sss: we picked"
+a wait 'boot scene: state \d+ scene 2$'
+b wait 'boot scene: state \d+ scene 2$'
+sleep 3
