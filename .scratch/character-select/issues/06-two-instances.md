@@ -73,3 +73,28 @@ Evidence:
 - Harmless: each side drops a few early datagrams for session 00000000 before the guest learns the host's session id.
 
 Route to character select for steps 2 and 3: the direct session from boot, instance a driving the menus exactly as the offline scripts do. Instance b's presses land on port 2, so b can choose its own character by stick without a lobby.
+
+### 2026-09-30: steps 2 and 3, the driver and runs at five delays, all passed
+
+The driver is `tools/a11y/drive_net.py`; `drive.py`'s run became a `Game` class it reuses, one per instance, each with its own key pipe. Script steps begin with `a` or `b`; waits look at that instance's output only. After the script it checks both logs for a session and for `net: DESYNC`, and compares the two recordings over the frames both recorded in the session: the side that leaves first records its next frame offline, its peer's port unplugged (`err` 0xff), so the comparison stops at the first `net: disconnected at frame` of either log. The script is `tools/a11y/css_net.drive`.
+
+What the script does: a walks the menus into VS. Mode, Melee (b's menu speech follows along); a steps Up to its button, Up to Pichu, Right three times to Mewtwo, Up to Kirby, waiting for each glide's arrival, and chooses; b hears "Player 1: Kirby"; a steps Down to Mewtwo and on into the player slots to its own ("Player 1: human"). b pushes the stick up 450 ms, hears "Holding your coin" and the portraits the coin enters, and chooses (Ness in every run); a hears "Player 2: Ness. Ready to fight. Press Start." Then Start on a, and on stage select Start on both.
+
+Found on the way:
+
+- Online stage select needs a pick from each player (`netStageSel_*` in `mnstagesel.c`); Start on one side alone leaves the match waiting. Noted in the primer.
+- Start pressed within milliseconds of Ready to Fight appearing is ignored; the script waits a second, as the offline scripts do.
+
+Results, every run passing (no DESYNC, recordings equal, both in the match, rollbacks 0):
+
+| Run | Delay | Frames recorded in agreement | Player 1: closed | Pichu | Each one-portrait step | Player 1: human |
+|---|---|---|---|---|---|---|
+| `--delay 0` | 0 | 1684 | 17 | 11 | 7 | 14 |
+| `--delay 2` | 2 | 1722 | 19 | 13 | 9 (Player 3: closed 10) | 16 |
+| `--delay 6` | 6 | 1725 | 23 | 17 | 13 | 20 |
+| `--delay 10` | 10 | 1823 | 27 | 21 | 17 | 24 |
+| `--sim-delay-ms 100` | auto: 2, then 8 at frame 240, 4 at 1620 (ping 203 ms) | 1635 | 25 | 19 | 15 | 22 |
+
+Each glide took its delay-0 frames plus the input delay and arrived. The one-portrait steps are Pikachu, Jigglypuff, Mewtwo, Kirby and Mewtwo again. Glides to "Player 3: closed" and "Player 2: closed" are passed through by the next press of the search, so not every run logs their arrival. The slow-link run's glide frames match delay 8, the delay in force during character select.
+
+Step 4 (fork against base port) remains.
