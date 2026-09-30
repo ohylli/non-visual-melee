@@ -38,7 +38,8 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/menu_names.cpp
         ${CMAKE_CURRENT_LIST_DIR}/menu_text.cpp
         ${CMAKE_CURRENT_LIST_DIR}/css_speech.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/css_names.cpp)
+        ${CMAKE_CURRENT_LIST_DIR}/css_names.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/css_targets.cpp)
 target_include_directories(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 # game_access.c reads the decomp's structs, so it lays out their bitfields as
 # the game's own files do (melee_game's options in CMakeLists.txt); MinGW's
@@ -147,12 +148,23 @@ if (TARGET unit_tests)
             ${CMAKE_CURRENT_LIST_DIR}/test_css_speech.cpp
             ${CMAKE_CURRENT_LIST_DIR}/css_speech.cpp
             ${CMAKE_CURRENT_LIST_DIR}/css_names.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/css_targets.cpp
             ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
     target_include_directories(css_speech_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
     target_compile_options(css_speech_test PRIVATE -UNDEBUG)
     add_test(NAME css_speech COMMAND css_speech_test)
     set_tests_properties(css_speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests css_speech_test)
+
+    # Character select's targets against hand-written snapshots.
+    add_executable(css_targets_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_css_targets.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/css_targets.cpp)
+    target_include_directories(css_targets_test PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(css_targets_test PRIVATE -UNDEBUG)
+    add_test(NAME css_targets COMMAND css_targets_test)
+    set_tests_properties(css_targets PROPERTIES LABELS melee)
+    add_dependencies(unit_tests css_targets_test)
 
     # The game text decoder against hand-written byte code.
     add_executable(game_text_test EXCLUDE_FROM_ALL

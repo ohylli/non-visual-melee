@@ -5,10 +5,15 @@
  * opening says the player and their character; a coin the hand carries says
  * each portrait it enters, and being picked up (with the portrait under it),
  * cleared or put back on its earlier choice; the costume changing says its
- * number. A choice is silent: the game's announcer names the character. It
- * compares each snapshot with the previous one and touches no game state
- * itself. */
+ * number. A free hand says each button or slider knob it reaches, a slider
+ * says being grabbed, its value and being let go, and a player slot or team
+ * the hand changes says its new state. Ready to Fight appearing is said.
+ * A choice is silent: the game's announcer names the character. Online,
+ * other players' choices and slot changes are queued behind; offline they
+ * are the players in the room, and silent. It compares each snapshot with
+ * the previous one and touches no game state itself. */
 #pragma once
+#include "css_targets.hpp"
 #include "game_access.h"
 #include <set>
 #include <string>
@@ -29,19 +34,30 @@ public:
         m_pickup_pending = false;
     }
 
-    /* The screen's state this frame. Speaks what the local hand changed since
-     * the last one, interrupting; nothing when nothing did. */
+    /* The screen's state this frame. Speaks what changed since the last one:
+     * the local hand's doings interrupting, other players' queued; nothing
+     * when nothing did. */
     void frame(const A11yCssState& state);
 
 private:
     std::string opening(const A11yCssState& state);
-    /* The announcement for what changed from last to now, or empty. */
-    std::string change_announcement(const A11yCssState& last, const A11yCssState& now);
+    /* What the local hand's coin did from last to now, or empty. */
+    std::string coin_announcement(const A11yCssState& last, const A11yCssState& now);
     /* The local hand holds the coin of slot coin, over the portrait now shows
      * under it: "Holding your coin. Fox". */
     std::string holding(const A11yCssState& now, int coin);
     /* The local hand let go of the coin of slot coin. */
     std::string dropped(const A11yCssState& last, const A11yCssState& now, int coin);
+    /* A slider the local hand grabbed, moved or let go of, or empty. */
+    std::string slider_announcement(const A11yCssState& last, const A11yCssState& now);
+    /* Changes to the player slots and the Teams rule: the local hand's
+     * appended to mine, other players' to others. */
+    void slot_announcements(
+        const A11yCssState& last, const A11yCssState& now, std::string& mine, std::string& others);
+    /* A target with its value: "Player 2: CPU", "Teams: off". */
+    std::string target_words(const A11yCssState& state, Target target);
+    /* A player slot with its kind and character: "Player 2: CPU, Yoshi". */
+    std::string slot_words(const A11yCssState& state, int slot);
     /* A character's name; a missing one is spoken by number and logged. */
     std::string name(A11yCharacter character);
 

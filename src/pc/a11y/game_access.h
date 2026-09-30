@@ -14,6 +14,8 @@ extern "C" {
 struct CSSData;
 struct CSSDoorsData;
 struct CSSIcon;
+struct CSSTag;
+struct HSD_JObj;
 
 /* A disc pointer as stored in game data, as a host address; NULL when it is
  * null or lands outside the game's memory. */
@@ -63,6 +65,18 @@ void a11y_game_menu_state(int center_text, A11yMenuState* out);
 /* Character select: four player slots and 25 portraits. */
 enum { A11Y_CSS_SLOTS = 4, A11Y_CSS_PORTRAITS = 25 };
 
+/* What the frame hook hands over (pc_a11y_css_frame). */
+typedef struct A11yCssScreen {
+    const struct CSSData* css;
+    const struct CSSDoorsData* doors;
+    const struct CSSIcon* icons;
+    const struct CSSTag* tags;
+    struct HSD_JObj* models;
+    int hand_count;
+    int pending_exit;
+    int ready;
+} A11yCssScreen;
+
 /* One hand as the hand hook reported it, in the raw numbers of mncharsel.c's
  * cursor struct; seen is false until the hook has reported it since the scene
  * was entered. */
@@ -74,6 +88,30 @@ typedef struct A11yCssHandReport {
     float y;
 } A11yCssHandReport;
 
+/* A rectangle in the screen's units, y growing upwards. The game's tests are
+ * strict: a point on an edge is outside. */
+typedef struct A11yCssRect {
+    float left;
+    float right;
+    float top;
+    float bottom;
+} A11yCssRect;
+
+/* A slider's knob: the point a free hand grabs it from, within the game's
+ * grab distance. known is false where the game's model has no such joint. */
+typedef struct A11yCssKnob {
+    bool known;
+    float x;
+    float y;
+} A11yCssKnob;
+
+/* The sliders of a player slot. */
+typedef enum A11yCssSlider {
+    A11Y_CSS_NO_SLIDER,
+    A11Y_CSS_CPU_LEVEL,
+    A11Y_CSS_HANDICAP,
+} A11yCssSlider;
+
 /* The local player's hand. */
 typedef struct A11yCssHand {
     /* False until the hand has updated once in this scene. A hand whose
@@ -81,6 +119,9 @@ typedef struct A11yCssHand {
     bool present;
     /* The player slot whose coin the hand carries, or -1. */
     int coin;
+    /* The slider the hand holds, and whose; -1 while it holds none. */
+    A11yCssSlider slider;
+    int slider_slot;
     /* Position in the screen's units: x from -35 to 26, y from -22 to 25. */
     float x;
     float y;
@@ -111,6 +152,29 @@ typedef struct A11yCssSlot {
     A11yCharacter character;
     /* The costume's number, from 0. */
     int costume;
+    /* Some hand carries the slot's coin. */
+    bool carried;
+    /* The slot's own hand (the hand of the same port) holds a coin or a
+     * slider; its HMN/CPU button does not react meanwhile. */
+    bool hand_holding;
+    /* The team in a team match: 0 red, 1 blue, 2 green. */
+    int team;
+    /* The sliders' values, 1 to 9, and whether some hand holds each. */
+    int cpu_level;
+    int handicap;
+    bool cpu_level_held;
+    bool handicap_held;
+    /* The slot's name tag window is open. */
+    bool name_tags_open;
+    /* The HMN/CPU and team buttons, the sliders' knobs, and the name box
+     * (read for the local player's slot only), where the game tests them;
+     * VS modes only, and not while the rules screen or name entry opens or
+     * is open. */
+    A11yCssRect slot_button;
+    A11yCssRect team_button;
+    A11yCssKnob cpu_level_knob;
+    A11yCssKnob handicap_knob;
+    A11yCssRect name_box;
 } A11yCssSlot;
 
 /* One portrait. */
@@ -119,35 +183,59 @@ typedef struct A11yCssPortrait {
     A11yCharacter character;
     /* A locked portrait is drawn as "?" or not at all, and never hovered. */
     bool locked;
-    /* The rectangle a carried coin hovers it in, in the screen's units. */
-    float left;
-    float right;
-    float top;
-    float bottom;
+    /* The rectangle a carried coin hovers it in. */
+    A11yCssRect rect;
 } A11yCssPortrait;
+
+/* Where the screen is going: mncharsel.c's pending exit, by its numbers. */
+typedef enum A11yCssExit {
+    A11Y_CSS_STAYING = 0,
+    /* Start was pressed with Ready to Fight shown; the next frame may still
+     * refuse and stay. */
+    A11Y_CSS_TO_STAGE_SELECT = 1,
+    A11Y_CSS_BACK = 2,
+    /* The rules screen or name entry is asked for, and opens next frame
+     * inside this scene. */
+    A11Y_CSS_TO_RULES = 3,
+    A11Y_CSS_TO_NAME_ENTRY = 4,
+    /* The rules screen or name entry is open. Leaving it builds the screen
+     * afresh, with the hands at home, as if arriving. */
+    A11Y_CSS_AWAY = 5,
+} A11yCssExit;
 
 /* What character select shows, read once a frame by its reader. */
 typedef struct A11yCssState {
     /* 4 in VS modes, 1 in single-player modes. */
     int hand_count;
-    /* The screen has begun to leave, or opened the rules screen or name
-     * entry. */
-    bool leaving;
+    A11yCssExit exit;
+    /* The session is online: other players' changes are spoken. Set by the
+     * caller, not read from the screen. */
+    bool online;
     /* The local player's slot, and the player number shown for them (0 for
      * "P1"); they differ in single-player modes, where the one slot belongs
      * to whichever port started the mode. */
     int local_slot;
     int local_player;
     A11yCssHand hand;
+    /* The player slots the buttons of a VS mode reach: 3 in Camera mode,
+     * whose fourth slot is the camera, else 4. */
+    int slot_count;
+    /* The top bar's Teams button and rules header exist; the handicap rule
+     * is on, so each slot shows a handicap slider. */
+    bool has_teams_button;
+    bool has_rules_button;
+    bool handicap_sliders;
+    /* A team match. */
+    bool teams;
+    /* Ready to Fight is shown. */
+    bool ready;
     A11yCssSlot slots[A11Y_CSS_SLOTS];
     A11yCssPortrait portraits[A11Y_CSS_PORTRAITS];
 } A11yCssState;
 
-/* Fills the snapshot from what the frame hook passed (pc_a11y_css_frame), the
- * hands the hand hook reported, indexed by hand, and the port the local
- * player drives. */
-void a11y_game_css_state(const struct CSSData* css, const struct CSSDoorsData* doors,
-    const struct CSSIcon* icons, int hand_count, int pending_exit,
+/* Fills the snapshot from what the frame hook passed, the hands the hand hook
+ * reported, indexed by hand, and the port the local player drives. */
+void a11y_game_css_state(const A11yCssScreen* screen,
     const A11yCssHandReport reports[A11Y_CSS_SLOTS], int local_port, A11yCssState* out);
 
 #ifdef __cplusplus

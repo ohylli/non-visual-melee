@@ -1,0 +1,75 @@
+# Character select's player slots, sliders and top bar with the stick: the
+# hand's buttons, making player 2 a CPU, its CPU level slider, a choice that
+# brings Ready to Fight, the Teams button, and the rules screen and back.
+# Run with the default --scene title:
+#   python tools/a11y/drive.py tools/a11y/css_slots.drive
+# Positions are in the screen's units: the hand starts at (-31, -21.5) and a
+# full push moves it about 1.24 a frame. Every slot is closed on arrival, and
+# player 2's controller is unplugged, so its button skips "human".
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# VS. Mode, Melee.
+press Down
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press A
+wait '"Character select\. Player 1, no character\."'
+sleep 1
+
+# Up onto player 1's HMN/CPU button, right onto player 2's, and A until it
+# is a CPU; a new CPU gets a random character.
+press Up 250
+wait '"Player 1: closed"'
+press Right 200
+wait '"Player 2: closed"'
+press A until '"Player 2: CPU, '
+sleep 0.5
+
+# Down to its CPU level slider's knob; grab it, push it right, let go.
+press Down 170
+wait '"Player 2 CPU level: 1"'
+press A
+wait '"Holding the slider"'
+press Right 100
+wait '"Level [2-9]"'
+press A
+wait '"Released"'
+sleep 0.5
+
+# Up into the portraits, where player 1's coin jumps into the hand; A
+# chooses, and with player 2's random character the match is ready.
+press Up 300
+wait '"Holding your coin'
+wait ': "(Dr\. Mario|Mario|Luigi|Bowser|Peach|Yoshi|DK|C\. Falcon|Ganondorf|Falco|Fox|Ness|Ice Climbers|Kirby|Samus|Zelda|Link|Young Link|Pichu|Pikachu|Jigglypuff|Mewtwo|Mr\. Game & Watch|Marth|Roy)"$'
+press A
+wait '"Ready to fight\. Press Start\."'
+sleep 0.5
+
+# Up to the top bar and left to the Teams button. A team match of two red
+# players is not ready; back to free-for-all, it is again.
+press Up 400
+sleep 0.3
+press Left 300
+wait '"Teams: off"'
+press A
+wait '"Teams: on"'
+press A
+wait '"Teams: off\. Ready to fight\. Press Start\."'
+
+# Right to the rules header; A opens the rules screen, B comes back to a
+# screen built afresh.
+press Right 250
+wait '"Rules"'
+press A
+wait '"Custom Rules\. No speech yet\."'
+sleep 1
+press B
+wait '"Character select\. Player 1, '

@@ -1,10 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Character select speech against a fake screen reader bridge, fed snapshots
- * of the screen written by hand. Links css_speech.cpp, css_names.cpp and
- * speech.cpp only, so this file supplies the pc_log_line that main.c normally
- * provides. */
+ * of the screen written by hand (test_css_screen.hpp). Links css_speech.cpp,
+ * css_names.cpp, css_targets.cpp and speech.cpp only, so this file supplies
+ * the pc_log_line that main.c normally provides. */
 #include "css_speech.hpp"
 #include "speech.hpp"
+#include "test_css_screen.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cstdarg>
@@ -40,50 +41,9 @@ private:
     std::vector<Output>& m_outputs;
 };
 
-/* The characters under the names players know. */
-constexpr A11yCharacter kDrMario = A11Y_CKind_DrMario, kMario = A11Y_CKind_Mario,
-                        kLuigi = A11Y_CKind_Luigi, kBowser = A11Y_CKind_Koopa,
-                        kPeach = A11Y_CKind_Peach, kYoshi = A11Y_CKind_Yoshi,
-                        kDk = A11Y_CKind_Donkey, kFalcon = A11Y_CKind_Captain,
-                        kGanon = A11Y_CKind_Ganon, kFalco = A11Y_CKind_Falco, kFox = A11Y_CKind_Fox,
-                        kNess = A11Y_CKind_Ness, kIceClimbers = A11Y_CKind_PopoNana,
-                        kKirby = A11Y_CKind_Kirby, kSamus = A11Y_CKind_Samus,
-                        kZelda = A11Y_CKind_Zelda, kLink = A11Y_CKind_Link,
-                        kYoungLink = A11Y_CKind_CLink, kPichu = A11Y_CKind_Pichu,
-                        kPikachu = A11Y_CKind_Pikachu, kJigglypuff = A11Y_CKind_Purin,
-                        kMewtwo = A11Y_CKind_Mewtwo, kGameWatch = A11Y_CKind_GameWatch,
-                        kMarth = A11Y_CKind_Mars, kRoy = A11Y_CKind_Emblem;
+using namespace css_test;
 
-/* The portraits in the game's table order (icons in mncharsel.c). */
-constexpr A11yCharacter kPortraitCharacters[A11Y_CSS_PORTRAITS] = {kDrMario, kMario, kLuigi,
-    kBowser, kPeach, kYoshi, kDk, kFalcon, kGanon, kFalco, kFox, kNess, kIceClimbers, kKirby,
-    kSamus, kZelda, kLink, kYoungLink, kPichu, kPikachu, kJigglypuff, kMewtwo, kGameWatch, kMarth,
-    kRoy};
-constexpr int kFoxPortrait = 10;
-constexpr int kNessPortrait = 11;
-constexpr int kYoshiPortrait = 5;
-constexpr int kMarthPortrait = 23;
-/* What a slot's portrait holds from the moment its coin is picked up. */
-constexpr int kPlaceholder = 0xD;
-
-/* VS mode, player 1 at home with no character and a free hand, player 2 a
- * CPU with Yoshi, the others closed; every portrait unlocked. */
-A11yCssState vs_screen() {
-    A11yCssState state{};
-    state.hand_count = A11Y_CSS_SLOTS;
-    state.local_slot = 0;
-    state.local_player = 0;
-    state.hand = A11yCssHand{true, -1, -31.0f, -21.5f};
-    for (A11yCssSlot& slot : state.slots) {
-        slot = A11yCssSlot{A11Y_CSS_CLOSED, -1, -1, A11Y_NO_CHARACTER, 0};
-    }
-    state.slots[0].kind = A11Y_CSS_HUMAN;
-    state.slots[1] = A11yCssSlot{A11Y_CSS_CPU, kYoshiPortrait, kYoshiPortrait, kYoshi, 0};
-    for (int i = 0; i < A11Y_CSS_PORTRAITS; i++) {
-        state.portraits[i].character = kPortraitCharacters[i];
-    }
-    return state;
-}
+constexpr int kPichuPortrait = 18;
 
 /* Player 1's slot with its coin resting on a chosen portrait. */
 void choose(A11yCssState& state, int portrait) {
@@ -127,7 +87,7 @@ struct Fixture {
 
     void frame(const A11yCssState& state) { css.frame(state); }
 
-    /* What was spoken since the last call. */
+    /* What was spoken since the last call, all of it interrupting. */
     std::vector<std::string> spoken() {
         std::vector<std::string> texts;
         for (const Output& output : outputs) {
@@ -136,6 +96,13 @@ struct Fixture {
         }
         outputs.clear();
         return texts;
+    }
+
+    /* What was spoken since the last call, interrupting or queued. */
+    std::vector<Output> said() {
+        std::vector<Output> out = outputs;
+        outputs.clear();
+        return out;
     }
 };
 
@@ -304,7 +271,9 @@ void carrying_the_coin_down_clears_the_character() {
     carry_over(state, 0, -1);
     Fixture f(state);
     state.hand.coin = -1;
-    state.slots[0] = A11yCssSlot{A11Y_CSS_HUMAN, -1, -1, A11Y_NO_CHARACTER, 0};
+    state.slots[0].portrait = -1;
+    state.slots[0].over_portrait = -1;
+    state.slots[0].character = A11Y_NO_CHARACTER;
     f.frame(state);
     assert((f.spoken() == Texts{"No character"}));
 }
@@ -370,8 +339,9 @@ void entering_a_portrait_resets_the_costume_unsaid() {
 void free_hand_over_portraits_says_nothing() {
     A11yCssState state = vs_screen();
     choose(state, kFoxPortrait);
+    state.hand.y = 1.0f;
     Fixture f(state);
-    for (float y = -21.5f; y < 20.0f; y += 2.0f) {
+    for (float y = 1.0f; y < 20.0f; y += 2.0f) {
         state.hand.y = y;
         f.frame(state);
     }
@@ -426,7 +396,7 @@ void single_player_modes_say_only_the_opening() {
 void leaving_screen_says_nothing() {
     A11yCssState state = vs_screen();
     Fixture f(state);
-    state.leaving = true;
+    state.exit = A11Y_CSS_TO_STAGE_SELECT;
     pick_up(state, 0);
     f.frame(state);
     assert(f.spoken().empty());
@@ -453,6 +423,253 @@ void every_portrait_has_a_name() {
                               "Kirby", "Samus", "Zelda", "Link", "Young Link", "Pichu", "Pikachu",
                               "Jigglypuff", "Mewtwo", "Mr. Game & Watch", "Marth", "Roy"}));
     assert(s_lines.size() == A11Y_CSS_PORTRAITS); /* the speak lines alone */
+}
+
+/* The hand moved to a point in one frame. */
+void move(A11yCssState& state, float x, float y) {
+    state.hand.x = x;
+    state.hand.y = y;
+}
+
+void free_hand_enters_and_leaves_each_button() {
+    A11yCssState state = vs_screen();
+    state.handicap_sliders = true;
+    state.slots[0].handicap_knob = A11yCssKnob{true, -30.9f, -12.0f};
+    Fixture f(state);
+    /* Home, then the name box, player 1's handicap knob and HMN/CPU button,
+     * space, player 2's button and CPU level knob, space, and the top bar. */
+    move(state, -28.0f, -18.5f);
+    f.frame(state);
+    move(state, -30.9f, -12.0f);
+    f.frame(state);
+    move(state, -32.0f, -2.0f);
+    f.frame(state);
+    move(state, -25.0f, -2.0f);
+    f.frame(state);
+    move(state, -16.0f, -2.0f);
+    f.frame(state);
+    move(state, -15.5f, -15.0f);
+    f.frame(state);
+    move(state, -8.0f, -10.0f);
+    f.frame(state);
+    move(state, -30.0f, 24.0f);
+    f.frame(state);
+    move(state, 0.0f, 24.0f);
+    f.frame(state);
+    move(state, 20.0f, 24.0f);
+    f.frame(state);
+    move(state, 16.0f, 24.0f);
+    f.frame(state);
+    assert((f.spoken() == Texts{"Player 1 name tag", "Player 1 handicap: 9", "Player 1: human",
+                              "Player 2: CPU", "Player 2 CPU level: 1", "Teams: off", "Rules",
+                              "Back"}));
+}
+
+void moving_within_a_button_says_it_once() {
+    A11yCssState state = vs_screen();
+    Fixture f(state);
+    for (float x = -19.0f; x < -14.0f; x += 0.5f) {
+        move(state, x, -2.0f);
+        f.frame(state);
+    }
+    assert((f.spoken() == Texts{"Player 2: CPU"}));
+}
+
+void slot_kinds_in_turn() {
+    A11yCssState state = vs_screen();
+    move(state, 14.0f, -2.0f);
+    Fixture f(state);
+    /* A on player 4's button: a new CPU gets a random character. */
+    state.slots[3] = cpu(3, kPichuPortrait);
+    f.frame(state);
+    state.slots[3].kind = A11Y_CSS_CLOSED;
+    f.frame(state);
+    /* Human again, with the character a player chooses still to come. */
+    state.slots[3] = slot(A11Y_CSS_HUMAN, 3);
+    f.frame(state);
+    assert((f.spoken() ==
+            Texts{"Player 4: CPU, Pichu", "Player 4: closed", "Player 4: human, no character"}));
+}
+
+void ones_own_slot_opening_as_the_hand_reaches_the_portraits_says_only_the_coin() {
+    A11yCssState state = vs_screen();
+    state.slots[0].kind = A11Y_CSS_CLOSED;
+    Fixture f(state);
+    move(state, -31.0f, 1.0f);
+    state.slots[0].kind = A11Y_CSS_HUMAN;
+    pick_up(state, 0);
+    f.frame(state);
+    f.frame(state);
+    assert((f.spoken() == Texts{"Holding your coin"}));
+}
+
+void slider_grabbed_moved_and_released() {
+    A11yCssState state = vs_screen();
+    move(state, -15.5f, -15.12f);
+    Fixture f(state);
+    state.hand.slider = A11Y_CSS_CPU_LEVEL;
+    state.hand.slider_slot = 1;
+    state.slots[1].cpu_level_held = true;
+    f.frame(state);
+    for (int level = 2; level <= 4; level++) {
+        state.slots[1].cpu_level = level;
+        state.slots[1].cpu_level_knob = cpu_level_knob(1, level);
+        move(state, state.slots[1].cpu_level_knob.x, -15.12f);
+        f.frame(state);
+        f.frame(state);
+    }
+    state.hand.slider = A11Y_CSS_NO_SLIDER;
+    state.hand.slider_slot = -1;
+    state.slots[1].cpu_level_held = false;
+    f.frame(state);
+    f.frame(state);
+    assert(
+        (f.spoken() == Texts{"Holding the slider", "Level 2", "Level 3", "Level 4", "Released"}));
+}
+
+void handicap_slider_says_its_value() {
+    A11yCssState state = vs_screen();
+    state.handicap_sliders = true;
+    state.hand.slider = A11Y_CSS_HANDICAP;
+    state.hand.slider_slot = 0;
+    Fixture f(state);
+    state.slots[0].handicap = 8;
+    f.frame(state);
+    assert((f.spoken() == Texts{"Handicap 8"}));
+}
+
+void team_match_teams_button_and_team_button() {
+    A11yCssState state = vs_screen();
+    move(state, -30.0f, 24.0f);
+    Fixture f(state);
+    state.teams = true;
+    f.frame(state);
+    move(state, -24.0f, -3.0f);
+    f.frame(state);
+    state.slots[0].team = 1;
+    f.frame(state);
+    state.slots[0].team = 2;
+    f.frame(state);
+    assert((f.spoken() == Texts{"Teams: on", "Player 1 team: red", "Blue team", "Green team"}));
+}
+
+void ready_to_fight_appears_and_disappears() {
+    A11yCssState state = vs_screen();
+    choose(state, kFoxPortrait);
+    Fixture f(state);
+    state.ready = true;
+    f.frame(state);
+    f.frame(state);
+    state.ready = false;
+    f.frame(state);
+    assert((f.spoken() == Texts{"Ready to fight. Press Start."}));
+}
+
+void ready_to_fight_follows_the_local_hands_doing() {
+    A11yCssState state = vs_screen();
+    choose(state, kFoxPortrait);
+    pick_up(state, 0);
+    carry_over(state, 0, kMarthPortrait);
+    Fixture f(state);
+    state.hand.coin = -1;
+    choose(state, kFoxPortrait);
+    state.ready = true;
+    f.frame(state);
+    assert((f.spoken() == Texts{"Back to Fox. Ready to fight. Press Start."}));
+}
+
+/* Player 3 joins and chooses Fox with their own hand. */
+void another_player_joins_and_chooses(Fixture& f, A11yCssState& state) {
+    state.slots[2] = slot(A11Y_CSS_HUMAN, 2);
+    f.frame(state);
+    state.slots[2].carried = true;
+    state.slots[2].portrait = kPlaceholder;
+    f.frame(state);
+    state.slots[2].over_portrait = kFoxPortrait;
+    state.slots[2].portrait = kFoxPortrait;
+    f.frame(state);
+    state.slots[2].carried = false;
+    state.slots[2].character = kFox;
+    f.frame(state);
+    state.teams = true;
+    f.frame(state);
+}
+
+void another_player_offline_says_nothing() {
+    A11yCssState state = vs_screen();
+    Fixture f(state);
+    another_player_joins_and_chooses(f, state);
+    assert(f.said().empty());
+}
+
+void another_player_online_is_queued() {
+    A11yCssState state = vs_screen();
+    state.online = true;
+    Fixture f(state);
+    another_player_joins_and_chooses(f, state);
+    assert((f.said() == std::vector<Output>{{"Player 3: human, no character", false},
+                            {"Player 3: Fox", false}, {"Teams: on", false}}));
+}
+
+void another_players_choice_that_makes_it_ready_is_queued_with_it() {
+    A11yCssState state = vs_screen();
+    state.online = true;
+    state.slots[2] = slot(A11Y_CSS_HUMAN, 2);
+    state.slots[2].carried = true;
+    Fixture f(state);
+    state.slots[2].carried = false;
+    state.slots[2].portrait = kFoxPortrait;
+    state.slots[2].character = kFox;
+    state.ready = true;
+    f.frame(state);
+    assert(
+        (f.said() == std::vector<Output>{{"Player 3: Fox. Ready to fight. Press Start.", false}}));
+}
+
+void choosing_for_a_cpu_says_nothing() {
+    A11yCssState state = vs_screen();
+    state.online = true;
+    pick_up(state, 1);
+    carry_over(state, 1, kFoxPortrait);
+    state.slots[1].carried = true;
+    Fixture f(state);
+    state.hand.coin = -1;
+    state.slots[1].carried = false;
+    state.slots[1].character = kFox;
+    f.frame(state);
+    f.frame(state);
+    assert(f.said().empty());
+}
+
+void rules_screen_and_name_entry_open_and_return() {
+    A11yCssState state = vs_screen();
+    move(state, 0.0f, 24.0f);
+    Fixture f(state);
+    state.exit = A11Y_CSS_TO_RULES;
+    f.frame(state);
+    state.exit = A11Y_CSS_AWAY;
+    f.frame(state);
+    /* Coming back builds the screen afresh, the hand at home. */
+    state.exit = A11Y_CSS_STAYING;
+    move(state, -31.0f, -21.5f);
+    f.frame(state);
+    state.exit = A11Y_CSS_TO_NAME_ENTRY;
+    f.frame(state);
+    assert((f.spoken() == Texts{"Custom Rules. No speech yet.",
+                              "Character select. Player 1, no character.",
+                              "Name Entry. No speech yet."}));
+}
+
+void name_tag_window_opening() {
+    A11yCssState state = vs_screen();
+    move(state, -28.0f, -18.5f);
+    Fixture f(state);
+    state.slots[0].name_tags_open = true;
+    move(state, -28.0f, -10.0f);
+    f.frame(state);
+    move(state, -28.0f, -12.0f);
+    f.frame(state);
+    assert((f.spoken() == Texts{"Name tags. No speech yet."}));
 }
 
 }  // namespace
@@ -493,6 +710,21 @@ int main() {
     leaving_screen_says_nothing();
     forgetting_makes_the_next_frame_an_arrival();
     every_portrait_has_a_name();
+    free_hand_enters_and_leaves_each_button();
+    moving_within_a_button_says_it_once();
+    slot_kinds_in_turn();
+    ones_own_slot_opening_as_the_hand_reaches_the_portraits_says_only_the_coin();
+    slider_grabbed_moved_and_released();
+    handicap_slider_says_its_value();
+    team_match_teams_button_and_team_button();
+    ready_to_fight_appears_and_disappears();
+    ready_to_fight_follows_the_local_hands_doing();
+    another_player_offline_says_nothing();
+    another_player_online_is_queued();
+    another_players_choice_that_makes_it_ready_is_queued_with_it();
+    choosing_for_a_cpu_says_nothing();
+    rules_screen_and_name_entry_open_and_return();
+    name_tag_window_opening();
     std::cout << "css_speech: all tests passed\n";
     return 0;
 }

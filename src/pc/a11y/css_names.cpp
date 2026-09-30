@@ -76,4 +76,26 @@ std::optional<std::string_view> character_name(A11yCharacter character) {
     return std::nullopt;
 }
 
+std::string_view slot_kind_word(A11yCssSlotKind kind) {
+    switch (kind) {
+    case A11Y_CSS_HUMAN:
+        return "human";
+    case A11Y_CSS_CPU:
+        return "CPU";
+    case A11Y_CSS_CLOSED:
+        break;
+    }
+    return "closed";
+}
+
+std::optional<std::string_view> team_word(int team) {
+    /* The door's team, 0 to 2, shows the colours of ports 1, 2 and 4
+     * (mnCharSel_804D50E0). */
+    constexpr std::string_view kTeams[] = {"red", "blue", "green"};
+    if (team < 0 || team >= static_cast<int>(std::size(kTeams))) {
+        return std::nullopt;
+    }
+    return kTeams[team];
+}
+
 }  // namespace a11y

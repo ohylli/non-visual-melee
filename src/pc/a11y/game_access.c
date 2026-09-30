@@ -10,6 +10,9 @@
 #include <melee/ft/forward.h>
 #include <melee/gm/forward.h>
 #include <melee/gm/gmmain_lib.h>
+#include <melee/gm/types.h>
+#include <melee/lb/lb_00B0.h>
+#include <melee/lb/lbspdisplay.h>
 #include <melee/mn/forward.h>
 #include <melee/mn/mnmain.h>
 #include <melee/mn/mnonline.h>
@@ -120,7 +123,12 @@ enum {
     /* Held things 0 to 3 are the coins of player slots 0 to 3; 4 to 7 their
      * CPU level sliders, 8 to 11 their handicap sliders. */
     A11Y_CSS_HELD_COINS = 4,
+    A11Y_CSS_HELD_CPU_LEVELS = 8,
+    A11Y_CSS_HELD_HANDICAPS = 12,
 };
+
+/* The handicap rule's setting that shows a slider per slot; 1 is "auto". */
+enum { A11Y_HANDICAP_ON = 2 };
 
 /* A slot's portrait number as the screen keeps it (0x19 and above for none),
  * or -1. */
@@ -128,12 +136,51 @@ static int css_portrait(u8 number) {
     return number < A11Y_CSS_PORTRAITS ? number : -1;
 }
 
-void a11y_game_css_state(const CSSData* css, const CSSDoorsData* doors, const CSSIcon* icons,
-    int hand_count, int pending_exit, const A11yCssHandReport reports[A11Y_CSS_SLOTS],
-    int local_port, A11yCssState* out) {
+/* Where a joint of the screen's model is, as mnCharSel_CursorThink finds it
+ * for the sliders and the name box. lb_8000B1CC sets up the joint's world
+ * matrix if it is out of date: a cache of the model's drawing, which the
+ * game's own A presses and every frame's drawing fill with the same values,
+ * so filling it here changes nothing the game decides. */
+static bool css_joint(HSD_JObj* models, u8 joint, Vec3* out) {
+    HSD_JObj* jobj = NULL;
+    if (models == NULL || lb_80011E24(models, &jobj, joint, -1) == 0 || jobj == NULL) {
+        return false;
+    }
+    lb_8000B1CC(jobj, NULL, out);
+    return true;
+}
+
+/* A slider's knob: the grab point mnCharSel_CursorThink tests, offset from
+ * the slider's joint. */
+static A11yCssKnob css_knob(HSD_JObj* models, u8 joint) {
+    A11yCssKnob knob = {false, 0.0f, 0.0f};
+    Vec3 pos;
+    if (css_joint(models, joint, &pos)) {
+        knob.known = true;
+        knob.x = -2.9f + pos.x;
+        knob.y = 1.7f + pos.y;
+    }
+    return knob;
+}
+
+static A11yCssRect css_rect(float left, float right, float top, float bottom) {
+    A11yCssRect rect = {left, right, top, bottom};
+    return rect;
+}
+
+static bool css_hand_holds(const A11yCssHandReport* report) {
+    return report->seen && report->state == A11Y_CSS_HAND_HOLDING;
+}
+
+void a11y_game_css_state(const A11yCssScreen* screen,
+    const A11yCssHandReport reports[A11Y_CSS_SLOTS], int local_port, A11yCssState* out) {
+    const CSSData* css = screen->css;
+    int hand_count = screen->hand_count;
     memset(out, 0, sizeof(*out));
     out->hand_count = hand_count;
-    out->leaving = pending_exit != 0;
+    out->exit =
+        screen->pending_exit < A11Y_CSS_AWAY ? (A11yCssExit)screen->pending_exit : A11Y_CSS_AWAY;
+    out->ready = screen->ready != 0;
 
     /* The players each slot's character is kept for. In single-player modes
      * slot 0 belongs to the port that started the mode and slot 1 (Training's
@@ -156,19 +203,45 @@ void a11y_game_css_state(const CSSData* css, const CSSDoorsData* doors, const CS
     out->local_slot = local_hand;
     out->local_player = players[local_hand];
 
+    /* The top bar's buttons and the slots the buttons reach, by the match
+     * type's tests in mnCharSel_CursorThink; single-player modes have their
+     * own. */
+    bool vs = hand_count == A11Y_CSS_SLOTS;
+    /* Opening the rules screen or name entry frees the screen's models and
+     * its name tag windows, and leaving them builds new ones
+     * (mnCharSel_802640A0); until then only the static tables are safe to
+     * read. */
+    bool built = out->exit == A11Y_CSS_STAYING || out->exit == A11Y_CSS_TO_STAGE_SELECT ||
+                 out->exit == A11Y_CSS_BACK;
+    int handicap_rule = gmMainLib_GetGameRules()->handicap;
+    out->slot_count = css->match_type == VS_CAMERA ? 3 : 4;
+    out->has_teams_button = vs && css->match_type <= VS_SLOWMO;
+    out->has_rules_button = vs && css->match_type != VS_STAMINA;
+    out->handicap_sliders = handicap_rule == A11Y_HANDICAP_ON;
+    out->teams = css->vs.start.rules.is_teams != 0;
+
     const A11yCssHandReport* report = &reports[local_hand];
+    int held = css_hand_holds(report) ? report->held : -1;
     out->hand.present = report->seen;
-    out->hand.coin = out->hand.present && report->state == A11Y_CSS_HAND_HOLDING &&
-                             report->held >= 0 && report->held < A11Y_CSS_HELD_COINS ?
-                         report->held :
-                         -1;
+    out->hand.coin = held >= 0 && held < A11Y_CSS_HELD_COINS ? held : -1;
+    out->hand.slider = A11Y_CSS_NO_SLIDER;
+    out->hand.slider_slot = -1;
+    if (held >= A11Y_CSS_HELD_COINS && held < A11Y_CSS_HELD_CPU_LEVELS) {
+        out->hand.slider = A11Y_CSS_CPU_LEVEL;
+        out->hand.slider_slot = held - A11Y_CSS_HELD_COINS;
+    } else if (held >= A11Y_CSS_HELD_CPU_LEVELS && held < A11Y_CSS_HELD_HANDICAPS) {
+        out->hand.slider = A11Y_CSS_HANDICAP;
+        out->hand.slider_slot = held - A11Y_CSS_HELD_CPU_LEVELS;
+    }
     out->hand.x = report->x;
     out->hand.y = report->y;
 
     for (int i = 0; i < A11Y_CSS_SLOTS; i++) {
-        const CSSDoor* door = &doors->doors[i];
+        const CSSDoor* door = &screen->doors->doors[i];
+        const CSSTag* tag = &screen->tags[i];
+        int player = players[i];
         A11yCssSlot* slot = &out->slots[i];
-        int ckind = css->vs.start.players[players[i]].ckind;
+        int ckind = css->vs.start.players[player].ckind;
         slot->kind = door->p_kind == Gm_PKind_Human ? A11Y_CSS_HUMAN :
                      door->p_kind == Gm_PKind_Cpu   ? A11Y_CSS_CPU :
                                                       A11Y_CSS_CLOSED;
@@ -177,17 +250,42 @@ void a11y_game_css_state(const CSSData* css, const CSSDoorsData* doors, const CS
         slot->character =
             ckind >= 0 && ckind < CKind_Playable_Count ? (A11yCharacter)ckind : A11Y_NO_CHARACTER;
         slot->costume = door->costume;
+        for (int hand = 0; hand < A11Y_CSS_SLOTS; hand++) {
+            if (css_hand_holds(&reports[hand]) && reports[hand].held == i) {
+                slot->carried = true;
+            }
+        }
+        slot->hand_holding = css_hand_holds(&reports[i]);
+        slot->team = door->team;
+        slot->cpu_level = css->vs.start.players[player].cpu_level;
+        slot->handicap = css->vs.start.players[player].handicap;
+        slot->cpu_level_held = door->is_hold_cpu_slider != 0;
+        slot->handicap_held = door->is_hold_handicap_slider != 0;
+        slot->name_tags_open = built && tag->data != NULL && tag->data->state != 0;
+        if (!vs || !built) {
+            continue;
+        }
+        /* The bounds of mnCharSel_CursorThink's tests; retail nudges the
+         * buttons' heights outward by a hair, which is left out here. */
+        slot->slot_button = css_rect(door->togglebtn_left, door->togglebtn_right, 0.2f, -4.6f);
+        slot->team_button = css_rect(door->teambtn_left, door->teambtn_right, -1.0f, -5.8f);
+        /* With the handicap rule on or automatic, the CPU level slider moves
+         * to its second place and the handicap slider takes the first. */
+        slot->cpu_level_knob = css_knob(
+            screen->models, handicap_rule != 0 ? door->cpuslider2_joint : door->cpuslider_joint);
+        slot->handicap_knob = css_knob(screen->models, door->cpuslider_joint);
+        Vec3 name;
+        if (i == local_hand && css_joint(screen->models, tag->name_jointl, &name)) {
+            slot->name_box = css_rect(name.x - 4.7f, name.x + 5.2f, name.y + 2.0f, name.y - 1.0f);
+        }
     }
 
     for (int i = 0; i < A11Y_CSS_PORTRAITS; i++) {
-        const CSSIcon* icon = &icons[i];
+        const CSSIcon* icon = &screen->icons[i];
         A11yCssPortrait* portrait = &out->portraits[i];
         portrait->character = (A11yCharacter)icon->char_kind;
         /* The hover test's own condition (mnCharSel_CursorThink). */
         portrait->locked = icon->state < ICONSTATE_TEMP;
-        portrait->left = icon->bound_l;
-        portrait->right = icon->bound_r;
-        portrait->top = icon->bound_u;
-        portrait->bottom = icon->bound_d;
+        portrait->rect = css_rect(icon->bound_l, icon->bound_r, icon->bound_u, icon->bound_d);
     }
 }
