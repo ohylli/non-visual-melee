@@ -59,6 +59,16 @@ Some screens run inside another scene: character select opens the rules screen (
 
 Single-player modes remember which controller started them (`gm_801677E8`, called as the mode is chosen), and single-cursor character select is handed a port through its data (`mnCharSel_804D6CF0`).
 
+### How a stick value reaches a cursor
+
+What the fork needs to know to move a free cursor by feeding stick input, as steering on character select does (`docs/adr/0004-free-cursors-are-steered-through-the-controller.md`).
+
+- **One thread.** Once per video frame, `pc_frame_boundary` (`src/pc/vi.c`) pumps events and publishes port 1's virtual pad (`publish_locked` in `src/pc/keyboard.c`, which merges the keyboard, the key driver and a GameCube adapter). The pad alarm then samples the pads (`PADRead`, which merges the virtual pad with an SDL gamepad, each stick axis taking the value further from rest), and the simulated frames run. All of it is on the game thread, so a value the game's code asks for reaches the pad without crossing threads.
+- **The game's clamping** (`HSD_PadClamp`, set up in `gmmain.c` with a minimum of 0 and a maximum of 80) sits between the sample and `HSD_PadCopyStatus`, which the screens read. Measured on 2026-09-30 by publishing every value and logging what the hand's port read: every stick within a circle of 80 arrives exactly as sent, down to 1; anything further out is scaled back onto the circle, each axis truncated toward zero (127,0 arrives as 80,0; 100,50 as 71,35; 64,64 as 56,56).
+- **The cursor's movement** on character select is `0.0002 * (x² + y² - 200)` units a frame in the stick's direction, and nothing below a squared tilt of 200. A full push moves 1.24 units, and the smallest tilt that moves anything moves 0.005, so a cursor can be placed to a hundredth of a unit.
+- **Delay.** Offline, a stick published at one video frame's boundary moves the cursor in the next simulated frame. Online, the local sample is taken once per fresh simulated frame and applied the input delay later, 2 frames by default. Video frames and simulated frames are not one to one: two simulated frames in one video frame sample the same published pad twice, and a video frame that simulates nothing loses what was published in it.
+- **The D-pad** reaches `HSD_PadCopyStatus` as its own buttons, apart from the stick's direction flags, and character select ignores it; a press is visible in the port's `trigger` bits for the frame it began.
+
 ## Sounds: the menu's own feedback
 
 Menu sounds go through one function, `lbAudioAx_80024030(kind)` (`src/melee/lb/lbaudio_ax.c`), which plays one of eleven fixed sounds. The kinds that matter most:
@@ -226,7 +236,7 @@ Speculative: places the code offers, not decisions.
 
 - **Many players, one menu.** Shared menus accept any controller, character select has one cursor per controller, and online a second human moves on the same screens. Whose actions to announce is a decision to make.
 - **Free cursors need more than "read the item".** On character and stage select the cursor slides between targets over empty space; announcing the target the cursor enters is the obvious start, but a player also needs to find targets.
-- **Read, don't steer.** Online, character and stage select run in lockstep: both machines advance frame by frame on the same synced controller input, and rollback (re-running recent frames when a late input arrives) is switched on only once the match starts (`docs/netcode-plan.md`, native menu integration). A fork feature that changed menu state or fed input would desynchronise the peers. Reading state and speaking is safe; the netplay speech gate (`pc_net_resim()`) costs nothing in menus.
+- **Steer only through the controller.** Online, character and stage select run in lockstep: both machines advance frame by frame on the same synced controller input, and rollback (re-running recent frames when a late input arrives) is switched on only once the match starts (`docs/netcode-plan.md`, native menu integration). A fork feature that changed menu state would desynchronise the peers. Feeding input is safe where it enters as controller input, before the game and the netplay code sample it: the peer receives it like any player's, and cannot tell it from one. It is unsafe anywhere later. Reading state and speaking is safe; the netplay speech gate (`pc_net_resim()`) costs nothing in menus.
 - **Names can move.** Hooks go into decomp-layer files, which decomp syncs replace. Hooking named functions and reading named fields is sturdier than reading `x5`-style fields, and every hook of this kind is a merge risk worth keeping small.
 - **Region.** String numbers are the NTSC-U build's, remapped for PAL discs by `pc_region_sis_index()`. String tables keyed by game identifiers (menu kind and selection, character, stage) are unaffected.
 

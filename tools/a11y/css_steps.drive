@@ -1,0 +1,64 @@
+# Character select with the D-pad: steps over the portraits, each naming
+# its destination at the press, and the glides that take the hand there.
+# Run with the default --scene title:
+#   python tools/a11y/drive.py tools/a11y/css_steps.drive
+# drive.py turns steering on (MELEE_A11Y_STEER=1). --no-card unlocks every
+# character, so the rows are the full 9, 9 and 7.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# VS. Mode, Melee.
+press Down
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press A
+wait '"Character select\. Player 1, no character\."'
+sleep 1
+
+# Up from the hand's start goes to the nearest portrait above it, Pichu in
+# the bottom row; the coin jumps into the hand on the way. Two more steps Up
+# reach the top row.
+press DUp
+wait ': "Pichu"$'
+wait 'glide arrived at "Pichu" in \d+ frames'
+press DUp
+wait ': "Fox"$'
+press DUp
+wait ': "Mario"$'
+wait 'glide arrived at "Mario"'
+
+# Along the top row, each name at its press, the next press during the
+# glide.
+press DRight
+wait ': "Luigi"$'
+press DRight
+wait ': "Bowser"$'
+press DRight
+wait ': "Peach"$'
+press DRight
+wait ': "Yoshi"$'
+press DRight
+wait ': "DK"$'
+press DRight
+wait ': "C\. Falcon"$'
+press DRight
+wait ': "Ganondorf"$'
+wait 'glide arrived at "Ganondorf"'
+
+# The row's end: no movement, the name again.
+press DRight
+wait ': "Ganondorf"$'
+
+# Down a row, and A chooses: the game's announcer names the character.
+press DDown
+wait ': "Young Link"$'
+wait 'glide arrived at "Young Link" in \d+ frames'
+press A
+sleep 1

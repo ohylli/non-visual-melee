@@ -230,6 +230,20 @@ typedef struct A11yCssState {
 void a11y_game_css_state(const A11yCssScreen* screen,
     const A11yCssHandReport reports[A11Y_CSS_SLOTS], int local_port, A11yCssState* out);
 
+/* A controller as the game read it this simulated frame (HSD_PadCopyStatus):
+ * the main stick after the game's clamping, and the D-pad directions newly
+ * pressed. Online, a port's pad is its player's synced input. */
+typedef struct A11yPad {
+    int stick_x;
+    int stick_y;
+    bool pressed_left;
+    bool pressed_right;
+    bool pressed_up;
+    bool pressed_down;
+} A11yPad;
+
+void a11y_game_pad(int port, A11yPad* out);
+
 #ifdef __cplusplus
 }
 #endif

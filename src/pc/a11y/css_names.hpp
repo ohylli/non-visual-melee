@@ -60,5 +60,9 @@ inline constexpr std::string_view kHoldingSlider = "Holding the slider";
 inline constexpr std::string_view kReleased = "Released";
 inline constexpr std::string_view kReadyToFight = "Ready to fight. Press Start.";
 inline constexpr std::string_view kNoSpeechYet = "No speech yet.";
+/* Steering: a step with nowhere to go, and a glide that did not get there
+ * ("Could not reach Fox"). */
+inline constexpr std::string_view kNothingThatWay = "Nothing that way";
+inline constexpr std::string_view kCouldNotReach = "Could not reach";
 
 }  // namespace a11y

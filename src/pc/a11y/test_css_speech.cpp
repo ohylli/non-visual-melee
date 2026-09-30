@@ -672,6 +672,94 @@ void name_tag_window_opening() {
     assert((f.spoken() == Texts{"Name tags. No speech yet."}));
 }
 
+a11y::Target portrait(int index) {
+    return a11y::Target{a11y::TargetKind::portrait, index};
+}
+
+void a_step_names_where_it_goes() {
+    A11yCssState state = vs_screen();
+    Fixture f(state);
+    f.css.step(state, portrait(kFoxPortrait));
+    f.css.step(state, a11y::Target{});
+    assert((f.spoken() == Texts{"Fox", "Nothing that way"}));
+}
+
+void a_glide_crosses_portraits_in_silence_and_arrives_silently() {
+    A11yCssState state = vs_screen();
+    state.hand.y = 1.0f;
+    pick_up(state, 0);
+    carry_over(state, 0, kFoxPortrait);
+    Fixture f(state);
+    f.css.glide_started(portrait(kMarthPortrait));
+    carry_over(state, 0, kNessPortrait);
+    f.frame(state);
+    carry_over(state, 0, -1);
+    f.frame(state);
+    carry_over(state, 0, kMarthPortrait);
+    f.frame(state);
+    f.css.glide_ended(false);
+    f.frame(state);
+    f.frame(state);
+    assert(f.spoken().empty());
+}
+
+void a_glide_ending_elsewhere_names_where_the_hand_is() {
+    /* The player's stick took over on the way. */
+    A11yCssState state = vs_screen();
+    state.hand.y = 1.0f;
+    pick_up(state, 0);
+    carry_over(state, 0, kFoxPortrait);
+    Fixture f(state);
+    f.css.glide_started(portrait(kMarthPortrait));
+    carry_over(state, 0, kNessPortrait);
+    f.frame(state);
+    f.css.glide_ended(false);
+    f.frame(state);
+    f.frame(state);
+    assert((f.spoken() == Texts{"Ness"}));
+}
+
+void a_failed_glide_says_so() {
+    A11yCssState state = vs_screen();
+    state.hand.y = 1.0f;
+    pick_up(state, 0);
+    carry_over(state, 0, kFoxPortrait);
+    Fixture f(state);
+    f.css.glide_started(portrait(kMarthPortrait));
+    carry_over(state, 0, kNessPortrait);
+    f.frame(state);
+    f.css.glide_ended(true);
+    f.frame(state);
+    assert((f.spoken() == Texts{"Could not reach Marth. Ness"}));
+}
+
+void a_free_hand_gliding_over_a_button_says_nothing() {
+    A11yCssState state = vs_screen();
+    Fixture f(state);
+    f.css.glide_started(portrait(kFoxPortrait));
+    move(state, -16.0f, -2.0f);
+    f.frame(state);
+    move(state, -23.0f, 11.0f);
+    f.frame(state);
+    f.css.glide_ended(false);
+    f.frame(state);
+    assert(f.spoken().empty());
+}
+
+void the_coin_jumping_in_during_a_glide_waits_behind_the_step() {
+    /* The step said the portrait; the pickup is queued behind it, without
+     * the portrait crossed. */
+    A11yCssState state = vs_screen();
+    Fixture f(state);
+    f.css.glide_started(portrait(kFoxPortrait));
+    state.hand.y = 1.0f;
+    pick_up(state, 0);
+    f.frame(state);
+    carry_over(state, 0, kPichuPortrait);
+    f.frame(state);
+    assert((f.said() == std::vector<Output>{Output{"Holding your coin", false}}));
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -725,6 +813,12 @@ int main() {
     choosing_for_a_cpu_says_nothing();
     rules_screen_and_name_entry_open_and_return();
     name_tag_window_opening();
+    a_step_names_where_it_goes();
+    a_glide_crosses_portraits_in_silence_and_arrives_silently();
+    a_glide_ending_elsewhere_names_where_the_hand_is();
+    a_failed_glide_says_so();
+    a_free_hand_gliding_over_a_button_says_nothing();
+    the_coin_jumping_in_during_a_glide_waits_behind_the_step();
     std::cout << "css_speech: all tests passed\n";
     return 0;
 }

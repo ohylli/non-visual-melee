@@ -24,6 +24,7 @@
 #include <string.h>
 #include <dolphin/pad.h>
 
+#include "pc/a11y/a11y_hooks.h"
 #include "pc/pc.h"
 #include "pc/touch.h"
 
@@ -312,6 +313,8 @@ static void publish_locked(void) {
             st.triggerRight = gc_st.triggerRight;
         any_active = true;
     }
+
+    any_active |= pc_a11y_pad(&st);
 
     static bool s_published0;
     if (any_active) {

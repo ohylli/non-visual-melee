@@ -4,6 +4,7 @@
  * decides what to say. `grep -rn pc_a11y_ src --exclude-dir=a11y` lists every
  * call site. */
 #pragma once
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -65,6 +66,16 @@ void pc_a11y_css_frame(const struct CSSData* css, const struct CSSDoorsData* doo
  * mncharsel.c defines: its index (the port in VS modes), state, what it
  * holds, and position. The next frame reads them. */
 void pc_a11y_css_hand(int hand, int state, int held, float x, float y);
+
+/* Port 1's virtual pad is about to be published (publish_locked in
+ * src/pc/keyboard.c, once per video frame, after the keyboard, the key
+ * driver and a GameCube adapter are merged). The one place the fork writes:
+ * steering adds its stick to the pad, as a player's controller would, before
+ * the game and the netplay code sample it. Returns true when it did, so the
+ * pad is published even with no other source active. What it asks for is
+ * published once and then dropped, so the stick returns to rest by itself. */
+struct PADStatus;
+bool pc_a11y_pad(struct PADStatus* pad);
 
 #ifdef __cplusplus
 }

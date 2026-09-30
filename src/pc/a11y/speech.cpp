@@ -30,6 +30,8 @@ Config config_from_environment() {
     Config config;
     config.enabled = env_switch("MELEE_A11Y");
     config.log = env_switch("MELEE_A11Y_LOG");
+    const char* steer = std::getenv("MELEE_A11Y_STEER");
+    config.steer = config.enabled || (steer != nullptr && std::strcmp(steer, "1") == 0);
     return config;
 }
 

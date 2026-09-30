@@ -29,6 +29,8 @@ RE is a Python regular expression searched in each line: escape brackets
 Buttons are GameCube names, as in tools/devctl.py: A B X Y Z L R Start,
 Up Down Left Right (main stick), CUp CDown CLeft CRight, DUp DDown DLeft
 DRight. They drive controller port 1, merged with any real controller there.
+Steering is on (MELEE_A11Y_STEER=1), so on character select the D-pad moves
+the hand from target to target.
 
 The run ends with an implicit quit. A failed wait quits too and exits 1, and
 so does the game exiting before the script ends, as on a crash.
@@ -253,9 +255,22 @@ def pattern(text):
         raise ScriptError(f"bad pattern {text!r}: {e}")
 
 
-def pad_pressed(line):
-    m = PAD_RE.search(line)
-    return m is not None and any(int(v, 16 if i == 0 else 10) != 0 for i, v in enumerate(m.groups()))
+STICK_KEYS = {"Up", "Down", "Left", "Right"}
+
+
+def pad_pressed(keys):
+    """A test for a "pad:" line showing the press of keys. A button press is
+    looked for among the buttons, sub-stick and triggers only: steering
+    (MELEE_A11Y_STEER) moves the main stick meanwhile."""
+    stick = any(key in STICK_KEYS for key in keys.split("+"))
+
+    def shows(line):
+        m = PAD_RE.search(line)
+        if m is None:
+            return False
+        values = [int(v, 16 if i == 0 else 10) for i, v in enumerate(m.groups())]
+        return any(values[1:3]) if stick else any(values[:1] + values[3:])
+    return shows
 
 
 def close_windows(pid):
@@ -403,6 +418,9 @@ def run(args, steps):
     env.update({
         "MELEE_KEY_FIFO": pipe_name,
         "MELEE_INPUT_TRACE": "1",
+        # D-pad steering on character select, which speech off would
+        # otherwise switch off.
+        "MELEE_A11Y_STEER": "1",
         "MELEE_BOOT_SCENE": args.scene,
         "MELEE_NO_ATTRACT": "1",
         "MELEE_EXIT_AFTER_FRAMES": str(args.max_frames),
@@ -445,7 +463,7 @@ def run(args, steps):
                     cursor = output.mark()
                     for n in range(1, times + 1):
                         pipe.send(f"{keys} {hold}", args.timeout, proc)
-                        if output.wait_for(output.mark(), pad_pressed, 5 + hold / 1000) is None:
+                        if output.wait_for(output.mark(), pad_pressed(keys), 5 + hold / 1000) is None:
                             step("warning: no pad change seen for that press")
                         if until is None:
                             break

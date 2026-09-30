@@ -15,6 +15,10 @@ enum class Mode { interrupt, queue };
 struct Config {
     bool enabled = true; /* MELEE_A11Y: the accessibility switch */
     bool log = true;     /* MELEE_A11Y_LOG: the speech log, a developer switch */
+    /* Steering with the D-pad: follows the accessibility switch;
+     * MELEE_A11Y_STEER=1 turns it on by itself, for agent runs with speech
+     * off. */
+    bool steer = true;
 };
 
 /* The only place the configuration is read from; swap its body when fork

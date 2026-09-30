@@ -1,17 +1,84 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Character select's targets against hand-written snapshots of the screen
- * (test_css_screen.hpp). */
+/* Character select's targets and steps against hand-written snapshots of the
+ * screen (test_css_screen.hpp). */
 #include "css_targets.hpp"
 #include "test_css_screen.hpp"
 #include <cassert>
+#include <cmath>
 #include <iostream>
 
 namespace {
 
+using a11y::Direction;
+using a11y::Point;
 using a11y::Target;
 using a11y::target_at;
 using a11y::TargetKind;
 using namespace css_test;
+
+constexpr Direction kDirections[] = {
+    Direction::left, Direction::right, Direction::up, Direction::down};
+constexpr int kDrMarioPortrait = 0, kMarioPortrait = 1, kLuigiPortrait = 2, kBowserPortrait = 3,
+              kPeachPortrait = 4, kGanonPortrait = 8, kFalcoPortrait = 9, kKirbyPortrait = 13,
+              kYoungLinkPortrait = 17, kPichuPortrait = 18, kPikachuPortrait = 19,
+              kJigglypuffPortrait = 20, kMewtwoPortrait = 21, kGameWatchPortrait = 22,
+              kRoyPortrait = 24;
+
+Target portrait(int index) {
+    return Target{TargetKind::portrait, index};
+}
+
+/* A step from a portrait, with the hand where a glide to it ends. */
+Target step_from(const A11yCssState& state, int from, Direction direction) {
+    Point hand = a11y::aim_point(state, portrait(from));
+    return a11y::step(state, portrait(from), hand.x, hand.y, direction);
+}
+
+/* The portrait at a row and column as drawn (test_css_screen.hpp), or -1. */
+int portrait_at(int row, int column) {
+    for (int i = 0; i < A11Y_CSS_PORTRAITS; i++) {
+        A11yCssRect rect = portrait_rect(i);
+        if (rect.top == kRowTops[row] && rect.left == kColumnLefts[column]) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int row_of(int portrait) {
+    return portrait < 9 ? 0 : portrait < 18 ? 1 : 2;
+}
+
+int column_of(int portrait) {
+    return row_of(portrait) == 2 ? portrait - 18 + 1 : portrait - 9 * row_of(portrait);
+}
+
+/* Where a step goes with every portrait unlocked, worked out on the grid:
+ * the top two rows have columns 0 to 8, the bottom one 1 to 7. */
+int expected_step(int from, Direction direction) {
+    int row = row_of(from);
+    int column = column_of(from);
+    int to = -1;
+    switch (direction) {
+    case Direction::left:
+        to = column > 0 ? portrait_at(row, column - 1) : -1;
+        break;
+    case Direction::right:
+        to = column < 8 ? portrait_at(row, column + 1) : -1;
+        break;
+    case Direction::up:
+        to = row > 0 ? portrait_at(row - 1, column) : -1;
+        break;
+    case Direction::down:
+        to = row == 0 ? portrait_at(1, column) :
+             row == 1 ? portrait_at(2, column < 1 ? 1 :
+                                       column > 7 ? 7 :
+                                                    column) :
+                        -1;
+        break;
+    }
+    return to >= 0 ? to : from;
+}
 
 void top_bar() {
     A11yCssState state = vs_screen();
@@ -187,6 +254,129 @@ void single_player_modes_have_back_only_so_far() {
     assert((target_at(state, -23.0f, 11.0f) == Target{TargetKind::portrait, kFoxPortrait}));
 }
 
+void aim_puts_the_coin_at_the_centre() {
+    A11yCssState state = vs_screen();
+    for (int i = 0; i < A11Y_CSS_PORTRAITS; i++) {
+        Point hand = a11y::aim_point(state, portrait(i));
+        A11yCssRect rect = portrait_rect(i);
+        assert(std::fabs(hand.x + a11y::kCoinOffsetX - (rect.left + rect.right) / 2.0f) < 1e-4f);
+        assert(std::fabs(hand.y + a11y::kCoinOffsetY - (rect.top + rect.bottom) / 2.0f) < 1e-4f);
+        assert(target_at(state, hand.x, hand.y) == portrait(i));
+    }
+}
+
+void steps_from_every_portrait() {
+    A11yCssState state = vs_screen();
+    for (int from = 0; from < A11Y_CSS_PORTRAITS; from++) {
+        for (Direction direction : kDirections) {
+            assert(step_from(state, from, direction) == portrait(expected_step(from, direction)));
+        }
+    }
+}
+
+void steps_stop_at_the_edges() {
+    /* No wrapping: the step names the portrait the hand is on. Up from the
+     * top row and Down from the bottom one are edges until the top bar and
+     * the player slots have steps. */
+    A11yCssState state = vs_screen();
+    assert(step_from(state, kDrMarioPortrait, Direction::left) == portrait(kDrMarioPortrait));
+    assert(step_from(state, kGanonPortrait, Direction::right) == portrait(kGanonPortrait));
+    assert(step_from(state, kYoungLinkPortrait, Direction::right) == portrait(kYoungLinkPortrait));
+    assert(step_from(state, kPichuPortrait, Direction::left) == portrait(kPichuPortrait));
+    assert(step_from(state, kRoyPortrait, Direction::right) == portrait(kRoyPortrait));
+    assert(step_from(state, kPeachPortrait, Direction::up) == portrait(kPeachPortrait));
+    assert(step_from(state, kMewtwoPortrait, Direction::down) == portrait(kMewtwoPortrait));
+}
+
+void steps_between_rows_of_different_lengths() {
+    /* The bottom row starts one column in and ends one early. */
+    A11yCssState state = vs_screen();
+    assert(step_from(state, kFalcoPortrait, Direction::down) == portrait(kPichuPortrait));
+    assert(step_from(state, kYoungLinkPortrait, Direction::down) == portrait(kRoyPortrait));
+    assert(step_from(state, kPichuPortrait, Direction::up) == portrait(kFoxPortrait));
+}
+
+void steps_skip_locked_portraits() {
+    A11yCssState state = vs_screen();
+    state.portraits[kFoxPortrait].locked = true;
+    state.portraits[kMewtwoPortrait].locked = true;
+    assert(step_from(state, kFalcoPortrait, Direction::right) == portrait(kNessPortrait));
+    assert(step_from(state, kNessPortrait, Direction::left) == portrait(kFalcoPortrait));
+    assert(step_from(state, kJigglypuffPortrait, Direction::right) == portrait(kGameWatchPortrait));
+    /* Nearest in x: Falco and Ness are as near to Fox's column; the left
+     * one wins. */
+    assert(step_from(state, kPichuPortrait, Direction::up) == portrait(kFalcoPortrait));
+    assert(step_from(state, kMarioPortrait, Direction::down) == portrait(kFalcoPortrait));
+    assert(step_from(state, kPeachPortrait, Direction::down) == portrait(kKirbyPortrait));
+    assert(step_from(state, kKirbyPortrait, Direction::down) == portrait(kJigglypuffPortrait));
+}
+
+void a_row_with_every_portrait_locked_is_skipped() {
+    A11yCssState state = vs_screen();
+    for (int i = kFalcoPortrait; i <= kYoungLinkPortrait; i++) {
+        state.portraits[i].locked = true;
+    }
+    assert(step_from(state, kBowserPortrait, Direction::down) == portrait(kJigglypuffPortrait));
+    assert(step_from(state, kJigglypuffPortrait, Direction::up) == portrait(kBowserPortrait));
+}
+
+void luigi_locked_trades_places_with_pikachu() {
+    /* With Luigi locked, mnCharSel_802640A0 builds the screen with Luigi's
+     * portrait in Pikachu's place on the bottom row and Pikachu's on the
+     * top row. */
+    A11yCssState state = vs_screen();
+    state.portraits[kLuigiPortrait].rect = portrait_rect(kPikachuPortrait);
+    state.portraits[kPikachuPortrait].rect = portrait_rect(kLuigiPortrait);
+    state.portraits[kLuigiPortrait].locked = true;
+    assert(step_from(state, kMarioPortrait, Direction::right) == portrait(kPikachuPortrait));
+    assert(step_from(state, kPikachuPortrait, Direction::right) == portrait(kBowserPortrait));
+    assert(step_from(state, kPikachuPortrait, Direction::left) == portrait(kMarioPortrait));
+    assert(step_from(state, kPikachuPortrait, Direction::down) == portrait(kNessPortrait));
+    assert(step_from(state, kNessPortrait, Direction::up) == portrait(kPikachuPortrait));
+    assert(step_from(state, kPichuPortrait, Direction::right) == portrait(kJigglypuffPortrait));
+    assert(step_from(state, kNessPortrait, Direction::down) == portrait(kPichuPortrait));
+}
+
+void a_press_during_a_glide_steps_on_from_its_destination() {
+    /* The hand is still over Dr. Mario, gliding to Mario. */
+    A11yCssState state = vs_screen();
+    Point hand = a11y::aim_point(state, portrait(kDrMarioPortrait));
+    assert(a11y::step(state, portrait(kMarioPortrait), hand.x, hand.y, Direction::right) ==
+           portrait(kLuigiPortrait));
+}
+
+void from_anywhere_else_the_nearest_that_way() {
+    A11yCssState state = vs_screen();
+    /* The hand's start, over player 1's slot: Up to the nearest row and in
+     * it the portrait nearest in x, and Right along that row; nothing is
+     * left or below. */
+    assert(a11y::step(state, Target{}, -31.0f, -21.5f, Direction::up) == portrait(kPichuPortrait));
+    assert(
+        a11y::step(state, Target{}, -31.0f, -21.5f, Direction::right) == portrait(kPichuPortrait));
+    assert(a11y::step(state, Target{}, -31.0f, -21.5f, Direction::left) == Target{});
+    assert(a11y::step(state, Target{}, -31.0f, -21.5f, Direction::down) == Target{});
+    /* Left of the bottom row, level with it: Right along the row, not up
+     * to the nearer Falco. */
+    Point pichu = a11y::aim_point(state, portrait(kPichuPortrait));
+    assert(
+        a11y::step(state, Target{}, -35.0f, pichu.y, Direction::right) == portrait(kPichuPortrait));
+    /* Right of the bottom row's end, level with it: Left to Roy. */
+    assert(a11y::step(state, Target{}, 25.0f, pichu.y, Direction::left) == portrait(kRoyPortrait));
+    /* Nothing further right in the hand's row: the nearest that way in any
+     * row. */
+    Point roy = a11y::aim_point(state, portrait(kRoyPortrait));
+    assert(a11y::step(state, Target{}, roy.x + 1.0f, pichu.y, Direction::right) ==
+           portrait(kYoungLinkPortrait));
+    /* Over the rules header, Down goes to the top row below it. */
+    assert(a11y::step(state, Target{TargetKind::rules}, 0.0f, 24.0f, Direction::down) ==
+           portrait(kPeachPortrait));
+    /* A locked portrait is no target: the hand over it is on nothing. */
+    state.portraits[kFoxPortrait].locked = true;
+    Point fox = a11y::aim_point(state, portrait(kFoxPortrait));
+    assert(target_at(state, fox.x, fox.y) == Target{});
+    assert(a11y::step(state, Target{}, fox.x, fox.y, Direction::right) == portrait(kNessPortrait));
+}
+
 }  // namespace
 
 int main() {
@@ -207,6 +397,15 @@ int main() {
     nothing_while_holding_a_slider_or_naming();
     empty_space();
     single_player_modes_have_back_only_so_far();
+    aim_puts_the_coin_at_the_centre();
+    steps_from_every_portrait();
+    steps_stop_at_the_edges();
+    steps_between_rows_of_different_lengths();
+    steps_skip_locked_portraits();
+    a_row_with_every_portrait_locked_is_skipped();
+    luigi_locked_trades_places_with_pikachu();
+    a_press_during_a_glide_steps_on_from_its_destination();
+    from_anywhere_else_the_nearest_that_way();
     std::cout << "css_targets: all tests passed\n";
     return 0;
 }

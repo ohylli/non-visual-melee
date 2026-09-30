@@ -103,6 +103,16 @@ Target hovered(const A11yCssState& state) {
     return target.kind == TargetKind::portrait ? Target{} : target;
 }
 
+/* What the local hand is on, for a glide's end: the portrait under a carried
+ * coin, or else what hovered() says. */
+Target under_hand(const A11yCssState& state) {
+    if (state.hand.present && state.hand.coin >= 0) {
+        int over = state.slots[state.hand.coin].over_portrait;
+        return over >= 0 ? Target{TargetKind::portrait, over} : Target{};
+    }
+    return hovered(state);
+}
+
 }  // namespace
 
 void CssSpeech::frame(const A11yCssState& state) {
@@ -114,6 +124,8 @@ void CssSpeech::frame(const A11yCssState& state) {
     m_last = state;
     if (arrived) {
         m_pickup_pending = false;
+        m_gliding = false;
+        m_glide_ended = false;
         m_speech.announce(opening(state), Mode::interrupt);
         return;
     }
@@ -134,14 +146,28 @@ void CssSpeech::frame(const A11yCssState& state) {
         return;
     }
 
+    /* During a glide, and on the frame after it ends, what the hand crosses
+     * goes unsaid: the step said where it goes. */
+    bool glide_ended = m_glide_ended;
+    m_glide_ended = false;
+    bool quiet = m_gliding || glide_ended;
+
     std::string mine;
     std::string others;
-    add(mine, coin_announcement(last, state));
+    add(mine, coin_announcement(last, state, quiet));
     add(mine, slider_announcement(last, state));
     Target was = hovered(last);
     Target is = hovered(state);
     slot_announcements(last, state, was, is, mine, others);
-    if (is != was && is.kind != TargetKind::none) {
+    if (glide_ended) {
+        if (m_glide_failed) {
+            add(mine, std::string(kCouldNotReach) + " " + target_words(state, m_destination));
+        }
+        Target under = under_hand(state);
+        if (under != m_destination && under.kind != TargetKind::none) {
+            add(mine, target_words(state, under));
+        }
+    } else if (!quiet && is != was && is.kind != TargetKind::none) {
         add(mine, target_words(state, is));
     }
     if (state.slots[state.local_slot].name_tags_open &&
@@ -155,11 +181,30 @@ void CssSpeech::frame(const A11yCssState& state) {
         add(mine.empty() && !others.empty() ? others : mine, kReadyToFight);
     }
     if (!mine.empty()) {
-        m_speech.announce(mine, Mode::interrupt);
+        /* Behind the step's announcement while the glide runs. */
+        m_speech.announce(mine, m_gliding ? Mode::queue : Mode::interrupt);
     }
     if (!others.empty()) {
         m_speech.announce(others, Mode::queue);
     }
+}
+
+void CssSpeech::step(const A11yCssState& state, Target to) {
+    m_speech.announce(
+        to.kind != TargetKind::none ? target_words(state, to) : std::string(kNothingThatWay),
+        Mode::interrupt);
+}
+
+void CssSpeech::glide_started(Target destination) {
+    m_gliding = true;
+    m_glide_ended = false;
+    m_destination = destination;
+}
+
+void CssSpeech::glide_ended(bool failed) {
+    m_gliding = false;
+    m_glide_ended = true;
+    m_glide_failed = failed;
 }
 
 std::string CssSpeech::opening(const A11yCssState& state) {
@@ -168,7 +213,8 @@ std::string CssSpeech::opening(const A11yCssState& state) {
            (character != A11Y_NO_CHARACTER ? name(character) : std::string(kNoCharacter)) + ".";
 }
 
-std::string CssSpeech::coin_announcement(const A11yCssState& last, const A11yCssState& now) {
+std::string CssSpeech::coin_announcement(
+    const A11yCssState& last, const A11yCssState& now, bool quiet) {
     int was_carrying = last.hand.coin;
     int carrying = now.hand.coin;
     if (carrying >= 0 && carrying != was_carrying) {
@@ -181,7 +227,7 @@ std::string CssSpeech::coin_announcement(const A11yCssState& last, const A11yCss
     bool pickup_pending = m_pickup_pending;
     m_pickup_pending = false;
     if (pickup_pending && carrying >= 0) {
-        return holding(now, carrying);
+        return holding(now, carrying, quiet);
     }
     if (was_carrying >= 0 && carrying < 0) {
         return dropped(last, now, was_carrying);
@@ -193,7 +239,9 @@ std::string CssSpeech::coin_announcement(const A11yCssState& last, const A11yCss
     if (carrying >= 0 && after.over_portrait != before.over_portrait) {
         /* Leaving every portrait says nothing. Entering one also resets the
          * costume, which goes unsaid. */
-        return after.over_portrait >= 0 ? name(now.portraits[after.over_portrait].character) : "";
+        return after.over_portrait >= 0 && !quiet ?
+                   name(now.portraits[after.over_portrait].character) :
+                   "";
     }
     if (after.over_portrait >= 0 && after.over_portrait == before.over_portrait &&
         after.portrait == before.portrait && after.character == before.character &&
@@ -204,13 +252,13 @@ std::string CssSpeech::coin_announcement(const A11yCssState& last, const A11yCss
     return "";
 }
 
-std::string CssSpeech::holding(const A11yCssState& now, int coin) {
+std::string CssSpeech::holding(const A11yCssState& now, int coin, bool quiet) {
     std::string out = coin == now.local_slot ?
                           std::string(kHoldingYourCoin) :
                           std::string(kHoldingCoinBefore) + std::to_string(coin + 1) +
                               std::string(kHoldingCoinAfter);
     int over = now.slots[coin].over_portrait;
-    if (over >= 0) {
+    if (over >= 0 && !quiet) {
         out += ". " + name(now.portraits[over].character);
     }
     return out;

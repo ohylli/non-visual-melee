@@ -1,5 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "css_targets.hpp"
+#include <algorithm>
+#include <cmath>
+#include <vector>
 
 namespace a11y {
 namespace {
@@ -14,6 +17,11 @@ constexpr float kRulesRight = 15.0f;
 constexpr float kTeamsRight = -25.5f;
 /* A free hand grabs a slider's knob within this squared distance. */
 constexpr float kGrabDistanceSquared = 5.0f;
+/* Portraits whose tops are this close are in one row. */
+constexpr float kSameRow = 0.5f;
+/* From anywhere else, a target counts as on a side of the hand when it is at
+ * least this far that way. */
+constexpr float kAhead = 0.5f;
 
 bool inside(const A11yCssRect& rect, float x, float y) {
     return x > rect.left && x < rect.right && y < rect.top && y > rect.bottom;
@@ -85,7 +93,175 @@ Target slot_target_at(const A11yCssState& state, float x, float y) {
     return Target{};
 }
 
+float centre_x(const A11yCssRect& rect) {
+    return (rect.left + rect.right) / 2.0f;
+}
+
+float centre_y(const A11yCssRect& rect) {
+    return (rect.top + rect.bottom) / 2.0f;
+}
+
+/* The unlocked portraits in rows as drawn, top to bottom, each left to
+ * right. Built from the rectangles, so a portrait the game moved is where it
+ * is drawn: with Luigi locked, Luigi's and Pikachu's trade rows. */
+std::vector<std::vector<int>> portrait_rows(const A11yCssState& state) {
+    std::vector<int> portraits;
+    for (int i = 0; i < A11Y_CSS_PORTRAITS; i++) {
+        if (!state.portraits[i].locked) {
+            portraits.push_back(i);
+        }
+    }
+    std::sort(portraits.begin(), portraits.end(), [&](int a, int b) {
+        const A11yCssRect& first = state.portraits[a].rect;
+        const A11yCssRect& second = state.portraits[b].rect;
+        if (std::fabs(first.top - second.top) > kSameRow) {
+            return first.top > second.top;
+        }
+        return first.left < second.left;
+    });
+    std::vector<std::vector<int>> rows;
+    float row_top = 0.0f;
+    for (int i : portraits) {
+        float top = state.portraits[i].rect.top;
+        if (rows.empty() || std::fabs(top - row_top) > kSameRow) {
+            rows.emplace_back();
+            row_top = top;
+        }
+        rows.back().push_back(i);
+    }
+    return rows;
+}
+
+/* The portrait of row nearest in x to x; the leftmost of two as near. */
+int nearest_in_x(const A11yCssState& state, const std::vector<int>& row, float x) {
+    int best = row.front();
+    for (int i : row) {
+        if (std::fabs(centre_x(state.portraits[i].rect) - x) <
+            std::fabs(centre_x(state.portraits[best].rect) - x))
+        {
+            best = i;
+        }
+    }
+    return best;
+}
+
+/* A step from the portrait from along the rows; from itself at an edge, none
+ * when from is not among them. */
+Target step_from_portrait(const A11yCssState& state, Target from, Direction direction) {
+    std::vector<std::vector<int>> rows = portrait_rows(state);
+    for (size_t r = 0; r < rows.size(); r++) {
+        const std::vector<int>& row = rows[r];
+        auto found = std::find(row.begin(), row.end(), from.index);
+        if (found == row.end()) {
+            continue;
+        }
+        size_t column = static_cast<size_t>(found - row.begin());
+        float x = centre_x(state.portraits[from.index].rect);
+        switch (direction) {
+        case Direction::left:
+            return column > 0 ? Target{TargetKind::portrait, row[column - 1]} : from;
+        case Direction::right:
+            return column + 1 < row.size() ? Target{TargetKind::portrait, row[column + 1]} : from;
+        case Direction::up:
+            return r > 0 ? Target{TargetKind::portrait, nearest_in_x(state, rows[r - 1], x)} : from;
+        case Direction::down:
+            return r + 1 < rows.size() ?
+                       Target{TargetKind::portrait, nearest_in_x(state, rows[r + 1], x)} :
+                       from;
+        }
+    }
+    return Target{};
+}
+
+/* The row a hand at height y is in or nearest to: the coin within its
+ * portraits' height, or the least far from it. */
+const std::vector<int>& nearest_row(
+    const A11yCssState& state, const std::vector<std::vector<int>>& rows, float y) {
+    float coin = y + kCoinOffsetY;
+    auto distance = [&](const std::vector<int>& row) {
+        const A11yCssRect& rect = state.portraits[row.front()].rect;
+        return coin > rect.top ? coin - rect.top : coin < rect.bottom ? rect.bottom - coin : 0.0f;
+    };
+    const std::vector<int>* best = &rows.front();
+    for (const std::vector<int>& row : rows) {
+        if (distance(row) < distance(*best)) {
+            best = &row;
+        }
+    }
+    return *best;
+}
+
+/* The nearest target on the direction's side of the hand, or none, by rows
+ * as a step from a portrait goes: Up and Down to the nearest row that way,
+ * at the portrait nearest in x; Left and Right along the row the hand is in
+ * or nearest to, else to the nearest portrait that way in any row. */
+Target nearest_that_way(const A11yCssState& state, float x, float y, Direction direction) {
+    std::vector<std::vector<int>> rows = portrait_rows(state);
+    if (rows.empty()) {
+        return Target{};
+    }
+    if (direction == Direction::up || direction == Direction::down) {
+        float way = direction == Direction::up ? 1.0f : -1.0f;
+        const std::vector<int>* best = nullptr;
+        float best_ahead = 0.0f;
+        for (const std::vector<int>& row : rows) {
+            float ahead = (aim_point(state, Target{TargetKind::portrait, row.front()}).y - y) * way;
+            if (ahead > kAhead && (best == nullptr || ahead < best_ahead)) {
+                best = &row;
+                best_ahead = ahead;
+            }
+        }
+        return best != nullptr ?
+                   Target{TargetKind::portrait, nearest_in_x(state, *best, x + kCoinOffsetX)} :
+                   Target{};
+    }
+    float way = direction == Direction::right ? 1.0f : -1.0f;
+    Target best;
+    float best_distance = 0.0f;
+    auto consider = [&](int i, float distance) {
+        if ((aim_point(state, Target{TargetKind::portrait, i}).x - x) * way > kAhead &&
+            (best.kind == TargetKind::none || distance < best_distance))
+        {
+            best = Target{TargetKind::portrait, i};
+            best_distance = distance;
+        }
+    };
+    for (int i : nearest_row(state, rows, y)) {
+        consider(i, std::fabs(aim_point(state, Target{TargetKind::portrait, i}).x - x));
+    }
+    if (best.kind != TargetKind::none) {
+        return best;
+    }
+    for (const std::vector<int>& row : rows) {
+        for (int i : row) {
+            Point aim = aim_point(state, Target{TargetKind::portrait, i});
+            consider(i, std::hypot(aim.x - x, aim.y - y));
+        }
+    }
+    return best;
+}
+
 }  // namespace
+
+Point aim_point(const A11yCssState& state, Target target) {
+    if (target.kind != TargetKind::portrait) {
+        return Point{};
+    }
+    /* Portraits are tested at the coin, so the hand aims to put the coin at
+     * the centre, carried or not. */
+    const A11yCssRect& rect = state.portraits[target.index].rect;
+    return Point{centre_x(rect) - kCoinOffsetX, centre_y(rect) - kCoinOffsetY};
+}
+
+Target step(const A11yCssState& state, Target from, float x, float y, Direction direction) {
+    if (from.kind == TargetKind::portrait) {
+        Target to = step_from_portrait(state, from, direction);
+        if (to.kind != TargetKind::none) {
+            return to;
+        }
+    }
+    return nearest_that_way(state, x, y, direction);
+}
 
 Target target_at(const A11yCssState& state, float x, float y) {
     if (state.hand.slider != A11Y_CSS_NO_SLIDER || state.slots[state.local_slot].name_tags_open) {

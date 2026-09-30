@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "a11y_hooks.h"
-#include "css_speech.hpp"
+#include "css_reader.hpp"
 #include "game_access.h"
 #include "game_text.hpp"
 #include "launcher_speech.hpp"
@@ -10,6 +10,8 @@
 #include "pc/region.h"
 #include "scene_speech.hpp"
 #include "speech.hpp"
+#include <cstdlib>
+#include <dolphin/pad.h>
 #include <memory>
 
 namespace {
@@ -19,14 +21,11 @@ namespace {
 std::unique_ptr<a11y::Speech> s_speech;
 std::unique_ptr<a11y::SceneSpeech> s_scene_speech;
 std::unique_ptr<a11y::MenuSpeech> s_menu_speech;
-std::unique_ptr<a11y::CssSpeech> s_css_speech;
+std::unique_ptr<a11y::CssReader> s_css;
 /* The centre text a leaf screen last set, kept across scenes: a screen the
  * menu scene opens on, as Multi-Man Melee after its match, sets it before
  * the scene hook runs. */
 int s_center_text = -1;
-/* Character select's hands as the hand hook last reported them, by hand;
- * cleared on every scene change, so a hand not yet updated reads as unseen. */
-A11yCssHandReport s_css_hands[A11Y_CSS_SLOTS] = {};
 
 /* The gate every hook from game code passes through. While rollback re-runs
  * frames (pc_net_resim), each hook is reached again for a frame that was
@@ -42,8 +41,8 @@ extern "C" void pc_a11y_init(void) {
     if (s_speech != nullptr) {
         return;
     }
-    s_speech = std::make_unique<a11y::Speech>(
-        a11y::config_from_environment(), a11y::make_screen_reader_bridge());
+    a11y::Config config = a11y::config_from_environment();
+    s_speech = std::make_unique<a11y::Speech>(config, a11y::make_screen_reader_bridge());
     s_speech->init();
     s_speech->announce("Non-Visual Melee ready", a11y::Mode::interrupt);
     s_scene_speech = std::make_unique<a11y::SceneSpeech>(*s_speech);
@@ -51,7 +50,7 @@ extern "C" void pc_a11y_init(void) {
     game_text.pal = pc_region_pal;
     game_text.resolve = a11y_game_resolve;
     s_menu_speech = std::make_unique<a11y::MenuSpeech>(*s_speech, game_text);
-    s_css_speech = std::make_unique<a11y::CssSpeech>(*s_speech);
+    s_css = std::make_unique<a11y::CssReader>(*s_speech, config.steer);
     a11y::launcher_speech_start(*s_speech);
 }
 
@@ -60,7 +59,7 @@ extern "C" void pc_a11y_shutdown(void) {
         return;
     }
     a11y::launcher_speech_stop();
-    s_css_speech.reset();
+    s_css.reset();
     s_menu_speech.reset();
     s_scene_speech.reset();
     s_speech->shutdown();
@@ -79,10 +78,7 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
     /* Arriving on the screen and entry just left, as when character select
      * goes back, is still an arrival. */
     s_menu_speech->forget();
-    s_css_speech->forget();
-    for (A11yCssHandReport& hand : s_css_hands) {
-        hand = A11yCssHandReport{};
-    }
+    s_css->forget();
     s_scene_speech->entered(scene_kind);
 }
 
@@ -112,10 +108,7 @@ extern "C" void pc_a11y_css_frame(const CSSData* css, const CSSDoorsData* doors,
      * be any player in the game. */
     int local_port = pc_net_active() ? pc_net_local_player() : 0;
     A11yCssScreen screen{css, doors, icons, tags, model_root, hand_count, pending_exit, ready};
-    A11yCssState state;
-    a11y_game_css_state(&screen, s_css_hands, local_port, &state);
-    state.online = pc_net_active();
-    s_css_speech->frame(state);
+    s_css->frame(screen, local_port, pc_net_active());
 }
 
 extern "C" void pc_a11y_css_hand(int hand, int state, int held, float x, float y) {
@@ -123,6 +116,23 @@ extern "C" void pc_a11y_css_hand(int hand, int state, int held, float x, float y
         return;
     }
     /* Read by the next frame hook, which sees the player slots this update
-     * left behind; nothing is spoken here. */
-    s_css_hands[hand] = A11yCssHandReport{true, state, held, x, y};
+     * left behind. The local hand also steers here, once per simulated
+     * frame. */
+    s_css->hand(hand, A11yCssHandReport{true, state, held, x, y});
+}
+
+extern "C" bool pc_a11y_pad(PADStatus* pad) {
+    a11y::Stick stick;
+    if (s_css == nullptr || !s_css->take_stick(&stick)) {
+        return false;
+    }
+    /* As the pad's other sources merge: each axis the one pushed further,
+     * so a player's own stick wins and the glide gives way. */
+    if (std::abs(stick.x) > std::abs(pad->stickX)) {
+        pad->stickX = static_cast<s8>(stick.x);
+    }
+    if (std::abs(stick.y) > std::abs(pad->stickY)) {
+        pad->stickY = static_cast<s8>(stick.y);
+    }
+    return true;
 }

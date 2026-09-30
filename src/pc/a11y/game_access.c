@@ -19,6 +19,7 @@
 #include <melee/mn/types.h>
 #include <melee/pl/forward.h>
 #include <string.h>
+#include <sysdolphin/baselib/controller.h>
 #include <sysdolphin/baselib/sislib.h>
 #include <sysdolphin/baselib/synth.h>
 
@@ -313,4 +314,18 @@ void a11y_game_css_state(const A11yCssScreen* screen,
         portrait->locked = icon->state < ICONSTATE_TEMP;
         portrait->rect = css_rect(icon->bound_l, icon->bound_r, icon->bound_u, icon->bound_d);
     }
+}
+
+void a11y_game_pad(int port, A11yPad* out) {
+    memset(out, 0, sizeof(*out));
+    if (port < 0 || port >= A11Y_CSS_SLOTS) {
+        return;
+    }
+    const HSD_PadStatus* pad = &HSD_PadCopyStatus[port];
+    out->stick_x = pad->stickX;
+    out->stick_y = pad->stickY;
+    out->pressed_left = (pad->trigger & HSD_PAD_DPADLEFT) != 0;
+    out->pressed_right = (pad->trigger & HSD_PAD_DPADRIGHT) != 0;
+    out->pressed_up = (pad->trigger & HSD_PAD_DPADUP) != 0;
+    out->pressed_down = (pad->trigger & HSD_PAD_DPADDOWN) != 0;
 }
