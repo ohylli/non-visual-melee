@@ -295,8 +295,8 @@ bool well_on(const A11yCssState& state, Target target, Point hand) {
  * a frame's movement away: within 3 units of the hand plus (3.8, -2.6), the
  * hand in the portrait band. */
 bool picks_up(const A11yCssState& state, Point hand, int slot) {
-    float dx = hand.x + 3.8f - state.slots[slot].coin_x;
-    float dy = hand.y - 2.6f - state.slots[slot].coin_y;
+    float dx = hand.x + 3.8f - state.slots[slot].coin.x;
+    float dy = hand.y - 2.6f - state.slots[slot].coin.y;
     return std::sqrt(dx * dx + dy * dy) < 3.0f - kMargin && hand.y > 0.2f && hand.y < 22.0f;
 }
 
@@ -315,7 +315,7 @@ A11yCssState every_kind_of_target() {
     state.slots[0].portrait = kFoxPortrait;
     state.slots[0].over_portrait = kFoxPortrait;
     state.slots[0].character = kFox;
-    coin_at_rest(state.slots[0], kFoxPortrait);
+    state.slots[0].coin = coin_at_rest(kFoxPortrait);
     return state;
 }
 
@@ -365,15 +365,15 @@ void onto_a_coin_to_pick_up_at_each_delay() {
      * of Yoshi's portrait, and player 1's own on Fox. */
     A11yCssState state = every_kind_of_target();
     A11yCssRect yoshi = portrait_rect(kYoshiPortrait);
-    const Point corners[] = {Point{yoshi.left + 3.4f, yoshi.top - 3.0f},
+    const Point corners[] = {Point{yoshi.left + kCoinRestRight, yoshi.top - kCoinRestDown},
         Point{yoshi.left, yoshi.top}, Point{yoshi.right, yoshi.top},
         Point{yoshi.left, yoshi.bottom}, Point{yoshi.right, yoshi.bottom}};
     for (int delay = 0; delay <= 10; delay++) {
         Channel channel;
         channel.delay = delay;
         for (Point coin : corners) {
-            state.slots[1].coin_x = coin.x;
-            state.slots[1].coin_y = coin.y;
+            state.slots[1].coin.x = coin.x;
+            state.slots[1].coin.y = coin.y;
             for (Point from : {kHome, Point{20.0f, 24.0f}, aim(kRoyPortrait)}) {
                 Run run = glide(from,
                     a11y::aim_point(state, Target{TargetKind::portrait, kYoshiPortrait}), channel);
@@ -386,12 +386,6 @@ void onto_a_coin_to_pick_up_at_each_delay() {
         assert(run.end == GlideEnd::arrived);
         assert(picks_up(state, run.hand, 0));
     }
-}
-
-/* The value a held slider shows with the hand at x (updateGrabbedSlider). */
-int slider_value(float origin, float x) {
-    float along = std::fmin(std::fmax(x - origin, 0.0f), 10.0f);
-    return static_cast<int>(0.8f * along + 0.5f) + 1;
 }
 
 void a_held_slider_from_each_value_to_each_other_at_each_delay() {

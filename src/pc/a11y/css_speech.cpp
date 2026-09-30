@@ -60,50 +60,16 @@ std::string coin_words(const A11yCssState& state, int coin) {
                                           std::string(kPlayersCoinAfter);
 }
 
-bool in_top_bar(Target target) {
-    return target.kind == TargetKind::teams || target.kind == TargetKind::rules ||
-           target.kind == TargetKind::back;
-}
-
-bool in_player_slots(Target target) {
-    return target.kind == TargetKind::slot_button || target.kind == TargetKind::team_button ||
-           target.kind == TargetKind::cpu_level || target.kind == TargetKind::handicap ||
-           target.kind == TargetKind::name_box;
-}
-
-/* A player slot's slider: the knob a hand reaches it at, its name there, the
- * shorter word said before its value while it is held, and the value. */
-struct SliderKind {
-    A11yCssSlider slider;
-    TargetKind knob;
+/* A slider's words: its name at its knob, and the shorter word said before
+ * its value while it is held. */
+struct SliderWords {
     std::string_view name;
     std::string_view held_word;
-    int A11yCssSlot::* value;
 };
 
-constexpr SliderKind kSliders[] = {
-    {A11Y_CSS_CPU_LEVEL, TargetKind::cpu_level, kCpuLevelSlider, kCpuLevelHeld,
-        &A11yCssSlot::cpu_level},
-    {A11Y_CSS_HANDICAP, TargetKind::handicap, kHandicapSlider, kHandicapHeld,
-        &A11yCssSlot::handicap},
-};
-
-const SliderKind* slider_kind(A11yCssSlider slider) {
-    for (const SliderKind& kind : kSliders) {
-        if (kind.slider == slider) {
-            return &kind;
-        }
-    }
-    return nullptr;
-}
-
-const SliderKind* slider_kind(TargetKind knob) {
-    for (const SliderKind& kind : kSliders) {
-        if (kind.knob == knob) {
-            return &kind;
-        }
-    }
-    return nullptr;
+SliderWords slider_words(const SliderKind& slider) {
+    return slider.slider == A11Y_CSS_CPU_LEVEL ? SliderWords{kCpuLevelSlider, kCpuLevelHeld} :
+                                                 SliderWords{kHandicapSlider, kHandicapHeld};
 }
 
 /* What the local hand is on, for hover announcements: the slider it holds,
@@ -115,7 +81,7 @@ Target hovered(const A11yCssState& state) {
         return Target{};
     }
     if (const SliderKind* held = slider_kind(hand.slider)) {
-        return Target{held->knob, hand.slider_slot};
+        return Target{held->knob_kind, hand.slider_slot};
     }
     Target target = target_at(state, hand.x, hand.y);
     return target.kind == TargetKind::portrait ? Target{} : target;
@@ -221,12 +187,12 @@ void CssSpeech::step(const A11yCssState& state, Target to) {
     std::string out;
     std::string words = target_words(state, to);
     int carrying = state.hand.coin;
-    if (carrying >= 0 && in_player_slots(to)) {
+    if (carrying >= 0 && area(to) == Area::player_slots) {
         /* The coin goes back as the hand leaves the portraits, before it
          * gets there; said now, and not again as it happens. */
         add(out, drop_words(state, carrying));
         m_drop_said = true;
-    } else if (carrying >= 0 && in_top_bar(to)) {
+    } else if (carrying >= 0 && area(to) == Area::top_bar) {
         words += ", " + std::string(kNotWhileHoldingACoin);
     } else if (to.kind == TargetKind::portrait) {
         int coin = pickable_coin(state, to.index);
@@ -334,7 +300,7 @@ std::string CssSpeech::slider_announcement(
         int was = last.slots[before.slider_slot].*held->value;
         int is = now.slots[before.slider_slot].*held->value;
         if (is != was) {
-            add(out, std::string(held->held_word) + " " + std::to_string(is));
+            add(out, std::string(slider_words(*held).held_word) + " " + std::to_string(is));
         }
     }
     if (after.slider != A11Y_CSS_NO_SLIDER && before.slider == A11Y_CSS_NO_SLIDER) {
@@ -409,12 +375,13 @@ std::string CssSpeech::target_words(const A11yCssState& state, Target target) {
         return player(i) + " " + std::string(kTeam) + ": " + team(state.slots[i].team);
     case TargetKind::cpu_level:
     case TargetKind::handicap: {
-        const SliderKind* knob = slider_kind(target.kind);
-        if (target.level > 0) {
-            return std::string(knob->held_word) + " " + std::to_string(target.level);
+        const SliderKind* slider = slider_kind(target.kind);
+        SliderWords words = slider_words(*slider);
+        if (target.level) {
+            return std::string(words.held_word) + " " + std::to_string(*target.level);
         }
-        return player(i) + " " + std::string(knob->name) + ": " +
-               std::to_string(state.slots[i].*knob->value);
+        return player(i) + " " + std::string(words.name) + ": " +
+               std::to_string(state.slots[i].*slider->value);
     }
     case TargetKind::name_box:
         return player(i) + " " + std::string(kNameBox);

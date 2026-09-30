@@ -779,7 +779,7 @@ void a_step_to_a_coin_says_whose_it_is() {
     /* Player 2's coin rests on Yoshi, player 1's own on Fox. */
     A11yCssState state = vs_screen();
     choose(state, kFoxPortrait);
-    coin_at_rest(state.slots[0], kFoxPortrait);
+    state.slots[0].coin = coin_at_rest(kFoxPortrait);
     Fixture f(state);
     f.css.step(state, portrait(kYoshiPortrait));
     f.css.step(state, portrait(kFoxPortrait));

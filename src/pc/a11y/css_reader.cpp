@@ -45,8 +45,8 @@ void CssReader::forget() {
     for (A11yCssHandReport& report : m_reports) {
         report = A11yCssHandReport{};
     }
-    for (CoinReport& coin : m_coins) {
-        coin = CoinReport{};
+    for (A11yCssCoinReport& coin : m_coins) {
+        coin = A11yCssCoinReport{};
     }
     m_have_state = false;
     m_local_updated = false;
@@ -57,13 +57,8 @@ void CssReader::forget() {
 
 void CssReader::frame(const A11yCssScreen& screen, int local_port, bool online) {
     A11yCssState state;
-    a11y_game_css_state(&screen, m_reports, local_port, &state);
+    a11y_game_css_state(&screen, m_reports, m_coins, local_port, &state);
     state.online = online;
-    for (int i = 0; i < A11Y_CSS_SLOTS; i++) {
-        state.slots[i].coin_seen = m_coins[i].seen;
-        state.slots[i].coin_x = m_coins[i].x;
-        state.slots[i].coin_y = m_coins[i].y;
-    }
     if (m_glide.active()) {
         if (!m_local_updated) {
             /* A hand whose controller is unplugged stops updating. */
@@ -92,7 +87,7 @@ void CssReader::hand(int hand, const A11yCssHandReport& report) {
 }
 
 void CssReader::coin(int slot, float x, float y) {
-    m_coins[slot] = CoinReport{true, x, y};
+    m_coins[slot] = A11yCssCoinReport{true, x, y};
 }
 
 bool CssReader::take_stick(Stick* out) {
@@ -116,7 +111,7 @@ bool CssReader::may_steer(const A11yCssState& state) const {
 void CssReader::follow_destination(const A11yCssState& state) {
     Target destination = m_glide_status.destination;
     bool holding = state.hand.slider != A11Y_CSS_NO_SLIDER;
-    if ((destination.level > 0) != holding) {
+    if (destination.level.has_value() != holding) {
         /* A glide to a value of a slider let go of would drag a free hand,
          * one to a target would drag a slider just grabbed. */
         stop_glide(holding ? "a slider was grabbed" : "the slider was let go", false);
@@ -125,10 +120,9 @@ void CssReader::follow_destination(const A11yCssState& state) {
     /* A knob moves with its value and a resting coin drifts. A target gone
      * from the rows (a slot closed, say) is aimed at where it was. */
     std::vector<std::vector<Target>> rows = target_rows(state);
-    bool exists =
-        destination.level > 0 || std::any_of(rows.begin(), rows.end(), [&](const auto& row) {
-            return std::find(row.begin(), row.end(), destination) != row.end();
-        });
+    bool exists = destination.level || std::any_of(rows.begin(), rows.end(), [&](const auto& row) {
+        return std::find(row.begin(), row.end(), destination) != row.end();
+    });
     if (exists) {
         m_glide.retarget(aim_point(state, destination));
     }

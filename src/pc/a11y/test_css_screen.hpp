@@ -6,6 +6,7 @@
 #pragma once
 #include "character_kinds.h"
 #include "game_access.h"
+#include <cmath>
 
 namespace css_test {
 
@@ -56,12 +57,22 @@ inline A11yCssKnob cpu_level_knob(int slot, int level) {
 }
 
 /* Where the game puts a coin on a portrait it chooses for a slot, as a new
- * CPU's (mnCharSel_8025FB50) or one put back (mnCharSel_8025FDEC). */
-inline void coin_at_rest(A11yCssSlot& slot, int portrait) {
+ * CPU's (mnCharSel_8025FB50) or one put back (mnCharSel_8025FDEC): this far
+ * right of the portrait's left edge and below its top. */
+constexpr float kCoinRestRight = 3.4f;
+constexpr float kCoinRestDown = 3.0f;
+
+inline A11yCssCoinReport coin_at_rest(int portrait) {
     A11yCssRect rect = portrait_rect(portrait);
-    slot.coin_seen = true;
-    slot.coin_x = rect.left + 3.4f;
-    slot.coin_y = rect.top - 3.0f;
+    return A11yCssCoinReport{true, rect.left + kCoinRestRight, rect.top - kCoinRestDown};
+}
+
+/* The value a held slider shows with the hand at x, the slider's lowest end
+ * at origin (updateGrabbedSlider): the hand's place along the slider's 10
+ * units, times 0.8, plus 0.5, truncated, plus 1. */
+inline int slider_value(float origin, float x) {
+    float along = std::fmin(std::fmax(x - origin, 0.0f), 10.0f);
+    return static_cast<int>(0.8f * along + 0.5f) + 1;
 }
 
 inline A11yCssSlot slot(A11yCssSlotKind kind, int index) {
@@ -88,7 +99,7 @@ inline A11yCssSlot cpu(int index, int portrait) {
     out.over_portrait = portrait;
     out.character = kPortraitCharacters[portrait];
     out.cpu_level_knob = cpu_level_knob(index, 1);
-    coin_at_rest(out, portrait);
+    out.coin = coin_at_rest(portrait);
     return out;
 }
 

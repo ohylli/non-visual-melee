@@ -89,6 +89,15 @@ typedef struct A11yCssHandReport {
     float y;
 } A11yCssHandReport;
 
+/* One player slot's coin as the coin hook reported it; seen is false until
+ * the hook has reported it since the scene was entered. A coin at rest drifts
+ * a little, away from other coins and from its portrait's edges. */
+typedef struct A11yCssCoinReport {
+    bool seen;
+    float x;
+    float y;
+} A11yCssCoinReport;
+
 /* A rectangle in the screen's units, y growing upwards. The game's tests are
  * strict: a point on an edge is outside. */
 typedef struct A11yCssRect {
@@ -100,8 +109,8 @@ typedef struct A11yCssRect {
 
 /* A slider's knob: the point a free hand grabs it from, within the game's
  * grab distance. known is false where the game's model has no such joint.
- * A held slider keeps the hand at its knob's height and follows the hand's
- * x over 10 units from origin_x, the hand's x at the slider's lowest end. */
+ * origin_x is the hand's x at the slider's lowest end; css_targets.cpp has
+ * how a held slider's value follows the hand from there. */
 typedef struct A11yCssKnob {
     bool known;
     float x;
@@ -149,13 +158,8 @@ typedef struct A11yCssSlot {
     int costume;
     /* Some hand carries the slot's coin. */
     bool carried;
-    /* Where the coin is, as the coin hook last reported it; coin_seen is false
-     * until it has since the scene was entered. A coin at rest drifts a
-     * little, away from other coins and from its portrait's edges. Filled by
-     * the reader, not read from the screen. */
-    bool coin_seen;
-    float coin_x;
-    float coin_y;
+    /* Where the coin is. */
+    A11yCssCoinReport coin;
     /* The slot's own hand (the hand of the same port) holds a coin or a
      * slider; its HMN/CPU button does not react meanwhile. */
     bool hand_holding;
@@ -236,9 +240,11 @@ typedef struct A11yCssState {
 } A11yCssState;
 
 /* Fills the snapshot from what the frame hook passed, the hands the hand hook
- * reported, indexed by hand, and the port the local player drives. */
+ * reported, indexed by hand, the coins the coin hook reported, indexed by
+ * slot, and the port the local player drives. */
 void a11y_game_css_state(const A11yCssScreen* screen,
-    const A11yCssHandReport reports[A11Y_CSS_SLOTS], int local_port, A11yCssState* out);
+    const A11yCssHandReport reports[A11Y_CSS_SLOTS], const A11yCssCoinReport coins[A11Y_CSS_SLOTS],
+    int local_port, A11yCssState* out);
 
 /* A controller as the game read it this simulated frame (HSD_PadCopyStatus):
  * the main stick after the game's clamping, and the D-pad directions newly

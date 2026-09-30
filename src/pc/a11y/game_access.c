@@ -174,8 +174,7 @@ static HSD_JObj* css_joint(HSD_JObj* model_root, u8 joint, Vec3* out) {
 
 /* A slider's knob: the grab point mnCharSel_CursorThink tests, offset from
  * the slider's joint. The joint's own x is how far along the slider the knob
- * is; a held slider sets it to the hand's x less the rest (updateGrabbedSlider),
- * so the rest is the hand's x at the lowest end. */
+ * is (updateGrabbedSlider), so the knob less it is the lowest end. */
 static A11yCssKnob css_knob(HSD_JObj* model_root, u8 joint) {
     A11yCssKnob knob = {false, 0.0f, 0.0f, 0.0f};
     Vec3 pos;
@@ -199,7 +198,8 @@ static bool css_hand_holds(const A11yCssHandReport* report) {
 }
 
 void a11y_game_css_state(const A11yCssScreen* screen,
-    const A11yCssHandReport reports[A11Y_CSS_SLOTS], int local_port, A11yCssState* out) {
+    const A11yCssHandReport reports[A11Y_CSS_SLOTS], const A11yCssCoinReport coins[A11Y_CSS_SLOTS],
+    int local_port, A11yCssState* out) {
     const CSSData* css = screen->css;
     int hand_count = screen->hand_count;
     memset(out, 0, sizeof(*out));
@@ -282,6 +282,7 @@ void a11y_game_css_state(const A11yCssScreen* screen,
             }
         }
         slot->hand_holding = css_hand_holds(&reports[i]);
+        slot->coin = coins[i];
         slot->team = door->team;
         slot->cpu_level = css->vs.start.players[player].cpu_level;
         slot->handicap = css->vs.start.players[player].handicap;

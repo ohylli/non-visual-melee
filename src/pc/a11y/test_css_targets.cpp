@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <optional>
 #include <vector>
 
 namespace {
@@ -37,11 +38,11 @@ Target team_button(int slot) {
     return Target{TargetKind::team_button, slot};
 }
 
-Target cpu_level(int slot, int level = 0) {
+Target cpu_level(int slot, std::optional<int> level = std::nullopt) {
     return Target{TargetKind::cpu_level, slot, level};
 }
 
-Target handicap(int slot, int level = 0) {
+Target handicap(int slot, std::optional<int> level = std::nullopt) {
     return Target{TargetKind::handicap, slot, level};
 }
 
@@ -419,12 +420,6 @@ void rows_are_rebuilt_as_a_slot_changes() {
     assert(a11y::step(state, cpu_level(1), knob.x, knob.y, Direction::up) == slot_button(1));
 }
 
-/* The value a held slider shows with the hand at x (updateGrabbedSlider). */
-int slider_value(const A11yCssKnob& knob, float x) {
-    float along = std::fmin(std::fmax(x - knob.origin_x, 0.0f), 10.0f);
-    return static_cast<int>(0.8f * along + 0.5f) + 1;
-}
-
 void a_held_slider_steps_its_value() {
     A11yCssState state = vs_screen();
     state.hand.slider = A11Y_CSS_CPU_LEVEL;
@@ -438,14 +433,14 @@ void a_held_slider_steps_its_value() {
     for (int level = 2; level <= 9; level++) {
         at = step_from(state, at, Direction::right);
         assert(at == cpu_level(1, level));
-        assert(slider_value(knob, a11y::aim_point(state, at).x) == level);
+        assert(slider_value(knob.origin_x, a11y::aim_point(state, at).x) == level);
         assert(std::fabs(a11y::aim_point(state, at).y - knob.y) < 1e-4f);
     }
     assert(step_from(state, at, Direction::right) == cpu_level(1, 9));
     for (int level = 8; level >= 1; level--) {
         at = step_from(state, at, Direction::left);
         assert(at == cpu_level(1, level));
-        assert(slider_value(knob, a11y::aim_point(state, at).x) == level);
+        assert(slider_value(knob.origin_x, a11y::aim_point(state, at).x) == level);
     }
     assert(step_from(state, at, Direction::left) == cpu_level(1, 1));
     /* Up and Down keep the value. */
@@ -487,7 +482,7 @@ void pickable_coins() {
     /* Player 2 is a CPU with Yoshi; player 1's own coin rests on Fox. */
     state.slots[0].portrait = kFoxPortrait;
     state.slots[0].character = kFox;
-    coin_at_rest(state.slots[0], kFoxPortrait);
+    state.slots[0].coin = coin_at_rest(kFoxPortrait);
     assert(a11y::pickable_coin(state, kYoshiPortrait) == 1);
     assert(a11y::pickable_coin(state, kFoxPortrait) == 0);
     assert(a11y::pickable_coin(state, kNessPortrait) == -1);
@@ -517,8 +512,8 @@ void pickable_coins() {
 /* A at the hand picks up the coin of a slot (mnCharSel_CursorThink): within
  * 3 units of the hand plus (3.8, -2.6), the hand in the portrait band. */
 bool picks_up(const A11yCssState& state, Point hand, int slot) {
-    float dx = hand.x + 3.8f - state.slots[slot].coin_x;
-    float dy = hand.y - 2.6f - state.slots[slot].coin_y;
+    float dx = hand.x + 3.8f - state.slots[slot].coin.x;
+    float dy = hand.y - 2.6f - state.slots[slot].coin.y;
     return dx * dx + dy * dy < 9.0f && hand.y > 0.2f && hand.y < 22.0f;
 }
 
@@ -527,7 +522,7 @@ void a_step_to_a_coin_aims_where_a_picks_it_up() {
     Point hand = a11y::aim_point(state, portrait(kYoshiPortrait));
     assert(picks_up(state, hand, 1));
     /* A coin drifted to the very top of its portrait: still in the band. */
-    state.slots[1].coin_y = portrait_rect(kYoshiPortrait).top;
+    state.slots[1].coin.y = portrait_rect(kYoshiPortrait).top;
     hand = a11y::aim_point(state, portrait(kYoshiPortrait));
     assert(picks_up(state, hand, 1));
     /* Carrying a coin, the portrait's centre. */

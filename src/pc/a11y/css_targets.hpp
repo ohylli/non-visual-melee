@@ -8,6 +8,7 @@
 #pragma once
 #include "game_access.h"
 #include "steering.hpp"
+#include <optional>
 #include <vector>
 
 namespace a11y {
@@ -33,11 +34,29 @@ struct Target {
     /* The portrait's number or the player slot's; -1 for the top bar. */
     int index = -1;
     /* A value of the slider the hand holds, 1 to 9, as a step's destination
-     * or where the hand is; 0 for everything else, the knob included. */
-    int level = 0;
+     * or where the hand is; none for everything else, the knob included. */
+    std::optional<int> level;
 
     bool operator==(const Target&) const = default;
 };
+
+/* The part of the screen a target is in; none for no target. */
+enum class Area { none, top_bar, portraits, player_slots };
+Area area(Target target);
+
+/* A player slot's slider: what the hand holds, the knob it is reached at, the
+ * knob's place in the slot, and the value it sets. */
+struct SliderKind {
+    A11yCssSlider slider;
+    TargetKind knob_kind;
+    A11yCssKnob A11yCssSlot::* knob;
+    int A11yCssSlot::* value;
+};
+
+/* The slider held as slider, or reached at a knob of kind knob; nullptr for
+ * none. */
+const SliderKind* slider_kind(A11yCssSlider slider);
+const SliderKind* slider_kind(TargetKind knob);
 
 /* Where a carried coin sits from the hand; portraits are tested there. */
 inline constexpr float kCoinOffsetX = 2.7f;

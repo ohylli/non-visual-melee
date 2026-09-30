@@ -53,13 +53,8 @@ private:
     /* The hands as the hand hook last reported them; a hand not reported
      * since the scene was entered reads as unseen. */
     A11yCssHandReport m_reports[A11Y_CSS_SLOTS] = {};
-    /* The coins as the coin hook last reported them. */
-    struct CoinReport {
-        bool seen = false;
-        float x = 0.0f;
-        float y = 0.0f;
-    };
-    CoinReport m_coins[A11Y_CSS_SLOTS];
+    /* The coins as the coin hook last reported them, indexed by slot. */
+    A11yCssCoinReport m_coins[A11Y_CSS_SLOTS] = {};
     /* This frame's snapshot, from the frame hook; the local hand's hook
      * moves its hand to where it went this frame. */
     A11yCssState m_state{};
