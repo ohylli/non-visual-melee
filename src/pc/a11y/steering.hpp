@@ -85,13 +85,17 @@ private:
     bool account(Stick applied);
     Stick stick_for(Point distance) const;
 
+    /* The input delay assumed until one is measured: longer than any online
+     * input delay. */
+    static constexpr int kUnmeasuredDelay = 30;
+
     bool m_active = false;
     Point m_destination;
     int m_now = 0;
     int m_started = 0;
     /* Frames from asking for a stick to the game applying it, as last
-     * measured; until then, longer than any online input delay. */
-    int m_delay = 30;
+     * measured. */
+    int m_delay = kUnmeasuredDelay;
     /* The stick the game applied last frame. */
     Stick m_last_applied;
     /* The stick the last frame asked for, until it is published. */

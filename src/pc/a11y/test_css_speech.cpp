@@ -72,6 +72,8 @@ struct Fixture {
     std::vector<Output> outputs;
     a11y::Speech speech{a11y::Config{true, true}, std::make_unique<FakeBridge>(outputs)};
     a11y::CssSpeech css{speech};
+    /* The glide as CssReader would pass it: an ended one for one frame. */
+    a11y::GlideStatus glide;
 
     Fixture() {
         speech.init();
@@ -80,12 +82,25 @@ struct Fixture {
 
     /* Arrives on the screen and drops the opening. */
     explicit Fixture(const A11yCssState& arrival) : Fixture() {
-        css.frame(arrival);
+        css.frame(arrival, glide);
         spoken();
         s_lines.clear();
     }
 
-    void frame(const A11yCssState& state) { css.frame(state); }
+    void frame(const A11yCssState& state) {
+        css.frame(state, glide);
+        if (glide.phase != a11y::GlideStatus::Phase::gliding) {
+            glide = a11y::GlideStatus{};
+        }
+    }
+
+    void glide_to(a11y::Target destination) {
+        glide = a11y::GlideStatus{a11y::GlideStatus::Phase::gliding, destination};
+    }
+
+    void glide_ended(bool failed) {
+        glide.phase = failed ? a11y::GlideStatus::Phase::failed : a11y::GlideStatus::Phase::ended;
+    }
 
     /* What was spoken since the last call, all of it interrupting. */
     std::vector<std::string> spoken() {
@@ -690,14 +705,14 @@ void a_glide_crosses_portraits_in_silence_and_arrives_silently() {
     pick_up(state, 0);
     carry_over(state, 0, kFoxPortrait);
     Fixture f(state);
-    f.css.glide_started(portrait(kMarthPortrait));
+    f.glide_to(portrait(kMarthPortrait));
     carry_over(state, 0, kNessPortrait);
     f.frame(state);
     carry_over(state, 0, -1);
     f.frame(state);
     carry_over(state, 0, kMarthPortrait);
     f.frame(state);
-    f.css.glide_ended(false);
+    f.glide_ended(false);
     f.frame(state);
     f.frame(state);
     assert(f.spoken().empty());
@@ -710,10 +725,10 @@ void a_glide_ending_elsewhere_names_where_the_hand_is() {
     pick_up(state, 0);
     carry_over(state, 0, kFoxPortrait);
     Fixture f(state);
-    f.css.glide_started(portrait(kMarthPortrait));
+    f.glide_to(portrait(kMarthPortrait));
     carry_over(state, 0, kNessPortrait);
     f.frame(state);
-    f.css.glide_ended(false);
+    f.glide_ended(false);
     f.frame(state);
     f.frame(state);
     assert((f.spoken() == Texts{"Ness"}));
@@ -725,10 +740,10 @@ void a_failed_glide_says_so() {
     pick_up(state, 0);
     carry_over(state, 0, kFoxPortrait);
     Fixture f(state);
-    f.css.glide_started(portrait(kMarthPortrait));
+    f.glide_to(portrait(kMarthPortrait));
     carry_over(state, 0, kNessPortrait);
     f.frame(state);
-    f.css.glide_ended(true);
+    f.glide_ended(true);
     f.frame(state);
     assert((f.spoken() == Texts{"Could not reach Marth. Ness"}));
 }
@@ -736,12 +751,12 @@ void a_failed_glide_says_so() {
 void a_free_hand_gliding_over_a_button_says_nothing() {
     A11yCssState state = vs_screen();
     Fixture f(state);
-    f.css.glide_started(portrait(kFoxPortrait));
+    f.glide_to(portrait(kFoxPortrait));
     move(state, -16.0f, -2.0f);
     f.frame(state);
     move(state, -23.0f, 11.0f);
     f.frame(state);
-    f.css.glide_ended(false);
+    f.glide_ended(false);
     f.frame(state);
     assert(f.spoken().empty());
 }
@@ -751,7 +766,7 @@ void the_coin_jumping_in_during_a_glide_waits_behind_the_step() {
      * the portrait crossed. */
     A11yCssState state = vs_screen();
     Fixture f(state);
-    f.css.glide_started(portrait(kFoxPortrait));
+    f.glide_to(portrait(kFoxPortrait));
     state.hand.y = 1.0f;
     pick_up(state, 0);
     f.frame(state);

@@ -115,7 +115,7 @@ Target under_hand(const A11yCssState& state) {
 
 }  // namespace
 
-void CssSpeech::frame(const A11yCssState& state) {
+void CssSpeech::frame(const A11yCssState& state, const GlideStatus& glide) {
     /* Leaving the rules screen or name entry builds the screen afresh inside
      * the same scene: an arrival too. */
     bool arrived = !m_seen || (m_last.exit == A11Y_CSS_AWAY && state.exit != A11Y_CSS_AWAY);
@@ -124,8 +124,6 @@ void CssSpeech::frame(const A11yCssState& state) {
     m_last = state;
     if (arrived) {
         m_pickup_pending = false;
-        m_gliding = false;
-        m_glide_ended = false;
         m_speech.announce(opening(state), Mode::interrupt);
         return;
     }
@@ -146,11 +144,12 @@ void CssSpeech::frame(const A11yCssState& state) {
         return;
     }
 
-    /* During a glide, and on the frame after it ends, what the hand crosses
+    /* During a glide, and on the frame it has ended, what the hand crosses
      * goes unsaid: the step said where it goes. */
-    bool glide_ended = m_glide_ended;
-    m_glide_ended = false;
-    bool quiet = m_gliding || glide_ended;
+    bool gliding = glide.phase == GlideStatus::Phase::gliding;
+    bool glide_ended =
+        glide.phase == GlideStatus::Phase::ended || glide.phase == GlideStatus::Phase::failed;
+    bool quiet = gliding || glide_ended;
 
     std::string mine;
     std::string others;
@@ -160,11 +159,11 @@ void CssSpeech::frame(const A11yCssState& state) {
     Target is = hovered(state);
     slot_announcements(last, state, was, is, mine, others);
     if (glide_ended) {
-        if (m_glide_failed) {
-            add(mine, std::string(kCouldNotReach) + " " + target_words(state, m_destination));
+        if (glide.phase == GlideStatus::Phase::failed) {
+            add(mine, std::string(kCouldNotReach) + " " + target_words(state, glide.destination));
         }
         Target under = under_hand(state);
-        if (under != m_destination && under.kind != TargetKind::none) {
+        if (under != glide.destination && under.kind != TargetKind::none) {
             add(mine, target_words(state, under));
         }
     } else if (!quiet && is != was && is.kind != TargetKind::none) {
@@ -182,7 +181,7 @@ void CssSpeech::frame(const A11yCssState& state) {
     }
     if (!mine.empty()) {
         /* Behind the step's announcement while the glide runs. */
-        m_speech.announce(mine, m_gliding ? Mode::queue : Mode::interrupt);
+        m_speech.announce(mine, gliding ? Mode::queue : Mode::interrupt);
     }
     if (!others.empty()) {
         m_speech.announce(others, Mode::queue);
@@ -193,18 +192,6 @@ void CssSpeech::step(const A11yCssState& state, Target to) {
     m_speech.announce(
         to.kind != TargetKind::none ? target_words(state, to) : std::string(kNothingThatWay),
         Mode::interrupt);
-}
-
-void CssSpeech::glide_started(Target destination) {
-    m_gliding = true;
-    m_glide_ended = false;
-    m_destination = destination;
-}
-
-void CssSpeech::glide_ended(bool failed) {
-    m_gliding = false;
-    m_glide_ended = true;
-    m_glide_failed = failed;
 }
 
 std::string CssSpeech::opening(const A11yCssState& state) {

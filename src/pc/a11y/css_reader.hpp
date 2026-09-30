@@ -37,7 +37,9 @@ private:
     /* The local hand updated: steps, and the glide's next frame. */
     void steer(int hand, const A11yCssHandReport& report);
     void press(Direction direction, Point hand);
-    void glide_ended(GlideEnd end);
+    /* The glide ended, failed or not, for why: logged now, spoken on the
+     * next frame. */
+    void glide_ended(bool failed, const char* why);
     /* Stops a glide under way, with no announcement unless failed. */
     void stop_glide(const char* why, bool failed);
 
@@ -53,7 +55,8 @@ private:
     /* The local hand reported since the last frame hook. */
     bool m_local_updated = false;
     Glide m_glide;
-    Target m_destination;
+    /* Where the glide goes, and how it ended until the frame hook says so. */
+    GlideStatus m_glide_status;
     /* The stick the glide asks for, until the pad hook takes it. */
     Stick m_request;
     bool m_request_waiting = false;

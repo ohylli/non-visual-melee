@@ -23,6 +23,20 @@ bool pressed(const A11yPad& pad, Direction* out) {
     return true;
 }
 
+/* Why the glide ended, for the log. */
+const char* why_ended(GlideEnd end) {
+    switch (end) {
+    case GlideEnd::failed:
+        return "could not get there";
+    case GlideEnd::abandoned:
+        return "the player's stick took over";
+    case GlideEnd::none:
+    case GlideEnd::arrived:
+        break;
+    }
+    return "arrived";
+}
+
 }  // namespace
 
 void CssReader::forget() {
@@ -33,6 +47,7 @@ void CssReader::forget() {
     m_have_state = false;
     m_local_updated = false;
     m_glide = Glide{};
+    m_glide_status = GlideStatus{};
     m_request_waiting = false;
 }
 
@@ -51,7 +66,10 @@ void CssReader::frame(const A11yCssScreen& screen, int local_port, bool online) 
     m_local_updated = false;
     m_state = state;
     m_have_state = true;
-    m_speech.frame(state);
+    m_speech.frame(state, m_glide_status);
+    if (m_glide_status.phase != GlideStatus::Phase::gliding) {
+        m_glide_status = GlideStatus{};
+    }
 }
 
 void CssReader::hand(int hand, const A11yCssHandReport& report) {
@@ -101,56 +119,41 @@ void CssReader::steer(int hand, const A11yCssHandReport& report) {
     m_request = glide.stick;
     m_request_waiting = moves(glide.stick);
     if (glide.end != GlideEnd::none) {
-        glide_ended(glide.end);
+        glide_ended(glide.end == GlideEnd::failed, why_ended(glide.end));
     }
 }
 
 void CssReader::press(Direction direction, Point hand) {
     /* A press during a glide steps on from where it was going. */
-    Target from = m_glide.active() ? m_destination : target_at(m_state, hand.x, hand.y);
+    Target from =
+        m_glide.active() ? m_glide_status.destination : target_at(m_state, hand.x, hand.y);
     Target to = step(m_state, from, hand.x, hand.y, direction);
     m_speech.step(m_state, to);
     /* At an edge the step names where the hand is, or is going. */
     if (to.kind == TargetKind::none || to == from) {
         return;
     }
-    m_destination = to;
+    m_glide_status = GlideStatus{GlideStatus::Phase::gliding, to};
     Point aim = aim_point(m_state, to);
     m_glide.start(aim);
-    m_speech.glide_started(to);
     if (log_enabled()) {
         pc_log_line("[a11y] glide to \"%s\" at (%.2f, %.2f)",
             m_speech.target_words(m_state, to).c_str(), aim.x, aim.y);
     }
 }
 
-void CssReader::glide_ended(GlideEnd end) {
-    std::string words = m_speech.target_words(m_state, m_destination);
-    int frames = m_glide.frames();
-    if (end == GlideEnd::arrived) {
-        if (log_enabled()) {
-            pc_log_line("[a11y] glide arrived at \"%s\" in %d frames", words.c_str(), frames);
-        }
-    } else if (end == GlideEnd::failed) {
-        if (log_enabled()) {
-            pc_log_line(
-                "[a11y] glide failed: could not reach \"%s\" in %d frames", words.c_str(), frames);
-        }
-    } else if (log_enabled()) {
-        pc_log_line("[a11y] glide to \"%s\" abandoned after %d frames: the player's stick "
-                    "took over",
-            words.c_str(), frames);
+void CssReader::glide_ended(bool failed, const char* why) {
+    if (log_enabled()) {
+        pc_log_line("[a11y] glide to \"%s\" ended after %d frames: %s",
+            m_speech.target_words(m_state, m_glide_status.destination).c_str(), m_glide.frames(),
+            why);
     }
-    m_speech.glide_ended(end == GlideEnd::failed);
+    m_glide_status.phase = failed ? GlideStatus::Phase::failed : GlideStatus::Phase::ended;
 }
 
 void CssReader::stop_glide(const char* why, bool failed) {
-    if (log_enabled()) {
-        pc_log_line("[a11y] glide to \"%s\" stopped after %d frames: %s",
-            m_speech.target_words(m_state, m_destination).c_str(), m_glide.frames(), why);
-    }
     m_glide.stop();
-    m_speech.glide_ended(failed);
+    glide_ended(failed, why);
 }
 
 }  // namespace a11y

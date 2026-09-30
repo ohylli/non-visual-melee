@@ -27,12 +27,12 @@ sleep 1
 # reach the top row.
 press DUp
 wait ': "Pichu"$'
-wait 'glide arrived at "Pichu" in \d+ frames'
+wait 'glide to "Pichu" ended after \d+ frames: arrived'
 press DUp
 wait ': "Fox"$'
 press DUp
 wait ': "Mario"$'
-wait 'glide arrived at "Mario"'
+wait 'glide to "Mario" ended after \d+ frames: arrived'
 
 # Along the top row, each name at its press, the next press during the
 # glide.
@@ -50,7 +50,7 @@ press DRight
 wait ': "C\. Falcon"$'
 press DRight
 wait ': "Ganondorf"$'
-wait 'glide arrived at "Ganondorf"'
+wait 'glide to "Ganondorf" ended after \d+ frames: arrived'
 
 # The row's end: no movement, the name again.
 press DRight
@@ -59,6 +59,6 @@ wait ': "Ganondorf"$'
 # Down a row, and A chooses: the game's announcer names the character.
 press DDown
 wait ': "Young Link"$'
-wait 'glide arrived at "Young Link" in \d+ frames'
+wait 'glide to "Young Link" ended after \d+ frames: arrived'
 press A
 sleep 1

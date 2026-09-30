@@ -24,6 +24,21 @@ namespace a11y {
 
 class Speech;
 
+/* A glide as the speech follows it, kept by whoever steers. */
+struct GlideStatus {
+    enum class Phase {
+        none,
+        /* Under way to destination. */
+        gliding,
+        /* Ended since the last frame, at the destination or elsewhere. */
+        ended,
+        /* Ended since the last frame without getting there. */
+        failed,
+    };
+    Phase phase = Phase::none;
+    Target destination;
+};
+
 class CssSpeech {
 public:
     /* speech must outlive this. */
@@ -34,26 +49,20 @@ public:
     void forget() {
         m_seen = false;
         m_pickup_pending = false;
-        m_gliding = false;
-        m_glide_ended = false;
     }
 
-    /* The screen's state this frame. Speaks what changed since the last one:
-     * the local hand's doings interrupting, other players' queued; nothing
-     * when nothing did. */
-    void frame(const A11yCssState& state);
+    /* The screen's state this frame, and the glide's. Speaks what changed
+     * since the last one: the local hand's doings interrupting, other
+     * players' queued; nothing when nothing did. While a glide runs, the
+     * targets the hand crosses go unsaid, and what the hand does meanwhile
+     * waits behind the step's announcement. The frame a glide has ended
+     * says "Could not reach" and the destination if it failed, and names
+     * what the hand is on unless that is the destination. */
+    void frame(const A11yCssState& state, const GlideStatus& glide);
 
     /* A step: says where it goes, interrupting; to is none when nothing lies
      * that way. */
     void step(const A11yCssState& state, Target to);
-    /* A glide to destination began, or turned there: until it ends, the
-     * targets the hand crosses go unsaid, and what the hand does meanwhile
-     * waits behind the step's announcement. */
-    void glide_started(Target destination);
-    /* The glide ended. The next frame says "Could not reach" and the
-     * destination if it failed, and names what the hand is on unless that
-     * is the destination. */
-    void glide_ended(bool failed);
 
     /* A target with its value: "Player 2: CPU", "Teams: off". */
     std::string target_words(const A11yCssState& state, Target target);
@@ -84,12 +93,6 @@ private:
     bool m_seen = false;
     /* A coin was picked up last frame and is not announced yet. */
     bool m_pickup_pending = false;
-    /* A glide is under way to m_destination, or ended since the last frame
-     * (failed if it did not get there). */
-    bool m_gliding = false;
-    bool m_glide_ended = false;
-    bool m_glide_failed = false;
-    Target m_destination;
     A11yCssState m_last{};
     /* The characters missing from the names table that were logged. */
     std::set<A11yCharacter> m_logged_missing;
