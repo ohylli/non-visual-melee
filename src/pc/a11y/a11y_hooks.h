@@ -67,6 +67,12 @@ void pc_a11y_css_frame(const struct CSSData* css, const struct CSSDoorsData* doo
  * holds, and position. The next frame reads them. */
 void pc_a11y_css_hand(int hand, int state, int held, float x, float y);
 
+/* One coin of character select has updated (the end of fn_80262648): its
+ * player slot and position, from the coin's struct, which only mncharsel.c
+ * defines. A coin that is not shown (its slot closed, or no character
+ * chosen) is not reported. The next frame reads them. */
+void pc_a11y_css_coin(int slot, float x, float y);
+
 /* Port 1's virtual pad is about to be published (publish_locked in
  * src/pc/keyboard.c, once per video frame, after the keyboard, the key
  * driver and a GameCube adapter are merged). The one place the fork writes:

@@ -51,10 +51,12 @@ inline constexpr std::string_view kOff = "off";
 inline constexpr std::string_view kNoCharacter = "no character";
 inline constexpr std::string_view kUnknownCharacter = "Unknown character";
 inline constexpr std::string_view kCostume = "Costume";
-inline constexpr std::string_view kHoldingYourCoin = "Holding your coin";
-/* "Holding player 2's coin", around the player's number. */
-inline constexpr std::string_view kHoldingCoinBefore = "Holding player ";
-inline constexpr std::string_view kHoldingCoinAfter = "'s coin";
+/* A coin by whose it is, "your coin" or "player 2's coin", as held ("Holding
+ * player 2's coin") and as a step finds it resting ("Yoshi, your coin"). */
+inline constexpr std::string_view kHolding = "Holding";
+inline constexpr std::string_view kYourCoin = "your coin";
+inline constexpr std::string_view kPlayersCoinBefore = "player ";
+inline constexpr std::string_view kPlayersCoinAfter = "'s coin";
 inline constexpr std::string_view kBackTo = "Back to";
 inline constexpr std::string_view kHoldingSlider = "Holding the slider";
 inline constexpr std::string_view kReleased = "Released";
@@ -64,5 +66,8 @@ inline constexpr std::string_view kNoSpeechYet = "No speech yet.";
  * ("Could not reach Fox"). */
 inline constexpr std::string_view kNothingThatWay = "Nothing that way";
 inline constexpr std::string_view kCouldNotReach = "Could not reach";
+/* A step onto the top bar with a coin in the hand: its buttons do not react
+ * to a hand that carries one ("Back, not while holding a coin"). */
+inline constexpr std::string_view kNotWhileHoldingACoin = "not while holding a coin";
 
 }  // namespace a11y

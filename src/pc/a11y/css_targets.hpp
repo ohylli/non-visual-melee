@@ -8,6 +8,7 @@
 #pragma once
 #include "game_access.h"
 #include "steering.hpp"
+#include <vector>
 
 namespace a11y {
 
@@ -31,6 +32,9 @@ struct Target {
     TargetKind kind = TargetKind::none;
     /* The portrait's number or the player slot's; -1 for the top bar. */
     int index = -1;
+    /* A value of the slider the hand holds, 1 to 9, as a step's destination
+     * or where the hand is; 0 for everything else, the knob included. */
+    int level = 0;
 
     bool operator==(const Target&) const = default;
 };
@@ -38,6 +42,10 @@ struct Target {
 /* Where a carried coin sits from the hand; portraits are tested there. */
 inline constexpr float kCoinOffsetX = 2.7f;
 inline constexpr float kCoinOffsetY = -2.0f;
+
+/* A slider's values. */
+inline constexpr int kLowestLevel = 1;
+inline constexpr int kHighestLevel = 9;
 
 /* The target the local player's hand would reach at (x, y). Carrying a coin,
  * the portrait under the coin: a carrying hand presses no button. Free, the
@@ -50,17 +58,41 @@ Target target_at(const A11yCssState& state, float x, float y);
 /* A D-pad direction. */
 enum class Direction { left, right, up, down };
 
-/* Where the hand goes to be on a target: for a portrait, where the coin sits
- * at the portrait's centre. */
+/* The targets a step reaches, in rows top to bottom, each left to right: the
+ * top bar, the rows of unlocked portraits as drawn, and in VS modes the
+ * player slots, each slot's HMN/CPU button, then its team button, CPU level
+ * knob and handicap knob where they exist. Empty rows are left out. The name
+ * box is not among them. */
+std::vector<std::vector<Target>> target_rows(const A11yCssState& state);
+
+/* What among the rows the hand at (x, y) is on, by the areas the game tests,
+ * whether or not it would react now (a hand carrying a coin, a slot whose
+ * coin another hand carries): a portrait under where the coin sits, a button,
+ * a knob within reach. A hand holding a slider is on its value. None
+ * elsewhere. */
+Target locate(const A11yCssState& state, float x, float y);
+
+/* The player slot whose coin rests on the portrait where the local hand, free
+ * of anything, may pick it up (its own or a CPU's), a CPU's before its own:
+ * B calls one's own back from anywhere. -1 for none, and while the hand holds
+ * anything. */
+int pickable_coin(const A11yCssState& state, int portrait);
+
+/* Where the hand goes to be on a target. For a portrait, where the coin sits
+ * at the portrait's centre; for a free hand, where A picks up the coin
+ * resting there, if pickable_coin names one. For a button, its middle, the
+ * height A leaves the hand at; for a knob, the point it is grabbed from; for
+ * a value of the held slider, the middle of that value's span. */
 Point aim_point(const A11yCssState& state, Target target);
 
-/* Where a step goes. from is the target the hand is on, or on its way to;
- * (x, y) is the hand. From a portrait: Left and Right to the next unlocked
- * portrait in its row, Up and Down to the unlocked portrait nearest in x in
- * the next row that has one; from itself at an edge. From anywhere else, the
- * nearest target that way by the same rows (Up and Down to the nearest row,
- * Left and Right along the row the hand is nearest to), or none. Portraits
- * only so far: the top bar and the player slots come with their steps. */
+/* Where a step goes. from is where the hand is going, or is (locate()).
+ * Along its row to the next target, Up and Down to the target nearest in x
+ * in the next row; from itself at an edge. A hand holding a slider steps its
+ * value with Left and Right, and Up and Down keep it where it is. From
+ * anything not in the rows, as from where the hand is; from anywhere else,
+ * the nearest target that way: Up and Down to the nearest row that way,
+ * Left and Right along the row the hand is nearest to, else the nearest
+ * target that way in any row. None when nothing lies that way. */
 Target step(const A11yCssState& state, Target from, float x, float y, Direction direction);
 
 }  // namespace a11y

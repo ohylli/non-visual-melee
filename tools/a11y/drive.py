@@ -17,6 +17,10 @@ Script steps, one per line (or ';'-separated with -c), '#' starts a comment:
                                  and wait until the game's pad shows them
   press ... until RE [TIMES]     press again every 1.5 s until an output line
                                  matches RE, at most TIMES (default 20)
+  search RE BUTTON[*N] ...       press the buttons one at a time, BUTTON*N
+                                 being N presses, until an output line
+                                 matches RE; each press waits up to 1.5 s for
+                                 a line of speech
   wait RE [SECONDS]              wait for an output line matching RE,
                                  newer than the last press or wait (default 30)
   sleep SECONDS
@@ -25,6 +29,10 @@ Script steps, one per line (or ';'-separated with -c), '#' starts a comment:
 
 RE is a Python regular expression searched in each line: escape brackets
 (\[a11y\]) and anchor with $ where a number could run on ("scene 1$").
+A named group a line matched keeps its text for the steps after it, where
+%NAME% in an RE stands for that text, escaped: after
+  wait '"Player 2: CPU, (?P<cpu>[^"]+)"'
+the step search '"%cpu%, player 2.s coin"' ... looks for that character.
 
 Buttons are GameCube names, as in tools/devctl.py: A B X Y Z L R Start,
 Up Down Left Right (main stick), CUp CDown CLeft CRight, DUp DDown DLeft
@@ -62,6 +70,7 @@ BUTTONS = {
 
 DEFAULT_SHOW = ("[a11y]", "boot scene")
 UNTIL_SETTLE = 1.5  # seconds a "press ... until" waits for its text before pressing again
+SPEECH = "] speak "  # in every announcement's log line
 PAD_RE = re.compile(r"pad: btn ([0-9a-f]+) stick (-?\d+),(-?\d+) sub (-?\d+),(-?\d+) trig (\d+),(\d+)")
 
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -232,7 +241,7 @@ def keys_for(spec):
     return "+".join(keys)
 
 
-def parse_press(rest):
+def parse_press(rest, captured):
     """press BUTTONS [MS] [until RE [TIMES]] -> (keys, hold, until, times)"""
     keys = keys_for(rest[0])
     rest = rest[1:]
@@ -241,18 +250,33 @@ def parse_press(rest):
         hold = int(rest.pop(0))
     until, times = None, 1
     if rest and rest[0].lower() == "until" and len(rest) in (2, 3):
-        until = pattern(rest[1])
+        until = pattern(rest[1], captured)
         times = int(rest[2]) if len(rest) == 3 else 20
     elif rest:
         raise ScriptError(f"bad press arguments: {' '.join(rest)}")
     return keys, hold, until, times
 
 
-def pattern(text):
+def pattern(text, captured):
+    """text as a regular expression, each %NAME% replaced by the escaped text
+    a named group of that name last matched."""
+    def value(m):
+        if m.group(1) not in captured:
+            raise ScriptError(f"%{m.group(1)}% in {text!r} was never captured")
+        return re.escape(captured[m.group(1)])
     try:
-        return re.compile(text)
+        return re.compile(re.sub(r"%(\w+)%", value, text))
     except re.error as e:
         raise ScriptError(f"bad pattern {text!r}: {e}")
+
+
+def parse_search(rest):
+    """BUTTON[*N] ... -> the keys of each press, in order"""
+    presses = []
+    for word in rest:
+        spec, _, count = word.partition("*")
+        presses += [keys_for(spec)] * (int(count) if count else 1)
+    return presses
 
 
 STICK_KEYS = {"Up", "Down", "Left", "Right"}
@@ -443,10 +467,21 @@ def run(args, steps):
         output = Output(proc, out_file, None if args.all else DEFAULT_SHOW)
         cursor = 0
         failed = False
+        captured = {}
 
         def step(msg):
             print(f">> {msg}", flush=True)
             out_file.write(f">> {msg}\n")
+
+        def press(keys, hold):
+            pipe.send(f"{keys} {hold}", args.timeout, proc)
+            if output.wait_for(output.mark(), pad_pressed(keys), 5 + hold / 1000) is None:
+                step("warning: no pad change seen for that press")
+
+        def matched(rx, i):
+            """Line i matched rx: keeps its named groups."""
+            captured.update(rx.search(output.lines[i]).groupdict())
+            return i + 1
 
         try:
             if args.focus:
@@ -459,27 +494,41 @@ def run(args, steps):
                 cmd, rest = words[0].lower(), words[1:]
                 step(" ".join(words))
                 if cmd == "press" and rest:
-                    keys, hold, until, times = parse_press(rest)
+                    keys, hold, until, times = parse_press(rest, captured)
                     cursor = output.mark()
                     for n in range(1, times + 1):
-                        pipe.send(f"{keys} {hold}", args.timeout, proc)
-                        if output.wait_for(output.mark(), pad_pressed(keys), 5 + hold / 1000) is None:
-                            step("warning: no pad change seen for that press")
+                        press(keys, hold)
                         if until is None:
                             break
                         i = output.wait_for(cursor, until.search, UNTIL_SETTLE)
                         if i is not None:
                             step(f"{until.pattern!r} after {n} press(es)")
-                            cursor = i + 1
+                            cursor = matched(until, i)
                             break
                     else:
                         raise ScriptError(f"no {until.pattern!r} after {times} presses")
+                elif cmd == "search" and len(rest) >= 2:
+                    rx = pattern(rest[0], captured)
+                    presses = parse_search(rest[1:])
+                    cursor = output.mark()
+                    for n, keys in enumerate(presses, 1):
+                        mark = output.mark()
+                        press(keys, 120)
+                        output.wait_for(mark, lambda line: SPEECH in line or rx.search(line), UNTIL_SETTLE)
+                        i = output.wait_for(cursor, rx.search, 0)
+                        if i is not None:
+                            step(f"{rx.pattern!r} after {n} press(es)")
+                            cursor = matched(rx, i)
+                            break
+                    else:
+                        raise ScriptError(f"no {rx.pattern!r} after {len(presses)} presses")
                 elif cmd == "wait" and len(rest) in (1, 2):
                     timeout = float(rest[1]) if len(rest) == 2 else args.timeout
-                    i = output.wait_for(cursor, pattern(rest[0]).search, timeout)
+                    rx = pattern(rest[0], captured)
+                    i = output.wait_for(cursor, rx.search, timeout)
                     if i is None:
                         raise ScriptError(f"timed out after {timeout:g} s waiting for {rest[0]!r}")
-                    cursor = i + 1
+                    cursor = matched(rx, i)
                 elif cmd == "sleep" and len(rest) == 1:
                     time.sleep(float(rest[0]))
                 elif cmd == "shot" and len(rest) == 1:

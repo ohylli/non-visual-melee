@@ -49,6 +49,7 @@ public:
     void forget() {
         m_seen = false;
         m_pickup_pending = false;
+        m_drop_said = false;
     }
 
     /* The screen's state this frame, and the glide's. Speaks what changed
@@ -61,7 +62,10 @@ public:
     void frame(const A11yCssState& state, const GlideStatus& glide);
 
     /* A step: says where it goes, interrupting; to is none when nothing lies
-     * that way. */
+     * that way. A portrait with a coin the hand may pick up says whose coin;
+     * a top bar button, that it waits while the hand holds a coin. A step
+     * down into the player slots with a coin in the hand first says what the
+     * coin going back does, which the drop then leaves unsaid. */
     void step(const A11yCssState& state, Target to);
 
     /* A target with its value: "Player 2: CPU", "Teams: off". */
@@ -77,8 +81,12 @@ private:
     std::string holding(const A11yCssState& now, int coin, bool quiet);
     /* The local hand let go of the coin of slot coin. */
     std::string dropped(const A11yCssState& last, const A11yCssState& now, int coin);
-    /* A slider the local hand grabbed, moved or let go of, or empty. */
-    std::string slider_announcement(const A11yCssState& last, const A11yCssState& now);
+    /* What the coin of slot coin going back does as the hand carries it down
+     * into the player slots: "No character", "Back to Yoshi". */
+    std::string drop_words(const A11yCssState& state, int coin);
+    /* A slider the local hand grabbed, moved or let go of, or empty; quiet
+     * leaves out its value. */
+    std::string slider_announcement(const A11yCssState& last, const A11yCssState& now, bool quiet);
     /* Changes to the player slots and the Teams rule, given what the local
      * hand was and is on: the local hand's appended to mine, other players'
      * to others. */
@@ -93,6 +101,8 @@ private:
     bool m_seen = false;
     /* A coin was picked up last frame and is not announced yet. */
     bool m_pickup_pending = false;
+    /* A step said what the carried coin going back does. */
+    bool m_drop_said = false;
     A11yCssState m_last{};
     /* The characters missing from the names table that were logged. */
     std::set<A11yCharacter> m_logged_missing;

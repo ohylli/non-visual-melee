@@ -163,24 +163,28 @@ static int css_portrait(u8 number) {
  * matrix if it is out of date: a cache of the model's drawing, which the
  * game's own A presses and every frame's drawing fill with the same values,
  * so filling it here changes nothing the game decides. */
-static bool css_joint(HSD_JObj* model_root, u8 joint, Vec3* out) {
+static HSD_JObj* css_joint(HSD_JObj* model_root, u8 joint, Vec3* out) {
     HSD_JObj* jobj = NULL;
     if (model_root == NULL || lb_80011E24(model_root, &jobj, joint, -1) == 0 || jobj == NULL) {
-        return false;
+        return NULL;
     }
     lb_8000B1CC(jobj, NULL, out);
-    return true;
+    return jobj;
 }
 
 /* A slider's knob: the grab point mnCharSel_CursorThink tests, offset from
- * the slider's joint. */
+ * the slider's joint. The joint's own x is how far along the slider the knob
+ * is; a held slider sets it to the hand's x less the rest (updateGrabbedSlider),
+ * so the rest is the hand's x at the lowest end. */
 static A11yCssKnob css_knob(HSD_JObj* model_root, u8 joint) {
-    A11yCssKnob knob = {false, 0.0f, 0.0f};
+    A11yCssKnob knob = {false, 0.0f, 0.0f, 0.0f};
     Vec3 pos;
-    if (css_joint(model_root, joint, &pos)) {
+    HSD_JObj* jobj = css_joint(model_root, joint, &pos);
+    if (jobj != NULL) {
         knob.known = true;
         knob.x = A11Y_CSS_KNOB_OFFSET_X + pos.x;
         knob.y = A11Y_CSS_KNOB_OFFSET_Y + pos.y;
+        knob.origin_x = knob.x - HSD_JObjGetTranslationX(jobj);
     }
     return knob;
 }
@@ -299,7 +303,7 @@ void a11y_game_css_state(const A11yCssScreen* screen,
             handicap_rule != A11Y_HANDICAP_OFF ? door->cpuslider2_joint : door->cpuslider_joint);
         slot->handicap_knob = css_knob(screen->model_root, door->cpuslider_joint);
         Vec3 name;
-        if (i == local_hand && css_joint(screen->model_root, tag->name_jointl, &name)) {
+        if (i == local_hand && css_joint(screen->model_root, tag->name_jointl, &name) != NULL) {
             slot->name_box =
                 css_rect(name.x + A11Y_CSS_NAME_BOX_LEFT, name.x + A11Y_CSS_NAME_BOX_RIGHT,
                     name.y + A11Y_CSS_NAME_BOX_TOP, name.y + A11Y_CSS_NAME_BOX_BOTTOM);

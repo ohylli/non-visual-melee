@@ -28,12 +28,17 @@ public:
     void frame(const A11yCssScreen& screen, int local_port, bool online);
     /* The hand hook: hand has updated this simulated frame. */
     void hand(int hand, const A11yCssHandReport& report);
+    /* The coin hook: the coin of slot is at (x, y). */
+    void coin(int slot, float x, float y);
     /* The pad hook: the stick steering asks for, handed over once; false
      * when it asks for none, so the stick returns to rest by itself. */
     bool take_stick(Stick* out);
 
 private:
     bool may_steer(const A11yCssState& state) const;
+    /* A glide under way follows its destination as it moves, and stops
+     * where holding a slider or not changes what a step means. */
+    void follow_destination(const A11yCssState& state);
     /* The local hand updated: steps, and the glide's next frame. */
     void steer(int hand, const A11yCssHandReport& report);
     void press(Direction direction, Point hand);
@@ -48,6 +53,13 @@ private:
     /* The hands as the hand hook last reported them; a hand not reported
      * since the scene was entered reads as unseen. */
     A11yCssHandReport m_reports[A11Y_CSS_SLOTS] = {};
+    /* The coins as the coin hook last reported them. */
+    struct CoinReport {
+        bool seen = false;
+        float x = 0.0f;
+        float y = 0.0f;
+    };
+    CoinReport m_coins[A11Y_CSS_SLOTS];
     /* This frame's snapshot, from the frame hook; the local hand's hook
      * moves its hand to where it went this frame. */
     A11yCssState m_state{};

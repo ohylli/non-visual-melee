@@ -121,6 +121,14 @@ extern "C" void pc_a11y_css_hand(int hand, int state, int held, float x, float y
     s_css->hand(hand, A11yCssHandReport{true, state, held, x, y});
 }
 
+extern "C" void pc_a11y_css_coin(int slot, float x, float y) {
+    if (!game_hook_may_speak() || slot < 0 || slot >= A11Y_CSS_SLOTS) {
+        return;
+    }
+    /* Read by the next frame hook: a step finds a coin to pick up by it. */
+    s_css->coin(slot, x, y);
+}
+
 extern "C" bool pc_a11y_pad(PADStatus* pad) {
     a11y::Stick stick;
     if (s_css == nullptr || !s_css->take_stick(&stick)) {

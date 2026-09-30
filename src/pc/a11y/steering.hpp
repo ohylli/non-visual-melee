@@ -55,6 +55,9 @@ public:
     /* Glides to destination from wherever the hand is, or turns a glide
      * under way there. */
     void start(Point destination);
+    /* Moves the destination of a glide under way, as a target that moves
+     * does; the count of its frames goes on. */
+    void retarget(Point destination) { m_destination = destination; }
     /* Ends the glide without reporting an end. */
     void stop() { m_active = false; }
     bool active() const { return m_active; }

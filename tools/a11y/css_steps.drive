@@ -22,9 +22,12 @@ press A
 wait '"Character select\. Player 1, no character\."'
 sleep 1
 
-# Up from the hand's start goes to the nearest portrait above it, Pichu in
-# the bottom row; the coin jumps into the hand on the way. Two more steps Up
-# reach the top row.
+# Up from the hand's start goes to the nearest target above it, player 1's
+# button, and Up again to the portrait nearest in x in the bottom row,
+# Pichu; the coin jumps into the hand on the way. Two more steps Up reach
+# the top row.
+press DUp
+wait ': "Player 1: closed"$'
 press DUp
 wait ': "Pichu"$'
 wait 'glide to "Pichu" ended after \d+ frames: arrived'

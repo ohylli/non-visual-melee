@@ -48,11 +48,20 @@ inline A11yCssRect portrait_rect(int portrait) {
         kColumnLefts[column], kColumnLefts[column + 1], kRowTops[row], kRowTops[row + 1]};
 }
 
-/* The CPU level knob of a CPU's slot at level 1; one level is 1.25 wide. */
+/* The CPU level knob of a CPU's slot at a level; one level is 1.25 wide, and
+ * the slider's lowest end is where the knob is at level 1. */
 inline A11yCssKnob cpu_level_knob(int slot, int level) {
-    return A11yCssKnob{true,
-        -15.5f + 15.4f * static_cast<float>(slot - 1) + 1.25f * static_cast<float>(level - 1),
-        -15.12f};
+    float origin = -15.5f + 15.4f * static_cast<float>(slot - 1);
+    return A11yCssKnob{true, origin + 1.25f * static_cast<float>(level - 1), -15.12f, origin};
+}
+
+/* Where the game puts a coin on a portrait it chooses for a slot, as a new
+ * CPU's (mnCharSel_8025FB50) or one put back (mnCharSel_8025FDEC). */
+inline void coin_at_rest(A11yCssSlot& slot, int portrait) {
+    A11yCssRect rect = portrait_rect(portrait);
+    slot.coin_seen = true;
+    slot.coin_x = rect.left + 3.4f;
+    slot.coin_y = rect.top - 3.0f;
 }
 
 inline A11yCssSlot slot(A11yCssSlotKind kind, int index) {
@@ -67,7 +76,7 @@ inline A11yCssSlot slot(A11yCssSlotKind kind, int index) {
     out.slot_button = A11yCssRect{-35.6f + step, -28.6f + step, 0.2f, -4.6f};
     out.team_button = A11yCssRect{-26.8f + step, -21.0f + step, -1.0f, -5.8f};
     /* Hidden in the slot until it is a CPU's. */
-    out.cpu_level_knob = A11yCssKnob{true, -30.9f + step, -20.12f};
+    out.cpu_level_knob = A11yCssKnob{true, -30.9f + step, -20.12f, -30.9f + step};
     out.handicap_knob = out.cpu_level_knob;
     return out;
 }
@@ -79,6 +88,7 @@ inline A11yCssSlot cpu(int index, int portrait) {
     out.over_portrait = portrait;
     out.character = kPortraitCharacters[portrait];
     out.cpu_level_knob = cpu_level_knob(index, 1);
+    coin_at_rest(out, portrait);
     return out;
 }
 

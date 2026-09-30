@@ -99,11 +99,14 @@ typedef struct A11yCssRect {
 } A11yCssRect;
 
 /* A slider's knob: the point a free hand grabs it from, within the game's
- * grab distance. known is false where the game's model has no such joint. */
+ * grab distance. known is false where the game's model has no such joint.
+ * A held slider keeps the hand at its knob's height and follows the hand's
+ * x over 10 units from origin_x, the hand's x at the slider's lowest end. */
 typedef struct A11yCssKnob {
     bool known;
     float x;
     float y;
+    float origin_x;
 } A11yCssKnob;
 
 /* The sliders of a player slot. */
@@ -146,6 +149,13 @@ typedef struct A11yCssSlot {
     int costume;
     /* Some hand carries the slot's coin. */
     bool carried;
+    /* Where the coin is, as the coin hook last reported it; coin_seen is false
+     * until it has since the scene was entered. A coin at rest drifts a
+     * little, away from other coins and from its portrait's edges. Filled by
+     * the reader, not read from the screen. */
+    bool coin_seen;
+    float coin_x;
+    float coin_y;
     /* The slot's own hand (the hand of the same port) holds a coin or a
      * slider; its HMN/CPU button does not react meanwhile. */
     bool hand_holding;

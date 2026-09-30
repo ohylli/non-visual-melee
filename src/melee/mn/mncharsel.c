@@ -3695,6 +3695,7 @@ void fn_80262648(HSD_GObj* gobj)
     HSD_JObjSetTranslateY(jobj, model->x14);
     HSD_JObjSetTranslateZ(jobj, 1.0f);
     HSD_JObjAnimAll(jobj);
+    pc_a11y_css_coin(model->x4, model->x8, model->xC);
 }
 
 void fn_80262F44(HSD_GObj* gobj)

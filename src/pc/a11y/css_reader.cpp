@@ -2,6 +2,7 @@
 #include "css_reader.hpp"
 #include "pc/pc.h"
 #include "speech.hpp"
+#include <algorithm>
 #include <string>
 
 namespace a11y {
@@ -44,6 +45,9 @@ void CssReader::forget() {
     for (A11yCssHandReport& report : m_reports) {
         report = A11yCssHandReport{};
     }
+    for (CoinReport& coin : m_coins) {
+        coin = CoinReport{};
+    }
     m_have_state = false;
     m_local_updated = false;
     m_glide = Glide{};
@@ -55,12 +59,19 @@ void CssReader::frame(const A11yCssScreen& screen, int local_port, bool online) 
     A11yCssState state;
     a11y_game_css_state(&screen, m_reports, local_port, &state);
     state.online = online;
+    for (int i = 0; i < A11Y_CSS_SLOTS; i++) {
+        state.slots[i].coin_seen = m_coins[i].seen;
+        state.slots[i].coin_x = m_coins[i].x;
+        state.slots[i].coin_y = m_coins[i].y;
+    }
     if (m_glide.active()) {
         if (!m_local_updated) {
             /* A hand whose controller is unplugged stops updating. */
             stop_glide("the hand stopped updating", true);
         } else if (!may_steer(state)) {
             stop_glide("steering is off here", false);
+        } else {
+            follow_destination(state);
         }
     }
     m_local_updated = false;
@@ -80,6 +91,10 @@ void CssReader::hand(int hand, const A11yCssHandReport& report) {
     }
 }
 
+void CssReader::coin(int slot, float x, float y) {
+    m_coins[slot] = CoinReport{true, x, y};
+}
+
 bool CssReader::take_stick(Stick* out) {
     m_glide.published();
     if (!m_request_waiting) {
@@ -92,11 +107,31 @@ bool CssReader::take_stick(Stick* out) {
 
 bool CssReader::may_steer(const A11yCssState& state) const {
     /* VS modes only so far: single-player modes read their one hand from
-     * the port that started the mode. A held slider follows the hand, and
-     * the name tag window keeps it inside itself. */
+     * the port that started the mode. The name tag window keeps the hand
+     * inside itself. */
     return state.hand_count == A11Y_CSS_SLOTS && state.exit == A11Y_CSS_STAYING &&
-           state.hand.present && state.hand.slider == A11Y_CSS_NO_SLIDER &&
-           !state.slots[state.local_slot].name_tags_open;
+           state.hand.present && !state.slots[state.local_slot].name_tags_open;
+}
+
+void CssReader::follow_destination(const A11yCssState& state) {
+    Target destination = m_glide_status.destination;
+    bool holding = state.hand.slider != A11Y_CSS_NO_SLIDER;
+    if ((destination.level > 0) != holding) {
+        /* A glide to a value of a slider let go of would drag a free hand,
+         * one to a target would drag a slider just grabbed. */
+        stop_glide(holding ? "a slider was grabbed" : "the slider was let go", false);
+        return;
+    }
+    /* A knob moves with its value and a resting coin drifts. A target gone
+     * from the rows (a slot closed, say) is aimed at where it was. */
+    std::vector<std::vector<Target>> rows = target_rows(state);
+    bool exists =
+        destination.level > 0 || std::any_of(rows.begin(), rows.end(), [&](const auto& row) {
+            return std::find(row.begin(), row.end(), destination) != row.end();
+        });
+    if (exists) {
+        m_glide.retarget(aim_point(state, destination));
+    }
 }
 
 void CssReader::steer(int hand, const A11yCssHandReport& report) {
@@ -125,8 +160,7 @@ void CssReader::steer(int hand, const A11yCssHandReport& report) {
 
 void CssReader::press(Direction direction, Point hand) {
     /* A press during a glide steps on from where it was going. */
-    Target from =
-        m_glide.active() ? m_glide_status.destination : target_at(m_state, hand.x, hand.y);
+    Target from = m_glide.active() ? m_glide_status.destination : locate(m_state, hand.x, hand.y);
     Target to = step(m_state, from, hand.x, hand.y, direction);
     m_speech.step(m_state, to);
     /* At an edge the step names where the hand is, or is going. */

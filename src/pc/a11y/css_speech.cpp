@@ -53,6 +53,24 @@ std::string slot_kind(const A11yCssState& state, int slot) {
     return player(slot) + ": " + std::string(slot_kind_word(state.slots[slot].kind));
 }
 
+/* The coin of a slot by whose it is: "your coin", "player 2's coin". */
+std::string coin_words(const A11yCssState& state, int coin) {
+    return coin == state.local_slot ? std::string(kYourCoin) :
+                                      std::string(kPlayersCoinBefore) + std::to_string(coin + 1) +
+                                          std::string(kPlayersCoinAfter);
+}
+
+bool in_top_bar(Target target) {
+    return target.kind == TargetKind::teams || target.kind == TargetKind::rules ||
+           target.kind == TargetKind::back;
+}
+
+bool in_player_slots(Target target) {
+    return target.kind == TargetKind::slot_button || target.kind == TargetKind::team_button ||
+           target.kind == TargetKind::cpu_level || target.kind == TargetKind::handicap ||
+           target.kind == TargetKind::name_box;
+}
+
 /* A player slot's slider: the knob a hand reaches it at, its name there, the
  * shorter word said before its value while it is held, and the value. */
 struct SliderKind {
@@ -103,9 +121,12 @@ Target hovered(const A11yCssState& state) {
     return target.kind == TargetKind::portrait ? Target{} : target;
 }
 
-/* What the local hand is on, for a glide's end: the portrait under a carried
- * coin, or else what hovered() says. */
+/* What the local hand is on, for a glide's end: the value of a held slider,
+ * the portrait under a carried coin, or else what hovered() says. */
 Target under_hand(const A11yCssState& state) {
+    if (state.hand.present && state.hand.slider != A11Y_CSS_NO_SLIDER) {
+        return locate(state, state.hand.x, state.hand.y);
+    }
     if (state.hand.present && state.hand.coin >= 0) {
         int over = state.slots[state.hand.coin].over_portrait;
         return over >= 0 ? Target{TargetKind::portrait, over} : Target{};
@@ -150,11 +171,14 @@ void CssSpeech::frame(const A11yCssState& state, const GlideStatus& glide) {
     bool glide_ended =
         glide.phase == GlideStatus::Phase::ended || glide.phase == GlideStatus::Phase::failed;
     bool quiet = gliding || glide_ended;
+    if (glide.phase == GlideStatus::Phase::none) {
+        m_drop_said = false;
+    }
 
     std::string mine;
     std::string others;
     add(mine, coin_announcement(last, state, quiet));
-    add(mine, slider_announcement(last, state));
+    add(mine, slider_announcement(last, state, quiet));
     Target was = hovered(last);
     Target is = hovered(state);
     slot_announcements(last, state, was, is, mine, others);
@@ -189,9 +213,29 @@ void CssSpeech::frame(const A11yCssState& state, const GlideStatus& glide) {
 }
 
 void CssSpeech::step(const A11yCssState& state, Target to) {
-    m_speech.announce(
-        to.kind != TargetKind::none ? target_words(state, to) : std::string(kNothingThatWay),
-        Mode::interrupt);
+    m_drop_said = false;
+    if (to.kind == TargetKind::none) {
+        m_speech.announce(kNothingThatWay, Mode::interrupt);
+        return;
+    }
+    std::string out;
+    std::string words = target_words(state, to);
+    int carrying = state.hand.coin;
+    if (carrying >= 0 && in_player_slots(to)) {
+        /* The coin goes back as the hand leaves the portraits, before it
+         * gets there; said now, and not again as it happens. */
+        add(out, drop_words(state, carrying));
+        m_drop_said = true;
+    } else if (carrying >= 0 && in_top_bar(to)) {
+        words += ", " + std::string(kNotWhileHoldingACoin);
+    } else if (to.kind == TargetKind::portrait) {
+        int coin = pickable_coin(state, to.index);
+        if (coin >= 0) {
+            words += ", " + coin_words(state, coin);
+        }
+    }
+    add(out, words);
+    m_speech.announce(out, Mode::interrupt);
 }
 
 std::string CssSpeech::opening(const A11yCssState& state) {
@@ -217,7 +261,9 @@ std::string CssSpeech::coin_announcement(
         return holding(now, carrying, quiet);
     }
     if (was_carrying >= 0 && carrying < 0) {
-        return dropped(last, now, was_carrying);
+        bool said = m_drop_said;
+        m_drop_said = false;
+        return said ? "" : dropped(last, now, was_carrying);
     }
     /* X and Y change the costume of the carried coin, or of one's own. */
     int slot = carrying >= 0 ? carrying : now.local_slot;
@@ -240,10 +286,7 @@ std::string CssSpeech::coin_announcement(
 }
 
 std::string CssSpeech::holding(const A11yCssState& now, int coin, bool quiet) {
-    std::string out = coin == now.local_slot ?
-                          std::string(kHoldingYourCoin) :
-                          std::string(kHoldingCoinBefore) + std::to_string(coin + 1) +
-                              std::string(kHoldingCoinAfter);
+    std::string out = std::string(kHolding) + " " + coin_words(now, coin);
     int over = now.slots[coin].over_portrait;
     if (over >= 0 && !quiet) {
         out += ". " + name(now.portraits[over].character);
@@ -268,12 +311,26 @@ std::string CssSpeech::dropped(const A11yCssState& last, const A11yCssState& now
     return "";
 }
 
-std::string CssSpeech::slider_announcement(const A11yCssState& last, const A11yCssState& now) {
+std::string CssSpeech::drop_words(const A11yCssState& state, int coin) {
+    /* Carried down, one's own coin clears the character (the game does so
+     * for the hand's own slot); any other goes back to the character it came
+     * from. */
+    if (coin == state.local_slot) {
+        return capitalised(kNoCharacter);
+    }
+    A11yCharacter character = state.slots[coin].character;
+    return character != A11Y_NO_CHARACTER ? std::string(kBackTo) + " " + name(character) : "";
+}
+
+std::string CssSpeech::slider_announcement(
+    const A11yCssState& last, const A11yCssState& now, bool quiet) {
     const A11yCssHand& before = last.hand;
     const A11yCssHand& after = now.hand;
     std::string out;
-    /* The value moves with the hand, and may move on the frame A lets go. */
-    if (const SliderKind* held = slider_kind(before.slider)) {
+    /* The value moves with the hand, and may move on the frame A lets go.
+     * During a glide the step has said the value it goes to. */
+    const SliderKind* held = slider_kind(before.slider);
+    if (held != nullptr && !quiet) {
         int was = last.slots[before.slider_slot].*held->value;
         int is = now.slots[before.slider_slot].*held->value;
         if (is != was) {
@@ -353,6 +410,9 @@ std::string CssSpeech::target_words(const A11yCssState& state, Target target) {
     case TargetKind::cpu_level:
     case TargetKind::handicap: {
         const SliderKind* knob = slider_kind(target.kind);
+        if (target.level > 0) {
+            return std::string(knob->held_word) + " " + std::to_string(target.level);
+        }
         return player(i) + " " + std::string(knob->name) + ": " +
                std::to_string(state.slots[i].*knob->value);
     }

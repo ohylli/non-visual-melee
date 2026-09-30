@@ -775,6 +775,148 @@ void the_coin_jumping_in_during_a_glide_waits_behind_the_step() {
     assert((f.said() == std::vector<Output>{Output{"Holding your coin", false}}));
 }
 
+void a_step_to_a_coin_says_whose_it_is() {
+    /* Player 2's coin rests on Yoshi, player 1's own on Fox. */
+    A11yCssState state = vs_screen();
+    choose(state, kFoxPortrait);
+    coin_at_rest(state.slots[0], kFoxPortrait);
+    Fixture f(state);
+    f.css.step(state, portrait(kYoshiPortrait));
+    f.css.step(state, portrait(kFoxPortrait));
+    f.css.step(state, portrait(kNessPortrait));
+    /* Carrying a coin, a coin at rest is not for picking up. */
+    pick_up(state, 0);
+    f.css.step(state, portrait(kYoshiPortrait));
+    assert((f.spoken() == Texts{"Yoshi, player 2's coin", "Fox, your coin", "Ness", "Yoshi"}));
+}
+
+void a_step_to_the_top_bar_with_a_coin_says_it_waits() {
+    A11yCssState state = vs_screen();
+    state.hand.y = 19.0f;
+    pick_up(state, 0);
+    carry_over(state, 0, 0); /* Dr. Mario */
+    Fixture f(state);
+    f.css.step(state, a11y::Target{a11y::TargetKind::teams});
+    f.css.step(state, a11y::Target{a11y::TargetKind::back});
+    assert((f.spoken() ==
+            Texts{"Teams: off, not while holding a coin", "Back, not while holding a coin"}));
+}
+
+void a_step_down_with_ones_own_coin_clears_the_character_first() {
+    /* The step says the coin goes back, then the destination; the coin
+     * going back on the way says nothing more, nor does the arrival. */
+    A11yCssState state = vs_screen();
+    state.hand.y = 5.0f;
+    choose(state, kPichuPortrait);
+    pick_up(state, 0);
+    carry_over(state, 0, kPichuPortrait);
+    Fixture f(state);
+    a11y::Target button{a11y::TargetKind::slot_button, 0};
+    f.css.step(state, button);
+    f.glide_to(button);
+    carry_over(state, 0, -1);
+    f.frame(state);
+    state.hand.coin = -1;
+    state.hand.y = -1.0f;
+    state.slots[0].portrait = -1;
+    state.slots[0].character = A11Y_NO_CHARACTER;
+    f.frame(state);
+    move(state, -32.1f, -2.2f);
+    f.frame(state);
+    f.glide_ended(false);
+    f.frame(state);
+    f.frame(state);
+    assert((f.spoken() == Texts{"No character. Player 1: human"}));
+}
+
+void a_step_down_with_a_cpus_coin_puts_it_back_first() {
+    A11yCssState state = vs_screen();
+    state.hand.y = 5.0f;
+    pick_up(state, 1);
+    carry_over(state, 1, kPichuPortrait);
+    Fixture f(state);
+    a11y::Target button{a11y::TargetKind::slot_button, 1};
+    f.css.step(state, button);
+    f.glide_to(button);
+    state.hand.coin = -1;
+    state.slots[1] = cpu(1, kYoshiPortrait);
+    f.frame(state);
+    f.glide_ended(false);
+    f.frame(state);
+    assert((f.spoken() == Texts{"Back to Yoshi. Player 2: CPU"}));
+}
+
+void a_drop_after_a_step_that_did_not_leave_the_portraits_is_said() {
+    /* A step down said the coin goes back, then a step up turned the glide
+     * before it did; B putting it back later is said. */
+    A11yCssState state = vs_screen();
+    state.hand.y = 5.0f;
+    choose(state, kFoxPortrait);
+    pick_up(state, 0);
+    carry_over(state, 0, kPichuPortrait);
+    Fixture f(state);
+    f.css.step(state, a11y::Target{a11y::TargetKind::slot_button, 0});
+    f.glide_to(a11y::Target{a11y::TargetKind::slot_button, 0});
+    f.frame(state);
+    f.css.step(state, portrait(kPichuPortrait));
+    f.glide_to(portrait(kPichuPortrait));
+    f.frame(state);
+    f.glide_ended(false);
+    f.frame(state);
+    f.frame(state);
+    state.hand.coin = -1;
+    choose(state, kFoxPortrait);
+    f.frame(state);
+    assert((f.spoken() == Texts{"No character. Player 1: human", "Pichu", "Back to Fox"}));
+}
+
+/* The hand holds player 2's CPU level slider at a level. */
+void hold_cpu_level(A11yCssState& state, int level) {
+    state.hand.slider = A11Y_CSS_CPU_LEVEL;
+    state.hand.slider_slot = 1;
+    state.slots[1].cpu_level_held = true;
+    state.slots[1].cpu_level = level;
+    state.slots[1].cpu_level_knob = cpu_level_knob(1, level);
+    move(state, state.slots[1].cpu_level_knob.x, state.slots[1].cpu_level_knob.y);
+}
+
+a11y::Target level(int value) {
+    return a11y::Target{a11y::TargetKind::cpu_level, 1, value};
+}
+
+void slider_steps_say_the_value_at_the_press_only() {
+    A11yCssState state = vs_screen();
+    hold_cpu_level(state, 3);
+    Fixture f(state);
+    /* Two steps right; the value passes 4 on its way to 5. */
+    f.css.step(state, level(4));
+    f.glide_to(level(4));
+    f.css.step(state, level(5));
+    f.glide_to(level(5));
+    hold_cpu_level(state, 4);
+    f.frame(state);
+    hold_cpu_level(state, 5);
+    f.frame(state);
+    f.glide_ended(false);
+    f.frame(state);
+    f.frame(state);
+    /* Up keeps the value and says it again. */
+    f.css.step(state, level(5));
+    assert((f.spoken() == Texts{"Level 4", "Level 5", "Level 5"}));
+}
+
+void a_slider_glide_ending_on_another_value_says_it() {
+    A11yCssState state = vs_screen();
+    hold_cpu_level(state, 3);
+    Fixture f(state);
+    f.glide_to(level(5));
+    hold_cpu_level(state, 4);
+    f.frame(state);
+    f.glide_ended(false);
+    f.frame(state);
+    assert((f.spoken() == Texts{"Level 4"}));
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -834,6 +976,13 @@ int main() {
     a_failed_glide_says_so();
     a_free_hand_gliding_over_a_button_says_nothing();
     the_coin_jumping_in_during_a_glide_waits_behind_the_step();
+    a_step_to_a_coin_says_whose_it_is();
+    a_step_to_the_top_bar_with_a_coin_says_it_waits();
+    a_step_down_with_ones_own_coin_clears_the_character_first();
+    a_step_down_with_a_cpus_coin_puts_it_back_first();
+    a_drop_after_a_step_that_did_not_leave_the_portraits_is_said();
+    slider_steps_say_the_value_at_the_press_only();
+    a_slider_glide_ending_on_another_value_says_it();
     std::cout << "css_speech: all tests passed\n";
     return 0;
 }
