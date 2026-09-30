@@ -4,6 +4,7 @@
  * only reads. */
 #pragma once
 #include "character_kinds.h"
+#include "css_kinds.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -71,7 +72,7 @@ typedef struct A11yCssScreen {
     const struct CSSDoorsData* doors;
     const struct CSSIcon* icons;
     const struct CSSTag* tags;
-    struct HSD_JObj* models;
+    struct HSD_JObj* model_root;
     int hand_count;
     int pending_exit;
     int ready;
@@ -126,15 +127,6 @@ typedef struct A11yCssHand {
     float x;
     float y;
 } A11yCssHand;
-
-/* What a player slot's HMN/CPU tab shows. */
-typedef enum A11yCssSlotKind {
-    A11Y_CSS_HUMAN,
-    A11Y_CSS_CPU,
-    /* Drawn "N/A". A closed slot shows no coin, but its character may hold a
-     * stale value. */
-    A11Y_CSS_CLOSED,
-} A11yCssSlotKind;
 
 /* One player slot along the bottom (the decomp's door). */
 typedef struct A11yCssSlot {

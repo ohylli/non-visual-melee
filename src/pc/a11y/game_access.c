@@ -127,8 +127,29 @@ enum {
     A11Y_CSS_HELD_HANDICAPS = 12,
 };
 
-/* The handicap rule's setting that shows a slider per slot; 1 is "auto". */
-enum { A11Y_HANDICAP_ON = 2 };
+/* The handicap rule's settings. On shows a slider per slot; on and auto both
+ * move the CPU level slider to its second place. */
+enum { A11Y_HANDICAP_OFF = 0, A11Y_HANDICAP_AUTO = 1, A11Y_HANDICAP_ON = 2 };
+
+/* The player slots the buttons reach in Camera mode, whose fourth slot is the
+ * camera. */
+enum { A11Y_CSS_CAMERA_MODE_SLOTS = 3 };
+
+/* The numbers of mnCharSel_CursorThink's tests, in the screen's units. A
+ * slider's grab point is this far from its joint. */
+static const float A11Y_CSS_KNOB_OFFSET_X = -2.9f;
+static const float A11Y_CSS_KNOB_OFFSET_Y = 1.7f;
+/* The top and bottom of the HMN/CPU and team buttons; their sides are the
+ * slot's own. */
+static const float A11Y_CSS_SLOT_BUTTON_TOP = 0.2f;
+static const float A11Y_CSS_SLOT_BUTTON_BOTTOM = -4.6f;
+static const float A11Y_CSS_TEAM_BUTTON_TOP = -1.0f;
+static const float A11Y_CSS_TEAM_BUTTON_BOTTOM = -5.8f;
+/* The name box around its joint. */
+static const float A11Y_CSS_NAME_BOX_LEFT = -4.7f;
+static const float A11Y_CSS_NAME_BOX_RIGHT = 5.2f;
+static const float A11Y_CSS_NAME_BOX_TOP = 2.0f;
+static const float A11Y_CSS_NAME_BOX_BOTTOM = -1.0f;
 
 /* A slot's portrait number as the screen keeps it (0x19 and above for none),
  * or -1. */
@@ -141,9 +162,9 @@ static int css_portrait(u8 number) {
  * matrix if it is out of date: a cache of the model's drawing, which the
  * game's own A presses and every frame's drawing fill with the same values,
  * so filling it here changes nothing the game decides. */
-static bool css_joint(HSD_JObj* models, u8 joint, Vec3* out) {
+static bool css_joint(HSD_JObj* model_root, u8 joint, Vec3* out) {
     HSD_JObj* jobj = NULL;
-    if (models == NULL || lb_80011E24(models, &jobj, joint, -1) == 0 || jobj == NULL) {
+    if (model_root == NULL || lb_80011E24(model_root, &jobj, joint, -1) == 0 || jobj == NULL) {
         return false;
     }
     lb_8000B1CC(jobj, NULL, out);
@@ -152,13 +173,13 @@ static bool css_joint(HSD_JObj* models, u8 joint, Vec3* out) {
 
 /* A slider's knob: the grab point mnCharSel_CursorThink tests, offset from
  * the slider's joint. */
-static A11yCssKnob css_knob(HSD_JObj* models, u8 joint) {
+static A11yCssKnob css_knob(HSD_JObj* model_root, u8 joint) {
     A11yCssKnob knob = {false, 0.0f, 0.0f};
     Vec3 pos;
-    if (css_joint(models, joint, &pos)) {
+    if (css_joint(model_root, joint, &pos)) {
         knob.known = true;
-        knob.x = -2.9f + pos.x;
-        knob.y = 1.7f + pos.y;
+        knob.x = A11Y_CSS_KNOB_OFFSET_X + pos.x;
+        knob.y = A11Y_CSS_KNOB_OFFSET_Y + pos.y;
     }
     return knob;
 }
@@ -207,14 +228,14 @@ void a11y_game_css_state(const A11yCssScreen* screen,
      * type's tests in mnCharSel_CursorThink; single-player modes have their
      * own. */
     bool vs = hand_count == A11Y_CSS_SLOTS;
-    /* Opening the rules screen or name entry frees the screen's models and
+    /* Opening the rules screen or name entry frees the screen's model and
      * its name tag windows, and leaving them builds new ones
      * (mnCharSel_802640A0); until then only the static tables are safe to
      * read. */
     bool built = out->exit == A11Y_CSS_STAYING || out->exit == A11Y_CSS_TO_STAGE_SELECT ||
                  out->exit == A11Y_CSS_BACK;
     int handicap_rule = gmMainLib_GetGameRules()->handicap;
-    out->slot_count = css->match_type == VS_CAMERA ? 3 : 4;
+    out->slot_count = css->match_type == VS_CAMERA ? A11Y_CSS_CAMERA_MODE_SLOTS : A11Y_CSS_SLOTS;
     out->has_teams_button = vs && css->match_type <= VS_SLOWMO;
     out->has_rules_button = vs && css->match_type != VS_STAMINA;
     out->handicap_sliders = handicap_rule == A11Y_HANDICAP_ON;
@@ -267,16 +288,20 @@ void a11y_game_css_state(const A11yCssScreen* screen,
         }
         /* The bounds of mnCharSel_CursorThink's tests; retail nudges the
          * buttons' heights outward by a hair, which is left out here. */
-        slot->slot_button = css_rect(door->togglebtn_left, door->togglebtn_right, 0.2f, -4.6f);
-        slot->team_button = css_rect(door->teambtn_left, door->teambtn_right, -1.0f, -5.8f);
+        slot->slot_button = css_rect(door->togglebtn_left, door->togglebtn_right,
+            A11Y_CSS_SLOT_BUTTON_TOP, A11Y_CSS_SLOT_BUTTON_BOTTOM);
+        slot->team_button = css_rect(door->teambtn_left, door->teambtn_right,
+            A11Y_CSS_TEAM_BUTTON_TOP, A11Y_CSS_TEAM_BUTTON_BOTTOM);
         /* With the handicap rule on or automatic, the CPU level slider moves
          * to its second place and the handicap slider takes the first. */
-        slot->cpu_level_knob = css_knob(
-            screen->models, handicap_rule != 0 ? door->cpuslider2_joint : door->cpuslider_joint);
-        slot->handicap_knob = css_knob(screen->models, door->cpuslider_joint);
+        slot->cpu_level_knob = css_knob(screen->model_root,
+            handicap_rule != A11Y_HANDICAP_OFF ? door->cpuslider2_joint : door->cpuslider_joint);
+        slot->handicap_knob = css_knob(screen->model_root, door->cpuslider_joint);
         Vec3 name;
-        if (i == local_hand && css_joint(screen->models, tag->name_jointl, &name)) {
-            slot->name_box = css_rect(name.x - 4.7f, name.x + 5.2f, name.y + 2.0f, name.y - 1.0f);
+        if (i == local_hand && css_joint(screen->model_root, tag->name_jointl, &name)) {
+            slot->name_box =
+                css_rect(name.x + A11Y_CSS_NAME_BOX_LEFT, name.x + A11Y_CSS_NAME_BOX_RIGHT,
+                    name.y + A11Y_CSS_NAME_BOX_TOP, name.y + A11Y_CSS_NAME_BOX_BOTTOM);
         }
     }
 

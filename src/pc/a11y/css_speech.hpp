@@ -50,10 +50,11 @@ private:
     std::string dropped(const A11yCssState& last, const A11yCssState& now, int coin);
     /* A slider the local hand grabbed, moved or let go of, or empty. */
     std::string slider_announcement(const A11yCssState& last, const A11yCssState& now);
-    /* Changes to the player slots and the Teams rule: the local hand's
-     * appended to mine, other players' to others. */
-    void slot_announcements(
-        const A11yCssState& last, const A11yCssState& now, std::string& mine, std::string& others);
+    /* Changes to the player slots and the Teams rule, given what the local
+     * hand was and is on: the local hand's appended to mine, other players'
+     * to others. */
+    void slot_announcements(const A11yCssState& last, const A11yCssState& now, Target was,
+        Target is, std::string& mine, std::string& others);
     /* A target with its value: "Player 2: CPU", "Teams: off". */
     std::string target_words(const A11yCssState& state, Target target);
     /* A player slot with its kind and character: "Player 2: CPU, Yoshi". */

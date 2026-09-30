@@ -57,8 +57,8 @@ struct HSD_JObj;
  * to Fight banner (nonzero while shown). Character select speech compares
  * the screen with the last frame here. */
 void pc_a11y_css_frame(const struct CSSData* css, const struct CSSDoorsData* doors,
-    const struct CSSIcon* icons, const struct CSSTag* tags, struct HSD_JObj* models, int hand_count,
-    int pending_exit, int ready);
+    const struct CSSIcon* icons, const struct CSSTag* tags, struct HSD_JObj* model_root,
+    int hand_count, int pending_exit, int ready);
 
 /* One hand of character select has updated (the end of
  * mnCharSel_CursorThink). The raw numbers of the hand's struct, which only
