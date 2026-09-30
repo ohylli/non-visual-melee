@@ -53,3 +53,11 @@ Rules are in the spec, section "Stage 2: stepping". This slice covers:
 - CLAUDE.md: one "Accessibility status" line; under "Online compatibility", the pad hook as the one place the fork writes; `MELEE_A11Y_STEER` under "Verification".
 
 ## Comments
+
+### 2026-09-30, code review of issue 01 (agent)
+
+Raised in the code review of issue 01 (commit `e10712e`) and left for this issue to consider: **move the hand hook's reports out of `hooks.cpp`**.
+
+- **Now.** `hooks.cpp` owns `s_css_hands`, the per-hand buffer `pc_a11y_css_hand` fills, and clears it in `pc_a11y_scene_entered` next to `s_css_speech->forget()`. Forgetting character select's state therefore takes two edits there, and `a11y_game_css_state` takes the buffer as one of its 8 parameters.
+- **Why not then.** The two resets sit side by side in the one function that means "a scene was entered", so they cannot drift apart, and a move would still leave two forget calls. Moving the buffer into `CssSpeech` was rejected: it would mix raw game input into the speech logic and stop the tests feeding it hand-written snapshots.
+- **Why here.** This issue advances the glide in the hand hook and reads the applied stick per hand, so the raw per-hand state grows. That is the point where one small reader object pays off: it holds the reports (and whatever the glide needs per hand), has a single `forget()`, and hands the snapshot builder its state. `a11y_game_css_state` then loses its reports parameter. Decide while designing the machinery; skip it if the glide's state ends up living elsewhere.
