@@ -11,14 +11,7 @@
 
 namespace a11y {
 
-enum class CharacterKind : int {
-#define A11Y_CHARACTER_KIND_ENUMERATOR(name, number) name = number,
-    A11Y_CHARACTER_KINDS(A11Y_CHARACTER_KIND_ENUMERATOR)
-#undef A11Y_CHARACTER_KIND_ENUMERATOR
-};
-
-/* A character's name by its CharacterKind; nothing for a kind missing from
- * the table. */
-std::optional<std::string_view> character_name(int character);
+/* A character's name; nothing for none or a kind missing from the table. */
+std::optional<std::string_view> character_name(A11yCharacter character);
 
 }  // namespace a11y

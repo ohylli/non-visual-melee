@@ -6,7 +6,7 @@ namespace a11y {
 namespace {
 
 struct CharacterWords {
-    CharacterKind kind;
+    A11yCharacter character;
     std::string_view name;
 };
 
@@ -14,62 +14,62 @@ struct CharacterWords {
  * the middle row, the bottom row, each from the left. Sheik has no portrait
  * of her own; she is here for a slot that keeps her after a match. */
 constexpr CharacterWords kCharacters[] = {
-    {CharacterKind::CKind_DrMario, "Dr. Mario"},
-    {CharacterKind::CKind_Mario, "Mario"},
-    {CharacterKind::CKind_Luigi, "Luigi"},
-    {CharacterKind::CKind_Koopa, "Bowser"},
-    {CharacterKind::CKind_Peach, "Peach"},
-    {CharacterKind::CKind_Yoshi, "Yoshi"},
-    {CharacterKind::CKind_Donkey, "DK"},
-    {CharacterKind::CKind_Captain, "C. Falcon"},
-    {CharacterKind::CKind_Ganon, "Ganondorf"},
+    {A11Y_CKind_DrMario, "Dr. Mario"},
+    {A11Y_CKind_Mario, "Mario"},
+    {A11Y_CKind_Luigi, "Luigi"},
+    {A11Y_CKind_Koopa, "Bowser"},
+    {A11Y_CKind_Peach, "Peach"},
+    {A11Y_CKind_Yoshi, "Yoshi"},
+    {A11Y_CKind_Donkey, "DK"},
+    {A11Y_CKind_Captain, "C. Falcon"},
+    {A11Y_CKind_Ganon, "Ganondorf"},
 
-    {CharacterKind::CKind_Falco, "Falco"},
-    {CharacterKind::CKind_Fox, "Fox"},
-    {CharacterKind::CKind_Ness, "Ness"},
-    {CharacterKind::CKind_PopoNana, "Ice Climbers"},
-    {CharacterKind::CKind_Kirby, "Kirby"},
-    {CharacterKind::CKind_Samus, "Samus"},
-    {CharacterKind::CKind_Zelda, "Zelda"},
-    {CharacterKind::CKind_Link, "Link"},
-    {CharacterKind::CKind_CLink, "Young Link"},
+    {A11Y_CKind_Falco, "Falco"},
+    {A11Y_CKind_Fox, "Fox"},
+    {A11Y_CKind_Ness, "Ness"},
+    {A11Y_CKind_PopoNana, "Ice Climbers"},
+    {A11Y_CKind_Kirby, "Kirby"},
+    {A11Y_CKind_Samus, "Samus"},
+    {A11Y_CKind_Zelda, "Zelda"},
+    {A11Y_CKind_Link, "Link"},
+    {A11Y_CKind_CLink, "Young Link"},
 
-    {CharacterKind::CKind_Pichu, "Pichu"},
-    {CharacterKind::CKind_Pikachu, "Pikachu"},
-    {CharacterKind::CKind_Purin, "Jigglypuff"},
-    {CharacterKind::CKind_Mewtwo, "Mewtwo"},
-    {CharacterKind::CKind_GameWatch, "Mr. Game & Watch"},
-    {CharacterKind::CKind_Mars, "Marth"},
-    {CharacterKind::CKind_Emblem, "Roy"},
+    {A11Y_CKind_Pichu, "Pichu"},
+    {A11Y_CKind_Pikachu, "Pikachu"},
+    {A11Y_CKind_Purin, "Jigglypuff"},
+    {A11Y_CKind_Mewtwo, "Mewtwo"},
+    {A11Y_CKind_GameWatch, "Mr. Game & Watch"},
+    {A11Y_CKind_Mars, "Marth"},
+    {A11Y_CKind_Emblem, "Roy"},
 
-    {CharacterKind::CKind_Seak, "Sheik"},
+    {A11Y_CKind_Seak, "Sheik"},
 };
 
-constexpr CharacterKind kAllKinds[] = {
-#define A11Y_CHARACTER_KIND_ITEM(name, number) CharacterKind::name,
-    A11Y_CHARACTER_KINDS(A11Y_CHARACTER_KIND_ITEM)
-#undef A11Y_CHARACTER_KIND_ITEM
+constexpr A11yCharacter kAllCharacters[] = {
+#define A11Y_CHARACTER_ITEM(name, number) A11Y_##name,
+    A11Y_CHARACTER_KINDS(A11Y_CHARACTER_ITEM)
+#undef A11Y_CHARACTER_ITEM
 };
 
-constexpr bool table_has_every_kind_once() {
-    for (CharacterKind kind : kAllKinds) {
+constexpr bool table_has_every_character_once() {
+    for (A11yCharacter character : kAllCharacters) {
         int found = 0;
-        for (const CharacterWords& character : kCharacters) {
-            found += character.kind == kind ? 1 : 0;
+        for (const CharacterWords& words : kCharacters) {
+            found += words.character == character ? 1 : 0;
         }
         if (found != 1) {
             return false;
         }
     }
-    return std::size(kCharacters) == std::size(kAllKinds);
+    return std::size(kCharacters) == std::size(kAllCharacters);
 }
-static_assert(table_has_every_kind_once(), "kCharacters needs every character kind, each once");
+static_assert(table_has_every_character_once(), "kCharacters needs every character, each once");
 
 }  // namespace
 
-std::optional<std::string_view> character_name(int character) {
+std::optional<std::string_view> character_name(A11yCharacter character) {
     for (const CharacterWords& words : kCharacters) {
-        if (static_cast<int>(words.kind) == character) {
+        if (words.character == character) {
             return words.name;
         }
     }

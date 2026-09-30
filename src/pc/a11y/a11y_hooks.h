@@ -53,7 +53,7 @@ struct CSSIcon;
  * the rules screen or name entry). Character select speech compares the
  * screen with the last frame here. */
 void pc_a11y_css_frame(const struct CSSData* css, const struct CSSDoorsData* doors,
-    const struct CSSIcon* icons, int hands, int pending_exit);
+    const struct CSSIcon* icons, int hand_count, int pending_exit);
 
 /* One hand of character select has updated (the end of
  * mnCharSel_CursorThink). The raw numbers of the hand's struct, which only

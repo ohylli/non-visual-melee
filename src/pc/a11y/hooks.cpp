@@ -103,7 +103,7 @@ extern "C" void pc_a11y_menu_center_text(int string_number) {
 }
 
 extern "C" void pc_a11y_css_frame(const CSSData* css, const CSSDoorsData* doors,
-    const CSSIcon* icons, int hands, int pending_exit) {
+    const CSSIcon* icons, int hand_count, int pending_exit) {
     if (!game_hook_may_speak()) {
         return;
     }
@@ -111,7 +111,8 @@ extern "C" void pc_a11y_css_frame(const CSSData* css, const CSSDoorsData* doors,
      * be any player in the game. */
     int local_port = pc_net_active() ? pc_net_local_player() : 0;
     A11yCssState state;
-    a11y_game_css_state(css, doors, icons, hands, pending_exit, s_css_hands, local_port, &state);
+    a11y_game_css_state(
+        css, doors, icons, hand_count, pending_exit, s_css_hands, local_port, &state);
     s_css_speech->frame(state);
 }
 

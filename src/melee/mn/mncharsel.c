@@ -10,7 +10,6 @@
 #include "mnmainrule.h"
 #include "mnname.h"
 #include "mnnamenew.h"
-#include "pc/a11y/a11y_hooks.h"
 #include "types.h"
 #include <melee/gm/gm_1601.h>
 #include <melee/gm/gm_unsplit.h>
@@ -5478,7 +5477,7 @@ void mnCharSel_Scene_OnFrame(void)
 
     PAD_STACK(8);
 
-    pc_a11y_css_frame(mnCharSel_804D6CB0, &mnCharSel_803F0DFC, icons, mnCharSel_804D6CF5, mnCharSel_804D6CF6); /* runs before the hands update this frame */
+    pc_a11y_css_frame(mnCharSel_804D6CB0, &mnCharSel_803F0DFC, icons, mnCharSel_804D6CF5, mnCharSel_804D6CF6);
     mnCharSel_804D6CEC += 1;
     if (mnCharSel_804D6CF6 <= 1) {
         cache = &lbDvd_GetPreloadCacheScene()->game_cache;

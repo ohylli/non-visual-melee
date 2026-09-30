@@ -35,3 +35,14 @@
     X(CKind_Emblem, 0x17)                                                                          \
     X(CKind_Pichu, 0x18)                                                                           \
     X(CKind_Ganon, 0x19)
+
+/* A character as fork code holds it, in C and in C++: the kinds under the
+ * fork's own names (A11Y_CKind_Fox), which game_access.c can use beside the
+ * decomp's, and none. A C enum, not an enum class, because game_access.h's
+ * snapshots carry it; C++ still refuses a plain int for it. */
+typedef enum A11yCharacter {
+    A11Y_NO_CHARACTER = -1,
+#define A11Y_CHARACTER_ENUMERATOR(name, number) A11Y_##name = (number),
+    A11Y_CHARACTER_KINDS(A11Y_CHARACTER_ENUMERATOR)
+#undef A11Y_CHARACTER_ENUMERATOR
+} A11yCharacter;

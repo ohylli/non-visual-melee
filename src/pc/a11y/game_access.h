@@ -3,6 +3,7 @@
  * C can include. Fork-internal: hooks live in a11y_hooks.h. Everything here
  * only reads. */
 #pragma once
+#include "character_kinds.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -75,8 +76,8 @@ typedef struct A11yCssHandReport {
 
 /* The local player's hand. */
 typedef struct A11yCssHand {
-    /* False until the hand has updated once in this scene, and while its
-     * controller is unplugged, which hides it. */
+    /* False until the hand has updated once in this scene. A hand whose
+     * controller is unplugged stops updating and keeps its last report. */
     bool present;
     /* The player slot whose coin the hand carries, or -1. */
     int coin;
@@ -97,24 +98,25 @@ typedef enum A11yCssSlotKind {
 /* One player slot along the bottom (the decomp's door). */
 typedef struct A11yCssSlot {
     A11yCssSlotKind kind;
-    /* The portrait the slot's coin marks (sel_icon), or -1 for none. While a
-     * hand carries the coin this holds a placeholder (0xD from the moment it
-     * is picked up), so the portrait under a carried coin is over_portrait. */
+    /* The portrait the slot's coin marks (sel_icon), or -1 for none. Picking
+     * the coin up sets a placeholder (0xD) here, which stays until the coin
+     * is first over a portrait, so the portrait under a carried coin is
+     * over_portrait. */
     int portrait;
     /* The portrait a carried coin was last found over (sel_icon_prev), or -1
      * while it is over none. At rest it equals portrait. */
     int over_portrait;
-    /* The chosen character (CharacterKind), or -1 for none. Picking the coin
-     * up keeps it; carrying the coin down into the player slots clears it. */
-    int character;
+    /* The chosen character, or none. Picking the coin up keeps it; carrying
+     * the coin down into the player slots clears it. */
+    A11yCharacter character;
     /* The costume's number, from 0. */
     int costume;
 } A11yCssSlot;
 
 /* One portrait. */
 typedef struct A11yCssPortrait {
-    /* The character (CharacterKind). */
-    int character;
+    /* The character, as the game's table holds it. */
+    A11yCharacter character;
     /* A locked portrait is drawn as "?" or not at all, and never hovered. */
     bool locked;
     /* The rectangle a carried coin hovers it in, in the screen's units. */
@@ -127,7 +129,7 @@ typedef struct A11yCssPortrait {
 /* What character select shows, read once a frame by its reader. */
 typedef struct A11yCssState {
     /* 4 in VS modes, 1 in single-player modes. */
-    int hands;
+    int hand_count;
     /* The screen has begun to leave, or opened the rules screen or name
      * entry. */
     bool leaving;
@@ -145,7 +147,7 @@ typedef struct A11yCssState {
  * hands the hand hook reported, indexed by hand, and the port the local
  * player drives. */
 void a11y_game_css_state(const struct CSSData* css, const struct CSSDoorsData* doors,
-    const struct CSSIcon* icons, int hands, int pending_exit,
+    const struct CSSIcon* icons, int hand_count, int pending_exit,
     const A11yCssHandReport reports[A11Y_CSS_SLOTS], int local_port, A11yCssState* out);
 
 #ifdef __cplusplus

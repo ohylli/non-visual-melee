@@ -19,10 +19,10 @@ void CssSpeech::frame(const A11yCssState& state) {
     }
     /* Single-player modes have one hand and their own targets; until they are
      * read, the opening is all they say. */
-    if (state.leaving || state.hands != A11Y_CSS_SLOTS) {
+    if (state.leaving || state.hand_count != A11Y_CSS_SLOTS) {
         return;
     }
-    std::string text = change(last, state);
+    std::string text = change_announcement(last, state);
     if (!text.empty()) {
         m_speech.announce(text, Mode::interrupt);
     }
@@ -32,12 +32,13 @@ std::string CssSpeech::opening(const A11yCssState& state) {
     /* A character counts once its coin rests on a portrait: a slot not yet
      * opened, or one whose coin went back, may keep a stale one. */
     const A11yCssSlot& slot = state.slots[state.local_slot];
-    bool chosen = slot.kind != A11Y_CSS_CLOSED && slot.portrait >= 0 && slot.character >= 0;
+    bool chosen =
+        slot.kind != A11Y_CSS_CLOSED && slot.portrait >= 0 && slot.character != A11Y_NO_CHARACTER;
     return "Character select. Player " + std::to_string(state.local_player + 1) + ", " +
            (chosen ? name(slot.character) : "no character") + ".";
 }
 
-std::string CssSpeech::change(const A11yCssState& last, const A11yCssState& now) {
+std::string CssSpeech::change_announcement(const A11yCssState& last, const A11yCssState& now) {
     int was_carrying = last.hand.coin;
     int carrying = now.hand.coin;
     if (carrying >= 0 && carrying != was_carrying) {
@@ -88,7 +89,7 @@ std::string CssSpeech::dropped(const A11yCssState& last, const A11yCssState& now
     const A11yCssSlot& before = last.slots[coin];
     const A11yCssSlot& after = now.slots[coin];
     /* Carried down into the player slots. */
-    if (after.portrait < 0 || after.character < 0) {
+    if (after.portrait < 0 || after.character == A11Y_NO_CHARACTER) {
         return "No character";
     }
     /* B puts the coin back on the character chosen before, which A cannot
@@ -101,11 +102,11 @@ std::string CssSpeech::dropped(const A11yCssState& last, const A11yCssState& now
     return "";
 }
 
-std::string CssSpeech::name(int character) {
+std::string CssSpeech::name(A11yCharacter character) {
     if (std::optional<std::string_view> known = character_name(character)) {
         return std::string(*known);
     }
-    if (m_logged.insert(character).second && log_enabled()) {
+    if (m_logged_missing.insert(character).second && log_enabled()) {
         pc_log_line("[a11y] character %d: not in the character names table", character);
     }
     return "Unknown character " + std::to_string(character);

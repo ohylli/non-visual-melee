@@ -36,21 +36,22 @@ public:
 private:
     std::string opening(const A11yCssState& state);
     /* The announcement for what changed from last to now, or empty. */
-    std::string change(const A11yCssState& last, const A11yCssState& now);
+    std::string change_announcement(const A11yCssState& last, const A11yCssState& now);
     /* The local hand holds the coin of slot coin, over the portrait now shows
      * under it: "Holding your coin. Fox". */
     std::string holding(const A11yCssState& now, int coin);
     /* The local hand let go of the coin of slot coin. */
     std::string dropped(const A11yCssState& last, const A11yCssState& now, int coin);
     /* A character's name; a missing one is spoken by number and logged. */
-    std::string name(int character);
+    std::string name(A11yCharacter character);
 
     Speech& m_speech;
     bool m_seen = false;
     /* A coin was picked up last frame and is not announced yet. */
     bool m_pickup_pending = false;
     A11yCssState m_last{};
-    std::set<int> m_logged;
+    /* The characters missing from the names table that were logged. */
+    std::set<A11yCharacter> m_logged_missing;
 };
 
 }  // namespace a11y

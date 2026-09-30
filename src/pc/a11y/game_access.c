@@ -19,27 +19,15 @@
 #include <sysdolphin/baselib/sislib.h>
 #include <sysdolphin/baselib/synth.h>
 
-/* The fork's copy of the scene kinds against the decomp's (scene_kinds.h). */
-#define A11Y_CHECK_SCENE_KIND(name, number)                                                        \
-    _Static_assert(name == (number), #name " no longer has the number scene_kinds.h gives it");
-A11Y_SCENE_KINDS(A11Y_CHECK_SCENE_KIND)
-#undef A11Y_CHECK_SCENE_KIND
-
-/* The fork's copy of the menu kinds and entries against the decomp's
- * (menu_kinds.h). */
-#define A11Y_CHECK_MENU_NUMBER(name, number)                                                       \
-    _Static_assert(name == (number), #name " no longer has the number menu_kinds.h gives it");
-A11Y_MENU_KINDS(A11Y_CHECK_MENU_NUMBER)
-A11Y_MENU_SELECTIONS(A11Y_CHECK_MENU_NUMBER)
-#undef A11Y_CHECK_MENU_NUMBER
-
-/* The fork's copy of the character kinds against the decomp's
- * (character_kinds.h). */
-#define A11Y_CHECK_CHARACTER_KIND(name, number)                                                    \
-    _Static_assert(name == (number), #name " no longer has the number character_kinds.h gives "    \
-                                           "it");
-A11Y_CHARACTER_KINDS(A11Y_CHECK_CHARACTER_KIND)
-#undef A11Y_CHECK_CHARACTER_KIND
+/* The fork's copies of the decomp's numbers (scene_kinds.h, menu_kinds.h,
+ * character_kinds.h) against the decomp's own. */
+#define A11Y_CHECK_NUMBER(name, number)                                                            \
+    _Static_assert(name == (number), #name " no longer has the number the fork's copy gives it");
+A11Y_SCENE_KINDS(A11Y_CHECK_NUMBER)
+A11Y_MENU_KINDS(A11Y_CHECK_NUMBER)
+A11Y_MENU_SELECTIONS(A11Y_CHECK_NUMBER)
+A11Y_CHARACTER_KINDS(A11Y_CHECK_NUMBER)
+#undef A11Y_CHECK_NUMBER
 
 /* The match rules before the players' data on character select have
  * bitfields. Laid out as MinGW does by default they take 144 bytes instead of
@@ -125,11 +113,10 @@ void a11y_game_menu_state(int center_text, A11yMenuState* out) {
     out->description = menu_string(row->description_indices[hovered]);
 }
 
-/* The hand's states and what a holding hand holds, as mnCharSel_CursorThink
- * uses them; the decomp has not named them. */
+/* The hand's holding state and what a holding hand holds, as
+ * mnCharSel_CursorThink uses them; the decomp has not named them. */
 enum {
     A11Y_CSS_HAND_HOLDING = 1,
-    A11Y_CSS_HAND_HIDDEN = 3,
     /* Held things 0 to 3 are the coins of player slots 0 to 3; 4 to 7 their
      * CPU level sliders, 8 to 11 their handicap sliders. */
     A11Y_CSS_HELD_COINS = 4,
@@ -142,10 +129,10 @@ static int css_portrait(u8 number) {
 }
 
 void a11y_game_css_state(const CSSData* css, const CSSDoorsData* doors, const CSSIcon* icons,
-    int hands, int pending_exit, const A11yCssHandReport reports[A11Y_CSS_SLOTS], int local_port,
-    A11yCssState* out) {
+    int hand_count, int pending_exit, const A11yCssHandReport reports[A11Y_CSS_SLOTS],
+    int local_port, A11yCssState* out) {
     memset(out, 0, sizeof(*out));
-    out->hands = hands;
+    out->hand_count = hand_count;
     out->leaving = pending_exit != 0;
 
     /* The players each slot's character is kept for. In single-player modes
@@ -154,7 +141,7 @@ void a11y_game_css_state(const CSSData* css, const CSSDoorsData* doors, const CS
      * (mnCharSel_802640A0). */
     int players[A11Y_CSS_SLOTS] = {0, 1, 2, 3};
     int local_hand = local_port;
-    if (hands == 1) {
+    if (hand_count == 1) {
         int first = (s8)(css->unk_0x0 - 1);
         if (first < 0) {
             first = 0;
@@ -170,7 +157,7 @@ void a11y_game_css_state(const CSSData* css, const CSSDoorsData* doors, const CS
     out->local_player = players[local_hand];
 
     const A11yCssHandReport* report = &reports[local_hand];
-    out->hand.present = report->seen && report->state != A11Y_CSS_HAND_HIDDEN;
+    out->hand.present = report->seen;
     out->hand.coin = out->hand.present && report->state == A11Y_CSS_HAND_HOLDING &&
                              report->held >= 0 && report->held < A11Y_CSS_HELD_COINS ?
                          report->held :
@@ -187,14 +174,15 @@ void a11y_game_css_state(const CSSData* css, const CSSDoorsData* doors, const CS
                                                       A11Y_CSS_CLOSED;
         slot->portrait = css_portrait(door->sel_icon);
         slot->over_portrait = css_portrait(door->sel_icon_prev);
-        slot->character = ckind >= 0 && ckind < CKind_Playable_Count ? ckind : -1;
+        slot->character =
+            ckind >= 0 && ckind < CKind_Playable_Count ? (A11yCharacter)ckind : A11Y_NO_CHARACTER;
         slot->costume = door->costume;
     }
 
     for (int i = 0; i < A11Y_CSS_PORTRAITS; i++) {
         const CSSIcon* icon = &icons[i];
         A11yCssPortrait* portrait = &out->portraits[i];
-        portrait->character = icon->char_kind;
+        portrait->character = (A11yCharacter)icon->char_kind;
         /* The hover test's own condition (mnCharSel_CursorThink). */
         portrait->locked = icon->state < ICONSTATE_TEMP;
         portrait->left = icon->bound_l;
