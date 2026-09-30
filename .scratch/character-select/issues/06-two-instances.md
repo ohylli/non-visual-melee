@@ -48,3 +48,28 @@ Each run passes when:
 - The primer or `docs/a11y/` gains what was learned about running netplay on Windows.
 
 ## Comments
+
+### 2026-09-30: step 1, smoke check passed
+
+A direct session comes up on Windows over loopback and walks the ordinary menus in sync, so no LAN lobby is needed to reach character select.
+
+How it ran: two copies of `tools/a11y/drive.py` started side by side from Git Bash, each with its own `--out` (so its own `MELEE_LOG_FILE`) and its own key pipe (drive.py names the pipe after its own process id). drive.py passes its environment through, so the net settings went on the command line:
+
+```
+MELEE_NET_KEY=a11ytest MELEE_SEED=7 MELEE_NET=127.0.0.1:42051 MELEE_NET_PORT=42050 MELEE_NET_PLAYER=0 MELEE_NET_RECORD=a.rec python tools/a11y/drive.py --out a.log --timeout 60 a.drive &
+MELEE_NET_KEY=a11ytest MELEE_SEED=7 MELEE_NET=127.0.0.1:42050 MELEE_NET_PORT=42051 MELEE_NET_PLAYER=1 MELEE_NET_RECORD=b.rec python tools/a11y/drive.py --out b.log --timeout 60 b.drive &
+```
+
+Instance a ran the steps of `tools/a11y/main_menu.drive`, then Down, A, A into VS. Mode, Melee, character select, after waiting for `net: rollback with`. Instance b only waited for its own "Character select." line; it was pressed nothing.
+
+Evidence:
+
+- Both logs have `net: rollback with` (P1 and P2, delay auto 2) and `net: handshake done seed=7 start_frame=120`; the handshake completes at the title screen, with the default `--scene title`.
+- No `bind` failure, no `peer silent`, no `DESYNC` in either log.
+- Both logs pass the same scenes at the same frames: title (0) to unlock notices (39) at frame 121, to the main menu (1) at 878, to character select (8) at 1000. Each scene change waits on a hand-off with the peer (`scene N hand-off waiting`).
+- Both `[a11y]` transcripts match line for line up to character select, where a says "Character select. Player 1, no character." and b "Character select. Player 2, no character.": each follows its own port's hand, as intended.
+- The two recordings (`MELEE_NET_RECORD`) are byte-identical, 1182 frames.
+- Frame 600 stats: rollbacks 0, loss 0 %, ping 0 ms; about 60 frames a second on both.
+- Harmless: each side drops a few early datagrams for session 00000000 before the guest learns the host's session id.
+
+Route to character select for steps 2 and 3: the direct session from boot, instance a driving the menus exactly as the offline scripts do. Instance b's presses land on port 2, so b can choose its own character by stick without a lobby.
