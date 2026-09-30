@@ -1,6 +1,6 @@
 # 03 Play-test character select speech by ear
 
-Status: ready-for-human
+Status: resolved (2026-09-30)
 Type: task
 Blocked by: 02
 
@@ -48,3 +48,5 @@ Anything unexpected becomes a new issue in this directory. Words that read badly
 19. Is the opening announcement enough, or should it say more, such as the mode or the other player slots?
 
 ## Comments
+
+2026-09-30: the maintainer ran the play test by ear with NVDA and noticed no issues. No new issues.
