@@ -105,7 +105,7 @@ bool CssReader::may_steer(const A11yCssState& state) const {
      * moves the hand only if controller 1 started it; online, the local
      * player's pad is controller 1's, whoever they are in the game. The name
      * tag window keeps the hand inside itself. */
-    bool reachable = state.hand_count == A11Y_CSS_SLOTS || state.local_port == 0;
+    bool reachable = !single_player(state) || state.local_port == 0;
     return reachable && state.exit == A11Y_CSS_STAYING && state.hand.present &&
            !state.slots[state.local_slot].name_tags_open;
 }

@@ -197,22 +197,27 @@ typedef struct A11yCssPortrait {
     A11yCssRect rect;
 } A11yCssPortrait;
 
-/* The single-player modes' arrows, below the portraits: the difficulty,
- * drawn "LEVEL", in Classic, Adventure and All-Star, and the stock count in
- * Classic and Adventure. A on an arrow steps the value one way; at the end of
- * the range it does nothing. */
-typedef struct A11yCssArrows {
-    bool difficulty_shown;
-    bool stocks_shown;
-    /* The difficulty, 0 (very easy) to 4 (very hard), and the stock count, 1
-     * to 5; stale where the arrows are not shown. */
-    int difficulty;
-    int stocks;
+/* A row of a single-player mode's arrows, below the portraits: A on the
+ * lower arrow steps the row's value one down, on the higher one up, and at
+ * that end of the range does nothing. */
+typedef struct A11yCssArrowRow {
+    bool shown;
+    /* Stale where the row is not shown. */
+    int value;
+    /* The ends of the range. */
+    int lowest;
+    int highest;
     /* Where the game tests the hand for each arrow. */
-    A11yCssRect difficulty_lower;
-    A11yCssRect difficulty_higher;
-    A11yCssRect stocks_fewer;
-    A11yCssRect stocks_more;
+    A11yCssRect lower;
+    A11yCssRect higher;
+} A11yCssArrowRow;
+
+/* The single-player modes' arrows: the difficulty, drawn "LEVEL", 0 (very
+ * easy) to 4 (very hard), in Classic, Adventure and All-Star, and below it
+ * the stock count, 1 to 5, in Classic and Adventure. */
+typedef struct A11yCssArrows {
+    A11yCssArrowRow difficulty;
+    A11yCssArrowRow stocks;
 } A11yCssArrows;
 
 enum {
@@ -261,10 +266,10 @@ typedef struct A11yCssState {
      * updates, after this snapshot. */
     bool pressed_a;
     A11yCssHand hand;
-    /* The player slots shown: in VS modes 4, of which the buttons reach 3 in
-     * Camera mode, whose fourth slot is the camera; in single-player modes
-     * 1, and 2 in Training, the second the CPU's. The slots after them read
-     * as closed. */
+    /* The player slots steps and speech go through: in VS modes those the
+     * buttons reach, 4, or 3 in Camera mode, whose fourth slot is the
+     * camera; in single-player modes the mode's own, 1, or 2 in Training,
+     * the second the CPU's, and the slots after those read as closed. */
     int slot_count;
     /* The top bar's Teams button and rules header exist; the handicap rule
      * is on, so each slot shows a handicap slider. */

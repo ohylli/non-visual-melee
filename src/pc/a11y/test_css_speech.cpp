@@ -456,6 +456,11 @@ void single_player_coin_is_read_as_in_vs_modes() {
     assert((f.spoken() == Texts{"Holding your coin", "Fox", "Ready to fight. Press Start."}));
 }
 
+/* The arrows by their numbers in kArrows. */
+constexpr a11y::Target kLowerArrow{a11y::TargetKind::arrow, 0};
+constexpr a11y::Target kHigherArrow{a11y::TargetKind::arrow, 1};
+constexpr a11y::Target kFewerArrow{a11y::TargetKind::arrow, 2};
+
 /* The hand at an arrow, free. */
 void hand_on(A11yCssState& state, const A11yCssRect& arrow) {
     state.hand.x = (arrow.left + arrow.right) / 2.0f;
@@ -487,21 +492,21 @@ void a_on_an_arrow_says_the_new_value() {
     state.pressed_a = true;
     f.frame(state);
     state.pressed_a = false;
-    state.arrows.difficulty = 3;
+    state.arrows.difficulty.value = 3;
     f.frame(state);
     hand_on(state, kStocksMore);
     f.frame(state);
     state.pressed_a = true;
     f.frame(state);
     state.pressed_a = false;
-    state.arrows.stocks = 4;
+    state.arrows.stocks.value = 4;
     f.frame(state);
     hand_on(state, kStocksFewer);
     f.frame(state);
     state.pressed_a = true;
     f.frame(state);
     state.pressed_a = false;
-    state.arrows.stocks = 3;
+    state.arrows.stocks.value = 3;
     f.frame(state);
     assert((f.spoken() == Texts{"Hard", "Stock: 3, more", "4", "Stock: 4, fewer", "3"}));
 }
@@ -522,8 +527,8 @@ void a_at_the_end_of_a_range_repeats_the_value() {
     };
     for (const Case& c : cases) {
         A11yCssState state = classic_screen();
-        state.arrows.difficulty = c.difficulty;
-        state.arrows.stocks = c.stocks;
+        state.arrows.difficulty.value = c.difficulty;
+        state.arrows.stocks.value = c.stocks;
         hand_on(state, *c.arrow);
         Fixture f(state);
         state.pressed_a = true;
@@ -535,8 +540,8 @@ void a_at_the_end_of_a_range_repeats_the_value() {
     /* The other end of each, where A changes the value, waits for it. */
     for (const Case& c : cases) {
         A11yCssState state = classic_screen();
-        state.arrows.difficulty = c.difficulty == 0 ? 4 : c.difficulty == 4 ? 0 : kNormal;
-        state.arrows.stocks = c.stocks == 1 ? 5 : c.stocks == 5 ? 1 : 3;
+        state.arrows.difficulty.value = c.difficulty == 0 ? 4 : c.difficulty == 4 ? 0 : kNormal;
+        state.arrows.stocks.value = c.stocks == 1 ? 5 : c.stocks == 5 ? 1 : 3;
         hand_on(state, *c.arrow);
         Fixture f(state);
         state.pressed_a = true;
@@ -547,7 +552,7 @@ void a_at_the_end_of_a_range_repeats_the_value() {
 
 void a_away_from_the_arrows_says_nothing_of_them() {
     A11yCssState state = classic_screen();
-    state.arrows.stocks = 1;
+    state.arrows.stocks.value = 1;
     Fixture f(state);
     state.pressed_a = true;
     f.frame(state);
@@ -558,7 +563,7 @@ void arrows_not_shown_say_nothing() {
     /* Training keeps whatever values a Classic run left. */
     A11yCssState state = training_screen();
     Fixture f(state);
-    state.arrows.stocks = 4;
+    state.arrows.stocks.value = 4;
     hand_on(state, kStocksMore);
     state.pressed_a = true;
     f.frame(state);
@@ -568,8 +573,8 @@ void arrows_not_shown_say_nothing() {
 void a_step_onto_an_arrow_names_it() {
     A11yCssState state = classic_screen();
     Fixture f(state);
-    f.css.step(state, a11y::Target{a11y::TargetKind::stocks_fewer});
-    f.css.step(state, a11y::Target{a11y::TargetKind::difficulty_higher});
+    f.css.step(state, kFewerArrow);
+    f.css.step(state, kHigherArrow);
     assert((f.spoken() == Texts{"Stock: 3, fewer", "Level: Normal, higher"}));
 }
 
@@ -578,7 +583,7 @@ void a_step_down_to_the_arrows_with_ones_own_coin_clears_it() {
     pick_up(state, 0);
     carry_over(state, 0, kPichuPortrait);
     Fixture f(state);
-    f.css.step(state, a11y::Target{a11y::TargetKind::difficulty_lower});
+    f.css.step(state, kLowerArrow);
     assert((f.spoken() == Texts{"No character. Level: Normal, lower"}));
 }
 

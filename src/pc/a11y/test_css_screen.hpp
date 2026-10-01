@@ -144,8 +144,10 @@ inline A11yCssState classic_screen() {
     state.slot_count = 1;
     state.has_teams_button = false;
     state.has_rules_button = false;
-    state.arrows = A11yCssArrows{
-        true, true, kNormal, 3, kDifficultyLower, kDifficultyHigher, kStocksFewer, kStocksMore};
+    state.arrows.difficulty = A11yCssArrowRow{true, kNormal, A11Y_CSS_LOWEST_DIFFICULTY,
+        A11Y_CSS_HIGHEST_DIFFICULTY, kDifficultyLower, kDifficultyHigher};
+    state.arrows.stocks = A11yCssArrowRow{
+        true, 3, A11Y_CSS_FEWEST_STOCKS, A11Y_CSS_MOST_STOCKS, kStocksFewer, kStocksMore};
     for (int i = 0; i < A11Y_CSS_SLOTS; i++) {
         if (i > 0) {
             state.slots[i] = slot(A11Y_CSS_CLOSED, i);
@@ -164,8 +166,8 @@ inline A11yCssState training_screen() {
     A11yCssState state = classic_screen();
     state.match_type = A11Y_TRAINING_MODE;
     state.slot_count = 2;
-    state.arrows.difficulty_shown = false;
-    state.arrows.stocks_shown = false;
+    state.arrows.difficulty.shown = false;
+    state.arrows.stocks.shown = false;
     state.slots[1] = cpu(1, 0);
     state.slots[1].slot_button = A11yCssRect{};
     state.slots[1].team_button = A11yCssRect{};

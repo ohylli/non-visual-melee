@@ -134,8 +134,13 @@ enum {
 enum { A11Y_HANDICAP_OFF = 0, A11Y_HANDICAP_AUTO = 1, A11Y_HANDICAP_ON = 2 };
 
 /* The player slots the buttons reach in Camera mode, whose fourth slot is the
- * camera; the slots Training shows, the player's and the CPU's. */
-enum { A11Y_CSS_CAMERA_MODE_SLOTS = 3, A11Y_CSS_TRAINING_SLOTS = 2 };
+ * camera; the slots a single-player mode has, the player's, and in Training
+ * the CPU's too. */
+enum {
+    A11Y_CSS_CAMERA_MODE_SLOTS = 3,
+    A11Y_CSS_SINGLE_PLAYER_SLOTS = 1,
+    A11Y_CSS_TRAINING_SLOTS = 2,
+};
 
 /* The numbers of mnCharSel_CursorThink's tests, in the screen's units. A
  * slider's grab point is this far from its joint. */
@@ -204,16 +209,23 @@ static bool css_hand_holds(const A11yCssHandReport* report) {
 static A11yCssArrows css_arrows(const CSSData* css, bool vs, const struct CSSDoorsMisc* misc,
     const struct CSSDoorsData2* data2) {
     A11yCssArrows arrows;
-    arrows.difficulty_shown = !vs && css->match_type <= REG_ALLSTAR;
-    arrows.stocks_shown = !vs && css->match_type < REG_ALLSTAR;
-    arrows.difficulty = misc->cpu_level;
-    arrows.stocks = data2->stocks;
-    arrows.difficulty_lower =
-        css_rect(misc->cpudown_left, misc->cpudown_right, misc->cpubtn_top, misc->cpubtn_btm);
-    arrows.difficulty_higher =
-        css_rect(misc->cpuup_left, misc->cpuup_right, misc->cpubtn_top, misc->cpubtn_btm);
-    arrows.stocks_fewer = css_rect(data2->xf8, data2->xfc, data2->x108, data2->x10c);
-    arrows.stocks_more = css_rect(data2->x100, data2->x104, data2->x108, data2->x10c);
+    arrows.difficulty = (A11yCssArrowRow){
+        .shown = !vs && css->match_type <= REG_ALLSTAR,
+        .value = misc->cpu_level,
+        .lowest = A11Y_CSS_LOWEST_DIFFICULTY,
+        .highest = A11Y_CSS_HIGHEST_DIFFICULTY,
+        .lower =
+            css_rect(misc->cpudown_left, misc->cpudown_right, misc->cpubtn_top, misc->cpubtn_btm),
+        .higher = css_rect(misc->cpuup_left, misc->cpuup_right, misc->cpubtn_top, misc->cpubtn_btm),
+    };
+    arrows.stocks = (A11yCssArrowRow){
+        .shown = !vs && css->match_type < REG_ALLSTAR,
+        .value = data2->stocks,
+        .lowest = A11Y_CSS_FEWEST_STOCKS,
+        .highest = A11Y_CSS_MOST_STOCKS,
+        .lower = css_rect(data2->xf8, data2->xfc, data2->x108, data2->x10c),
+        .higher = css_rect(data2->x100, data2->x104, data2->x108, data2->x10c),
+    };
     return arrows;
 }
 
@@ -266,12 +278,12 @@ void a11y_game_css_state(const A11yCssScreen* screen,
     bool built = out->exit == A11Y_CSS_STAYING || out->exit == A11Y_CSS_TO_STAGE_SELECT ||
                  out->exit == A11Y_CSS_BACK;
     int handicap_rule = gmMainLib_GetGameRules()->handicap;
-    /* The slots that exist: in single-player modes the rest keep whatever
+    /* The slots the mode has: in single-player modes the rest keep whatever
      * the last VS mode left, name tag windows freed since included. */
-    int shown = vs                               ? A11Y_CSS_SLOTS :
-                css->match_type == TRAINING_MODE ? A11Y_CSS_TRAINING_SLOTS :
-                                                   1;
-    out->slot_count = !vs                          ? shown :
+    int mode_slots = vs                               ? A11Y_CSS_SLOTS :
+                     css->match_type == TRAINING_MODE ? A11Y_CSS_TRAINING_SLOTS :
+                                                        A11Y_CSS_SINGLE_PLAYER_SLOTS;
+    out->slot_count = !vs                          ? mode_slots :
                       css->match_type == VS_CAMERA ? A11Y_CSS_CAMERA_MODE_SLOTS :
                                                      A11Y_CSS_SLOTS;
     out->has_teams_button = vs && css->match_type <= VS_SLOWMO;
@@ -302,7 +314,7 @@ void a11y_game_css_state(const A11yCssScreen* screen,
         int player = players[i];
         A11yCssSlot* slot = &out->slots[i];
         int ckind = css->vs.start.players[player].ckind;
-        if (i >= shown) {
+        if (i >= mode_slots) {
             slot->kind = A11Y_CSS_CLOSED;
             slot->portrait = -1;
             slot->over_portrait = -1;

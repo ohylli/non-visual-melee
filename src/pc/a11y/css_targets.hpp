@@ -27,16 +27,14 @@ enum class TargetKind {
     teams,
     rules,
     back,
-    /* A single-player mode's arrows. */
-    difficulty_lower,
-    difficulty_higher,
-    stocks_fewer,
-    stocks_more,
+    /* A single-player mode's arrow. */
+    arrow,
 };
 
 struct Target {
     TargetKind kind = TargetKind::none;
-    /* The portrait's number or the player slot's; -1 for the top bar. */
+    /* The portrait's number, the player slot's or the arrow's in kArrows; -1
+     * for the top bar. */
     int index = -1;
     /* A value of the slider the hand holds, 1 to 9, as a step's destination
      * or where the hand is; none for everything else, the knob included. */
@@ -62,6 +60,32 @@ struct SliderKind {
  * none. */
 const SliderKind* slider_kind(A11yCssSlider slider);
 const SliderKind* slider_kind(TargetKind knob);
+
+/* A row of a single-player mode's arrows: its place in A11yCssArrows. */
+using ArrowRow = A11yCssArrowRow A11yCssArrows::*;
+
+/* A single-player mode's arrow: its row, and whether A on it steps the row's
+ * value up. */
+struct ArrowKind {
+    ArrowRow row;
+    bool higher;
+};
+
+/* The arrows by their numbers, as drawn, row by row, each left to right: the
+ * difficulty's lower and higher, then the stock count's fewer and more. */
+inline constexpr ArrowKind kArrows[] = {
+    {&A11yCssArrows::difficulty, false},
+    {&A11yCssArrows::difficulty, true},
+    {&A11yCssArrows::stocks, false},
+    {&A11yCssArrows::stocks, true},
+};
+
+/* The arrow target's kind; the target must be an arrow. */
+const ArrowKind& arrow_kind(Target arrow);
+
+/* The screen is a single-player mode's: one hand, and arrows where VS modes
+ * have the player slots' buttons. */
+bool single_player(const A11yCssState& state);
 
 /* Where a carried coin sits from the hand; portraits are tested there. */
 inline constexpr float kCoinOffsetX = 2.7f;
@@ -109,9 +133,6 @@ int pickable_coin(const A11yCssState& state, int portrait);
  * height A leaves the hand at; for a knob, the point it is grabbed from; for
  * a value of the held slider, the middle of that value's span. */
 Point aim_point(const A11yCssState& state, Target target);
-
-/* The target is a single-player mode's arrow. */
-bool is_arrow(Target target);
 
 /* A on the arrow would change nothing: its value is at that end of the
  * range. */

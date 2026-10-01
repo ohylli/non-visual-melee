@@ -4,6 +4,7 @@
 #include "pc/pc.h"
 #include "speech.hpp"
 #include <cctype>
+#include <initializer_list>
 #include <optional>
 #include <string_view>
 
@@ -33,10 +34,6 @@ std::string capitalised(std::string_view words) {
 /* "Player 2" for player number 1, as the hand's badge shows "P2". */
 std::string player(int number) {
     return std::string(kPlayer) + " " + std::to_string(number + 1);
-}
-
-bool single_player(const A11yCssState& state) {
-    return state.hand_count != A11Y_CSS_SLOTS;
 }
 
 /* Whose a player slot is: in VS modes slot 1 is player 2's, as its tab shows
@@ -87,10 +84,20 @@ std::string difficulty(int value) {
     return word ? std::string(*word) : std::string(kDifficultyArrows) + " " + std::to_string(value);
 }
 
-/* The value of an arrow's row: "Normal", "3". */
-std::string arrow_value(const A11yCssState& state, Target arrow) {
-    bool stocks = arrow.kind == TargetKind::stocks_fewer || arrow.kind == TargetKind::stocks_more;
-    return stocks ? std::to_string(state.arrows.stocks) : difficulty(state.arrows.difficulty);
+/* A row of arrows' words: its name, its value as the strip shows it
+ * ("Normal", "3"), and the ways of its lower and higher arrows. */
+struct ArrowRowWords {
+    std::string_view name;
+    std::string value;
+    std::string_view lower;
+    std::string_view higher;
+};
+
+ArrowRowWords arrow_row_words(const A11yCssState& state, ArrowRow row) {
+    int value = (state.arrows.*row).value;
+    return row == &A11yCssArrows::stocks ?
+               ArrowRowWords{kStockArrows, std::to_string(value), kFewer, kMore} :
+               ArrowRowWords{kDifficultyArrows, difficulty(value), kLower, kHigher};
 }
 
 /* A slider's words: its name at its knob, and the shorter word said before
@@ -257,19 +264,17 @@ std::string CssSpeech::opening(const A11yCssState& state) {
 std::string CssSpeech::arrow_announcement(
     const A11yCssState& last, const A11yCssState& now, Target is) {
     /* Only the local hand changes them: its A on an arrow. */
-    const A11yCssArrows& before = last.arrows;
-    const A11yCssArrows& after = now.arrows;
-    if (after.difficulty_shown && before.difficulty_shown && after.difficulty != before.difficulty)
-    {
-        return difficulty(after.difficulty);
-    }
-    if (after.stocks_shown && before.stocks_shown && after.stocks != before.stocks) {
-        return std::to_string(after.stocks);
+    for (ArrowRow row : {&A11yCssArrows::difficulty, &A11yCssArrows::stocks}) {
+        const A11yCssArrowRow& before = last.arrows.*row;
+        const A11yCssArrowRow& after = now.arrows.*row;
+        if (after.shown && before.shown && after.value != before.value) {
+            return arrow_row_words(now, row).value;
+        }
     }
     /* At the end of the range the game does nothing; the value again says
      * the press was heard. Elsewhere the value changes next frame. */
-    if (now.pressed_a && is_arrow(is) && arrow_at_end(now, is)) {
-        return arrow_value(now, is);
+    if (now.pressed_a && is.kind == TargetKind::arrow && arrow_at_end(now, is)) {
+        return arrow_row_words(now, arrow_kind(is).row).value;
     }
     return "";
 }
@@ -455,18 +460,12 @@ std::string CssSpeech::target_words(const A11yCssState& state, Target target) {
         return std::string(kRulesButton);
     case TargetKind::back:
         return std::string(kBackButton);
-    case TargetKind::difficulty_lower:
-        return std::string(kDifficultyArrows) + ": " + arrow_value(state, target) + ", " +
-               std::string(kLower);
-    case TargetKind::difficulty_higher:
-        return std::string(kDifficultyArrows) + ": " + arrow_value(state, target) + ", " +
-               std::string(kHigher);
-    case TargetKind::stocks_fewer:
-        return std::string(kStockArrows) + ": " + arrow_value(state, target) + ", " +
-               std::string(kFewer);
-    case TargetKind::stocks_more:
-        return std::string(kStockArrows) + ": " + arrow_value(state, target) + ", " +
-               std::string(kMore);
+    case TargetKind::arrow: {
+        const ArrowKind& arrow = arrow_kind(target);
+        ArrowRowWords words = arrow_row_words(state, arrow.row);
+        return std::string(words.name) + ": " + words.value + ", " +
+               std::string(arrow.higher ? words.higher : words.lower);
+    }
     }
     return "";
 }

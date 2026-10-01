@@ -49,10 +49,11 @@ Target handicap(int slot, std::optional<int> level = std::nullopt) {
 constexpr Target kTeams{TargetKind::teams};
 constexpr Target kRules{TargetKind::rules};
 constexpr Target kBack{TargetKind::back};
-constexpr Target kLower{TargetKind::difficulty_lower};
-constexpr Target kHigher{TargetKind::difficulty_higher};
-constexpr Target kFewer{TargetKind::stocks_fewer};
-constexpr Target kMore{TargetKind::stocks_more};
+/* The arrows by their numbers in kArrows. */
+constexpr Target kLower{TargetKind::arrow, 0};
+constexpr Target kHigher{TargetKind::arrow, 1};
+constexpr Target kFewer{TargetKind::arrow, 2};
+constexpr Target kMore{TargetKind::arrow, 3};
 
 using Row = std::vector<Target>;
 
@@ -306,7 +307,7 @@ void single_player_arrows_by_mode() {
      * Training have no arrows. */
     A11yCssState state = classic_screen();
     state.match_type = A11Y_REG_ALLSTAR;
-    state.arrows.stocks_shown = false;
+    state.arrows.stocks.shown = false;
     assert(target_at(state, -7.5f, -9.0f) == kLower);
     assert((target_at(state, 0.7f, -14.5f) == Target{}));
     state = training_screen();
@@ -329,17 +330,14 @@ void single_player_name_box() {
 void arrows_at_the_ends_of_their_ranges() {
     A11yCssState state = classic_screen();
     for (Target arrow : {kLower, kHigher, kFewer, kMore}) {
-        assert(a11y::is_arrow(arrow));
         assert(!a11y::arrow_at_end(state, arrow));
     }
-    assert(!a11y::is_arrow(kBack));
-    assert(!a11y::is_arrow(portrait(kFoxPortrait)));
-    state.arrows.difficulty = 0;
-    state.arrows.stocks = 1;
+    state.arrows.difficulty.value = 0;
+    state.arrows.stocks.value = 1;
     assert(a11y::arrow_at_end(state, kLower) && !a11y::arrow_at_end(state, kHigher));
     assert(a11y::arrow_at_end(state, kFewer) && !a11y::arrow_at_end(state, kMore));
-    state.arrows.difficulty = 4;
-    state.arrows.stocks = 5;
+    state.arrows.difficulty.value = 4;
+    state.arrows.stocks.value = 5;
     assert(!a11y::arrow_at_end(state, kLower) && a11y::arrow_at_end(state, kHigher));
     assert(!a11y::arrow_at_end(state, kFewer) && a11y::arrow_at_end(state, kMore));
 }
@@ -479,7 +477,7 @@ void rows_in_classic() {
 void rows_in_all_star_and_training() {
     A11yCssState state = classic_screen();
     state.match_type = A11Y_REG_ALLSTAR;
-    state.arrows.stocks_shown = false;
+    state.arrows.stocks.shown = false;
     std::vector<Row> rows = a11y::target_rows(state);
     assert(rows.size() == 5);
     assert((rows.back() == Row{kLower, kHigher}));

@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "css_targets.hpp"
 #include <algorithm>
+#include <cassert>
 #include <cmath>
+#include <iterator>
 #include <optional>
 
 namespace a11y {
@@ -89,20 +91,15 @@ Point centre(const A11yCssRect& rect) {
     return Point{centre_x(rect), centre_y(rect)};
 }
 
+/* The row of arrows an arrow is in. */
+const A11yCssArrowRow& arrow_row(const A11yCssState& state, Target arrow) {
+    return state.arrows.*arrow_kind(arrow).row;
+}
+
 /* Where the game tests the hand for an arrow. */
 const A11yCssRect& arrow_rect(const A11yCssState& state, Target arrow) {
-    const A11yCssArrows& arrows = state.arrows;
-    switch (arrow.kind) {
-    case TargetKind::difficulty_lower:
-        return arrows.difficulty_lower;
-    case TargetKind::difficulty_higher:
-        return arrows.difficulty_higher;
-    case TargetKind::stocks_fewer:
-        return arrows.stocks_fewer;
-    default:
-        break;
-    }
-    return arrows.stocks_more;
+    const A11yCssArrowRow& row = arrow_row(state, arrow);
+    return arrow_kind(arrow).higher ? row.higher : row.lower;
 }
 
 /* The point steps measure from and to: where a target is in the rows' layout.
@@ -137,10 +134,7 @@ Point step_anchor(const A11yCssState& state, Target target) {
         return Point{(kRulesLeft + kRulesRight) / 2.0f, kTopBarMiddle};
     case TargetKind::back:
         return Point{(kBackLeft + kHandRight) / 2.0f, kTopBarMiddle};
-    case TargetKind::difficulty_lower:
-    case TargetKind::difficulty_higher:
-    case TargetKind::stocks_fewer:
-    case TargetKind::stocks_more:
+    case TargetKind::arrow:
         return centre(arrow_rect(state, target));
     }
     return Point{};
@@ -169,10 +163,7 @@ bool contains(const A11yCssState& state, Target target, float x, float y) {
         return y > kTopBarBottom && x > kRulesLeft && x < kRulesRight;
     case TargetKind::back:
         return y > kTopBarBottom && x > kBackLeft;
-    case TargetKind::difficulty_lower:
-    case TargetKind::difficulty_higher:
-    case TargetKind::stocks_fewer:
-    case TargetKind::stocks_more:
+    case TargetKind::arrow:
         return inside(arrow_rect(state, target), x, y);
     }
     return false;
@@ -199,10 +190,7 @@ bool reacts(const A11yCssState& state, Target target) {
     case TargetKind::teams:
     case TargetKind::rules:
     case TargetKind::back:
-    case TargetKind::difficulty_lower:
-    case TargetKind::difficulty_higher:
-    case TargetKind::stocks_fewer:
-    case TargetKind::stocks_more:
+    case TargetKind::arrow:
         break;
     }
     return true;
@@ -296,16 +284,19 @@ std::vector<Target> slot_row(const A11yCssState& state) {
     return row;
 }
 
-/* A single-player mode's arrows as drawn: the difficulty row above the stock
- * row, each arrow pointing down the range on the left. */
+/* A single-player mode's arrows as drawn, the rows shown: the difficulty row
+ * above the stock row, each arrow pointing down the range on the left. */
 Rows arrow_rows(const A11yCssState& state) {
     Rows rows;
-    if (state.arrows.difficulty_shown) {
-        rows.push_back(
-            {Target{TargetKind::difficulty_lower}, Target{TargetKind::difficulty_higher}});
-    }
-    if (state.arrows.stocks_shown) {
-        rows.push_back({Target{TargetKind::stocks_fewer}, Target{TargetKind::stocks_more}});
+    for (int i = 0; i < static_cast<int>(std::size(kArrows)); i++) {
+        ArrowRow row = kArrows[i].row;
+        if (!(state.arrows.*row).shown) {
+            continue;
+        }
+        if (i == 0 || kArrows[i - 1].row != row) {
+            rows.emplace_back();
+        }
+        rows.back().push_back(Target{TargetKind::arrow, i});
     }
     return rows;
 }
@@ -470,13 +461,20 @@ Area area(Target target) {
     case TargetKind::back:
         return Area::top_bar;
     /* Below the portraits, where a carried coin goes back. */
-    case TargetKind::difficulty_lower:
-    case TargetKind::difficulty_higher:
-    case TargetKind::stocks_fewer:
-    case TargetKind::stocks_more:
+    case TargetKind::arrow:
         return Area::player_slots;
     }
     return Area::none;
+}
+
+const ArrowKind& arrow_kind(Target arrow) {
+    assert(arrow.kind == TargetKind::arrow && arrow.index >= 0 &&
+           arrow.index < static_cast<int>(std::size(kArrows)));
+    return kArrows[arrow.index];
+}
+
+bool single_player(const A11yCssState& state) {
+    return state.hand_count != A11Y_CSS_SLOTS;
 }
 
 const SliderKind* slider_kind(A11yCssSlider slider) {
@@ -503,14 +501,14 @@ std::vector<std::vector<Target>> target_rows(const A11yCssState& state) {
     for (std::vector<Target>& row : portrait_rows(state)) {
         rows.push_back(std::move(row));
     }
-    if (state.hand_count == A11Y_CSS_SLOTS) {
+    if (single_player(state)) {
+        for (std::vector<Target>& row : arrow_rows(state)) {
+            rows.push_back(std::move(row));
+        }
+    } else {
         std::vector<Target> slots = slot_row(state);
         if (!slots.empty()) {
             rows.push_back(std::move(slots));
-        }
-    } else {
-        for (std::vector<Target>& row : arrow_rows(state)) {
-            rows.push_back(std::move(row));
         }
     }
     return rows;
@@ -567,34 +565,9 @@ Point aim_point(const A11yCssState& state, Target target) {
     return step_anchor(state, target);
 }
 
-bool is_arrow(Target target) {
-    switch (target.kind) {
-    case TargetKind::difficulty_lower:
-    case TargetKind::difficulty_higher:
-    case TargetKind::stocks_fewer:
-    case TargetKind::stocks_more:
-        return true;
-    default:
-        break;
-    }
-    return false;
-}
-
 bool arrow_at_end(const A11yCssState& state, Target arrow) {
-    const A11yCssArrows& arrows = state.arrows;
-    switch (arrow.kind) {
-    case TargetKind::difficulty_lower:
-        return arrows.difficulty <= A11Y_CSS_LOWEST_DIFFICULTY;
-    case TargetKind::difficulty_higher:
-        return arrows.difficulty >= A11Y_CSS_HIGHEST_DIFFICULTY;
-    case TargetKind::stocks_fewer:
-        return arrows.stocks <= A11Y_CSS_FEWEST_STOCKS;
-    case TargetKind::stocks_more:
-        return arrows.stocks >= A11Y_CSS_MOST_STOCKS;
-    default:
-        break;
-    }
-    return false;
+    const A11yCssArrowRow& row = arrow_row(state, arrow);
+    return arrow_kind(arrow).higher ? row.value >= row.highest : row.value <= row.lowest;
 }
 
 Target step(const A11yCssState& state, Target from, float x, float y, Direction direction) {
@@ -618,9 +591,8 @@ Target target_at(const A11yCssState& state, float x, float y) {
     if (state.hand.coin < 0) {
         Target target = first_at(state, top_bar_row(state), x, y);
         if (target.kind == TargetKind::none) {
-            target = first_at(state,
-                state.hand_count == A11Y_CSS_SLOTS ? slot_row(state) : arrows_in_test_order(state),
-                x, y);
+            target = first_at(
+                state, single_player(state) ? arrows_in_test_order(state) : slot_row(state), x, y);
         }
         /* The name box after every slot, or after the arrows. */
         int own = state.local_slot;
