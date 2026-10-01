@@ -1,6 +1,6 @@
 # 06 Two instances: steering under input delay, fork against base port
 
-Status: ready-for-agent
+Status: resolved (2026-10-01)
 Type: task
 Blocked by: 04
 
@@ -98,3 +98,23 @@ Results, every run passing (no DESYNC, recordings equal, both in the match, roll
 Each glide took its delay-0 frames plus the input delay and arrived. The one-portrait steps are Pikachu, Jigglypuff, Mewtwo, Kirby and Mewtwo again. Glides to "Player 3: closed" and "Player 2: closed" are passed through by the next press of the search, so not every run logs their arrival. The slow-link run's glide frames match delay 8, the delay in force during character select.
 
 Step 4 (fork against base port) remains.
+
+### 2026-10-01: step 4, fork against base port, all passed
+
+`upstream/master` was e833835, the commit of the fork's last base merge, so the version strings match (v0.2.2-beta). It was built in a worktree outside the repo (`../melee-pc-base`) with its own `build/`.
+
+The base port does not build natively under MSYS2: abseil's time zone code fails on undeclared `WindowsCreateStringReference` and friends. The fork's own build fix from 64e1385 is missing upstream: the Windows SDK level pin for native MinGW builds, and `zlib1.dll` copied beside the executable (its `file_cache.cpp` part is upstream already). Those two `CMakeLists.txt` blocks went into the worktree uncommitted; neither touches what the game simulates.
+
+`drive_net.py --base-b <build dir>` runs instance b from that build. The base port has no speech log, so `css_net.drive` gained steps addressed to `b-fork` (b's speech waits, run only against a fork build) and `b-base` (waits on `boot scene` lines for character select, scene 8, and stage select, scene 9, and a short sleep for the coin; run only against a base port build). Steps addressed to plain `b` run in both. A fork-against-fork run at delay 0 afterwards still passed with the same frames as before.
+
+Results, every run passing: no `DESYNC` and no `peer silent` on either side, recordings equal, both in the match, rollbacks 0, b's log without a single `[a11y]` line. Player 2 chose Ness in every run, and player 1 heard it.
+
+| Run | Delay | Frames recorded in agreement | Player 1: closed | Pichu | Each one-portrait step | Player 1: human |
+|---|---|---|---|---|---|---|
+| `--delay 0` | 0 | 1689 | 17 | 11 | 7 | 14 |
+| `--delay 2` | 2 | 1719 | 19 | 13 | 9 | 16 |
+| `--delay 6` | 6 | 1720 | 23 | 17 | 13 | 20 |
+| `--delay 10` | 10 | 1807 | 27 | 21 | 17 | 24 |
+| `--sim-delay-ms 100` | auto: 2, then 8 at frame 240, 4 at 1620 (ping 203 ms) | 1630 | 25 | 19 | 15 | 22 |
+
+Each glide took the same frames as against a fork build. What was learned about running netplay on Windows is in `docs/a11y/netplay.md`; CLAUDE.md says to repeat these five runs with `--base-b` after a base merge.
