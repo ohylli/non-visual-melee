@@ -99,15 +99,16 @@ extern "C" void pc_a11y_menu_center_text(int string_number) {
 }
 
 extern "C" void pc_a11y_css_frame(const CSSData* css, const CSSDoorsData* doors,
-    const CSSIcon* icons, const CSSTag* tags, HSD_JObj* model_root, int hand_count,
-    int pending_exit, int ready) {
+    const CSSIcon* icons, const CSSTag* tags, const CSSDoorsMisc* misc, const CSSDoorsData2* data2,
+    HSD_JObj* model_root, int hand_count, int pending_exit, int ready) {
     if (!game_hook_may_speak()) {
         return;
     }
     /* Online, the local player's controller is always port 1, but they may
      * be any player in the game. */
     int local_port = pc_net_active() ? pc_net_local_player() : 0;
-    A11yCssScreen screen{css, doors, icons, tags, model_root, hand_count, pending_exit, ready};
+    A11yCssScreen screen{
+        css, doors, icons, tags, misc, data2, model_root, hand_count, pending_exit, ready};
     s_css->frame(screen, local_port, pc_net_active());
 }
 

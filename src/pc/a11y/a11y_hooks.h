@@ -45,21 +45,26 @@ void pc_a11y_menu_center_text(int string_number);
  * game_access.c looks inside these types. */
 struct CSSData;
 struct CSSDoorsData;
+struct CSSDoorsData2;
+struct CSSDoorsMisc;
 struct CSSIcon;
 struct CSSTag;
 struct HSD_JObj;
 
 /* Once a frame of character select (mnCharSel_Scene_OnFrame), before the
  * hands update: the screen's data, its four player slots, its table of 25
- * portraits, the players' name tag windows, the root of the screen's model
- * (where the sliders and name boxes are), the number of hands (4 in VS modes,
- * 1 in single-player modes), the pending exit (nonzero once the screen has
- * begun to leave or asked for the rules screen or name entry) and the Ready
- * to Fight banner (nonzero while shown). Character select speech compares
- * the screen with the last frame here. */
+ * portraits, the players' name tag windows, the single-player modes' two
+ * tables (the difficulty arrows and the one name box in misc, the stock
+ * arrows in data2), the root of the screen's model (where the sliders and
+ * name boxes are), the number of hands (4 in VS modes, 1 in single-player
+ * modes), the pending exit (nonzero once the screen has begun to leave or
+ * asked for the rules screen or name entry) and the Ready to Fight banner
+ * (nonzero while shown). Character select speech compares the screen with
+ * the last frame here. */
 void pc_a11y_css_frame(const struct CSSData* css, const struct CSSDoorsData* doors,
-    const struct CSSIcon* icons, const struct CSSTag* tags, struct HSD_JObj* model_root,
-    int hand_count, int pending_exit, int ready);
+    const struct CSSIcon* icons, const struct CSSTag* tags, const struct CSSDoorsMisc* misc,
+    const struct CSSDoorsData2* data2, struct HSD_JObj* model_root, int hand_count,
+    int pending_exit, int ready);
 
 /* One hand of character select has updated (the end of
  * mnCharSel_CursorThink). The raw numbers of the hand's struct, which only

@@ -88,6 +88,44 @@ std::string_view slot_kind_word(A11yCssSlotKind kind) {
     return "closed";
 }
 
+std::optional<std::string_view> mode_name(int match_type) {
+    struct ModeWords {
+        A11yCssMatchType match_type;
+        std::string_view name;
+    };
+    constexpr ModeWords kModes[] = {
+        {A11Y_REG_CLASSIC, "Classic"},
+        {A11Y_REG_ADVENTURE, "Adventure"},
+        {A11Y_REG_ALLSTAR, "All-Star"},
+        {A11Y_EVENT_MATCH, "Event Match"},
+        {A11Y_STADIUM_TARGET, "Target Test"},
+        {A11Y_STADIUM_HOMERUN, "Home-Run Contest"},
+        {A11Y_STADIUM_MULTIMAN_10, "10-Man Melee"},
+        {A11Y_STADIUM_MULTIMAN_100, "100-Man Melee"},
+        {A11Y_STADIUM_3_MIN_MELEE, "3-Minute Melee"},
+        {A11Y_STADIUM_15_MIN_MELEE, "15-Minute Melee"},
+        {A11Y_STADIUM_ENDLESS_MELEE, "Endless Melee"},
+        {A11Y_STADIUM_CRUEL_MELEE, "Cruel Melee"},
+        {A11Y_TRAINING_MODE, "Training"},
+    };
+    for (const ModeWords& mode : kModes) {
+        if (mode.match_type == match_type) {
+            return mode.name;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string_view> difficulty_word(int difficulty) {
+    /* The strip's texts in mnCharSel_802640A0, by the value they stand for. */
+    constexpr std::string_view kDifficulties[] = {
+        "Very easy", "Easy", "Normal", "Hard", "Very hard"};
+    if (difficulty < 0 || difficulty >= static_cast<int>(std::size(kDifficulties))) {
+        return std::nullopt;
+    }
+    return kDifficulties[difficulty];
+}
+
 std::optional<std::string_view> team_word(int team) {
     /* The door's team, 0 to 2, shows the colours of ports 1, 2 and 4
      * (mnCharSel_804D50E0). */

@@ -14,6 +14,8 @@ extern "C" {
 
 struct CSSData;
 struct CSSDoorsData;
+struct CSSDoorsData2;
+struct CSSDoorsMisc;
 struct CSSIcon;
 struct CSSTag;
 struct HSD_JObj;
@@ -72,6 +74,8 @@ typedef struct A11yCssScreen {
     const struct CSSDoorsData* doors;
     const struct CSSIcon* icons;
     const struct CSSTag* tags;
+    const struct CSSDoorsMisc* misc;
+    const struct CSSDoorsData2* data2;
     struct HSD_JObj* model_root;
     int hand_count;
     int pending_exit;
@@ -172,10 +176,10 @@ typedef struct A11yCssSlot {
     bool handicap_held;
     /* The slot's name tag window is open. */
     bool name_tags_open;
-    /* The HMN/CPU and team buttons, the sliders' knobs, and the name box
-     * (read for the local player's slot only), where the game tests them;
-     * VS modes only, and not while the rules screen or name entry opens or
-     * is open. */
+    /* The HMN/CPU and team buttons and the sliders' knobs, VS modes only,
+     * and the name box, read for the local player's slot only, where the
+     * game tests them; not while the rules screen or name entry opens or is
+     * open. */
     A11yCssRect slot_button;
     A11yCssRect team_button;
     A11yCssKnob cpu_level_knob;
@@ -192,6 +196,31 @@ typedef struct A11yCssPortrait {
     /* The rectangle a carried coin hovers it in. */
     A11yCssRect rect;
 } A11yCssPortrait;
+
+/* The single-player modes' arrows, below the portraits: the difficulty,
+ * drawn "LEVEL", in Classic, Adventure and All-Star, and the stock count in
+ * Classic and Adventure. A on an arrow steps the value one way; at the end of
+ * the range it does nothing. */
+typedef struct A11yCssArrows {
+    bool difficulty_shown;
+    bool stocks_shown;
+    /* The difficulty, 0 (very easy) to 4 (very hard), and the stock count, 1
+     * to 5; stale where the arrows are not shown. */
+    int difficulty;
+    int stocks;
+    /* Where the game tests the hand for each arrow. */
+    A11yCssRect difficulty_lower;
+    A11yCssRect difficulty_higher;
+    A11yCssRect stocks_fewer;
+    A11yCssRect stocks_more;
+} A11yCssArrows;
+
+enum {
+    A11Y_CSS_LOWEST_DIFFICULTY = 0,
+    A11Y_CSS_HIGHEST_DIFFICULTY = 4,
+    A11Y_CSS_FEWEST_STOCKS = 1,
+    A11Y_CSS_MOST_STOCKS = 5,
+};
 
 /* Where the screen is going: mncharsel.c's pending exit, by its numbers. */
 typedef enum A11yCssExit {
@@ -213,6 +242,9 @@ typedef enum A11yCssExit {
 typedef struct A11yCssState {
     /* 4 in VS modes, 1 in single-player modes. */
     int hand_count;
+    /* The mode: the screen's CSSMatchType, an A11yCssMatchType in
+     * single-player modes. */
+    int match_type;
     A11yCssExit exit;
     /* The session is online: other players' changes are spoken. Set by the
      * caller, not read from the screen. */
@@ -222,9 +254,17 @@ typedef struct A11yCssState {
      * to whichever port started the mode. */
     int local_slot;
     int local_player;
+    /* The controller port whose pad moves the local hand: the local player's
+     * in VS modes, the port that started a single-player mode. */
+    int local_port;
+    /* A was pressed on that pad this frame; the hand acts on it as it
+     * updates, after this snapshot. */
+    bool pressed_a;
     A11yCssHand hand;
-    /* The player slots the buttons of a VS mode reach: 3 in Camera mode,
-     * whose fourth slot is the camera, else 4. */
+    /* The player slots shown: in VS modes 4, of which the buttons reach 3 in
+     * Camera mode, whose fourth slot is the camera; in single-player modes
+     * 1, and 2 in Training, the second the CPU's. The slots after them read
+     * as closed. */
     int slot_count;
     /* The top bar's Teams button and rules header exist; the handicap rule
      * is on, so each slot shows a handicap slider. */
@@ -235,6 +275,7 @@ typedef struct A11yCssState {
     bool teams;
     /* Ready to Fight is shown. */
     bool ready;
+    A11yCssArrows arrows;
     A11yCssSlot slots[A11Y_CSS_SLOTS];
     A11yCssPortrait portraits[A11Y_CSS_PORTRAITS];
 } A11yCssState;

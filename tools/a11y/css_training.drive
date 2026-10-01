@@ -1,0 +1,66 @@
+# Training's character select by D-pad and buttons alone: a character for
+# the player, then the CPU's coin found, picked up and carried to another
+# portrait, Start, and Start again on stage select. The opening names both
+# player slots, the CPU's with the character the game chose for it at
+# random.
+# Run with the default --scene title:
+#   python tools/a11y/drive.py tools/a11y/css_training.drive
+# drive.py turns steering on (MELEE_A11Y_STEER=1). --no-card unlocks every
+# character.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# 1-P Mode, Training.
+press A
+wait '"1-P Mode\. Regular Match\. '
+sleep 0.3
+press Down
+wait '"Event Match\. '
+press Down
+wait '"Stadium\. '
+press Down
+wait '"Training\. '
+sleep 0.3
+press A
+wait '"Training character select\. Player 1, no character\. CPU, (?P<cpu>.+)\."$'
+sleep 1
+
+# Up from the hand's start to the portrait nearest in x in the bottom row,
+# where the coin jumps into the hand; A chooses, which is all Training
+# needs to be ready. Should the CPU's coin rest there too, the step names
+# it, and A still chooses with the coin already in the hand.
+press DUp
+wait ': "Pichu(, the CPU.s coin)?"$'
+wait 'glide to "Pichu[^"]*" ended after \d+ frames: arrived'
+press A
+wait 'Ready to fight\. Press Start\.'
+sleep 0.5
+
+# Over every portrait until a step names the CPU's coin; the glide aims
+# where A picks it up.
+search ': "%cpu%, the CPU.s coin"$' DUp DUp DLeft DRight*8 DDown DLeft*8 DDown DRight*6
+wait 'glide to "%cpu%" ended after \d+ frames: arrived'
+press A
+wait ': "Holding the CPU.s coin'
+sleep 0.5
+
+# One step to another portrait, Left or else Right, and A chooses for the
+# CPU, which makes the match ready again.
+search ': "(?!%cpu%")[^"]+"$' DLeft DRight
+wait 'glide to "[^"]+" ended after \d+ frames: arrived'
+press A
+wait 'Ready to fight\. Press Start\.'
+sleep 0.5
+
+# Start leaves for stage select, and Start there picks a random stage.
+press Start
+wait '"Stage select\. '
+sleep 1
+press Start
+wait 'boot scene: state \d+ scene 4$'
+sleep 2

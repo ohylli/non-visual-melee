@@ -27,6 +27,11 @@ enum class TargetKind {
     teams,
     rules,
     back,
+    /* A single-player mode's arrows. */
+    difficulty_lower,
+    difficulty_higher,
+    stocks_fewer,
+    stocks_more,
 };
 
 struct Target {
@@ -80,8 +85,9 @@ enum class Direction { left, right, up, down };
 /* The targets a step reaches, in rows top to bottom, each left to right: the
  * top bar, the rows of unlocked portraits as drawn, and in VS modes the
  * player slots, each slot's HMN/CPU button, then its team button, CPU level
- * knob and handicap knob where they exist. Empty rows are left out. The name
- * box is not among them. */
+ * knob and handicap knob where they exist; in single-player modes the
+ * difficulty arrows and below them the stock arrows, where shown. Empty rows
+ * are left out. The name box is not among them. */
 std::vector<std::vector<Target>> target_rows(const A11yCssState& state);
 
 /* What among the rows the hand at (x, y) is on, by the areas the game tests,
@@ -103,6 +109,13 @@ int pickable_coin(const A11yCssState& state, int portrait);
  * height A leaves the hand at; for a knob, the point it is grabbed from; for
  * a value of the held slider, the middle of that value's span. */
 Point aim_point(const A11yCssState& state, Target target);
+
+/* The target is a single-player mode's arrow. */
+bool is_arrow(Target target);
+
+/* A on the arrow would change nothing: its value is at that end of the
+ * range. */
+bool arrow_at_end(const A11yCssState& state, Target arrow);
 
 /* Where a step goes. from is where the hand is going, or is (locate()).
  * Along its row to the next target, Up and Down to the target nearest in x

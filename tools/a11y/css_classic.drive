@@ -1,0 +1,76 @@
+# Classic's character select by D-pad and buttons alone: steps up over the
+# stock and level arrows to a portrait, A chooses, the level one higher and
+# one lower, A at the lowest level says the value again, the stocks one
+# higher, and Start leaves for the stage intro. Every step names its
+# destination at the press, and A on an arrow says the new value.
+# Run with the default --scene title:
+#   python tools/a11y/drive.py tools/a11y/css_classic.drive
+# drive.py turns steering on (MELEE_A11Y_STEER=1). With --no-card the save
+# the base port builds starts Classic at Very easy with 3 stocks.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# 1-P Mode, Regular Match, Classic.
+press A
+wait '"1-P Mode\. Regular Match\. '
+sleep 0.3
+press A
+wait '"Regular Match\. Classic\. '
+sleep 0.3
+press A
+wait '"Classic character select\. Player 1, no character\."'
+sleep 1
+
+# Up from the hand's start: the nearest target above is the stock arrow
+# that lowers the count, then the level arrow above it, then the portrait
+# nearest in x in the bottom row; the coin jumps into the hand on the way.
+press DUp
+wait ': "Stock: 3, fewer"$'
+press DUp
+wait ': "Level: Very easy, lower"$'
+press DUp
+wait ': "Jigglypuff"$'
+wait 'glide to "Jigglypuff" ended after \d+ frames: arrived'
+press A
+wait 'Ready to fight\. Press Start\.'
+sleep 0.5
+
+# Down to the level row and right to the arrow that raises it; A raises
+# the level. Left, and A lowers it; A again at the lowest level does
+# nothing, and says so by saying the value again.
+press DDown
+wait ': "Level: Very easy, lower"$'
+press DRight
+wait ': "Level: Very easy, higher"$'
+wait 'glide to "Level: Very easy, higher" ended after \d+ frames: arrived'
+press A
+wait ': "Easy"$'
+press DLeft
+wait ': "Level: Easy, lower"$'
+wait 'glide to "Level: Easy, lower" ended after \d+ frames: arrived'
+press A
+wait ': "Very easy"$'
+press A
+wait ': "Very easy"$'
+
+# Down to the stock row, the arrow nearest in x, and right to the arrow
+# that raises the count; A raises it to 4.
+press DDown
+wait ': "Stock: 3, fewer"$'
+press DRight
+wait ': "Stock: 3, more"$'
+wait 'glide to "Stock: 3, more" ended after \d+ frames: arrived'
+press A
+wait ': "4"$'
+sleep 0.5
+
+# Start leaves for the stage intro, then the match.
+press Start
+wait '"Stage intro"'
+wait 'boot scene: state \d+ scene 2$'
+sleep 2

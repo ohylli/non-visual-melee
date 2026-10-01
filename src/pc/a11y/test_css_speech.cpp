@@ -3,6 +3,7 @@
  * of the screen written by hand (test_css_screen.hpp). Links css_speech.cpp,
  * css_names.cpp, css_targets.cpp and speech.cpp only, so this file supplies
  * the pc_log_line that main.c normally provides. */
+#include "css_names.hpp"
 #include "css_speech.hpp"
 #include "speech.hpp"
 #include "test_css_screen.hpp"
@@ -395,17 +396,213 @@ void missing_name_is_spoken_by_number_and_logged_once() {
     assert(count_logged("[a11y] character 27: not in the character names table") == 1);
 }
 
-void single_player_modes_say_only_the_opening() {
+void single_player_openings_name_the_mode() {
     Fixture f;
-    A11yCssState state = vs_screen();
-    state.hand_count = 1;
-    state.local_player = 2;
+    A11yCssState state = classic_screen();
     f.frame(state);
+    state.match_type = A11Y_REG_ADVENTURE;
+    choose(state, kFoxPortrait);
+    f.css.forget();
+    f.frame(state);
+    state.match_type = A11Y_STADIUM_HOMERUN;
+    f.css.forget();
+    f.frame(state);
+    assert((f.spoken() == Texts{"Classic character select. Player 1, no character.",
+                              "Adventure character select. Player 1, Fox.",
+                              "Home-Run Contest character select. Player 1, Fox."}));
+}
+
+void training_opening_names_the_cpu_too() {
+    Fixture f;
+    f.frame(training_screen());
+    assert((
+        f.spoken() == Texts{"Training character select. Player 1, no character. CPU, Dr. Mario."}));
+}
+
+void a_mode_started_from_another_controller_cannot_be_steered() {
+    /* Player 3 started it: the badge says P3, and steering reaches only
+     * controller 1. */
+    Fixture f;
+    A11yCssState state = classic_screen();
+    state.local_player = 2;
+    state.local_port = 2;
+    f.frame(state);
+    assert((f.spoken() == Texts{"Classic character select. Player 3, no character. Steering "
+                                "needs controller 1."}));
+}
+
+void every_single_player_mode_has_a_name() {
+#define A11Y_CHECK_MODE_NAME(name, number) assert(a11y::mode_name(number).has_value());
+    A11Y_CSS_MATCH_TYPES(A11Y_CHECK_MODE_NAME)
+#undef A11Y_CHECK_MODE_NAME
+    assert(!a11y::mode_name(0).has_value());
+}
+
+void single_player_coin_is_read_as_in_vs_modes() {
+    A11yCssState state = classic_screen();
+    Fixture f(state);
+    state.hand.y = 1.0f;
     pick_up(state, 0);
+    f.frame(state);
     f.frame(state);
     carry_over(state, 0, kFoxPortrait);
     f.frame(state);
-    assert((f.spoken() == Texts{"Character select. Player 3, no character."}));
+    /* A chooses: the announcer names Fox, and Ready to Fight appears. */
+    state.hand.coin = -1;
+    state.slots[0].character = kFox;
+    f.frame(state);
+    state.ready = true;
+    f.frame(state);
+    assert((f.spoken() == Texts{"Holding your coin", "Fox", "Ready to fight. Press Start."}));
+}
+
+/* The hand at an arrow, free. */
+void hand_on(A11yCssState& state, const A11yCssRect& arrow) {
+    state.hand.x = (arrow.left + arrow.right) / 2.0f;
+    state.hand.y = (arrow.top + arrow.bottom) / 2.0f;
+}
+
+void free_hand_on_each_arrow() {
+    A11yCssState state = classic_screen();
+    Fixture f(state);
+    hand_on(state, kDifficultyLower);
+    f.frame(state);
+    hand_on(state, kDifficultyHigher);
+    f.frame(state);
+    hand_on(state, kStocksFewer);
+    f.frame(state);
+    hand_on(state, kStocksMore);
+    f.frame(state);
+    state.hand.x = 5.0f;
+    f.frame(state);
+    assert((f.spoken() == Texts{"Level: Normal, lower", "Level: Normal, higher", "Stock: 3, fewer",
+                              "Stock: 3, more"}));
+}
+
+void a_on_an_arrow_says_the_new_value() {
+    /* The press shows on the pad the frame before the value changes. */
+    A11yCssState state = classic_screen();
+    hand_on(state, kDifficultyHigher);
+    Fixture f(state);
+    state.pressed_a = true;
+    f.frame(state);
+    state.pressed_a = false;
+    state.arrows.difficulty = 3;
+    f.frame(state);
+    hand_on(state, kStocksMore);
+    f.frame(state);
+    state.pressed_a = true;
+    f.frame(state);
+    state.pressed_a = false;
+    state.arrows.stocks = 4;
+    f.frame(state);
+    hand_on(state, kStocksFewer);
+    f.frame(state);
+    state.pressed_a = true;
+    f.frame(state);
+    state.pressed_a = false;
+    state.arrows.stocks = 3;
+    f.frame(state);
+    assert((f.spoken() == Texts{"Hard", "Stock: 3, more", "4", "Stock: 4, fewer", "3"}));
+}
+
+void a_at_the_end_of_a_range_repeats_the_value() {
+    /* The game does nothing; each arrow at both ends of its range. */
+    struct Case {
+        const A11yCssRect* arrow;
+        int difficulty;
+        int stocks;
+        const char* said;
+    };
+    const Case cases[] = {
+        {&kDifficultyLower, 0, 3, "Very easy"},
+        {&kDifficultyHigher, 4, 3, "Very hard"},
+        {&kStocksFewer, kNormal, 1, "1"},
+        {&kStocksMore, kNormal, 5, "5"},
+    };
+    for (const Case& c : cases) {
+        A11yCssState state = classic_screen();
+        state.arrows.difficulty = c.difficulty;
+        state.arrows.stocks = c.stocks;
+        hand_on(state, *c.arrow);
+        Fixture f(state);
+        state.pressed_a = true;
+        f.frame(state);
+        state.pressed_a = false;
+        f.frame(state);
+        assert((f.spoken() == Texts{c.said}));
+    }
+    /* The other end of each, where A changes the value, waits for it. */
+    for (const Case& c : cases) {
+        A11yCssState state = classic_screen();
+        state.arrows.difficulty = c.difficulty == 0 ? 4 : c.difficulty == 4 ? 0 : kNormal;
+        state.arrows.stocks = c.stocks == 1 ? 5 : c.stocks == 5 ? 1 : 3;
+        hand_on(state, *c.arrow);
+        Fixture f(state);
+        state.pressed_a = true;
+        f.frame(state);
+        assert(f.spoken().empty());
+    }
+}
+
+void a_away_from_the_arrows_says_nothing_of_them() {
+    A11yCssState state = classic_screen();
+    state.arrows.stocks = 1;
+    Fixture f(state);
+    state.pressed_a = true;
+    f.frame(state);
+    assert(f.spoken().empty());
+}
+
+void arrows_not_shown_say_nothing() {
+    /* Training keeps whatever values a Classic run left. */
+    A11yCssState state = training_screen();
+    Fixture f(state);
+    state.arrows.stocks = 4;
+    hand_on(state, kStocksMore);
+    state.pressed_a = true;
+    f.frame(state);
+    assert(f.spoken().empty());
+}
+
+void a_step_onto_an_arrow_names_it() {
+    A11yCssState state = classic_screen();
+    Fixture f(state);
+    f.css.step(state, a11y::Target{a11y::TargetKind::stocks_fewer});
+    f.css.step(state, a11y::Target{a11y::TargetKind::difficulty_higher});
+    assert((f.spoken() == Texts{"Stock: 3, fewer", "Level: Normal, higher"}));
+}
+
+void a_step_down_to_the_arrows_with_ones_own_coin_clears_it() {
+    A11yCssState state = classic_screen();
+    pick_up(state, 0);
+    carry_over(state, 0, kPichuPortrait);
+    Fixture f(state);
+    f.css.step(state, a11y::Target{a11y::TargetKind::difficulty_lower});
+    assert((f.spoken() == Texts{"No character. Level: Normal, lower"}));
+}
+
+void training_cpus_coin() {
+    /* A step to the CPU's portrait says whose coin rests there; picking it
+     * up says so; choosing for it is left to the announcer. */
+    A11yCssState state = training_screen();
+    state.hand.y = 1.0f;
+    pick_up(state, 0);
+    choose(state, kFoxPortrait);
+    state.hand.coin = -1;
+    Fixture f(state);
+    f.css.step(state, a11y::Target{a11y::TargetKind::portrait, 0});
+    pick_up(state, 1);
+    f.frame(state);
+    carry_over(state, 1, 0);
+    f.frame(state);
+    carry_over(state, 1, kYoshiPortrait);
+    f.frame(state);
+    state.hand.coin = -1;
+    state.slots[1].character = kYoshi;
+    f.frame(state);
+    assert((f.spoken() ==
+            Texts{"Dr. Mario, the CPU's coin", "Holding the CPU's coin. Dr. Mario", "Yoshi"}));
 }
 
 void leaving_screen_says_nothing() {
@@ -951,7 +1148,19 @@ int main() {
     free_hand_over_portraits_says_nothing();
     another_players_coin_moving_says_nothing();
     missing_name_is_spoken_by_number_and_logged_once();
-    single_player_modes_say_only_the_opening();
+    single_player_openings_name_the_mode();
+    training_opening_names_the_cpu_too();
+    a_mode_started_from_another_controller_cannot_be_steered();
+    every_single_player_mode_has_a_name();
+    single_player_coin_is_read_as_in_vs_modes();
+    free_hand_on_each_arrow();
+    a_on_an_arrow_says_the_new_value();
+    a_at_the_end_of_a_range_repeats_the_value();
+    a_away_from_the_arrows_says_nothing_of_them();
+    arrows_not_shown_say_nothing();
+    a_step_onto_an_arrow_names_it();
+    a_step_down_to_the_arrows_with_ones_own_coin_clears_it();
+    training_cpus_coin();
     leaving_screen_says_nothing();
     forgetting_makes_the_next_frame_an_arrival();
     every_portrait_has_a_name();

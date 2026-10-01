@@ -24,6 +24,14 @@ std::string_view slot_kind_word(A11yCssSlotKind kind);
  * a number the game does not use. */
 std::optional<std::string_view> team_word(int team);
 
+/* A single-player mode's name, as the main menu tree says it ("Classic",
+ * "Training"); nothing for a VS mode or a number the game does not use. */
+std::optional<std::string_view> mode_name(int match_type);
+
+/* A difficulty as the arrows' strip draws it, "VERY EASY" to "VERY HARD":
+ * "Very easy" to "Very hard"; nothing outside 0 to 4. */
+std::optional<std::string_view> difficulty_word(int difficulty);
+
 /* The top bar's buttons, the sliders and the name box, as spoken. */
 inline constexpr std::string_view kTeamsButton = "Teams";
 inline constexpr std::string_view kRulesButton = "Rules";
@@ -36,6 +44,15 @@ inline constexpr std::string_view kNameBox = "name tag";
 inline constexpr std::string_view kCpuLevelHeld = "Level";
 inline constexpr std::string_view kHandicapHeld = "Handicap";
 
+/* A single-player mode's arrows: the row's label as drawn, then which way
+ * the arrow steps ("Level: Normal, lower", "Stock: 3, more"). */
+inline constexpr std::string_view kDifficultyArrows = "Level";
+inline constexpr std::string_view kStockArrows = "Stock";
+inline constexpr std::string_view kLower = "lower";
+inline constexpr std::string_view kHigher = "higher";
+inline constexpr std::string_view kFewer = "fewer";
+inline constexpr std::string_view kMore = "more";
+
 /* The screens character select opens inside itself, as the main menu tree
  * names them, and the name tag window. */
 inline constexpr std::string_view kRulesScreen = "Custom Rules";
@@ -44,6 +61,10 @@ inline constexpr std::string_view kNameTagsWindow = "Name tags";
 
 /* The rest of what character select says, around the names above. */
 inline constexpr std::string_view kScreenName = "Character select";
+/* After a single-player mode's name: "Classic character select". */
+inline constexpr std::string_view kModeScreenName = "character select";
+/* Training's second slot, the CPU's, drawn "CP". */
+inline constexpr std::string_view kCpu = "CPU";
 inline constexpr std::string_view kPlayer = "Player";
 inline constexpr std::string_view kTeam = "team";
 inline constexpr std::string_view kOn = "on";
@@ -57,6 +78,7 @@ inline constexpr std::string_view kHolding = "Holding";
 inline constexpr std::string_view kYourCoin = "your coin";
 inline constexpr std::string_view kPlayersCoinBefore = "player ";
 inline constexpr std::string_view kPlayersCoinAfter = "'s coin";
+inline constexpr std::string_view kCpusCoin = "the CPU's coin";
 inline constexpr std::string_view kBackTo = "Back to";
 inline constexpr std::string_view kHoldingSlider = "Holding the slider";
 inline constexpr std::string_view kReleased = "Released";
@@ -69,5 +91,8 @@ inline constexpr std::string_view kCouldNotReach = "Could not reach";
 /* A step onto the top bar with a coin in the hand: its buttons do not react
  * to a hand that carries one ("Back, not while holding a coin"). */
 inline constexpr std::string_view kNotWhileHoldingACoin = "not while holding a coin";
+/* A single-player mode started from another controller: steering reaches
+ * only controller 1's pad. */
+inline constexpr std::string_view kSteeringNeedsPort1 = "Steering needs controller 1.";
 
 }  // namespace a11y

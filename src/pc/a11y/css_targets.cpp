@@ -89,6 +89,22 @@ Point centre(const A11yCssRect& rect) {
     return Point{centre_x(rect), centre_y(rect)};
 }
 
+/* Where the game tests the hand for an arrow. */
+const A11yCssRect& arrow_rect(const A11yCssState& state, Target arrow) {
+    const A11yCssArrows& arrows = state.arrows;
+    switch (arrow.kind) {
+    case TargetKind::difficulty_lower:
+        return arrows.difficulty_lower;
+    case TargetKind::difficulty_higher:
+        return arrows.difficulty_higher;
+    case TargetKind::stocks_fewer:
+        return arrows.stocks_fewer;
+    default:
+        break;
+    }
+    return arrows.stocks_more;
+}
+
 /* The point steps measure from and to: where a target is in the rows' layout.
  * It is the aim, apart from a coin to pick up or a slider's value, which move
  * the aim without moving the target in the rows. For a portrait, where the
@@ -121,6 +137,11 @@ Point step_anchor(const A11yCssState& state, Target target) {
         return Point{(kRulesLeft + kRulesRight) / 2.0f, kTopBarMiddle};
     case TargetKind::back:
         return Point{(kBackLeft + kHandRight) / 2.0f, kTopBarMiddle};
+    case TargetKind::difficulty_lower:
+    case TargetKind::difficulty_higher:
+    case TargetKind::stocks_fewer:
+    case TargetKind::stocks_more:
+        return centre(arrow_rect(state, target));
     }
     return Point{};
 }
@@ -148,6 +169,11 @@ bool contains(const A11yCssState& state, Target target, float x, float y) {
         return y > kTopBarBottom && x > kRulesLeft && x < kRulesRight;
     case TargetKind::back:
         return y > kTopBarBottom && x > kBackLeft;
+    case TargetKind::difficulty_lower:
+    case TargetKind::difficulty_higher:
+    case TargetKind::stocks_fewer:
+    case TargetKind::stocks_more:
+        return inside(arrow_rect(state, target), x, y);
     }
     return false;
 }
@@ -173,6 +199,10 @@ bool reacts(const A11yCssState& state, Target target) {
     case TargetKind::teams:
     case TargetKind::rules:
     case TargetKind::back:
+    case TargetKind::difficulty_lower:
+    case TargetKind::difficulty_higher:
+    case TargetKind::stocks_fewer:
+    case TargetKind::stocks_more:
         break;
     }
     return true;
@@ -264,6 +294,30 @@ std::vector<Target> slot_row(const A11yCssState& state) {
         }
     }
     return row;
+}
+
+/* A single-player mode's arrows as drawn: the difficulty row above the stock
+ * row, each arrow pointing down the range on the left. */
+Rows arrow_rows(const A11yCssState& state) {
+    Rows rows;
+    if (state.arrows.difficulty_shown) {
+        rows.push_back(
+            {Target{TargetKind::difficulty_lower}, Target{TargetKind::difficulty_higher}});
+    }
+    if (state.arrows.stocks_shown) {
+        rows.push_back({Target{TargetKind::stocks_fewer}, Target{TargetKind::stocks_more}});
+    }
+    return rows;
+}
+
+/* The arrows in the order mnCharSel_CursorThink tests them: the stock arrows
+ * first. */
+std::vector<Target> arrows_in_test_order(const A11yCssState& state) {
+    std::vector<Target> arrows;
+    for (const std::vector<Target>& row : arrow_rows(state)) {
+        arrows.insert(arrows.begin(), row.begin(), row.end());
+    }
+    return arrows;
 }
 
 /* The target of row nearest in x to x; the first of two as near. */
@@ -415,6 +469,12 @@ Area area(Target target) {
     case TargetKind::rules:
     case TargetKind::back:
         return Area::top_bar;
+    /* Below the portraits, where a carried coin goes back. */
+    case TargetKind::difficulty_lower:
+    case TargetKind::difficulty_higher:
+    case TargetKind::stocks_fewer:
+    case TargetKind::stocks_more:
+        return Area::player_slots;
     }
     return Area::none;
 }
@@ -443,11 +503,14 @@ std::vector<std::vector<Target>> target_rows(const A11yCssState& state) {
     for (std::vector<Target>& row : portrait_rows(state)) {
         rows.push_back(std::move(row));
     }
-    /* Single-player modes' own buttons come with their steps. */
     if (state.hand_count == A11Y_CSS_SLOTS) {
         std::vector<Target> slots = slot_row(state);
         if (!slots.empty()) {
             rows.push_back(std::move(slots));
+        }
+    } else {
+        for (std::vector<Target>& row : arrow_rows(state)) {
+            rows.push_back(std::move(row));
         }
     }
     return rows;
@@ -504,6 +567,36 @@ Point aim_point(const A11yCssState& state, Target target) {
     return step_anchor(state, target);
 }
 
+bool is_arrow(Target target) {
+    switch (target.kind) {
+    case TargetKind::difficulty_lower:
+    case TargetKind::difficulty_higher:
+    case TargetKind::stocks_fewer:
+    case TargetKind::stocks_more:
+        return true;
+    default:
+        break;
+    }
+    return false;
+}
+
+bool arrow_at_end(const A11yCssState& state, Target arrow) {
+    const A11yCssArrows& arrows = state.arrows;
+    switch (arrow.kind) {
+    case TargetKind::difficulty_lower:
+        return arrows.difficulty <= A11Y_CSS_LOWEST_DIFFICULTY;
+    case TargetKind::difficulty_higher:
+        return arrows.difficulty >= A11Y_CSS_HIGHEST_DIFFICULTY;
+    case TargetKind::stocks_fewer:
+        return arrows.stocks <= A11Y_CSS_FEWEST_STOCKS;
+    case TargetKind::stocks_more:
+        return arrows.stocks >= A11Y_CSS_MOST_STOCKS;
+    default:
+        break;
+    }
+    return false;
+}
+
 Target step(const A11yCssState& state, Target from, float x, float y, Direction direction) {
     if (state.hand.slider != A11Y_CSS_NO_SLIDER) {
         return slider_step(state, from, direction);
@@ -524,17 +617,18 @@ Target target_at(const A11yCssState& state, float x, float y) {
     }
     if (state.hand.coin < 0) {
         Target target = first_at(state, top_bar_row(state), x, y);
-        /* Single-player modes' own buttons come with their reader. */
-        if (target.kind == TargetKind::none && state.hand_count == A11Y_CSS_SLOTS) {
-            target = first_at(state, slot_row(state), x, y);
-            /* The name box after every slot. */
-            int own = state.local_slot;
-            Target name_box{TargetKind::name_box, own};
-            if (target.kind == TargetKind::none && own < state.slot_count &&
-                state.slots[own].kind == A11Y_CSS_HUMAN && contains(state, name_box, x, y))
-            {
-                target = name_box;
-            }
+        if (target.kind == TargetKind::none) {
+            target = first_at(state,
+                state.hand_count == A11Y_CSS_SLOTS ? slot_row(state) : arrows_in_test_order(state),
+                x, y);
+        }
+        /* The name box after every slot, or after the arrows. */
+        int own = state.local_slot;
+        Target name_box{TargetKind::name_box, own};
+        if (target.kind == TargetKind::none && own < state.slot_count &&
+            state.slots[own].kind == A11Y_CSS_HUMAN && contains(state, name_box, x, y))
+        {
+            target = name_box;
         }
         if (target.kind != TargetKind::none) {
             return target;

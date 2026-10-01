@@ -31,6 +31,7 @@ A11Y_SCENE_KINDS(A11Y_CHECK_NUMBER)
 A11Y_MENU_KINDS(A11Y_CHECK_NUMBER)
 A11Y_MENU_SELECTIONS(A11Y_CHECK_NUMBER)
 A11Y_CHARACTER_KINDS(A11Y_CHECK_NUMBER)
+A11Y_CSS_MATCH_TYPES(A11Y_CHECK_NUMBER)
 #undef A11Y_CHECK_NUMBER
 
 /* The match rules before the players' data on character select have
@@ -133,8 +134,8 @@ enum {
 enum { A11Y_HANDICAP_OFF = 0, A11Y_HANDICAP_AUTO = 1, A11Y_HANDICAP_ON = 2 };
 
 /* The player slots the buttons reach in Camera mode, whose fourth slot is the
- * camera. */
-enum { A11Y_CSS_CAMERA_MODE_SLOTS = 3 };
+ * camera; the slots Training shows, the player's and the CPU's. */
+enum { A11Y_CSS_CAMERA_MODE_SLOTS = 3, A11Y_CSS_TRAINING_SLOTS = 2 };
 
 /* The numbers of mnCharSel_CursorThink's tests, in the screen's units. A
  * slider's grab point is this far from its joint. */
@@ -197,6 +198,25 @@ static bool css_hand_holds(const A11yCssHandReport* report) {
     return report->seen && report->state == A11Y_CSS_HAND_HOLDING;
 }
 
+/* The single-player modes' arrows, by mnCharSel_CursorThink's tests: the
+ * stock arrows below match type 0xD (All-Star), the difficulty arrows up to
+ * it. */
+static A11yCssArrows css_arrows(const CSSData* css, bool vs, const struct CSSDoorsMisc* misc,
+    const struct CSSDoorsData2* data2) {
+    A11yCssArrows arrows;
+    arrows.difficulty_shown = !vs && css->match_type <= REG_ALLSTAR;
+    arrows.stocks_shown = !vs && css->match_type < REG_ALLSTAR;
+    arrows.difficulty = misc->cpu_level;
+    arrows.stocks = data2->stocks;
+    arrows.difficulty_lower =
+        css_rect(misc->cpudown_left, misc->cpudown_right, misc->cpubtn_top, misc->cpubtn_btm);
+    arrows.difficulty_higher =
+        css_rect(misc->cpuup_left, misc->cpuup_right, misc->cpubtn_top, misc->cpubtn_btm);
+    arrows.stocks_fewer = css_rect(data2->xf8, data2->xfc, data2->x108, data2->x10c);
+    arrows.stocks_more = css_rect(data2->x100, data2->x104, data2->x108, data2->x10c);
+    return arrows;
+}
+
 void a11y_game_css_state(const A11yCssScreen* screen,
     const A11yCssHandReport reports[A11Y_CSS_SLOTS], const A11yCssCoinReport coins[A11Y_CSS_SLOTS],
     int local_port, A11yCssState* out) {
@@ -204,6 +224,7 @@ void a11y_game_css_state(const A11yCssScreen* screen,
     int hand_count = screen->hand_count;
     memset(out, 0, sizeof(*out));
     out->hand_count = hand_count;
+    out->match_type = css->match_type;
     out->exit =
         screen->pending_exit < A11Y_CSS_AWAY ? (A11yCssExit)screen->pending_exit : A11Y_CSS_AWAY;
     out->ready = screen->ready != 0;
@@ -216,7 +237,7 @@ void a11y_game_css_state(const A11yCssScreen* screen,
     int local_hand = local_port;
     if (hand_count == 1) {
         int first = (s8)(css->unk_0x0 - 1);
-        if (first < 0) {
+        if (first < 0 || first >= A11Y_CSS_SLOTS) {
             first = 0;
         }
         players[0] = first;
@@ -228,6 +249,11 @@ void a11y_game_css_state(const A11yCssScreen* screen,
     }
     out->local_slot = local_hand;
     out->local_player = players[local_hand];
+    /* A VS mode's hand reads its own port; the one hand of a single-player
+     * mode reads the port that started it. Online, a port's pad is its
+     * player's synced input. */
+    out->local_port = players[local_hand];
+    out->pressed_a = (HSD_PadCopyStatus[out->local_port].trigger & HSD_PAD_A) != 0;
 
     /* The top bar's buttons and the slots the buttons reach, by the match
      * type's tests in mnCharSel_CursorThink; single-player modes have their
@@ -240,11 +266,19 @@ void a11y_game_css_state(const A11yCssScreen* screen,
     bool built = out->exit == A11Y_CSS_STAYING || out->exit == A11Y_CSS_TO_STAGE_SELECT ||
                  out->exit == A11Y_CSS_BACK;
     int handicap_rule = gmMainLib_GetGameRules()->handicap;
-    out->slot_count = css->match_type == VS_CAMERA ? A11Y_CSS_CAMERA_MODE_SLOTS : A11Y_CSS_SLOTS;
+    /* The slots that exist: in single-player modes the rest keep whatever
+     * the last VS mode left, name tag windows freed since included. */
+    int shown = vs                               ? A11Y_CSS_SLOTS :
+                css->match_type == TRAINING_MODE ? A11Y_CSS_TRAINING_SLOTS :
+                                                   1;
+    out->slot_count = !vs                          ? shown :
+                      css->match_type == VS_CAMERA ? A11Y_CSS_CAMERA_MODE_SLOTS :
+                                                     A11Y_CSS_SLOTS;
     out->has_teams_button = vs && css->match_type <= VS_SLOWMO;
     out->has_rules_button = vs && css->match_type != VS_STAMINA;
-    out->handicap_sliders = handicap_rule == A11Y_HANDICAP_ON;
-    out->teams = css->vs.start.rules.is_teams != 0;
+    out->handicap_sliders = vs && handicap_rule == A11Y_HANDICAP_ON;
+    out->teams = vs && css->vs.start.rules.is_teams != 0;
+    out->arrows = css_arrows(css, vs, screen->misc, screen->data2);
 
     const A11yCssHandReport* report = &reports[local_hand];
     int held = css_hand_holds(report) ? report->held : -1;
@@ -268,6 +302,13 @@ void a11y_game_css_state(const A11yCssScreen* screen,
         int player = players[i];
         A11yCssSlot* slot = &out->slots[i];
         int ckind = css->vs.start.players[player].ckind;
+        if (i >= shown) {
+            slot->kind = A11Y_CSS_CLOSED;
+            slot->portrait = -1;
+            slot->over_portrait = -1;
+            slot->character = A11Y_NO_CHARACTER;
+            continue;
+        }
         slot->kind = door->p_kind == Gm_PKind_Human ? A11Y_CSS_HUMAN :
                      door->p_kind == Gm_PKind_Cpu   ? A11Y_CSS_CPU :
                                                       A11Y_CSS_CLOSED;
@@ -289,7 +330,18 @@ void a11y_game_css_state(const A11yCssScreen* screen,
         slot->cpu_level_held = door->is_hold_cpu_slider != 0;
         slot->handicap_held = door->is_hold_handicap_slider != 0;
         slot->name_tags_open = built && tag->data != NULL && tag->data->state != 0;
-        if (!vs || !built) {
+        if (!built) {
+            continue;
+        }
+        /* The one name box of a single-player mode has a joint of its own. */
+        Vec3 name;
+        u8 name_joint = vs ? tag->name_jointl : screen->misc->tag_box_joint;
+        if (i == local_hand && css_joint(screen->model_root, name_joint, &name) != NULL) {
+            slot->name_box =
+                css_rect(name.x + A11Y_CSS_NAME_BOX_LEFT, name.x + A11Y_CSS_NAME_BOX_RIGHT,
+                    name.y + A11Y_CSS_NAME_BOX_TOP, name.y + A11Y_CSS_NAME_BOX_BOTTOM);
+        }
+        if (!vs) {
             continue;
         }
         /* The bounds of mnCharSel_CursorThink's tests; retail nudges the
@@ -303,12 +355,6 @@ void a11y_game_css_state(const A11yCssScreen* screen,
         slot->cpu_level_knob = css_knob(screen->model_root,
             handicap_rule != A11Y_HANDICAP_OFF ? door->cpuslider2_joint : door->cpuslider_joint);
         slot->handicap_knob = css_knob(screen->model_root, door->cpuslider_joint);
-        Vec3 name;
-        if (i == local_hand && css_joint(screen->model_root, tag->name_jointl, &name) != NULL) {
-            slot->name_box =
-                css_rect(name.x + A11Y_CSS_NAME_BOX_LEFT, name.x + A11Y_CSS_NAME_BOX_RIGHT,
-                    name.y + A11Y_CSS_NAME_BOX_TOP, name.y + A11Y_CSS_NAME_BOX_BOTTOM);
-        }
     }
 
     for (int i = 0; i < A11Y_CSS_PORTRAITS; i++) {

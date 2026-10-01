@@ -319,11 +319,11 @@ A11yCssState every_kind_of_target() {
     return state;
 }
 
-void onto_every_kind_of_target_at_each_delay() {
-    /* The portraits among themselves are glided between above; here every
-     * other target from and to every target. Yoshi and Fox, with coins on
-     * them, are aimed at to pick those up; A there would. */
-    A11yCssState state = every_kind_of_target();
+/* Glides from every target in the screen's rows to every other, at delays 0
+ * to 10, but portrait to portrait, which is glided between above; each ends
+ * well on its target, or where A picks up the coin resting there. The
+ * longest at no delay. */
+int glides_among_the_rows(const A11yCssState& state) {
     std::vector<Target> targets;
     for (const std::vector<Target>& row : a11y::target_rows(state)) {
         targets.insert(targets.end(), row.begin(), row.end());
@@ -356,8 +356,27 @@ void onto_every_kind_of_target_at_each_delay() {
             }
         }
     }
+    return longest;
+}
+
+void onto_every_kind_of_target_at_each_delay() {
+    /* Yoshi and Fox, with coins on them, are aimed at to pick those up; A
+     * there would. */
+    int longest = glides_among_the_rows(every_kind_of_target());
     std::cout << "steering: longest glide to any target at no delay " << longest << " frames\n";
     assert(longest < kLongestGlide);
+}
+
+void onto_every_single_player_target_at_each_delay() {
+    /* Classic's arrows and Training's CPU coin, player 1's coin at rest on
+     * Fox so no coin jumps into the hand. */
+    for (A11yCssState state : {classic_screen(), training_screen()}) {
+        state.slots[0].portrait = kFoxPortrait;
+        state.slots[0].over_portrait = kFoxPortrait;
+        state.slots[0].character = kFox;
+        state.slots[0].coin = coin_at_rest(kFoxPortrait);
+        assert(glides_among_the_rows(state) < kLongestGlide);
+    }
 }
 
 void onto_a_coin_to_pick_up_at_each_delay() {
@@ -449,6 +468,7 @@ int main() {
     the_players_stick_takes_over();
     a_new_destination_on_the_way();
     onto_every_kind_of_target_at_each_delay();
+    onto_every_single_player_target_at_each_delay();
     onto_a_coin_to_pick_up_at_each_delay();
     a_held_slider_from_each_value_to_each_other_at_each_delay();
     a_click_on_the_hmn_cpu_button_on_the_way();

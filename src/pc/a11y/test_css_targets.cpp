@@ -49,6 +49,10 @@ Target handicap(int slot, std::optional<int> level = std::nullopt) {
 constexpr Target kTeams{TargetKind::teams};
 constexpr Target kRules{TargetKind::rules};
 constexpr Target kBack{TargetKind::back};
+constexpr Target kLower{TargetKind::difficulty_lower};
+constexpr Target kHigher{TargetKind::difficulty_higher};
+constexpr Target kFewer{TargetKind::stocks_fewer};
+constexpr Target kMore{TargetKind::stocks_more};
 
 using Row = std::vector<Target>;
 
@@ -275,14 +279,69 @@ void empty_space() {
     assert((target_at(state, 25.0f, -10.0f) == Target{}));
 }
 
-void single_player_modes_have_back_only_so_far() {
-    A11yCssState state = vs_screen();
-    state.hand_count = 1;
-    state.has_teams_button = false;
-    state.has_rules_button = false;
-    assert((target_at(state, 20.0f, 24.0f) == Target{TargetKind::back}));
+void single_player_top_bar_is_back_alone() {
+    A11yCssState state = classic_screen();
+    assert(target_at(state, 20.0f, 24.0f) == kBack);
+    assert((target_at(state, -30.0f, 24.0f) == Target{}));
+    assert((target_at(state, 0.0f, 24.0f) == Target{}));
     assert((target_at(state, -32.0f, -2.0f) == Target{}));
-    assert((target_at(state, -23.0f, 11.0f) == Target{TargetKind::portrait, kFoxPortrait}));
+    assert(target_at(state, -23.0f, 11.0f) == portrait(kFoxPortrait));
+}
+
+void single_player_arrows() {
+    /* Inside each arrow's rectangle, strictly; nothing between them. */
+    A11yCssState state = classic_screen();
+    assert(target_at(state, -7.5f, -9.0f) == kLower);
+    assert(target_at(state, 16.0f, -9.0f) == kHigher);
+    assert(target_at(state, 0.7f, -14.5f) == kFewer);
+    assert(target_at(state, 16.5f, -14.5f) == kMore);
+    assert((target_at(state, -7.5f, -12.1f) == Target{}));
+    assert((target_at(state, 5.0f, -14.5f) == Target{}));
+    assert((target_at(state, 5.0f, -9.0f) == Target{}));
+    assert((target_at(state, 16.5f, -12.2f) == Target{}));
+}
+
+void single_player_arrows_by_mode() {
+    /* All-Star has no stock arrows; the Stadium modes, Event Match and
+     * Training have no arrows. */
+    A11yCssState state = classic_screen();
+    state.match_type = A11Y_REG_ALLSTAR;
+    state.arrows.stocks_shown = false;
+    assert(target_at(state, -7.5f, -9.0f) == kLower);
+    assert((target_at(state, 0.7f, -14.5f) == Target{}));
+    state = training_screen();
+    assert((target_at(state, -7.5f, -9.0f) == Target{}));
+    assert((target_at(state, 16.5f, -14.5f) == Target{}));
+}
+
+void single_player_arrows_wait_while_carrying_a_coin() {
+    A11yCssState state = classic_screen();
+    state.hand.coin = 0;
+    assert((target_at(state, -7.5f, -9.0f) == Target{}));
+    assert((target_at(state, 16.5f, -14.5f) == Target{}));
+}
+
+void single_player_name_box() {
+    A11yCssState state = classic_screen();
+    assert((target_at(state, -28.0f, -18.5f) == Target{TargetKind::name_box, 0}));
+}
+
+void arrows_at_the_ends_of_their_ranges() {
+    A11yCssState state = classic_screen();
+    for (Target arrow : {kLower, kHigher, kFewer, kMore}) {
+        assert(a11y::is_arrow(arrow));
+        assert(!a11y::arrow_at_end(state, arrow));
+    }
+    assert(!a11y::is_arrow(kBack));
+    assert(!a11y::is_arrow(portrait(kFoxPortrait)));
+    state.arrows.difficulty = 0;
+    state.arrows.stocks = 1;
+    assert(a11y::arrow_at_end(state, kLower) && !a11y::arrow_at_end(state, kHigher));
+    assert(a11y::arrow_at_end(state, kFewer) && !a11y::arrow_at_end(state, kMore));
+    state.arrows.difficulty = 4;
+    state.arrows.stocks = 5;
+    assert(!a11y::arrow_at_end(state, kLower) && a11y::arrow_at_end(state, kHigher));
+    assert(!a11y::arrow_at_end(state, kFewer) && a11y::arrow_at_end(state, kMore));
 }
 
 void aim_puts_the_coin_at_the_centre() {
@@ -403,6 +462,95 @@ void rows_in_stamina_and_camera_modes() {
     assert((rows.front() == Row{kTeams, kBack}));
     assert((rows.back() == Row{slot_button(0), slot_button(1), cpu_level(1), slot_button(2)}));
     assert(step_from(state, kTeams, Direction::right) == kBack);
+}
+
+void rows_in_classic() {
+    /* Back alone over the portraits; the difficulty arrows above the stock
+     * arrows below them, as drawn. */
+    A11yCssState state = classic_screen();
+    std::vector<Row> rows = a11y::target_rows(state);
+    assert(rows.size() == 6);
+    assert((rows[0] == Row{kBack}));
+    assert(rows[1].size() == 9 && rows[2].size() == 9 && rows[3].size() == 7);
+    assert((rows[4] == Row{kLower, kHigher}));
+    assert((rows[5] == Row{kFewer, kMore}));
+}
+
+void rows_in_all_star_and_training() {
+    A11yCssState state = classic_screen();
+    state.match_type = A11Y_REG_ALLSTAR;
+    state.arrows.stocks_shown = false;
+    std::vector<Row> rows = a11y::target_rows(state);
+    assert(rows.size() == 5);
+    assert((rows.back() == Row{kLower, kHigher}));
+    /* Training's two slots have no buttons: the portraits are the last row. */
+    rows = a11y::target_rows(training_screen());
+    assert(rows.size() == 4);
+    assert((rows[0] == Row{kBack}));
+    assert(rows.back().back() == portrait(kRoyPortrait));
+}
+
+void steps_over_the_arrows() {
+    A11yCssState state = classic_screen();
+    assert(step_from(state, kLower, Direction::right) == kHigher);
+    assert(step_from(state, kHigher, Direction::left) == kLower);
+    assert(step_from(state, kFewer, Direction::right) == kMore);
+    assert(step_from(state, kMore, Direction::left) == kFewer);
+    /* Each arrow's row to the one nearest in x in the next. */
+    assert(step_from(state, kLower, Direction::down) == kFewer);
+    assert(step_from(state, kHigher, Direction::down) == kMore);
+    assert(step_from(state, kFewer, Direction::up) == kLower);
+    assert(step_from(state, kMore, Direction::up) == kHigher);
+    assert(step_from(state, kLower, Direction::up) == portrait(kJigglypuffPortrait));
+    assert(step_from(state, kHigher, Direction::up) == portrait(kRoyPortrait));
+    assert(step_from(state, kPichuPortrait, Direction::down) == kLower);
+    assert(step_from(state, kRoyPortrait, Direction::down) == kHigher);
+    /* The edges. */
+    assert(step_from(state, kLower, Direction::left) == kLower);
+    assert(step_from(state, kHigher, Direction::right) == kHigher);
+    assert(step_from(state, kFewer, Direction::down) == kFewer);
+    assert(step_from(state, kMore, Direction::right) == kMore);
+    /* From the top bar, Back down to the portrait nearest in x. */
+    assert(step_from(state, kBack, Direction::down) == portrait(kGanonPortrait));
+    assert(step_from(state, kDrMarioPortrait, Direction::up) == kBack);
+}
+
+void single_player_steps_from_the_hands_start() {
+    /* The hand starts below the player slot, left of the arrows. */
+    A11yCssState state = classic_screen();
+    float x = state.hand.x;
+    float y = state.hand.y;
+    assert(a11y::step(state, Target{}, x, y, Direction::up) == kFewer);
+    assert(a11y::step(state, Target{}, x, y, Direction::right) == kFewer);
+    assert((a11y::step(state, Target{}, x, y, Direction::left) == Target{}));
+    state = training_screen();
+    assert(a11y::step(state, Target{}, x, y, Direction::up) == portrait(kPichuPortrait));
+    assert(step_from(state, kPichuPortrait, Direction::down) == portrait(kPichuPortrait));
+}
+
+void every_single_player_target_is_where_its_glide_ends() {
+    /* A free hand at a target's aim is on it, for hover and for locate. */
+    for (A11yCssState state : {classic_screen(), training_screen()}) {
+        for (const Row& row : a11y::target_rows(state)) {
+            for (Target target : row) {
+                Point hand = a11y::aim_point(state, target);
+                assert(a11y::locate(state, hand.x, hand.y) == target);
+                if (target.kind != TargetKind::portrait) {
+                    assert(target_at(state, hand.x, hand.y) == target);
+                }
+            }
+        }
+    }
+}
+
+void training_cpus_coin_is_pickable() {
+    /* The CPU's coin rests on Dr. Mario; a free hand aims where A picks it
+     * up. */
+    A11yCssState state = training_screen();
+    assert(a11y::pickable_coin(state, kDrMarioPortrait) == 1);
+    assert(a11y::pickable_coin(state, kMarioPortrait) == -1);
+    Point aim = a11y::aim_point(state, portrait(kDrMarioPortrait));
+    assert(std::fabs(aim.x - (state.slots[1].coin.x - 3.8f)) < 1e-4f);
 }
 
 void rows_are_rebuilt_as_a_slot_changes() {
@@ -646,7 +794,12 @@ int main() {
     a_carrying_hand_presses_no_button();
     nothing_while_holding_a_slider_or_naming();
     empty_space();
-    single_player_modes_have_back_only_so_far();
+    single_player_top_bar_is_back_alone();
+    single_player_arrows();
+    single_player_arrows_by_mode();
+    single_player_arrows_wait_while_carrying_a_coin();
+    single_player_name_box();
+    arrows_at_the_ends_of_their_ranges();
     aim_puts_the_coin_at_the_centre();
     steps_from_every_portrait();
     steps_stop_at_the_edges();
@@ -656,6 +809,12 @@ int main() {
     rows_in_a_team_match();
     rows_with_the_handicap_rule_on();
     rows_in_stamina_and_camera_modes();
+    rows_in_classic();
+    rows_in_all_star_and_training();
+    steps_over_the_arrows();
+    single_player_steps_from_the_hands_start();
+    every_single_player_target_is_where_its_glide_ends();
+    training_cpus_coin_is_pickable();
     rows_are_rebuilt_as_a_slot_changes();
     a_held_slider_steps_its_value();
     a_held_handicap_slider_steps_too();

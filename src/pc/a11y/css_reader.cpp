@@ -82,7 +82,7 @@ void CssReader::hand(int hand, const A11yCssHandReport& report) {
     m_reports[hand] = report;
     if (m_steer && m_have_state && hand == m_state.local_slot) {
         m_local_updated = true;
-        steer(hand, report);
+        steer(report);
     }
 }
 
@@ -101,11 +101,13 @@ bool CssReader::take_stick(Stick* out) {
 }
 
 bool CssReader::may_steer(const A11yCssState& state) const {
-    /* VS modes only so far: single-player modes read their one hand from
-     * the port that started the mode. The name tag window keeps the hand
-     * inside itself. */
-    return state.hand_count == A11Y_CSS_SLOTS && state.exit == A11Y_CSS_STAYING &&
-           state.hand.present && !state.slots[state.local_slot].name_tags_open;
+    /* Steering writes controller 1's pad only, which in a single-player mode
+     * moves the hand only if controller 1 started it; online, the local
+     * player's pad is controller 1's, whoever they are in the game. The name
+     * tag window keeps the hand inside itself. */
+    bool reachable = state.hand_count == A11Y_CSS_SLOTS || state.local_port == 0;
+    return reachable && state.exit == A11Y_CSS_STAYING && state.hand.present &&
+           !state.slots[state.local_slot].name_tags_open;
 }
 
 void CssReader::follow_destination(const A11yCssState& state) {
@@ -128,12 +130,12 @@ void CssReader::follow_destination(const A11yCssState& state) {
     }
 }
 
-void CssReader::steer(int hand, const A11yCssHandReport& report) {
+void CssReader::steer(const A11yCssHandReport& report) {
     m_state.hand.x = report.x;
     m_state.hand.y = report.y;
     Point at{report.x, report.y};
     A11yPad pad;
-    a11y_game_pad(hand, &pad);
+    a11y_game_pad(m_state.local_port, &pad);
     bool allowed = may_steer(m_state);
     if (!allowed && m_glide.active()) {
         stop_glide("steering is off here", false);

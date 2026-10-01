@@ -8,6 +8,8 @@
  * number. A free hand says each button or slider knob it reaches, a slider
  * says being grabbed, its value and being let go, and a player slot or team
  * the hand changes says its new state. Ready to Fight appearing is said.
+ * In single-player modes, a free hand on an arrow says its row's value and
+ * way, and A says the new value, or the same at the end of the range.
  * A choice is silent: the game's announcer names the character. Online,
  * other players' choices and slot changes are queued behind; offline they
  * are the players in the room, and silent. A step names where it goes at the
@@ -84,6 +86,9 @@ private:
     /* What the coin of slot coin going back does as the hand carries it down
      * into the player slots: "No character", "Back to Yoshi". */
     std::string drop_words(const A11yCssState& state, int coin);
+    /* A single-player mode's difficulty or stock count changed, or A on an
+     * arrow, is, at the end of its range: the value. Empty otherwise. */
+    std::string arrow_announcement(const A11yCssState& last, const A11yCssState& now, Target is);
     /* A slider the local hand grabbed, moved or let go of, or empty; quiet
      * leaves out its value. */
     std::string slider_announcement(const A11yCssState& last, const A11yCssState& now, bool quiet);

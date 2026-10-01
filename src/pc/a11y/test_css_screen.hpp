@@ -125,4 +125,53 @@ inline A11yCssState vs_screen() {
     return state;
 }
 
+/* The arrows' rectangles in the game's tables (mnCharSel_803F0EBC and data2
+ * in mncharsel.c). */
+constexpr A11yCssRect kDifficultyLower{-10.9f, -4.2f, -6.8f, -12.1f};
+constexpr A11yCssRect kDifficultyHigher{12.5f, 19.6f, -6.8f, -12.1f};
+constexpr A11yCssRect kStocksFewer{-2.2f, 3.7f, -12.4f, -16.6f};
+constexpr A11yCssRect kStocksMore{13.7f, 19.3f, -12.4f, -16.6f};
+constexpr int kNormal = 2;
+
+/* Classic, started from controller 1: the one hand at home with no
+ * character, the difficulty Normal, 3 stocks; every portrait unlocked. The
+ * one name box is taken as VS player 1's, near where Classic draws it. A
+ * single-player mode reads no buttons or knobs. */
+inline A11yCssState classic_screen() {
+    A11yCssState state = vs_screen();
+    state.hand_count = 1;
+    state.match_type = A11Y_REG_CLASSIC;
+    state.slot_count = 1;
+    state.has_teams_button = false;
+    state.has_rules_button = false;
+    state.arrows = A11yCssArrows{
+        true, true, kNormal, 3, kDifficultyLower, kDifficultyHigher, kStocksFewer, kStocksMore};
+    for (int i = 0; i < A11Y_CSS_SLOTS; i++) {
+        if (i > 0) {
+            state.slots[i] = slot(A11Y_CSS_CLOSED, i);
+        }
+        state.slots[i].slot_button = A11yCssRect{};
+        state.slots[i].team_button = A11yCssRect{};
+        state.slots[i].cpu_level_knob = A11yCssKnob{};
+        state.slots[i].handicap_knob = A11yCssKnob{};
+    }
+    return state;
+}
+
+/* Training: no arrows, and the CPU's slot second, its coin resting on Dr.
+ * Mario, the character the game chose at random. */
+inline A11yCssState training_screen() {
+    A11yCssState state = classic_screen();
+    state.match_type = A11Y_TRAINING_MODE;
+    state.slot_count = 2;
+    state.arrows.difficulty_shown = false;
+    state.arrows.stocks_shown = false;
+    state.slots[1] = cpu(1, 0);
+    state.slots[1].slot_button = A11yCssRect{};
+    state.slots[1].team_button = A11yCssRect{};
+    state.slots[1].cpu_level_knob = A11yCssKnob{};
+    state.slots[1].handicap_knob = A11yCssKnob{};
+    return state;
+}
+
 }  // namespace css_test

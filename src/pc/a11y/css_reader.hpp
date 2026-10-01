@@ -40,7 +40,7 @@ private:
      * where holding a slider or not changes what a step means. */
     void follow_destination(const A11yCssState& state);
     /* The local hand updated: steps, and the glide's next frame. */
-    void steer(int hand, const A11yCssHandReport& report);
+    void steer(const A11yCssHandReport& report);
     void press(Direction direction, Point hand);
     /* The glide ended, failed or not, for why: logged now, spoken on the
      * next frame. */

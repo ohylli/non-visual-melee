@@ -30,9 +30,23 @@ std::string capitalised(std::string_view words) {
     return out;
 }
 
-/* "Player 2" for slot 1, as its tab shows "P2" in VS modes. */
-std::string player(int slot) {
-    return std::string(kPlayer) + " " + std::to_string(slot + 1);
+/* "Player 2" for player number 1, as the hand's badge shows "P2". */
+std::string player(int number) {
+    return std::string(kPlayer) + " " + std::to_string(number + 1);
+}
+
+bool single_player(const A11yCssState& state) {
+    return state.hand_count != A11Y_CSS_SLOTS;
+}
+
+/* Whose a player slot is: in VS modes slot 1 is player 2's, as its tab shows
+ * "P2"; in single-player modes the first is the player who started the mode
+ * and Training's second the CPU's. */
+std::string slot_name(const A11yCssState& state, int slot) {
+    if (single_player(state)) {
+        return slot == state.local_slot ? player(state.local_player) : std::string(kCpu);
+    }
+    return player(slot);
 }
 
 std::string team(int number) {
@@ -50,14 +64,33 @@ A11yCharacter chosen(const A11yCssSlot& slot) {
 
 /* "Player 2: CPU". */
 std::string slot_kind(const A11yCssState& state, int slot) {
-    return player(slot) + ": " + std::string(slot_kind_word(state.slots[slot].kind));
+    return slot_name(state, slot) + ": " + std::string(slot_kind_word(state.slots[slot].kind));
 }
 
-/* The coin of a slot by whose it is: "your coin", "player 2's coin". */
+/* The coin of a slot by whose it is: "your coin", "player 2's coin", and in
+ * Training "the CPU's coin". */
 std::string coin_words(const A11yCssState& state, int coin) {
-    return coin == state.local_slot ? std::string(kYourCoin) :
-                                      std::string(kPlayersCoinBefore) + std::to_string(coin + 1) +
-                                          std::string(kPlayersCoinAfter);
+    if (coin == state.local_slot) {
+        return std::string(kYourCoin);
+    }
+    if (single_player(state)) {
+        return std::string(kCpusCoin);
+    }
+    return std::string(kPlayersCoinBefore) + std::to_string(coin + 1) +
+           std::string(kPlayersCoinAfter);
+}
+
+/* A single-player mode's difficulty as the arrows' strip shows it:
+ * "Normal". */
+std::string difficulty(int value) {
+    std::optional<std::string_view> word = difficulty_word(value);
+    return word ? std::string(*word) : std::string(kDifficultyArrows) + " " + std::to_string(value);
+}
+
+/* The value of an arrow's row: "Normal", "3". */
+std::string arrow_value(const A11yCssState& state, Target arrow) {
+    bool stocks = arrow.kind == TargetKind::stocks_fewer || arrow.kind == TargetKind::stocks_more;
+    return stocks ? std::to_string(state.arrows.stocks) : difficulty(state.arrows.difficulty);
 }
 
 /* A slider's words: its name at its knob, and the shorter word said before
@@ -114,11 +147,6 @@ void CssSpeech::frame(const A11yCssState& state, const GlideStatus& glide) {
         m_speech.announce(opening(state), Mode::interrupt);
         return;
     }
-    /* Single-player modes have one hand and their own targets; until they are
-     * read, the opening is all they say. */
-    if (state.hand_count != A11Y_CSS_SLOTS) {
-        return;
-    }
     /* The rules screen and name entry open inside this scene. */
     if (state.exit != last.exit &&
         (state.exit == A11Y_CSS_TO_RULES || state.exit == A11Y_CSS_TO_NAME_ENTRY))
@@ -147,6 +175,7 @@ void CssSpeech::frame(const A11yCssState& state, const GlideStatus& glide) {
     add(mine, slider_announcement(last, state, quiet));
     Target was = hovered(last);
     Target is = hovered(state);
+    add(mine, arrow_announcement(last, state, is));
     slot_announcements(last, state, was, is, mine, others);
     if (glide_ended) {
         if (glide.phase == GlideStatus::Phase::failed) {
@@ -205,9 +234,44 @@ void CssSpeech::step(const A11yCssState& state, Target to) {
 }
 
 std::string CssSpeech::opening(const A11yCssState& state) {
-    A11yCharacter character = chosen(state.slots[state.local_slot]);
-    return std::string(kScreenName) + ". " + player(state.local_player) + ", " +
-           (character != A11Y_NO_CHARACTER ? name(character) : std::string(kNoCharacter)) + ".";
+    std::optional<std::string_view> mode =
+        single_player(state) ? mode_name(state.match_type) : std::nullopt;
+    std::string out =
+        mode ? std::string(*mode) + " " + std::string(kModeScreenName) : std::string(kScreenName);
+    /* The player, and in Training the CPU they choose for too. */
+    for (int i = 0; i < A11Y_CSS_SLOTS; i++) {
+        bool own = i == state.local_slot;
+        if (own || (single_player(state) && i < state.slot_count)) {
+            A11yCharacter character = chosen(state.slots[i]);
+            out += ". " + slot_name(state, i) + ", " +
+                   (character != A11Y_NO_CHARACTER ? name(character) : std::string(kNoCharacter));
+        }
+    }
+    out += ".";
+    if (single_player(state) && state.local_port != 0) {
+        out += " " + std::string(kSteeringNeedsPort1);
+    }
+    return out;
+}
+
+std::string CssSpeech::arrow_announcement(
+    const A11yCssState& last, const A11yCssState& now, Target is) {
+    /* Only the local hand changes them: its A on an arrow. */
+    const A11yCssArrows& before = last.arrows;
+    const A11yCssArrows& after = now.arrows;
+    if (after.difficulty_shown && before.difficulty_shown && after.difficulty != before.difficulty)
+    {
+        return difficulty(after.difficulty);
+    }
+    if (after.stocks_shown && before.stocks_shown && after.stocks != before.stocks) {
+        return std::to_string(after.stocks);
+    }
+    /* At the end of the range the game does nothing; the value again says
+     * the press was heard. Elsewhere the value changes next frame. */
+    if (now.pressed_a && is_arrow(is) && arrow_at_end(now, is)) {
+        return arrow_value(now, is);
+    }
+    return "";
 }
 
 std::string CssSpeech::coin_announcement(
@@ -343,14 +407,14 @@ void CssSpeech::slot_announcements(const A11yCssState& last, const A11yCssState&
             if (on(TargetKind::team_button, i)) {
                 add(mine, capitalised(colour) + " " + std::string(kTeam));
             } else {
-                add(theirs, player(i) + " " + std::string(kTeam) + ": " + colour);
+                add(theirs, slot_name(now, i) + " " + std::string(kTeam) + ": " + colour);
             }
         }
         /* The local hand's choices, for itself or a CPU, are left to the
          * game's announcer. */
         A11yCharacter character = chosen(after);
         if (!own && !holds(i) && character != A11Y_NO_CHARACTER && character != chosen(before)) {
-            add(theirs, player(i) + ": " + name(character));
+            add(theirs, slot_name(now, i) + ": " + name(character));
         }
     }
     if (now.teams != last.teams) {
@@ -372,7 +436,7 @@ std::string CssSpeech::target_words(const A11yCssState& state, Target target) {
     case TargetKind::slot_button:
         return slot_kind(state, i);
     case TargetKind::team_button:
-        return player(i) + " " + std::string(kTeam) + ": " + team(state.slots[i].team);
+        return slot_name(state, i) + " " + std::string(kTeam) + ": " + team(state.slots[i].team);
     case TargetKind::cpu_level:
     case TargetKind::handicap: {
         const SliderKind* slider = slider_kind(target.kind);
@@ -380,17 +444,29 @@ std::string CssSpeech::target_words(const A11yCssState& state, Target target) {
         if (target.level) {
             return std::string(words.held_word) + " " + std::to_string(*target.level);
         }
-        return player(i) + " " + std::string(words.name) + ": " +
+        return slot_name(state, i) + " " + std::string(words.name) + ": " +
                std::to_string(state.slots[i].*slider->value);
     }
     case TargetKind::name_box:
-        return player(i) + " " + std::string(kNameBox);
+        return slot_name(state, i) + " " + std::string(kNameBox);
     case TargetKind::teams:
         return std::string(kTeamsButton) + ": " + std::string(state.teams ? kOn : kOff);
     case TargetKind::rules:
         return std::string(kRulesButton);
     case TargetKind::back:
         return std::string(kBackButton);
+    case TargetKind::difficulty_lower:
+        return std::string(kDifficultyArrows) + ": " + arrow_value(state, target) + ", " +
+               std::string(kLower);
+    case TargetKind::difficulty_higher:
+        return std::string(kDifficultyArrows) + ": " + arrow_value(state, target) + ", " +
+               std::string(kHigher);
+    case TargetKind::stocks_fewer:
+        return std::string(kStockArrows) + ": " + arrow_value(state, target) + ", " +
+               std::string(kFewer);
+    case TargetKind::stocks_more:
+        return std::string(kStockArrows) + ": " + arrow_value(state, target) + ", " +
+               std::string(kMore);
     }
     return "";
 }
