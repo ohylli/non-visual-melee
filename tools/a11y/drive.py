@@ -442,9 +442,10 @@ class Game:
     args say otherwise, fed input over its own key pipe, its output saved to
     out and printed as it comes. step() runs one script step against it.
     A name tells two games apart in the printed output and in the pipe's
-    name; env holds settings of this run over the ones every run gets."""
+    name; env holds settings of this run over the ones every run gets; exe
+    is another build's melee.exe in place of build/melee.exe."""
 
-    def __init__(self, args, out, env=None, name=None):
+    def __init__(self, args, out, env=None, name=None, exe=None):
         self.args = args
         self.name = name
         self.cursor = 0
@@ -469,7 +470,7 @@ class Game:
         if not args.focus:
             full_env["SDL_WINDOW_ACTIVATE_WHEN_SHOWN"] = "0"
         full_env.update(env or {})
-        exe = os.path.join(REPO, "build", "melee.exe")
+        exe = exe or os.path.join(REPO, "build", "melee.exe")
         disc = os.path.join(REPO, args.disc)
 
         os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
