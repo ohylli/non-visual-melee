@@ -1,6 +1,6 @@
 # 08 Play-test steering by ear
 
-Status: ready-for-human
+Status: resolved (2026-10-02)
 Type: task
 Blocked by: 05, 07
 
@@ -45,3 +45,5 @@ Anything unexpected becomes a new issue in this directory.
 19. Launch with `MELEE_A11Y=0`. Expected: silence, and the D-pad does nothing on character select.
 
 ## Comments
+
+2026-10-02: the maintainer ran the play test by ear with NVDA. Steering is acceptable for now. Findings to return to later: issues 10 to 15.
