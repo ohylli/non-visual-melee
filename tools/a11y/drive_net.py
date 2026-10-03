@@ -19,7 +19,12 @@ instance by a first word, a or b:
 
 A wait or search looks at that instance's output only, and named groups
 are kept per instance. sleep and quit may stand without an instance; quit ends
-the script, and the run ends with an implicit one, which closes both.
+the script, and the run ends with an implicit one, which closes both. Addressed
+to one instance, quit closes that one alone, as a player closing the game, and
+the other plays on:
+
+  a quit
+  b wait '"Connection lost\.'
 
 With --base-b, instance b is a base port build, the one in that build
 directory, so it logs no [a11y] lines. A step addressed to b-fork runs only
@@ -165,6 +170,10 @@ def run(args, steps):
                 if ONLY[words[0]] != bool(args.base_b):
                     continue
                 words = ["b"] + words[1:]
+            if len(words) == 2 and words[1].lower() == "quit":
+                games[words[0]].note("quit")
+                drive.quit_game(games[words[0]].proc)
+                continue
             games[words[0]].step(words[1:])
     except ScriptError as e:
         print(f">> FAILED: {e}", flush=True)

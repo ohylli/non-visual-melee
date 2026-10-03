@@ -27,7 +27,7 @@ A copy started with `MELEE_NET` (the peer's address and port), `MELEE_NET_PORT`,
 
 ## Two copies in the LAN lobby
 
-The LAN lobby (VS. Mode, Online, LAN play) finds other copies by mDNS, multicast DNS on UDP 5353 (`src/pc/net_lan.c`), and two copies on one Windows machine find each other there: multicast sent from one comes back to every listener on the machine. `drive_net.py --lan` runs them this way, and `tools/a11y/lan_lobby.drive` takes both from the title screen through the lobby into character select.
+The LAN lobby (VS. Mode, Online, LAN play) finds other copies by mDNS, multicast DNS on UDP 5353 (`src/pc/net_lan.c`), and two copies on one Windows machine find each other there: multicast sent from one comes back to every listener on the machine. `drive_net.py --lan` runs them this way, and `tools/a11y/lan_lobby.drive` takes both from the title screen through the lobby into character select, backs out to the lobby, starts again and closes one copy, so the other loses its connection. A step `a quit` or `b quit` closes that copy alone.
 
 - Discovery goes out over a real network interface, never loopback, so the machine needs one up with an address (the log names it in a `lan: interface` line). With none, the lobby logs `lan: no usable network interface` and finds nobody.
 - No `MELEE_NET`: each copy starts offline and walks the menus by its own presses until the session begins.
@@ -38,6 +38,15 @@ The LAN lobby (VS. Mode, Online, LAN play) finds other copies by mDNS, multicast
 - A fork build and a base port build pair in the lobby as they do in a direct session.
 - Windows Firewall blocks incoming traffic on a Public network unless a rule allows the program, and asks the first time a program listens, which takes focus. Rules are per program path, so each build directory's `melee.exe` needs its own; this machine has rules for the fork's and the base port worktree's, allowing UDP and TCP in. A new build directory means a new prompt, best answered by the maintainer before an agent runs it.
 - `MELEE_NET_RECORD` starts writing at boot and runs on into the session without a new header, so two copies' recordings share no frame numbers and are not compared. Desyncs still show as `net: DESYNC`.
+
+## How the LAN lobby is read
+
+The lobby (scene `GS_ONLINE_LOBBY`, the first state of the online game mode, flow in `src/melee/gm/gmonlinemode.c`) fills an `OnlineLobbyView` each frame and draws it; the fork's hook hands that view over once it is drawn, and `lobby_speech.cpp` compares it with the last frame. The view has everything the screen shows: the machines listed (row 0 is this one), a phase and a status line. Only LAN play's list speaks; direct connect, which `MELEE_LAN_DIRECT` also routes through this path, and the internet layouts keep the scene announcement.
+
+- What pairs two machines: the protocol version, the version string and the disc image. A machine that differs in any of them is listed as another version and never paired.
+- Machines are listed by hostname, cut to 15 characters, and rows can reorder, so the fork matches them by name, counting a repeated name: two copies on one computer share it.
+- The phase does not tell every status apart: waiting for the host and connecting share one, and so do searching and a network that hides players. The fork tells them by the start of the status line, the base port's literal strings.
+- Every way out of a session lands in a fresh, searching lobby, and by then the reason is gone: the lobby's entry disconnects, and a disconnect marks every ended session as "peer left", a clean back-out included. So the fork tells "Back to LAN play." from "Connection lost." by the scene the session left. Character select returns to the lobby when someone held B (its pending exit says so on its last frame) or when the other machine was lost; stage select, the match and results return only when it was lost. The pending exit is recorded even on frames rollback re-runs, since the frame that shows a back-out by the other player may be one.
 
 ## Stage select needs both players
 

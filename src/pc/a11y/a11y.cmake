@@ -41,6 +41,7 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/css_names.cpp
         ${CMAKE_CURRENT_LIST_DIR}/css_targets.cpp
         ${CMAKE_CURRENT_LIST_DIR}/css_reader.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/lobby_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/steering.cpp)
 target_include_directories(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 # game_access.c reads the decomp's structs, so it lays out their bitfields as
@@ -157,6 +158,18 @@ if (TARGET unit_tests)
     add_test(NAME css_speech COMMAND css_speech_test)
     set_tests_properties(css_speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests css_speech_test)
+
+    # Lobby speech against hand-written snapshots of the lobby's view; a fake
+    # bridge and its own pc_log_line.
+    add_executable(lobby_speech_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_lobby_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/lobby_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
+    target_include_directories(lobby_speech_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(lobby_speech_test PRIVATE -UNDEBUG)
+    add_test(NAME lobby_speech COMMAND lobby_speech_test)
+    set_tests_properties(lobby_speech PROPERTIES LABELS melee)
+    add_dependencies(unit_tests lobby_speech_test)
 
     # The glide against a simulated hand that moves as the game's does.
     add_executable(steering_test EXCLUDE_FROM_ALL

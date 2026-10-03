@@ -78,6 +78,13 @@ void pc_a11y_css_hand(int hand, int state, int held, float x, float y);
  * chosen) is not reported. The next frame reads them. */
 void pc_a11y_css_coin(int slot, float x, float y);
 
+/* Once a frame of the online lobby's LAN path (gm_Scene_OnlineLobby_OnFrame
+ * in src/melee/gm/gmonlinemode.c), after the view is drawn: the view the
+ * scene filled this frame (OnlineLobbyView, gmonlinemode.h). Lobby speech
+ * compares it with the last frame here. */
+struct OnlineLobbyView;
+void pc_a11y_lobby_frame(const struct OnlineLobbyView* view);
+
 /* Port 1's virtual pad is about to be published (publish_locked in
  * src/pc/keyboard.c, once per video frame, after the keyboard, the key
  * driver and a GameCube adapter are merged). The one place the fork writes:

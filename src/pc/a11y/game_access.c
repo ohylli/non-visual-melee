@@ -10,6 +10,7 @@
 #include <melee/ft/forward.h>
 #include <melee/gm/forward.h>
 #include <melee/gm/gmmain_lib.h>
+#include <melee/gm/gmonlinemode.h>
 #include <melee/gm/types.h>
 #include <melee/lb/lb_00B0.h>
 #include <melee/lb/lbspdisplay.h>
@@ -391,4 +392,50 @@ void a11y_game_pad(int port, A11yPad* out) {
     out->pressed_right = (pad->trigger & HSD_PAD_DPADRIGHT) != 0;
     out->pressed_up = (pad->trigger & HSD_PAD_DPADUP) != 0;
     out->pressed_down = (pad->trigger & HSD_PAD_DPADDOWN) != 0;
+}
+
+_Static_assert(
+    A11Y_LOBBY_ROWS == ONLINE_LOBBY_MAX_PLAYERS - 1, "the lobby lists another number of rows");
+_Static_assert(
+    A11Y_LOBBY_NAME_LEN == ONLINE_LOBBY_NAME_LEN, "the lobby's names have another length");
+_Static_assert(
+    A11Y_LOBBY_MESSAGE_LEN == ONLINE_LOBBY_MSG_LEN, "the lobby's status line has another length");
+
+void a11y_game_lobby_state(const OnlineLobbyView* view, A11yLobbyState* out) {
+    memset(out, 0, sizeof(*out));
+    out->lan = gmOnline_GetKind() == ONLINE_KIND_LAN && view->screen == LOBBY_SCREEN_PLAYERS;
+    if (!out->lan) {
+        return;
+    }
+    switch (view->phase) {
+    case LOBBY_PHASE_SEARCHING:
+        out->phase = A11Y_LOBBY_SEARCHING;
+        break;
+    case LOBBY_PHASE_FOUND:
+        out->phase = A11Y_LOBBY_FOUND;
+        break;
+    case LOBBY_PHASE_CONNECTING:
+        out->phase = A11Y_LOBBY_CONNECTING;
+        break;
+    case LOBBY_PHASE_STARTING:
+        out->phase = A11Y_LOBBY_STARTING;
+        break;
+    case LOBBY_PHASE_ERROR:
+    default:
+        out->phase = A11Y_LOBBY_FAILED;
+        break;
+    }
+    /* Row 0 is this machine. */
+    for (int i = 1; i < view->player_count && i < ONLINE_LOBBY_MAX_PLAYERS; i++) {
+        A11yLobbyRow* row = &out->rows[out->row_count++];
+        memcpy(row->name, view->players[i].name, sizeof(row->name));
+        row->name[sizeof(row->name) - 1] = ' ';
+        row->other_version = view->players[i].incompatible;
+    }
+    memcpy(out->message, view->message, sizeof(out->message));
+    out->message[sizeof(out->message) - 1] = ' ';
+}
+
+bool a11y_game_lan_play(void) {
+    return gmOnline_GetKind() == ONLINE_KIND_LAN;
 }

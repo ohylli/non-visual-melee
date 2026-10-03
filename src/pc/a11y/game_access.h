@@ -19,6 +19,7 @@ struct CSSDoorsMisc;
 struct CSSIcon;
 struct CSSTag;
 struct HSD_JObj;
+struct OnlineLobbyView;
 
 /* A disc pointer as stored in game data, as a host address; NULL when it is
  * null or lands outside the game's memory. */
@@ -305,6 +306,43 @@ typedef struct A11yPad {
 } A11yPad;
 
 void a11y_game_pad(int port, A11yPad* out);
+
+/* The online lobby: the view its scene fills each frame (OnlineLobbyView,
+ * src/melee/gm/gmonlinemode.h), by the numbers and text the screen shows. */
+enum { A11Y_LOBBY_ROWS = 7, A11Y_LOBBY_NAME_LEN = 16, A11Y_LOBBY_MESSAGE_LEN = 96 };
+
+typedef enum A11yLobbyPhase {
+    A11Y_LOBBY_SEARCHING,
+    A11Y_LOBBY_FOUND,
+    /* Waiting for the host, or connecting to it. */
+    A11Y_LOBBY_CONNECTING,
+    A11Y_LOBBY_STARTING,
+    A11Y_LOBBY_FAILED,
+} A11yLobbyPhase;
+
+/* Another machine the lobby lists. */
+typedef struct A11yLobbyRow {
+    char name[A11Y_LOBBY_NAME_LEN];
+    /* Another protocol, version string or disc: listed, never paired. */
+    bool other_version;
+} A11yLobbyRow;
+
+typedef struct A11yLobbyState {
+    /* LAN play's list of machines. Direct connect, which can also arrive
+     * here, and every other layout are false and not read further. */
+    bool lan;
+    A11yLobbyPhase phase;
+    /* The other machines, this one left out, in the order shown. */
+    int row_count;
+    A11yLobbyRow rows[A11Y_LOBBY_ROWS];
+    /* The status line, as shown. */
+    char message[A11Y_LOBBY_MESSAGE_LEN];
+} A11yLobbyState;
+
+void a11y_game_lobby_state(const struct OnlineLobbyView* view, A11yLobbyState* out);
+
+/* True when the online mode was entered for LAN play. */
+bool a11y_game_lan_play(void);
 
 #ifdef __cplusplus
 }

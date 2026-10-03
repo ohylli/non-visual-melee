@@ -1,21 +1,25 @@
-# Two instances meet in the LAN lobby and go on into character select, for
+# Two instances meet in the LAN lobby, go on into character select, back out
+# of it to the lobby, start again and lose the connection when a closes, for
 # tools/a11y/drive_net.py --lan: no session at boot, each walks the menus by
 # its own presses (VS. Mode, Online, LAN play), the two find each other by
 # mDNS, and Start on a makes a the host (player 1) and pulls b in as player 2.
 #   python tools/a11y/drive_net.py --lan tools/a11y/lan_lobby.drive
 # Instance b may be a base port build (--base-b): its b-base steps wait on
 # the lobby's own log lines where its b-fork steps wait on its speech.
+# The lobby's speech: its opening, the other machine found, the status
+# changes after Start, and the two returns: player 1 backing out, and the
+# connection lost.
 
 # Title screen to the main menu (tools/a11y/main_menu.drive), each instance
-# on its own.
+# on its own. The menu's opening can reach the log before the scene line, so
+# a fork build presses until the opening itself.
 a wait "state 0 scene 0$"
 b wait "state 0 scene 0$"
 a press Start until "boot scene: game mode"
-a press A until "boot scene: state 0 scene 1$"
+a press A until '"Main Menu\. 1-P Mode\. '
 b press Start until "boot scene: game mode"
-b press A until "boot scene: state 0 scene 1$"
-a wait '"Main Menu\. 1-P Mode\. '
-b-fork wait '"Main Menu\. 1-P Mode\. '
+b-fork press A until '"Main Menu\. 1-P Mode\. '
+b-base press A until "boot scene: state 0 scene 1$"
 b-base sleep 2
 sleep 1
 
@@ -32,6 +36,7 @@ a wait '"Online\. LAN play\. '
 sleep 0.3
 a press A
 a wait "lobby: LAN: searching"
+a wait '"LAN play\. (Searching for players|Found [^."]+)\. .*B to go back\."'
 
 b press Down
 b-fork wait '"VS\. Mode\. '
@@ -49,6 +54,7 @@ b-base sleep 1
 sleep 0.3
 b press A
 b wait "lobby: LAN: searching"
+b-fork wait '"LAN play\. (Searching for players|Found [^."]+)\. .*B to go back\."'
 
 # Each finds the other over the machine's network interface, and the lobby
 # invites Start. Its count includes the machine itself.
@@ -56,6 +62,8 @@ a wait "lan: found "
 b wait "lan: found "
 a wait "lobby: 2 players found - press START"
 b wait "lobby: 2 players found - press START"
+a wait 'Found [^."]+\. Press Start to play\.'
+b-fork wait 'Found [^."]+\. Press Start to play\.'
 sleep 1
 
 # Start on a: a is ready, elects itself host and proposes b, which follows
@@ -63,9 +71,35 @@ sleep 1
 a press Start
 a wait "lan: host election: we host as P1"
 b wait "lan: host election: .* hosts, joining as P2"
+a wait '"Starting\."'
+b-fork wait '"Starting\."'
 a wait "lobby: entering CSS"
 b wait "lobby: entering CSS"
 a wait '"Character select\. Player 1, no character\."'
 b-fork wait '"Character select\. Player 2, no character\."'
 b-base wait 'boot scene: state \d+ scene 8$'
 sleep 2
+
+# Holding B on character select backs out: both return to a fresh lobby.
+a press B 1500
+a wait '"Back to LAN play\. (Searching for players|Found [^."]+)\. .*B to go back\."'
+b-fork wait '"Back to LAN play\. (Searching for players|Found [^."]+)\. .*B to go back\."'
+b-base wait "lobby: LAN: searching"
+
+# Start again; a closes on character select, and b returns to its lobby.
+a wait 'Found [^."]+\. Press Start to play\.'
+b-fork wait 'Found [^."]+\. Press Start to play\.'
+b-base wait "lobby: 2 players found - press START"
+sleep 1
+a press Start
+a wait "lobby: entering CSS"
+b wait "lobby: entering CSS"
+a wait '"Character select\. Player 1, no character\."'
+b-fork wait '"Character select\. Player 2, no character\."'
+b-base wait 'boot scene: state \d+ scene 8$'
+sleep 2
+a quit
+b wait "net: peer left"
+b-fork wait '"Connection lost\. LAN play\. Searching for players\. B to go back\."'
+b-base wait "lobby: LAN: searching"
+sleep 1

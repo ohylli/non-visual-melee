@@ -4,6 +4,7 @@
 #include "game_access.h"
 #include "game_text.hpp"
 #include "launcher_speech.hpp"
+#include "lobby_speech.hpp"
 #include "menu_speech.hpp"
 #include "menu_text.hpp"
 #include "pc/net.h"
@@ -22,10 +23,16 @@ std::unique_ptr<a11y::Speech> s_speech;
 std::unique_ptr<a11y::SceneSpeech> s_scene_speech;
 std::unique_ptr<a11y::MenuSpeech> s_menu_speech;
 std::unique_ptr<a11y::CssReader> s_css;
+std::unique_ptr<a11y::LobbySpeech> s_lobby;
 /* The centre text a leaf screen last set, kept across scenes: a screen the
  * menu scene opens on, as Multi-Man Melee after its match, sets it before
  * the scene hook runs. */
 int s_center_text = -1;
+/* The scene entered last, and character select's pending exit on its last
+ * frame, recorded even while rollback re-runs frames: the frame where a
+ * back-out shows may be a re-run. They tell the lobby how it was reached. */
+int s_scene = -1;
+int s_css_exit = A11Y_CSS_STAYING;
 
 /* The gate every hook from game code passes through. While rollback re-runs
  * frames (pc_net_resim), each hook is reached again for a frame that was
@@ -51,6 +58,7 @@ extern "C" void pc_a11y_init(void) {
     game_text.resolve = a11y_game_resolve;
     s_menu_speech = std::make_unique<a11y::MenuSpeech>(*s_speech, game_text);
     s_css = std::make_unique<a11y::CssReader>(*s_speech, config.steer);
+    s_lobby = std::make_unique<a11y::LobbySpeech>(*s_speech);
     a11y::launcher_speech_start(*s_speech);
 }
 
@@ -59,6 +67,7 @@ extern "C" void pc_a11y_shutdown(void) {
         return;
     }
     a11y::launcher_speech_stop();
+    s_lobby.reset();
     s_css.reset();
     s_menu_speech.reset();
     s_scene_speech.reset();
@@ -72,6 +81,10 @@ extern "C" void pc_a11y_launcher_frame(void) {
 
 extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
     (void)mode_kind; /* for mode-specific scene names, later */
+    int previous_scene = s_scene;
+    int css_exit = s_css_exit;
+    s_scene = scene_kind;
+    s_css_exit = A11Y_CSS_STAYING;
     if (!game_hook_may_speak()) {
         return;
     }
@@ -79,6 +92,11 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
      * goes back, is still an arrival. */
     s_menu_speech->forget();
     s_css->forget();
+    if (scene_kind == static_cast<int>(a11y::SceneKind::GS_ONLINE_LOBBY) && a11y_game_lan_play()) {
+        /* LAN play's lobby speaks its own opening on its first frame. */
+        s_lobby->entered(a11y::lobby_arrival(previous_scene, css_exit));
+        return;
+    }
     s_scene_speech->entered(scene_kind);
 }
 
@@ -101,6 +119,7 @@ extern "C" void pc_a11y_menu_center_text(int string_number) {
 extern "C" void pc_a11y_css_frame(const CSSData* css, const CSSDoorsData* doors,
     const CSSIcon* icons, const CSSTag* tags, const CSSDoorsMisc* misc, const CSSDoorsData2* data2,
     HSD_JObj* model_root, int hand_count, int pending_exit, int ready) {
+    s_css_exit = pending_exit;
     if (!game_hook_may_speak()) {
         return;
     }
@@ -128,6 +147,15 @@ extern "C" void pc_a11y_css_coin(int slot, float x, float y) {
     }
     /* Read by the next frame hook: a step finds a coin to pick up by it. */
     s_css->coin(slot, x, y);
+}
+
+extern "C" void pc_a11y_lobby_frame(const OnlineLobbyView* view) {
+    if (!game_hook_may_speak()) {
+        return;
+    }
+    A11yLobbyState state;
+    a11y_game_lobby_state(view, &state);
+    s_lobby->frame(state);
 }
 
 extern "C" bool pc_a11y_pad(PADStatus* pad) {

@@ -31,6 +31,7 @@
 extern const char* pc_get_net_target(void);
 extern void pc_set_net_target(const char* code);
 #include "pc/pc.h"
+#include "pc/a11y/a11y_hooks.h"
 #endif
 
 /* GM_ONLINE: lobby -> CSS -> SSS -> VS -> (sudden death) -> results -> CSS,
@@ -951,6 +952,7 @@ void gm_Scene_OnlineLobby_OnFrame(void)
     n = pc_lan_peers(peers, PC_LAN_MAX_PEERS);
     lobbyFillView(&view, state, why, peers, n);
     mnOnlineLobby_Update(&view);
+    pc_a11y_lobby_frame(&view);
 
     if (state == 2) {
         /* Both peers tick in lockstep once connected, so leaving on the

@@ -75,7 +75,7 @@ python tools/a11y/drive_net.py --delay 10 tools/a11y/css_net.drive
 python tools/a11y/drive_net.py --sim-delay-ms 100 tools/a11y/css_net.drive
 ```
 
-`tools/a11y/lan_lobby.drive` starts both instances with no session: each walks the menus into the LAN lobby on its own presses, they find each other there, and Start on a takes both into character select. It runs with `--lan`, which skips the recording comparison (`docs/a11y/netplay.md` says why):
+`tools/a11y/lan_lobby.drive` starts both instances with no session: each walks the menus into the LAN lobby on its own presses, they find each other there, and Start on a takes both into character select. Holding B there takes both back to the lobby; Start again, then closing a alone (`a quit`), returns b to its lobby with the connection lost. It fails on a missing lobby announcement: the opening, the other machine found, starting, and the two returns. It runs with `--lan`, which skips the recording comparison (`docs/a11y/netplay.md` says why):
 
 ```
 python tools/a11y/drive_net.py --lan --out-dir build/drive/lan tools/a11y/lan_lobby.drive

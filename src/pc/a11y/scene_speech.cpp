@@ -25,6 +25,7 @@ constexpr SceneWords kScenes[] = {
     {SceneKind::GS_TOU_SETUP, "Tournament setup. No speech yet."},
     {SceneKind::GS_TOU_BRACKET, "Tournament bracket. No speech yet."},
     {SceneKind::GS_TOU_ALT, "Tournament bracket. No speech yet."},
+    /* All but LAN play, whose lobby speaks its own opening. */
     {SceneKind::GS_ONLINE_LOBBY, "Online lobby. No speech yet."},
     {SceneKind::GS_PRIZE_INTERFACE, "Unlock notice. No speech yet."},
     {SceneKind::GS_GAMEOVER, "Continue screen. No speech yet."},
