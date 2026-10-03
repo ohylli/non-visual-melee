@@ -11,8 +11,8 @@ Four levels, each including the one before it. Choose the one the change calls f
 
 1. **Quick** (about 1 minute), after any change and while iterating: the build, the style check, the unit tests, a bounded run of the scene the change touches (`title` when none fits), and the drive scripts covering the screen or feature the change touched.
 2. **Menus** (about 4 minutes more), after a change to menu speech or to code every screen shares (`hooks.cpp`, the speech subsystem), and before committing a menu feature: all eight menu drive scripts.
-3. **Online** (about 3 minutes more), after a change to steering, the pad hook, cues, or anything that could reach game state, input or sound handles: the five `css_net.drive` runs.
-4. **Base merge** (about 3 minutes more): the five `css_net.drive` runs again against a base port build, alongside the `base-merge` skill's own checks.
+3. **Online** (about 4 minutes more), after a change to steering, the pad hook, cues, the online lobby, or anything that could reach game state, input or sound handles: the five `css_net.drive` runs and the `lan_lobby.drive` run.
+4. **Base merge** (about 4 minutes more): the five `css_net.drive` runs and the `lan_lobby.drive` run again against a base port build, alongside the `base-merge` skill's own checks.
 
 ## 2. Run it
 
@@ -63,7 +63,7 @@ Flakes: a step that logs "no pad change seen for that press" lost its press to t
 
 ## Online runs
 
-`tools/a11y/drive_net.py` runs two instances of the game in one netplay session over loopback (see "Driving the game" in `CLAUDE.md`), from one script whose steps are addressed to instance a (player 1) or b (player 2); each is a `drive.py` run with its own key pipe, log and recording of controller data. A session starts at boot and walks the ordinary menus in sync, so a's presses move both. After the script it fails on a missing session, a `net: DESYNC` in either log, or recordings that differ over the frames both recorded, and it lists each side's delay and every glide's frames. Primer: `docs/a11y/netplay.md`.
+`tools/a11y/drive_net.py` runs two instances of the game in one netplay session over loopback (see "Driving the game" in `CLAUDE.md`), from one script whose steps are addressed to instance a (player 1) or b (player 2); each is a `drive.py` run with its own key pipe, log and recording of controller data. A session starts at boot, unless `--lan` leaves it to the LAN lobby, and walks the ordinary menus in sync, so a's presses move both. After the script it fails on a missing session, a `net: DESYNC` in either log, or recordings that differ over the frames both recorded, and it lists each side's delay and every glide's frames. Primer: `docs/a11y/netplay.md`.
 
 `tools/a11y/css_net.drive` steps player 1 over the portraits into its player slot while player 2 chooses by stick, each hearing the other's choice, and starts the match. Its five runs, below; each writes to `build/drive/net` unless given its own `--out-dir`, so give each one to keep all five:
 
@@ -74,6 +74,14 @@ python tools/a11y/drive_net.py --delay 6 tools/a11y/css_net.drive
 python tools/a11y/drive_net.py --delay 10 tools/a11y/css_net.drive
 python tools/a11y/drive_net.py --sim-delay-ms 100 tools/a11y/css_net.drive
 ```
+
+`tools/a11y/lan_lobby.drive` starts both instances with no session: each walks the menus into the LAN lobby on its own presses, they find each other there, and Start on a takes both into character select. It runs with `--lan`, which skips the recording comparison (`docs/a11y/netplay.md` says why):
+
+```
+python tools/a11y/drive_net.py --lan --out-dir build/drive/lan tools/a11y/lan_lobby.drive
+```
+
+The LAN run needs a network interface up (Ethernet or Wi-Fi with an address; `lan: no usable network interface` in a log means none) and a Windows Firewall rule letting that build's `melee.exe` take UDP in. A build directory without a rule makes the first run prompt and take focus, so ask the maintainer to allow it first.
 
 At the base merge level, add `--base-b <dir>` to each, instance b then being a base port build of the merged commit from that build directory: build it in a git worktree outside the repo with its own build directory, with the fork's native Windows build fix applied (`docs/a11y/netplay.md`).
 

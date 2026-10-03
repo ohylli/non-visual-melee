@@ -33,7 +33,7 @@ Base merges conflict wherever the fork edits a base port file, so the fork's foo
 
 ## Online compatibility
 
-Fork builds are meant to play online against base port builds of the same release. On Windows over loopback, a fork build plays against another fork build and against a base port build of its last base merge, through character select and into the match with steering, at input delays 0 to 10 frames and over a simulated slow link (`tools/a11y/drive_net.py`, primer `docs/a11y/netplay.md`).
+Fork builds are meant to play online against base port builds of the same release. On Windows over loopback, a fork build plays against another fork build and against a base port build of its last base merge, through character select and into the match with steering, at input delays 0 to 10 frames and over a simulated slow link (`tools/a11y/drive_net.py`, primer `docs/a11y/netplay.md`). On one machine, a fork build also meets either kind in the LAN lobby and goes on into character select with it (`tools/a11y/lan_lobby.drive`).
 
 - Two copies pair when their protocol version, app version string and disc image id match. The fork keeps the base port's version string (`MELEE_APP_VERSION`, `src/pc/version.cpp`), including in fork releases.
 - Rollback (online netcode that re-runs recent frames when a late input arrives) needs both machines to simulate identical frames, so fork code reads game state and leaves the simulation untouched.

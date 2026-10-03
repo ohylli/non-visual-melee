@@ -36,6 +36,15 @@ to a.rec and b.rec. After the script, the run fails unless both logs show a
 session (net: rollback with), neither logs net: DESYNC, and the two
 recordings hold the same data for the frames both recorded in the session.
 The summary lists the delay each side used and every glide's frames.
+
+With --lan, the two start with no session: each walks the menus on its own
+presses into the LAN lobby, where they find each other by mDNS over the
+machine's network interface, and Start on one makes it the host (player 1)
+and pulls the other in as player 2. Each instance's recording would start at
+boot and run on into the session without a new header, so the two share no
+frame numbers: --lan records nothing and leaves desyncs to net: DESYNC.
+Windows Firewall must let melee.exe take UDP in, or the first run prompts
+and steals focus.
 """
 import argparse
 import os
@@ -98,6 +107,12 @@ def session_end(games):
     return min(ends, default=sys.maxsize)
 
 
+# Lines the summary repeats: the session's start, its delays and the LAN
+# lobby's discovery and host election.
+SUMMARY = ("net: rollback with", "net: delay ", "peer silent", "lan: found", "lan: lost",
+           "lan: host election", "lan: failed", "lobby: entering CSS")
+
+
 def check_logs(games):
     problems = []
     for name, game in games.items():
@@ -106,7 +121,7 @@ def check_logs(games):
             problems.append(f"{name} never started a session")
         problems += [f"{name}: {line}" for line in lines if "net: DESYNC" in line]
         for line in lines:
-            if "net: rollback with" in line or "net: delay " in line or "peer silent" in line:
+            if any(s in line for s in SUMMARY):
                 print(f">> {name} {line}", flush=True)
         for line in lines:
             if "glide to " in line:
@@ -115,7 +130,9 @@ def check_logs(games):
 
 
 def run(args, steps):
-    common = {"MELEE_NET_KEY": args.key, "MELEE_SEED": args.seed, "MELEE_NET_DELAY": args.delay}
+    common = {"MELEE_SEED": args.seed, "MELEE_NET_DELAY": args.delay}
+    if not args.lan:
+        common["MELEE_NET_KEY"] = args.key
     if args.sim_delay_ms:
         common["MELEE_NET_SIM_DELAY_MS"] = str(args.sim_delay_ms)
     out = {name: os.path.join(args.out_dir, name) for name in NAMES}
@@ -130,12 +147,11 @@ def run(args, steps):
     failed = False
     try:
         for player, name in enumerate(NAMES):
-            env = dict(common, **{
-                "MELEE_NET": f"127.0.0.1:{args.port + 1 - player}",
-                "MELEE_NET_PORT": str(args.port + player),
-                "MELEE_NET_PLAYER": str(player),
-                "MELEE_NET_RECORD": out[name] + ".rec",
-            })
+            env = dict(common, MELEE_NET_PORT=str(args.port + player))
+            if not args.lan:
+                env["MELEE_NET"] = f"127.0.0.1:{args.port + 1 - player}"
+                env["MELEE_NET_PLAYER"] = str(player)
+                env["MELEE_NET_RECORD"] = out[name] + ".rec"
             exe = os.path.join(args.base_b, "melee.exe") if name == "b" and args.base_b else None
             games[name] = Game(args, out[name] + ".log", env, name, exe)
         for words in steps:
@@ -158,7 +174,8 @@ def run(args, steps):
     problems = [f"{name} exited with code {code}" for name, code in codes.items() if code != 0]
     try:
         problems += check_logs(games)
-        problems += compare_recordings(out["a"] + ".rec", out["b"] + ".rec", session_end(games))
+        if not args.lan:
+            problems += compare_recordings(out["a"] + ".rec", out["b"] + ".rec", session_end(games))
     except (OSError, ScriptError) as e:
         problems.append(str(e))
     for problem in problems:
@@ -178,6 +195,8 @@ def main():
                     help="MELEE_NET_SIM_DELAY_MS on both sides: each holds every packet it sends that long")
     ap.add_argument("--port", type=int, default=42050, help="a's UDP port; b's is the next (default 42050)")
     ap.add_argument("--key", default="a11ytest", help="MELEE_NET_KEY, shared by both")
+    ap.add_argument("--lan", action="store_true",
+                    help="no session at boot: the two meet in the LAN lobby")
     ap.add_argument("--seed", default="7", help="MELEE_SEED, shared by both")
     ap.add_argument("--base-b", metavar="BUILD_DIR",
                     help="run instance b from a base port build directory, such as a worktree's build")
