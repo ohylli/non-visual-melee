@@ -168,6 +168,16 @@ _Avoid_: Jump, hop, move
 The hand's movement to a target under steering.
 _Avoid_: Travel, animation, path
 
+### Online play
+
+**Lobby**:
+The native screen where players find each other before an online session starts, and where both return when it ends. LAN play, direct connect and internet play each have their own layout of it.
+_Avoid_: Online menu, matchmaking, waiting room
+
+**Quick chat**:
+The base port's set of fixed phrases a player sends to the other player online with two D-pad presses.
+_Avoid_: Chat messages, emotes
+
 ### Wording
 
 Write "accessibility" in prose. `a11y` appears only in identifiers and paths.
