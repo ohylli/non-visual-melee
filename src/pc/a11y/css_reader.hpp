@@ -33,6 +33,9 @@ public:
     /* The pad hook: the stick steering asks for, handed over once; false
      * when it asks for none, so the stick returns to rest by itself. */
     bool take_stick(Stick* out);
+    /* Whether the D-pad steers the hand, rather than doing what the game
+     * or the base port would make of it. */
+    bool steers() const { return m_steer; }
 
 private:
     bool may_steer(const A11yCssState& state) const;

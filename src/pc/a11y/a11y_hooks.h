@@ -5,6 +5,7 @@
  * call site. */
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -94,6 +95,13 @@ void pc_a11y_lobby_frame(const struct OnlineLobbyView* view);
  * published once and then dropped, so the stick returns to rest by itself. */
 struct PADStatus;
 bool pc_a11y_pad(struct PADStatus* pad);
+
+/* Controller 1's physical buttons are about to reach online quick chat
+ * (pc_net_chat_poll in src/pc/vi.c, once per video frame). Returns the
+ * buttons chat may see: on character select, while the D-pad steers, the
+ * D-pad is left out, so steering sends no phrases. Chat is presentation
+ * only; the game and the netplay code read the pads elsewhere. */
+uint16_t pc_a11y_chat_buttons(uint16_t buttons);
 
 #ifdef __cplusplus
 }

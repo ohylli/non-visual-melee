@@ -173,3 +173,16 @@ extern "C" bool pc_a11y_pad(PADStatus* pad) {
     }
     return true;
 }
+
+extern "C" uint16_t pc_a11y_chat_buttons(uint16_t buttons) {
+    /* Not gated on rollback: chat runs once per video frame, outside the
+     * simulation, and what it is handed changes nothing the peer sees but
+     * phrases. */
+    if (s_css == nullptr || !s_css->steers() ||
+        s_scene != static_cast<int>(a11y::SceneKind::GS_CSS))
+    {
+        return buttons;
+    }
+    constexpr uint16_t dpad = PAD_BUTTON_LEFT | PAD_BUTTON_RIGHT | PAD_BUTTON_DOWN | PAD_BUTTON_UP;
+    return static_cast<uint16_t>(buttons & ~dpad);
+}

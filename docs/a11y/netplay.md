@@ -48,6 +48,10 @@ The lobby (scene `GS_ONLINE_LOBBY`, the first state of the online game mode, flo
 - The phase does not tell every status apart: waiting for the host and connecting share one, and so do searching and a network that hides players. The fork tells them by the start of the status line, the base port's literal strings.
 - Every way out of a session lands in a fresh, searching lobby, and by then the reason is gone: the lobby's entry disconnects, and a disconnect marks every ended session as "peer left", a clean back-out included. So the fork tells "Back to LAN play." from "Connection lost." by the scene the session left. Character select returns to the lobby when someone held B (its pending exit says so on its last frame) or when the other machine was lost; stage select, the match and results return only when it was lost. The pending exit is recorded even on frames rollback re-runs, since the frame that shows a back-out by the other player may be one.
 
+## Quick chat and steering share the D-pad
+
+Quick chat (`src/pc/net_chat.c`) lets a player in a session send one of sixteen phrases with two D-pad presses, on character select, results and the lobby. It reads controller 1's physical buttons once a video frame, outside the simulation, so what it sees never reaches the game or the peer's inputs, only the phrases it sends. On character select steering uses the same D-pad, so while steering is on the fork's chat hook (`pc_a11y_chat_buttons`, called from `src/pc/vi.c`) hands chat the buttons without the D-pad there. Results and the lobby keep chat, and so does a player with steering off. The base port logs nothing when a phrase is sent; the chat line at the bottom of the screen ("You: Hello", "Opponent: Hello") is the only sign, so a check takes screenshots.
+
 ## Stage select needs both players
 
 Online, each player picks a stage on their own, the picks are exchanged, and a coin flip on the session's seed chooses between them (`netStageSel_*` in `mnstagesel.c`). Start on one side alone leaves the match waiting, so a script presses Start on both.
