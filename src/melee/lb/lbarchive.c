@@ -40,7 +40,7 @@ static inline void vLoadSections(HSD_Archive* archive, void** symbol,
 {
     const char* symbol_name;
 
-    for (; symbol != NULL; symbol = va_arg(symbols, void**)) {
+    for (; symbol != NULL && (uint32_t)(uintptr_t)symbol != 0; symbol = va_arg(symbols, void**)) {
         symbol_name = va_arg(symbols, const char*);
         *symbol = NULL;
         *symbol = HSD_ArchiveGetPublicAddress(archive, symbol_name);
