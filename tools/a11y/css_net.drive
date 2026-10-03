@@ -83,8 +83,8 @@ sleep 1
 # a coin flip on the session's seed chooses between the two picks; Start is
 # a random stage.
 a press Start
-a wait '"Stage select\. '
-b-fork wait '"Stage select\. '
+a wait '"Stage select\. .*then wait for your opponent\."'
+b-fork wait '"Stage select\. .*then wait for your opponent\."'
 b-base wait 'boot scene: state \d+ scene 9$'
 sleep 1
 a press Start

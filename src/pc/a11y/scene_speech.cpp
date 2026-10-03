@@ -18,7 +18,16 @@ constexpr SceneWords kScenes[] = {
     /* Scenes to operate. */
     /* Start with no stage hovered, as on arrival, picks one at random. */
     {SceneKind::GS_SSS, "Stage select. No speech yet. Press Start for a random stage."},
-    {SceneKind::GS_RESULTS, "Results. No speech yet."},
+    /* The game takes no press until its announcer has named the winner (or
+     * "No contest"). Then any button from any player silently shows every
+     * player's stats, and once they have slid in, Start marks that player
+     * ready with the confirm sound (sfxForward), a second Start taking it
+     * back with the back sound; the scene ends once every human player is
+     * ready (fn_80177920, fn_80178050). A player whose opponent opened the
+     * stats is made ready by their first Start, so the words count sounds,
+     * not presses. */
+    {SceneKind::GS_RESULTS, "Results. No speech yet. Once the announcer finishes, press Start "
+                            "until you hear the confirm sound."},
     {SceneKind::GS_TOY_GALLERY, "Trophy gallery. No speech yet."},
     {SceneKind::GS_TOY_LOTTERY, "Trophy lottery. No speech yet."},
     {SceneKind::GS_TOY_COLLECTION, "Trophy collection. No speech yet."},
@@ -76,6 +85,17 @@ constexpr SceneWords kScenes[] = {
     {SceneKind::GS_INTRO_ALLSTAR, ""},
 };
 
+/* What a netplay session says instead, where the other player has to act
+ * too: each picks a stage, and each must be ready on results. */
+constexpr SceneWords kOnlineScenes[] = {
+    {SceneKind::GS_SSS,
+        "Stage select. No speech yet. Press Start for a random stage, then wait for your "
+        "opponent."},
+    {SceneKind::GS_RESULTS,
+        "Results. No speech yet. Once the announcer finishes, press Start until you hear the "
+        "confirm sound, then wait for your opponent."},
+};
+
 constexpr SceneKind kAllKinds[] = {
 #define A11Y_SCENE_KIND_ITEM(name, number) SceneKind::name,
     A11Y_SCENE_KINDS(A11Y_SCENE_KIND_ITEM)
@@ -98,7 +118,14 @@ static_assert(table_has_every_kind_once(), "kScenes needs every scene kind, each
 
 }  // namespace
 
-std::optional<std::string_view> scene_announcement(int scene_kind) {
+std::optional<std::string_view> scene_announcement(int scene_kind, bool online) {
+    if (online) {
+        for (const SceneWords& scene : kOnlineScenes) {
+            if (static_cast<int>(scene.kind) == scene_kind) {
+                return scene.words;
+            }
+        }
+    }
     for (const SceneWords& scene : kScenes) {
         if (static_cast<int>(scene.kind) == scene_kind) {
             return scene.words;
@@ -107,8 +134,8 @@ std::optional<std::string_view> scene_announcement(int scene_kind) {
     return std::nullopt;
 }
 
-void SceneSpeech::entered(int scene_kind) {
-    std::optional<std::string_view> words = scene_announcement(scene_kind);
+void SceneSpeech::entered(int scene_kind, bool online) {
+    std::optional<std::string_view> words = scene_announcement(scene_kind, online);
     if (!words) {
         if (m_unknown_logged.insert(scene_kind).second && log_enabled()) {
             pc_log_line("[a11y] scene %d: not in the scene table, silent", scene_kind);

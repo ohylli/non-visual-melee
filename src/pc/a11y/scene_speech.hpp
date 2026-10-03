@@ -21,9 +21,10 @@ enum class SceneKind : int {
 #undef A11Y_SCENE_KIND_ENUMERATOR
 };
 
-/* What is said on entering a scene of this kind: empty for a silent scene,
- * nothing for a kind missing from the table. */
-std::optional<std::string_view> scene_announcement(int scene_kind);
+/* What is said on entering a scene of this kind, in a netplay session when
+ * online: empty for a silent scene, nothing for a kind missing from the
+ * table. */
+std::optional<std::string_view> scene_announcement(int scene_kind, bool online);
 
 class SceneSpeech {
 public:
@@ -33,8 +34,8 @@ public:
     /* A scene has loaded and its first frame is next. Every arrival is
      * announced, even in the scene just left: character select after results
      * is a new arrival. A kind missing from the table stays silent and is
-     * logged, once per kind. */
-    void entered(int scene_kind);
+     * logged, once per kind. online: a netplay session is running. */
+    void entered(int scene_kind, bool online);
 
 private:
     Speech& m_speech;

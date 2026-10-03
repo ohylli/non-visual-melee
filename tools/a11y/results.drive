@@ -1,0 +1,25 @@
+# Results after a VS match, offline: the debug match (Link, player 1, against
+# a CPU Mario, one stock each on Battlefield) ends with Link walking off the
+# stage. Results says how to leave, and two Starts once the announcer has
+# named the winner do: the first shows each player's stats, the second makes
+# player 1 ready with the confirm sound, and with no other human the debug
+# match starts again.
+# Run from Git Bash with the debug match switches:
+#   MELEE_DEBUG_VS=cpu MELEE_DEBUG_VS_STOCKS=1 MELEE_DEBUG_VS_STAGE=31 \
+#     python tools/a11y/drive.py tools/a11y/results.drive
+
+# Start on the title screen goes straight into the debug match.
+wait "state 0 scene 0$"
+press Start until "boot scene: state \d+ scene 2$"
+sleep 2
+
+# Left off the stage's edge, and on falling to the end of the match.
+press Left 6000
+wait '"Results\. No speech yet\. Once the announcer finishes, press Start until you hear the confirm sound\."$' 60
+
+# The game takes no press until the announcer has named the winner.
+sleep 5
+press Start
+sleep 1
+press Start
+wait 'boot scene: state \d+ scene 2$'

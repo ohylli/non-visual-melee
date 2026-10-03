@@ -60,33 +60,56 @@ std::size_t count_logged(const std::string& line) {
     return static_cast<std::size_t>(std::count(s_lines.begin(), s_lines.end(), line));
 }
 
+constexpr const char* kResults = "Results. No speech yet. Once the announcer finishes, press Start "
+                                 "until you hear the confirm sound.";
+
 void named_scene_interrupts() {
     Fixture f;
-    f.scenes.entered(kind(a11y::SceneKind::GS_RESULTS));
-    assert((f.outputs == std::vector<Output>{{"Results. No speech yet.", true}}));
-    assert(count_logged("[a11y] speak interrupt: \"Results. No speech yet.\"") == 1);
+    f.scenes.entered(kind(a11y::SceneKind::GS_RESULTS), false);
+    assert((f.outputs == std::vector<Output>{{kResults, true}}));
+    assert(count_logged(std::string("[a11y] speak interrupt: \"") + kResults + "\"") == 1);
+}
+
+void online_scene_says_to_wait_for_the_opponent() {
+    Fixture f;
+    f.scenes.entered(kind(a11y::SceneKind::GS_SSS), true);
+    f.scenes.entered(kind(a11y::SceneKind::GS_RESULTS), true);
+    assert(f.outputs.size() == 2);
+    assert(f.outputs[0].text ==
+           "Stage select. No speech yet. Press Start for a random stage, then wait for your "
+           "opponent.");
+    assert(f.outputs[1].text ==
+           "Results. No speech yet. Once the announcer finishes, press Start until you hear the "
+           "confirm sound, then wait for your opponent.");
+}
+
+void online_scene_without_its_own_words_says_the_offline_ones() {
+    Fixture f;
+    f.scenes.entered(kind(a11y::SceneKind::GS_TITLE), true);
+    f.scenes.entered(kind(a11y::SceneKind::GS_VS), true);
+    assert((f.outputs == std::vector<Output>{{"Title screen. Press Start.", true}}));
 }
 
 void title_screen_names_its_way_out() {
     Fixture f;
-    f.scenes.entered(kind(a11y::SceneKind::GS_TITLE));
+    f.scenes.entered(kind(a11y::SceneKind::GS_TITLE), false);
     assert((f.outputs == std::vector<Output>{{"Title screen. Press Start.", true}}));
 }
 
 void silent_scene_says_and_logs_nothing() {
     Fixture f;
-    f.scenes.entered(kind(a11y::SceneKind::GS_MENU));
-    f.scenes.entered(kind(a11y::SceneKind::GS_CSS));
-    f.scenes.entered(kind(a11y::SceneKind::GS_VS));
+    f.scenes.entered(kind(a11y::SceneKind::GS_MENU), false);
+    f.scenes.entered(kind(a11y::SceneKind::GS_CSS), false);
+    f.scenes.entered(kind(a11y::SceneKind::GS_VS), false);
     assert(f.outputs.empty());
     assert(s_lines.empty());
 }
 
 void unknown_kind_is_silent_and_logged_once() {
     Fixture f;
-    f.scenes.entered(200);
-    f.scenes.entered(200);
-    f.scenes.entered(201);
+    f.scenes.entered(200, false);
+    f.scenes.entered(200, false);
+    f.scenes.entered(201, true);
     assert(f.outputs.empty());
     assert(count_logged("[a11y] scene 200: not in the scene table, silent") == 1);
     assert(count_logged("[a11y] scene 201: not in the scene table, silent") == 1);
@@ -95,18 +118,21 @@ void unknown_kind_is_silent_and_logged_once() {
 
 void same_kind_twice_is_announced_twice() {
     Fixture f;
-    f.scenes.entered(kind(a11y::SceneKind::GS_RESULTS));
-    f.scenes.entered(kind(a11y::SceneKind::GS_RESULTS));
+    f.scenes.entered(kind(a11y::SceneKind::GS_RESULTS), false);
+    f.scenes.entered(kind(a11y::SceneKind::GS_RESULTS), false);
     assert(f.outputs.size() == 2);
     assert(f.outputs[0] == f.outputs[1]);
 }
 
 void lookup_tells_silent_from_unknown() {
-    assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_SSS)) ==
+    assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_SSS), false) ==
            "Stage select. No speech yet. Press Start for a random stage.");
-    assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_TRAINING)) == "");
-    assert(!a11y::scene_announcement(-1).has_value());
-    assert(!a11y::scene_announcement(kind(a11y::SceneKind::GS_ONLINE_LOBBY) + 1).has_value());
+    assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_TRAINING), false) == "");
+    assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_VS), true) == "");
+    assert(!a11y::scene_announcement(-1, false).has_value());
+    assert(!a11y::scene_announcement(-1, true).has_value());
+    assert(
+        !a11y::scene_announcement(kind(a11y::SceneKind::GS_ONLINE_LOBBY) + 1, false).has_value());
 }
 
 }  // namespace
@@ -122,6 +148,8 @@ extern "C" void pc_log_line(const char* fmt, ...) {
 
 int main() {
     named_scene_interrupts();
+    online_scene_says_to_wait_for_the_opponent();
+    online_scene_without_its_own_words_says_the_offline_ones();
     title_screen_names_its_way_out();
     silent_scene_says_and_logs_nothing();
     unknown_kind_is_silent_and_logged_once();

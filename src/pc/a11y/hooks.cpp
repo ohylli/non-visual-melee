@@ -97,7 +97,7 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
         s_lobby->entered(a11y::lobby_arrival(previous_scene, css_exit));
         return;
     }
-    s_scene_speech->entered(scene_kind);
+    s_scene_speech->entered(scene_kind, pc_net_active());
 }
 
 extern "C" void pc_a11y_menu_frame(void) {

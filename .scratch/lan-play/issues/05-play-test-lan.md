@@ -12,7 +12,7 @@ Check by ear:
 - Both sides: the one that pressed Start and the one pulled in hear waiting, connecting and starting.
 - Character select steering online without stray quick chat on the friend's screen.
 - Stage select's online sentence, random stage, the match.
-- Leaving results, the rematch through character select.
+- Leaving results: "press Start until you hear the confirm sound, then wait for your opponent" after the announcer, whether "the confirm sound" is clear, and the rematch through character select.
 - Backing out of character select: "Back to LAN play."
 - A lost connection (close one copy mid-match or on character select): "Connection lost."
 - Whether hostnames are spoken understandably.

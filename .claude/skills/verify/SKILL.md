@@ -10,7 +10,7 @@ The agent cannot hear the game, so verification reads the game's log: every anno
 Four levels, each including the one before it. Choose the one the change calls for by your own judgement, unless the maintainer names one; when torn between two, take the higher. Times are from one sequential run on the maintainer's machine. Nearly all of it is the game running scripts in real time, and a failed wait adds its timeout.
 
 1. **Quick** (about 1 minute), after any change and while iterating: the build, the style check, the unit tests, a bounded run of the scene the change touches (`title` when none fits), and the drive scripts covering the screen or feature the change touched.
-2. **Menus** (about 4 minutes more), after a change to menu speech or to code every screen shares (`hooks.cpp`, the speech subsystem), and before committing a menu feature: all eight menu drive scripts.
+2. **Menus** (about 4 minutes more), after a change to menu speech or to code every screen shares (`hooks.cpp`, the speech subsystem), and before committing a menu feature: all nine menu drive scripts.
 3. **Online** (about 4 minutes more), after a change to steering, the pad hook, cues, the online lobby, or anything that could reach game state, input or sound handles: the five `css_net.drive` runs and the `lan_lobby.drive` run.
 4. **Base merge** (about 4 minutes more): the five `css_net.drive` runs and the `lan_lobby.drive` run again against a base port build, alongside the `base-merge` skill's own checks.
 
@@ -48,7 +48,7 @@ A bounded run boots straight into a scene and exits after a fixed frame count:
 
 ## Menu drive scripts
 
-`tools/a11y/drive.py` is described under "Driving the game" in `CLAUDE.md`. Run a script as `python tools/a11y/drive.py tools/a11y/<name>.drive`; its transcript goes to `build/drive/last.log` unless `--out` names another. The eight menu drive scripts each fail on a missing announcement:
+`tools/a11y/drive.py` is described under "Driving the game" in `CLAUDE.md`. Run a script as `python tools/a11y/drive.py tools/a11y/<name>.drive`; its transcript goes to `build/drive/last.log` unless `--out` names another. The nine menu drive scripts each fail on a missing announcement:
 
 - `tree_walk.drive`: every tree screen of the main menu tree, a leaf screen and a return from character select.
 - `leaf_screens.drive`: the leaf screens with a reader.
@@ -58,6 +58,7 @@ A bounded run boots straight into a scene and exits after a fixed frame count:
 - `css_setup.drive`: a whole VS setup by D-pad and buttons, from choosing a character to the match beginning.
 - `css_classic.drive`: Classic's character select by D-pad: a character, the level arrows both ways and at the lowest level, the stock arrow, and Start into the stage intro.
 - `css_training.drive`: Training's character select by D-pad: a character for the player, the CPU's coin found and carried to another portrait, and the match beginning.
+- `results.drive`: results after a one-stock debug match the player walks out of, its announcement, and two Starts after the announcer leaving it. It needs the debug match switches: `MELEE_DEBUG_VS=cpu MELEE_DEBUG_VS_STOCKS=1 MELEE_DEBUG_VS_STAGE=31 python tools/a11y/drive.py tools/a11y/results.drive`.
 
 Flakes: a step that logs "no pad change seen for that press" lost its press to the input driver; rerun before suspecting speech. A press can also land a frame off with no such line (a cursor back where it was); a script that fails once and passes on an unchanged rerun lost a press too.
 
