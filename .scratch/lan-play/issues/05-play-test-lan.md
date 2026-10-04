@@ -1,6 +1,6 @@
 # 05 Play test: LAN play on two machines
 
-Status: ready-for-human
+Status: resolved (2026-10-04)
 Type: task
 Blocked by: 02, 03, 04
 
@@ -18,3 +18,9 @@ Check by ear:
 - Whether hostnames are spoken understandably.
 
 Record findings under "Comments" and as new issues.
+
+## Comments
+
+### 2026-10-04: play-tested with a friend
+
+The maintainer played LAN with a friend and noticed no issues. A machine arriving in the lobby, "Connection lost." and the rest were announced properly.
