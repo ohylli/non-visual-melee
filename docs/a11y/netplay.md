@@ -29,15 +29,15 @@ A copy started with `MELEE_NET` (the peer's address and port), `MELEE_NET_PORT`,
 
 The LAN lobby (VS. Mode, Online, LAN play) finds other copies by mDNS, multicast DNS on UDP 5353 (`src/pc/net_lan.c`), and two copies on one Windows machine find each other there: multicast sent from one comes back to every listener on the machine. `drive_net.py --lan` runs them this way, and `tools/a11y/lan_lobby.drive` takes both from the title screen through the lobby into character select, backs out to the lobby, starts again and closes one copy, so the other loses its connection. A step `a quit` or `b quit` closes that copy alone.
 
-- Discovery goes out over a real network interface, never loopback, so the machine needs one up with an address (the log names it in a `lan: interface` line). With none, the lobby logs `lan: no usable network interface` and finds nobody.
+- Discovery goes out over a real network interface, never loopback, so the machine needs one up with an address; the log names the one it uses. With none, the log says so and the lobby finds nobody.
 - No `MELEE_NET`: each copy starts offline and walks the menus by its own presses until the session begins.
 - Each copy needs its own `MELEE_NET_PORT`. The lobby's machine id mixes the port into the install id, so two copies of one install are told apart; both are listed by the computer's hostname.
 - The lobby's count includes the machine itself: two copies show "2 players found - press START".
 - Start on one copy makes it the host (player 1); the other, idle in its lobby, follows as player 2. The two then go into character select together as in a direct session.
-- A copy that closes sends a goodbye: the other logs `net: peer left` and returns to a fresh, searching lobby.
+- A copy that closes sends a goodbye: the other logs that its peer left and returns to a fresh, searching lobby.
 - A fork build and a base port build pair in the lobby as they do in a direct session.
-- Windows Firewall blocks incoming traffic on a Public network unless a rule allows the program, and asks the first time a program listens, which takes focus. Rules are per program path, so each build directory's `melee.exe` needs its own; this machine has rules for the fork's and the base port worktree's, allowing UDP and TCP in. A new build directory means a new prompt, best answered by the maintainer before an agent runs it.
-- `MELEE_NET_RECORD` starts writing at boot and runs on into the session without a new header, so two copies' recordings share no frame numbers and are not compared. Desyncs still show as `net: DESYNC`.
+- Windows Firewall blocks incoming traffic on a Public network unless a rule allows the program, and asks the first time a program listens, which takes focus. Rules are per program path, so each build directory's `melee.exe` needs its own, allowing UDP and TCP in. A new build directory means a new prompt, best answered by the maintainer before an agent runs it.
+- `MELEE_NET_RECORD` starts writing at boot and runs on into the session without a new header, so two copies' recordings share no frame numbers and are not compared. Desyncs are still logged.
 
 ## How the LAN lobby is read
 

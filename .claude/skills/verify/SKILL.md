@@ -88,4 +88,6 @@ At the base merge level, add `--base-b <dir>` to each, instance b then being a b
 
 ## Out of reach
 
-The port menu and the launcher are out of the driver's reach; they depend on the maintainer play-testing, after which the agent reads the `[a11y]` lines against what they report. A debug control server (state queries, pause, input injection over localhost) is a possible future direction, not a commitment.
+The port menu and the launcher are out of the driver's reach; they depend on the maintainer play-testing, after which the agent reads the `[a11y]` lines against what they report.
+
+Quick chat logs nothing, so no script checks that steering sends no phrases on online character select (`pc_a11y_chat_buttons`). After a change there, run `css_net.drive`'s D-pad steps with a screenshot of both windows after a second D-pad press: neither may show a chat line ("You: Hello", "Opponent: Hello"). A debug control server (state queries, pause, input injection over localhost) is a possible future direction, not a commitment.

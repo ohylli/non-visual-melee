@@ -87,11 +87,10 @@ b-fork wait '"Back to LAN play\. (Searching for players|Found [^."]+)\. .*B to g
 b-base wait "lobby: LAN: searching"
 
 # Start again; a closes on character select, and b returns to its lobby.
-a wait 'Found [^."]+\. Press Start to play\.'
-b-fork wait 'Found [^."]+\. Press Start to play\.'
-b-base wait "lobby: 2 players found - press START"
-sleep 1
-a press Start
+# The fresh lobbies may list each other by their first frame, so the
+# opening says the machine found and no later line does: Start is pressed
+# until a lobby that lists the other takes it.
+a press Start until "lan: host election: we host as P1"
 a wait "lobby: entering CSS"
 b wait "lobby: entering CSS"
 a wait '"Character select\. Player 1, no character\."'

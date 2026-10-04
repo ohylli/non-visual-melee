@@ -429,11 +429,11 @@ void a11y_game_lobby_state(const OnlineLobbyView* view, A11yLobbyState* out) {
     for (int i = 1; i < view->player_count && i < ONLINE_LOBBY_MAX_PLAYERS; i++) {
         A11yLobbyRow* row = &out->rows[out->row_count++];
         memcpy(row->name, view->players[i].name, sizeof(row->name));
-        row->name[sizeof(row->name) - 1] = ' ';
+        row->name[sizeof(row->name) - 1] = '\0';
         row->other_version = view->players[i].incompatible;
     }
     memcpy(out->message, view->message, sizeof(out->message));
-    out->message[sizeof(out->message) - 1] = ' ';
+    out->message[sizeof(out->message) - 1] = '\0';
 }
 
 bool a11y_game_lan_play(void) {
