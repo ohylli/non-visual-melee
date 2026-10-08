@@ -43,8 +43,12 @@ One complete unit of speech sent to the screen reader: everything the player nee
 _Avoid_: Message, utterance, speech line, TTS string
 
 **Cue**:
-A non-speech sound the fork plays to convey game state during play, as distinct from the game's own sound effects.
+A non-speech sound the fork plays to convey game state during play, as distinct from the sound effects the game plays by itself. A cue is usually the fork's own sound, but can be one of the game's sounds that the fork chooses to play.
 _Avoid_: Beep, sound effect, SFX, earcon
+
+**Cue engine**:
+The fork's own sound player for cues, with its own output beside the game's audio. Cues that are game sounds go through the game's audio instead.
+_Avoid_: Mixer, audio backend, sound system
 
 **Speech log**:
 The developer-facing record of every announcement and cue, written as it happens.

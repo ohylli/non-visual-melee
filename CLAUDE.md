@@ -29,7 +29,7 @@ Base merges conflict wherever the fork edits a base port file, so the fork's foo
 - Compose each announcement as one text (setting name and value together).
 - Accessibility is always compiled in and switched at runtime, default on. Hooks stay free of `#ifdef`.
 - Fork settings live in fork-owned storage, read and written by fork code. They are meant to appear in the port menu eventually; revisit storage when that feature is specced.
-- Cues use the game's own audio path where possible (`lbAudioAx_800237A8(sfx_id, volume, pan)` plays any game sound with pan; the software mixer is `src/pc/audio.c`).
+- Cues play through the cue engine: the fork's own SDL audio stream beside the game's, filled by miniaudio, with the fork's own constant-power pan and start and stop ramps (ADR-0005). A cue that should be a game sound may use the game's path instead (`lbAudioAx_800237A8(sfx_id, volume, pan)` plays any game sound the current screen has loaded, with pan; the software mixer is `src/pc/audio.c`).
 
 ## Online compatibility
 
@@ -39,7 +39,7 @@ Fork builds are meant to play online against base port builds of the same releas
 - Rollback (online netcode that re-runs recent frames when a late input arrives) needs both machines to simulate identical frames, so fork code reads game state and leaves the simulation untouched.
 - The one place the fork writes is the pad hook, `pc_a11y_pad` in `publish_locked` (`src/pc/keyboard.c`): steering adds its stick to port 1's virtual pad there, before the game and the netplay code sample it, so the peer receives it as a player's input (ADR-0004). Nothing else the fork does may change game state or input.
 - Speech is gated in fork code: check `pc_net_resim()` in `hooks.cpp` and stay silent while it is true, so a re-run frame never repeats an announcement.
-- Cues are gated like speech and started as audio-private sounds. In a netplay session every sound start returns a handle built from the frame and its place in the frame's call order (`src/pc/net_sfx.h`), and the game keeps those handles as state, so a cue counted in that order would give every later game sound a different handle than on a base port peer. Wrap each cue in `net_sfx_private(true)` / `net_sfx_private(false)`, which leaves it out of the count. A private start plays on every re-run, so a cue also stays silent while `pc_net_resim()` is true.
+- Cues are gated like speech: silent while `pc_net_resim()` is true. A cue on the cue engine never reaches the game's sounds. A cue through the game's path is started as an audio-private sound: in a netplay session every sound start returns a handle built from the frame and its place in the frame's call order (`src/pc/net_sfx.h`), and the game keeps those handles as state, so a cue counted in that order would give every later game sound a different handle than on a base port peer. Wrap each such cue in `net_sfx_private(true)` / `net_sfx_private(false)`, which leaves it out of the count; a private start plays on every re-run, which the gate silences.
 
 ## Build and run (Windows)
 
