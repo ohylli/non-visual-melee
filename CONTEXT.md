@@ -142,6 +142,18 @@ _Avoid_: Free cursor menu, pointer screen
 Anything on a free-cursor screen that reacts to the cursor: a portrait, a button, a slider.
 _Avoid_: Hotspot, item, element
 
+**Steering**:
+The fork moving the cursor of a free-cursor screen (a hand or the stage cursor) by generating stick input, as opposed to changing the cursor's position in game memory.
+_Avoid_: Auto-move, snapping, warping
+
+**Step**:
+One D-pad press under steering, moving the cursor to the neighbouring target.
+_Avoid_: Jump, hop, move
+
+**Glide**:
+The cursor's movement to a target under steering.
+_Avoid_: Travel, animation, path
+
 ### Character select
 
 **Hand**:
@@ -160,17 +172,23 @@ _Avoid_: Icon (the decomp's word), character slot, cell
 One of the four panels along the bottom of character select, with its HMN/CPU tab and name box.
 _Avoid_: Door (the decomp's word), port, panel
 
-**Steering**:
-The fork moving the hand by generating stick input, as opposed to changing the hand's position in game memory.
-_Avoid_: Auto-move, snapping, warping
+### Stage select
 
-**Step**:
-One D-pad press under steering, moving the hand to the neighbouring target.
-_Avoid_: Jump, hop, move
+**Stage cursor**:
+The round crosshair that moves over stage select. Depending on the mode and rules it answers to every controller, to one player's, or online to each player's own.
+_Avoid_: Hand (that is character select's), reticle, pointer
 
-**Glide**:
-The hand's movement to a target under steering.
-_Avoid_: Travel, animation, path
+**Stage tile**:
+One stage's picture on stage select, which the player picks to fight there.
+_Avoid_: Icon (the decomp's word), cell, portrait
+
+**Random tile**:
+The tile labelled "Random", which picks a stage at random.
+_Avoid_: Random button, random cell
+
+**Locked tile**:
+A stage tile drawn as a "?" because its stage is not yet unlocked. It can be hovered but not picked.
+_Avoid_: Question mark, hidden stage (some locked stages are not drawn at all)
 
 ### Online play
 
