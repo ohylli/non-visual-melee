@@ -5,6 +5,7 @@
 #pragma once
 #include "character_kinds.h"
 #include "css_kinds.h"
+#include "stage_kinds.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -20,6 +21,7 @@ struct CSSIcon;
 struct CSSTag;
 struct HSD_JObj;
 struct OnlineLobbyView;
+struct SSSData;
 
 /* A disc pointer as stored in game data, as a host address; NULL when it is
  * null or lands outside the game's memory. */
@@ -306,6 +308,98 @@ typedef struct A11yPad {
 } A11yPad;
 
 void a11y_game_pad(int port, A11yPad* out);
+
+/* Stage select: 30 stage tiles in mnstagesel.c's table, the last the random
+ * tile; the hovered index is 30 until the stage cursor first enters one. */
+enum { A11Y_SSS_TILES = 30, A11Y_SSS_RANDOM_TILE = 29, A11Y_SSS_NO_TILE = 30 };
+
+/* What the frame hook hands over (pc_a11y_sss_frame), in mnstagesel.c's raw
+ * numbers. */
+typedef struct A11ySssScreen {
+    const struct SSSData* data;
+    /* The table of tiles, whose row type only mnstagesel.c defines, and the
+     * size of a row there, which game_access.c checks against its copy. */
+    const void* tiles;
+    int tile_size;
+    int hovered;
+    int pick;
+    int frozen;
+    int buttons;
+    int owner;
+    int local_pick;
+    int remote_pick;
+} A11ySssScreen;
+
+/* How a tile is drawn, by the table's own numbers. */
+typedef enum A11ySssTileState {
+    /* A locked stage outside the stacked pairs: not drawn, never hovered. */
+    A11Y_SSS_NOT_DRAWN = 0,
+    /* A locked tile, drawn as "?": hovered, but a pick is refused. */
+    A11Y_SSS_LOCKED = 1,
+    A11Y_SSS_UNLOCKED = 2,
+} A11ySssTileState;
+
+/* One stage tile. */
+typedef struct A11ySssTile {
+    /* The stage, or none for the random tile. */
+    A11yStage stage;
+    A11ySssTileState state;
+    /* The centre of its hit box in the screen's units, y growing upwards,
+     * and the box's half extents. The game's test is strict: a point on an
+     * edge is outside. */
+    float x;
+    float y;
+    float half_width;
+    float half_height;
+} A11ySssTile;
+
+/* Where the screen is in picking, by mnStageSel_804D6CAF's numbers. */
+typedef enum A11ySssPick {
+    A11Y_SSS_CHOOSING = 0,
+    /* A stage or Random was picked; the preview shows and the stage cursor
+     * is hidden. Offline, Random is rolled at once and the hovered index is
+     * the stage rolled. */
+    A11Y_SSS_PICKED = 1,
+    /* The preview has shown: the match loads, online once both players'
+     * picks are known. */
+    A11Y_SSS_LEAVING = 2,
+} A11ySssPick;
+
+/* What stage select shows, read once a frame by its reader. */
+typedef struct A11ySssState {
+    /* The stage-select rule Random or Ordered chose the stage beforehand:
+     * the screen was never built and leaves on this frame. Nothing below is
+     * read but skipped_stage. */
+    bool skipped;
+    A11yStage skipped_stage;
+    /* The session is online. Set by the caller, not read from the screen. */
+    bool online;
+    /* The port whose controller moves the stage cursor, or -1 for every
+     * controller (the first stick pushed past the dead zone moves it). The
+     * Turns and Loser rules hand it to one player; online it is the local
+     * player's. */
+    int owner;
+    /* The tile the stage cursor is on, or was on last: crossing empty space
+     * keeps it. A11Y_SSS_NO_TILE until the cursor first enters one. */
+    int hovered;
+    A11ySssPick pick;
+    /* A or Start was pressed on the screen's last frame and reached the
+     * pick, which acts on the tile hovered before that frame's cursor
+     * movement: the hovered index of the previous snapshot. Never set during
+     * the screen's first 20 frames, nor once a pick is made. */
+    bool pressed_a;
+    bool pressed_start;
+    /* Online: the tiles each player sent (A11Y_SSS_RANDOM_TILE or
+     * A11Y_SSS_NO_TILE for Random), or -1 while unknown. */
+    int local_pick;
+    int remote_pick;
+    A11ySssTile tiles[A11Y_SSS_TILES];
+} A11ySssState;
+
+/* Fills the snapshot from what the frame hook passed. False, with the
+ * snapshot left skipped, when the table's rows no longer have the layout
+ * game_access.c knows. */
+bool a11y_game_sss_state(const A11ySssScreen* screen, A11ySssState* out);
 
 /* The online lobby: the view its scene fills each frame (OnlineLobbyView,
  * src/melee/gm/gmonlinemode.h), by the numbers and text the screen shows. */

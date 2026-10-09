@@ -72,13 +72,9 @@ void named_scene_interrupts() {
 
 void online_scene_says_to_wait_for_the_opponent() {
     Fixture f;
-    f.scenes.entered(kind(a11y::SceneKind::GS_SSS), true);
     f.scenes.entered(kind(a11y::SceneKind::GS_RESULTS), true);
-    assert(f.outputs.size() == 2);
+    assert(f.outputs.size() == 1);
     assert(f.outputs[0].text ==
-           "Stage select. No speech yet. Press Start for a random stage, then wait for your "
-           "opponent.");
-    assert(f.outputs[1].text ==
            "Results. No speech yet. Once the announcer finishes, press Start until you hear the "
            "confirm sound, then wait for your opponent.");
 }
@@ -100,6 +96,8 @@ void silent_scene_says_and_logs_nothing() {
     Fixture f;
     f.scenes.entered(kind(a11y::SceneKind::GS_MENU), false);
     f.scenes.entered(kind(a11y::SceneKind::GS_CSS), false);
+    f.scenes.entered(kind(a11y::SceneKind::GS_SSS), false);
+    f.scenes.entered(kind(a11y::SceneKind::GS_SSS), true);
     f.scenes.entered(kind(a11y::SceneKind::GS_VS), false);
     assert(f.outputs.empty());
     assert(s_lines.empty());
@@ -125,8 +123,7 @@ void same_kind_twice_is_announced_twice() {
 }
 
 void lookup_tells_silent_from_unknown() {
-    assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_SSS), false) ==
-           "Stage select. No speech yet. Press Start for a random stage.");
+    assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_RESULTS), false) == kResults);
     assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_TRAINING), false) == "");
     assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_VS), true) == "");
     assert(!a11y::scene_announcement(-1, false).has_value());

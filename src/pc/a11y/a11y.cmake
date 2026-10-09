@@ -42,6 +42,9 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/css_targets.cpp
         ${CMAKE_CURRENT_LIST_DIR}/css_reader.cpp
         ${CMAKE_CURRENT_LIST_DIR}/lobby_speech.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/sss_speech.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/sss_names.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/sss_reader.cpp
         ${CMAKE_CURRENT_LIST_DIR}/steering.cpp)
 target_include_directories(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 # game_access.c reads the decomp's structs, so it lays out their bitfields as
@@ -158,6 +161,19 @@ if (TARGET unit_tests)
     add_test(NAME css_speech COMMAND css_speech_test)
     set_tests_properties(css_speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests css_speech_test)
+
+    # Stage select speech against hand-written snapshots of the screen; a fake
+    # bridge and its own pc_log_line.
+    add_executable(sss_speech_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_sss_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/sss_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/sss_names.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
+    target_include_directories(sss_speech_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(sss_speech_test PRIVATE -UNDEBUG)
+    add_test(NAME sss_speech COMMAND sss_speech_test)
+    set_tests_properties(sss_speech PROPERTIES LABELS melee)
+    add_dependencies(unit_tests sss_speech_test)
 
     # Lobby speech against hand-written snapshots of the lobby's view; a fake
     # bridge and its own pc_log_line.

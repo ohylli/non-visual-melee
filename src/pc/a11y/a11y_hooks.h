@@ -79,6 +79,22 @@ void pc_a11y_css_hand(int hand, int state, int held, float x, float y);
  * chosen) is not reported. The next frame reads them. */
 void pc_a11y_css_coin(int slot, float x, float y);
 
+/* Once a frame of stage select (mnStageSel_Scene_OnFrame in
+ * src/melee/mn/mnstagesel.c), after ranked play's own list and before
+ * everything else, the skipped scene's first and only frame included. Its
+ * state lives in static variables there, handed over raw: the screen's data,
+ * the table of tiles (mnStageSel_803F06D0, a row type only that file
+ * defines, and the size of its row), the hovered tile (mnStageSel_804D6CAE),
+ * the pick state (mnStageSel_804D6CAF), the frames input is still ignored
+ * (mnStageSel_804D6CA4), the buttons the screen read on its last frame
+ * (mnStageSel_804D6CA0), the port the stage cursor answers to
+ * (mnStageSel_804D50A0, -1 for every port), and online the two players'
+ * picks (-1 while unknown). Stage select speech compares the screen with
+ * the last frame here. */
+struct SSSData;
+void pc_a11y_sss_frame(const struct SSSData* data, const void* tiles, int tile_size, int hovered,
+    int pick, int frozen, int buttons, int owner, int local_pick, int remote_pick);
+
 /* Once a frame of the online lobby's LAN path (gm_Scene_OnlineLobby_OnFrame
  * in src/melee/gm/gmonlinemode.c), after the view is drawn: the view the
  * scene filled this frame (OnlineLobbyView, gmonlinemode.h). Lobby speech

@@ -7,11 +7,13 @@
 #include "pc/pc.h"
 #include "pc/region.h"
 #include "scene_kinds.h"
+#include "stage_kinds.h"
 #include <melee/ft/forward.h>
 #include <melee/gm/forward.h>
 #include <melee/gm/gmmain_lib.h>
 #include <melee/gm/gmonlinemode.h>
 #include <melee/gm/types.h>
+#include <melee/gr/forward.h>
 #include <melee/lb/lb_00B0.h>
 #include <melee/lb/lbspdisplay.h>
 #include <melee/mn/forward.h>
@@ -25,7 +27,7 @@
 #include <sysdolphin/baselib/synth.h>
 
 /* The fork's copies of the decomp's numbers (scene_kinds.h, menu_kinds.h,
- * character_kinds.h) against the decomp's own. */
+ * character_kinds.h, stage_kinds.h) against the decomp's own. */
 #define A11Y_CHECK_NUMBER(name, number)                                                            \
     _Static_assert(name == (number), #name " no longer has the number the fork's copy gives it");
 A11Y_SCENE_KINDS(A11Y_CHECK_NUMBER)
@@ -33,6 +35,7 @@ A11Y_MENU_KINDS(A11Y_CHECK_NUMBER)
 A11Y_MENU_SELECTIONS(A11Y_CHECK_NUMBER)
 A11Y_CHARACTER_KINDS(A11Y_CHECK_NUMBER)
 A11Y_CSS_MATCH_TYPES(A11Y_CHECK_NUMBER)
+A11Y_STAGE_KINDS(A11Y_CHECK_NUMBER)
 #undef A11Y_CHECK_NUMBER
 
 /* The match rules before the players' data on character select have
@@ -392,6 +395,85 @@ void a11y_game_pad(int port, A11yPad* out) {
     out->pressed_right = (pad->trigger & HSD_PAD_DPADRIGHT) != 0;
     out->pressed_up = (pad->trigger & HSD_PAD_DPADUP) != 0;
     out->pressed_down = (pad->trigger & HSD_PAD_DPADDOWN) != 0;
+}
+
+/* A row of stage select's table of tiles (mnStageSel_803F06D0), whose type
+ * mnstagesel.c keeps to itself; the hook passes the size of its own row,
+ * which a11y_game_sss_state checks against this copy's. */
+typedef struct A11ySssTileRow {
+    HSD_JObj* model;
+    int x4;
+    /* An A11ySssTileState. */
+    u8 state;
+    u8 x9;
+    u8 xA;
+    u8 stkind;
+    f32 half_width;
+    f32 half_height;
+    f32 x14;
+    f32 x18;
+} A11ySssTileRow;
+
+static A11yStage sss_stage(int stkind) {
+    switch (stkind) {
+#define A11Y_STAGE_CASE(name, number)                                                              \
+    case number:                                                                                   \
+        return A11Y_##name;
+        A11Y_STAGE_KINDS(A11Y_STAGE_CASE)
+#undef A11Y_STAGE_CASE
+    default:
+        return A11Y_NO_STAGE;
+    }
+}
+
+bool a11y_game_sss_state(const A11ySssScreen* screen, A11ySssState* out) {
+    const SSSData* data = screen->data;
+    memset(out, 0, sizeof(*out));
+    /* The skipped scene never ran mnStageSel_Scene_OnEnter, so the table
+     * still points at the models of the last stage select, long freed. */
+    if (data->force_stage_id >= 0) {
+        out->skipped = true;
+        out->skipped_stage = sss_stage(data->force_stage_id);
+        return true;
+    }
+    if (screen->tile_size != (int)sizeof(A11ySssTileRow)) {
+        out->skipped = true;
+        out->skipped_stage = A11Y_NO_STAGE;
+        return false;
+    }
+    out->owner = screen->owner;
+    out->hovered = screen->hovered < A11Y_SSS_NO_TILE ? screen->hovered : A11Y_SSS_NO_TILE;
+    out->pick = screen->pick < A11Y_SSS_LEAVING ? (A11ySssPick)screen->pick : A11Y_SSS_LEAVING;
+    /* The buttons and the input freeze are those the pick saw: the screen
+     * reads the buttons and counts the freeze down before its objects
+     * update, and the hook runs before the next frame's read. A pick sets
+     * the freeze again. */
+    bool taking = screen->frozen == 0 && out->pick == A11Y_SSS_CHOOSING;
+    out->pressed_a = taking && (screen->buttons & HSD_PAD_A) != 0;
+    out->pressed_start = taking && (screen->buttons & HSD_PAD_START) != 0;
+    out->local_pick = screen->local_pick;
+    out->remote_pick = screen->remote_pick;
+
+    const A11ySssTileRow* rows = (const A11ySssTileRow*)screen->tiles;
+    for (int i = 0; i < A11Y_SSS_TILES; i++) {
+        const A11ySssTileRow* row = &rows[i];
+        A11ySssTile* tile = &out->tiles[i];
+        tile->stage = i == A11Y_SSS_RANDOM_TILE ? A11Y_NO_STAGE : sss_stage(row->stkind);
+        tile->state =
+            row->state <= A11Y_SSS_UNLOCKED ? (A11ySssTileState)row->state : A11Y_SSS_UNLOCKED;
+        tile->half_width = row->half_width;
+        tile->half_height = row->half_height;
+        /* Where fn_8025A310 tests the stage cursor against, read the same
+         * way; lb_8000B1CC fills the joint's cached world matrix as the
+         * game's own test and drawing do each frame. */
+        if (tile->state != A11Y_SSS_NOT_DRAWN && row->model != NULL) {
+            Vec3 pos;
+            lb_8000B1CC(row->model, NULL, &pos);
+            tile->x = pos.x;
+            tile->y = pos.y;
+        }
+    }
+    return true;
 }
 
 _Static_assert(

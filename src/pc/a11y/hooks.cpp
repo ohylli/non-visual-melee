@@ -11,6 +11,7 @@
 #include "pc/region.h"
 #include "scene_speech.hpp"
 #include "speech.hpp"
+#include "sss_reader.hpp"
 #include <cstdlib>
 #include <dolphin/pad.h>
 #include <memory>
@@ -23,6 +24,7 @@ std::unique_ptr<a11y::Speech> s_speech;
 std::unique_ptr<a11y::SceneSpeech> s_scene_speech;
 std::unique_ptr<a11y::MenuSpeech> s_menu_speech;
 std::unique_ptr<a11y::CssReader> s_css;
+std::unique_ptr<a11y::SssReader> s_sss;
 std::unique_ptr<a11y::LobbySpeech> s_lobby;
 /* The centre text a leaf screen last set, kept across scenes: a screen the
  * menu scene opens on, as Multi-Man Melee after its match, sets it before
@@ -58,6 +60,7 @@ extern "C" void pc_a11y_init(void) {
     game_text.resolve = a11y_game_resolve;
     s_menu_speech = std::make_unique<a11y::MenuSpeech>(*s_speech, game_text);
     s_css = std::make_unique<a11y::CssReader>(*s_speech, config.steer);
+    s_sss = std::make_unique<a11y::SssReader>(*s_speech);
     s_lobby = std::make_unique<a11y::LobbySpeech>(*s_speech);
     a11y::launcher_speech_start(*s_speech);
 }
@@ -68,6 +71,7 @@ extern "C" void pc_a11y_shutdown(void) {
     }
     a11y::launcher_speech_stop();
     s_lobby.reset();
+    s_sss.reset();
     s_css.reset();
     s_menu_speech.reset();
     s_scene_speech.reset();
@@ -92,6 +96,7 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
      * goes back, is still an arrival. */
     s_menu_speech->forget();
     s_css->forget();
+    s_sss->forget();
     if (scene_kind == static_cast<int>(a11y::SceneKind::GS_ONLINE_LOBBY) && a11y_game_lan_play()) {
         /* LAN play's lobby speaks its own opening on its first frame. */
         s_lobby->entered(a11y::lobby_arrival(previous_scene, css_exit));
@@ -147,6 +152,16 @@ extern "C" void pc_a11y_css_coin(int slot, float x, float y) {
     }
     /* Read by the next frame hook: a step finds a coin to pick up by it. */
     s_css->coin(slot, x, y);
+}
+
+extern "C" void pc_a11y_sss_frame(const SSSData* data, const void* tiles, int tile_size,
+    int hovered, int pick, int frozen, int buttons, int owner, int local_pick, int remote_pick) {
+    if (!game_hook_may_speak()) {
+        return;
+    }
+    A11ySssScreen screen{
+        data, tiles, tile_size, hovered, pick, frozen, buttons, owner, local_pick, remote_pick};
+    s_sss->frame(screen, pc_net_active());
 }
 
 extern "C" void pc_a11y_lobby_frame(const OnlineLobbyView* view) {

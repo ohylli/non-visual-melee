@@ -1,0 +1,355 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Stage select speech against a fake screen reader bridge, fed snapshots of
+ * the screen written by hand (test_sss_screen.hpp). Links sss_speech.cpp,
+ * sss_names.cpp and speech.cpp only, so this file supplies the pc_log_line
+ * that main.c normally provides. */
+#include "speech.hpp"
+#include "sss_names.hpp"
+#include "sss_speech.hpp"
+#include "test_sss_screen.hpp"
+#include <algorithm>
+#include <cassert>
+#include <cstdarg>
+#include <cstdio>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace {
+
+std::vector<std::string> s_lines;
+
+struct Output {
+    std::string text;
+    bool interrupt;
+
+    bool operator==(const Output&) const = default;
+};
+
+class FakeBridge final : public a11y::ScreenReaderBridge {
+public:
+    explicit FakeBridge(std::vector<Output>& outputs) : m_outputs(outputs) {}
+
+    std::string init() override { return "Fake"; }
+    void shutdown() override {}
+    std::string output(std::string_view utf8, bool interrupt) override {
+        m_outputs.push_back(Output{std::string(utf8), interrupt});
+        return "";
+    }
+
+private:
+    std::vector<Output>& m_outputs;
+};
+
+using namespace sss_test;
+
+constexpr const char* kOpening = "Stage select. D-pad to choose, Start picks a random stage.";
+
+/* Speech over a fake bridge, and stage select speech over that; s_lines only
+ * ever holds the lines of the test that is running. */
+struct Fixture {
+    std::vector<Output> outputs;
+    a11y::Speech speech{a11y::Config{true, true}, std::make_unique<FakeBridge>(outputs)};
+    a11y::SssSpeech sss{speech};
+
+    Fixture() {
+        speech.init();
+        s_lines.clear();
+    }
+
+    /* Arrives on the screen and drops the opening. */
+    explicit Fixture(const A11ySssState& arrival) : Fixture() {
+        sss.frame(arrival);
+        spoken();
+        s_lines.clear();
+    }
+
+    /* What was spoken since the last call, all of it interrupting. */
+    std::vector<std::string> spoken() {
+        std::vector<std::string> texts;
+        for (const Output& output : outputs) {
+            assert(output.interrupt);
+            texts.push_back(output.text);
+        }
+        outputs.clear();
+        return texts;
+    }
+};
+
+using Texts = std::vector<std::string>;
+
+std::size_t count_logged(const std::string& line) {
+    return static_cast<std::size_t>(std::count(s_lines.begin(), s_lines.end(), line));
+}
+
+/* The stage cursor enters a tile. */
+void hover(Fixture& f, A11ySssState& state, int tile) {
+    state.hovered = tile;
+    f.sss.frame(state);
+}
+
+/* A or Start reached the pick on the screen's last frame, which made it, with
+ * the hovered index it left: Random leaves the stage it rolled there. */
+void pick(Fixture& f, A11ySssState& state, int hovered_after) {
+    state.pick = A11Y_SSS_PICKED;
+    state.hovered = hovered_after;
+    f.sss.frame(state);
+}
+
+void opening_for_every_controller() {
+    Fixture f;
+    f.sss.frame(screen());
+    assert((f.spoken() == Texts{kOpening}));
+}
+
+void opening_for_controller_1_alone() {
+    /* The Turns rule with player 1's turn: the cursor is controller 1's,
+     * which steering reaches. */
+    Fixture f;
+    A11ySssState state = screen();
+    state.owner = 0;
+    f.sss.frame(state);
+    assert((f.spoken() == Texts{kOpening}));
+}
+
+void opening_for_another_player() {
+    Fixture f;
+    A11ySssState state = screen();
+    state.owner = 2;
+    f.sss.frame(state);
+    assert((f.spoken() ==
+            Texts{std::string(kOpening) + " Player 3 chooses. Steering needs controller 1."}));
+}
+
+void opening_online_names_no_player() {
+    /* Online the cursor is the local player's, on controller 1, whichever
+     * player they are. */
+    Fixture f;
+    A11ySssState state = screen();
+    state.online = true;
+    state.owner = 1;
+    f.sss.frame(state);
+    assert((f.spoken() == Texts{kOpening}));
+}
+
+void unchanged_snapshot_speaks_nothing() {
+    A11ySssState state = screen();
+    Fixture f(state);
+    f.sss.frame(state);
+    f.sss.frame(state);
+    assert(f.spoken().empty());
+}
+
+void hover_names_each_stage_entered() {
+    A11ySssState state = screen();
+    Fixture f(state);
+    hover(f, state, kBattlefieldTile);
+    hover(f, state, kFoursideTile);
+    hover(f, state, kOnettTile);
+    hover(f, state, kCorneriaTile);
+    assert((f.spoken() == Texts{"Battlefield", "Fourside", "Onett", "Corneria"}));
+}
+
+void hover_names_the_random_tile() {
+    A11ySssState state = screen();
+    Fixture f(state);
+    hover(f, state, A11Y_SSS_RANDOM_TILE);
+    assert((f.spoken() == Texts{"Random"}));
+}
+
+void hover_on_a_locked_tile_hides_its_stage() {
+    A11ySssState state = screen_with_locked_stages();
+    Fixture f(state);
+    hover(f, state, kOnettTile);
+    hover(f, state, kFoursideTile);
+    assert((f.spoken() == Texts{"Onett", "Locked stage"}));
+}
+
+void leaving_a_tile_into_empty_space_says_nothing() {
+    /* The game keeps the last tile hovered while the cursor crosses empty
+     * space, so the snapshot does not change; entering the same tile again
+     * says nothing either. */
+    A11ySssState state = screen();
+    Fixture f(state);
+    hover(f, state, kCorneriaTile);
+    f.sss.frame(state);
+    f.sss.frame(state);
+    assert((f.spoken() == Texts{"Corneria"}));
+}
+
+void random_says_the_stage_it_rolled() {
+    A11ySssState state = screen();
+    Fixture f(state);
+    hover(f, state, A11Y_SSS_RANDOM_TILE);
+    f.spoken();
+    state.pressed_a = true;
+    pick(f, state, kCorneriaTile);
+    assert((f.spoken() == Texts{"Random: Corneria."}));
+    /* The preview shows, then the match loads: nothing more. */
+    state.pressed_a = false;
+    f.sss.frame(state);
+    state.pick = A11Y_SSS_LEAVING;
+    f.sss.frame(state);
+    assert(f.spoken().empty());
+}
+
+void start_before_any_tile_rolls_too() {
+    A11ySssState state = screen();
+    Fixture f(state);
+    state.pressed_start = true;
+    pick(f, state, kFountainTile);
+    assert((f.spoken() == Texts{"Random: Fountain of Dreams."}));
+}
+
+void a_before_any_tile_says_nothing() {
+    A11ySssState state = screen();
+    Fixture f(state);
+    state.pressed_a = true;
+    f.sss.frame(state);
+    assert(f.spoken().empty());
+}
+
+void a_named_pick_says_nothing() {
+    A11ySssState state = screen();
+    Fixture f(state);
+    hover(f, state, kPeachsCastleTile);
+    f.spoken();
+    state.pressed_a = true;
+    pick(f, state, kPeachsCastleTile);
+    state.pressed_a = false;
+    state.pick = A11Y_SSS_LEAVING;
+    f.sss.frame(state);
+    assert(f.spoken().empty());
+}
+
+void a_pick_on_a_locked_tile_is_refused() {
+    A11ySssState state = screen_with_locked_stages();
+    Fixture f(state);
+    hover(f, state, kBrinstarDepthsTile);
+    f.spoken();
+    state.pressed_a = true;
+    f.sss.frame(state);
+    state.pressed_a = false;
+    f.sss.frame(state);
+    state.pressed_start = true;
+    f.sss.frame(state);
+    assert((f.spoken() == Texts{"Locked.", "Locked."}));
+}
+
+void a_refusal_names_the_tile_entered_after_it() {
+    /* The pick acts on the tile hovered before its frame's movement; the
+     * cursor may enter another in the same frame. */
+    A11ySssState state = screen_with_locked_stages();
+    Fixture f(state);
+    hover(f, state, kBrinstarDepthsTile);
+    f.spoken();
+    state.pressed_a = true;
+    hover(f, state, kBrinstarTile);
+    assert((f.spoken() == Texts{"Locked. Brinstar"}));
+}
+
+void a_on_an_unlocked_tile_that_did_not_pick_says_nothing() {
+    /* Not a refusal: only a locked tile refuses. */
+    A11ySssState state = screen();
+    Fixture f(state);
+    hover(f, state, kBrinstarTile);
+    f.spoken();
+    state.pressed_a = true;
+    f.sss.frame(state);
+    assert(f.spoken().empty());
+}
+
+void online_picks_are_left_to_their_own_rules() {
+    /* Online Random is rolled only once both players have picked; until
+     * then the hovered index keeps the random tile. */
+    A11ySssState state = screen();
+    state.online = true;
+    Fixture f(state);
+    hover(f, state, A11Y_SSS_RANDOM_TILE);
+    f.spoken();
+    state.pressed_a = true;
+    pick(f, state, A11Y_SSS_RANDOM_TILE);
+    state.pressed_a = false;
+    state.pick = A11Y_SSS_LEAVING;
+    state.hovered = kCorneriaTile;
+    f.sss.frame(state);
+    assert(f.spoken().empty());
+}
+
+void skipped_scene_says_nothing() {
+    Fixture f;
+    A11ySssState state{};
+    state.skipped = true;
+    state.skipped_stage = A11Y_St_Kind_Corneria;
+    f.sss.frame(state);
+    assert(f.spoken().empty());
+}
+
+void forgetting_makes_the_next_frame_an_arrival() {
+    A11ySssState state = screen();
+    Fixture f(state);
+    hover(f, state, kCorneriaTile);
+    f.spoken();
+    f.sss.forget();
+    f.sss.frame(screen());
+    assert((f.spoken() == Texts{kOpening}));
+}
+
+void missing_name_is_spoken_by_number_and_logged_once() {
+    A11ySssState state = screen();
+    Fixture f(state);
+    /* Akaneia, a stage the grid does not have. */
+    state.tiles[kCorneriaTile].stage = static_cast<A11yStage>(0x15);
+    hover(f, state, kCorneriaTile);
+    hover(f, state, kOnettTile);
+    hover(f, state, kCorneriaTile);
+    assert((f.spoken() == Texts{"Unknown stage 21", "Onett", "Unknown stage 21"}));
+    assert(count_logged("[a11y] stage 21: not in the stage names table") == 1);
+}
+
+void every_tile_has_a_name() {
+    for (const TileRow& row : kTiles) {
+        assert(row.stage == A11Y_NO_STAGE || a11y::stage_name(row.stage).has_value());
+    }
+    assert(a11y::stage_name(A11Y_St_Kind_Shrine) == "Hyrule Temple");
+    assert(a11y::stage_name(A11Y_St_Kind_OldPupupu) == "Dream Land N64");
+    assert(!a11y::stage_name(A11Y_NO_STAGE).has_value());
+}
+
+}  // namespace
+
+extern "C" void pc_log_line(const char* fmt, ...) {
+    char line[512];
+    va_list ap;
+    va_start(ap, fmt);
+    std::vsnprintf(line, sizeof(line), fmt, ap);
+    va_end(ap);
+    s_lines.emplace_back(line);
+}
+
+int main() {
+    opening_for_every_controller();
+    opening_for_controller_1_alone();
+    opening_for_another_player();
+    opening_online_names_no_player();
+    unchanged_snapshot_speaks_nothing();
+    hover_names_each_stage_entered();
+    hover_names_the_random_tile();
+    hover_on_a_locked_tile_hides_its_stage();
+    leaving_a_tile_into_empty_space_says_nothing();
+    random_says_the_stage_it_rolled();
+    start_before_any_tile_rolls_too();
+    a_before_any_tile_says_nothing();
+    a_named_pick_says_nothing();
+    a_pick_on_a_locked_tile_is_refused();
+    a_refusal_names_the_tile_entered_after_it();
+    a_on_an_unlocked_tile_that_did_not_pick_says_nothing();
+    online_picks_are_left_to_their_own_rules();
+    skipped_scene_says_nothing();
+    forgetting_makes_the_next_frame_an_arrival();
+    missing_name_is_spoken_by_number_and_logged_once();
+    every_tile_has_a_name();
+    std::cout << "sss_speech: all tests passed\n";
+    return 0;
+}

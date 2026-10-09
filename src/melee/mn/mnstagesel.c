@@ -1096,6 +1096,7 @@ void mnStageSel_Scene_OnFrame(void)
         return;
     }
 #endif
+    pc_a11y_sss_frame(sss_data, mnStageSel_803F06D0, sizeof mnStageSel_803F06D0[0], mnStageSel_804D6CAE, mnStageSel_804D6CAF, mnStageSel_804D6CA4, mnStageSel_804D6CA0, mnStageSel_804D50A0, net_local_pick, net_remote_pick);
     if (sss_data->force_stage_id >= 0) {
         mnStageSel_804D6CAF = 2;
         sss_data->vs.start.rules.stkind = sss_data->force_stage_id;

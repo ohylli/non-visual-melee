@@ -1,0 +1,67 @@
+# Stage select with the stick: the opening, the stage cursor entering tiles
+# and naming each, the random tile, and A on it saying the stage it rolled
+# before the match begins. Character select is set up by D-pad, as in
+# css_setup.drive: Fox for player 1 and a CPU for player 2.
+# Run with the default --scene title:
+#   python tools/a11y/drive.py tools/a11y/sss_hover.drive
+# --no-card unlocks every stage, so no tile is locked here. Positions are in
+# the screen's units: the stage cursor starts at (0, -13), below every tile,
+# and a full push moves it 1.5 a frame on each axis. Stick holds move it an
+# inexact distance, so waits accept any stage's name where the aim is not
+# certain.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# VS. Mode, Melee.
+press Down
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press A
+wait '"Character select\. Player 1, no character\."'
+sleep 1
+
+# Fox for player 1, and player 2 made a CPU, which gets a random character
+# and makes the match ready.
+press DUp
+wait ': "Player 1: closed"$'
+press DUp
+wait ': "Pichu"$'
+press DUp
+wait ': "Fox"$'
+wait 'glide to "Fox" ended after \d+ frames: arrived'
+press A
+sleep 1
+search ': "Player 2: closed"$' DDown*2 DRight*3 DLeft*3
+wait 'glide to "Player 2: closed" ended after \d+ frames: arrived'
+press A until 'Ready to fight\. Press Start\.'
+sleep 1
+
+# Start leaves for stage select, which speaks its own opening.
+press Start
+wait ': "Stage select\. D-pad to choose, Start picks a random stage\."$'
+sleep 1
+
+# Up from below every tile: through Battlefield in the bottom row into the
+# block beside the random tile (Fourside), then up a row (Onett).
+press Up 120
+wait ': "Battlefield"$'
+wait ': "(Fourside|Brinstar Depths|Big Blue|Final Destination)"$'
+press Up 70
+wait ': "(Onett|Brinstar|Mute City)"$'
+
+# Left along that row, through Brinstar to the random tile, and A rolls a
+# stage, said before the match begins.
+press Left 170
+wait ': "Random"$'
+sleep 0.5
+press A
+wait ': "Random: [^"]+\."$'
+wait 'boot scene: state \d+ scene 2$'
+sleep 2

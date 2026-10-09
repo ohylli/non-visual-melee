@@ -16,8 +16,6 @@ struct SceneWords {
  * the play test to judge. */
 constexpr SceneWords kScenes[] = {
     /* Scenes to operate. */
-    /* Start with no stage hovered, as on arrival, picks one at random. */
-    {SceneKind::GS_SSS, "Stage select. No speech yet. Press Start for a random stage."},
     /* The game takes no press until its announcer has named the winner (or
      * "No contest"). Then any button from any player silently shows every
      * player's stats, and once they have slid in, Start marks that player
@@ -65,10 +63,11 @@ constexpr SceneWords kScenes[] = {
     {SceneKind::GS_REGEND_CONGRATS, "Congratulations"},
     {SceneKind::GS_STAFFROLL, "Credits"},
 
-    /* Silent. The main menu tree and character select speak their own
-     * opening. */
+    /* Silent. The main menu tree, character select and stage select speak
+     * their own opening. */
     {SceneKind::GS_MENU, ""},
     {SceneKind::GS_CSS, ""},
+    {SceneKind::GS_SSS, ""},
     /* Matches, including the attract demo: the game's announcer speaks. */
     {SceneKind::GS_VS, ""},
     {SceneKind::GS_SUDDEN_DEATH, ""},
@@ -86,11 +85,8 @@ constexpr SceneWords kScenes[] = {
 };
 
 /* What a netplay session says instead, where the other player has to act
- * too: each picks a stage, and each must be ready on results. */
+ * too: each must be ready on results. */
 constexpr SceneWords kOnlineScenes[] = {
-    {SceneKind::GS_SSS,
-        "Stage select. No speech yet. Press Start for a random stage, then wait for your "
-        "opponent."},
     {SceneKind::GS_RESULTS,
         "Results. No speech yet. Once the announcer finishes, press Start until you hear the "
         "confirm sound, then wait for your opponent."},
