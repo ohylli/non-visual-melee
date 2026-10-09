@@ -53,16 +53,20 @@ void SssSpeech::frame(const A11ySssState& state, const GlideState<int>& glide) {
 
     std::string out;
     /* A pick acts on the tile hovered before its frame's cursor movement:
-     * the last snapshot's. Online the picks wait for the other player's and
-     * are spoken by their own rules. */
+     * the last snapshot's. */
     bool picked = last.pick == A11Y_SSS_CHOOSING && state.pick != A11Y_SSS_CHOOSING;
     if (!state.online && picked && rolls(last.hovered) && is_tile(state.hovered)) {
-        /* The roll lands in the hovered index at once. */
+        /* Offline the roll lands in the hovered index at once; online it
+         * waits for the other player's pick. */
         add(out, std::string(kRandom) + ": " + tile_words(state, state.hovered) + ".");
-    } else if (!state.online && picked && !rolls(last.hovered) && last.hovered != m_named) {
+    } else if (picked && !rolls(last.hovered) && last.hovered != m_named) {
         /* A during a glide picks the tile crossed, not the one the step
          * named. */
         add(out, std::string(kPicked) + " " + tile_words(state, last.hovered) + ".");
+    }
+    if (state.online && picked) {
+        /* The other player's pick stays unsaid until the coin flip. */
+        add(out, kWaitingForOpponent);
     }
     bool pressed = state.pressed_a || state.pressed_start;
     if (!state.online && pressed && state.pick == A11Y_SSS_CHOOSING &&
@@ -102,6 +106,15 @@ void SssSpeech::step(const A11ySssState& state, int tile) {
     m_speech.announce(hover_words(state, tile), Mode::interrupt);
 }
 
+void SssSpeech::resolved(
+    const A11ySssState& state, int stage_tile, int local_pick, int remote_pick) {
+    if (!state.online || m_resolved || !is_tile(stage_tile)) {
+        return;
+    }
+    m_resolved = true;
+    m_speech.announce(result(state, stage_tile, local_pick, remote_pick), Mode::interrupt);
+}
+
 std::string SssSpeech::tile_words(const A11ySssState& state, int tile) {
     if (tile == A11Y_SSS_RANDOM_TILE) {
         return std::string(kRandom);
@@ -132,6 +145,35 @@ std::string SssSpeech::opening(const A11ySssState& state) {
                std::string(kChooses) + ". " + std::string(kSteeringNeedsPort1);
     }
     return out;
+}
+
+std::string SssSpeech::result(
+    const A11ySssState& state, int stage_tile, int local_pick, int remote_pick) {
+    std::string stage = tile_words(state, stage_tile);
+    std::string random = std::string(kRandom) + ": ";
+    bool local_random = rolls(local_pick);
+    bool remote_random = rolls(remote_pick);
+    if (local_random && remote_random) {
+        return random + stage + ".";
+    }
+    if (local_pick == remote_pick) {
+        return stage + ".";
+    }
+    /* A named pick that names the stage won, though a Random beside it may
+     * have rolled the same stage: either way the stage is the one named. */
+    if (!local_random && stage_tile == local_pick) {
+        return stage + ", " + std::string(kYourPick) + ".";
+    }
+    if (!remote_random && stage_tile == remote_pick) {
+        return stage + ", " + std::string(kOpponentsPick) + ".";
+    }
+    if (local_random) {
+        return random + stage + ", " + std::string(kYourPick) + ".";
+    }
+    if (remote_random) {
+        return random + stage + ", " + std::string(kOpponentsPick) + ".";
+    }
+    return stage + ".";
 }
 
 std::string SssSpeech::name(A11yStage stage) {

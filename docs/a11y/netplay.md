@@ -54,7 +54,11 @@ Quick chat (`src/pc/net_chat.c`) lets a player in a session send one of sixteen 
 
 ## Stage select needs both players
 
-Online, each player picks a stage on their own, the picks are exchanged, and a coin flip on the session's seed chooses between them (`netStageSel_*` in `mnstagesel.c`). Start on one side alone leaves the match waiting, so a script presses Start on both.
+Online, each player picks a stage on their own, the picks are exchanged, and a coin flip on the session's seed chooses between them (`netStageSel_*` in `mnstagesel.c`). Start on one side alone leaves the match waiting, so a script presses Start or A on both.
+
+- Each copy's stage cursor answers to its own player's port, which the local controller 1 feeds, so steering works for player 2 as for player 1.
+- A copy reads the other's pick only once its own preview has shown, about 1.5 seconds after its own pick, so the player who picks second hears the result that long after.
+- For a given pair of picks the coin flip depends on the seed alone, so a script with a fixed seed always gets the same side's pick.
 
 ## A base port build to play against
 

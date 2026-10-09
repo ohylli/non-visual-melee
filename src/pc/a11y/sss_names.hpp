@@ -49,5 +49,11 @@ inline constexpr std::string_view kUnknownStage = "Unknown stage";
 inline constexpr std::string_view kPicked = "Picked";
 /* A glide that did not get there: "Could not reach Corneria". */
 inline constexpr std::string_view kCouldNotReach = "Could not reach";
+/* Online, after the player's own pick. */
+inline constexpr std::string_view kWaitingForOpponent = "Waiting for your opponent.";
+/* Online, the coin flip's result: "Corneria, your pick.", "Random:
+ * Corneria, opponent's pick.", or the stage alone when both picked it. */
+inline constexpr std::string_view kYourPick = "your pick";
+inline constexpr std::string_view kOpponentsPick = "opponent's pick";
 
 }  // namespace a11y

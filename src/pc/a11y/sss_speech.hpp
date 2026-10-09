@@ -12,8 +12,11 @@
  * destination at the press; what the glide crosses goes unsaid, and so does
  * its arrival, while a glide ending elsewhere names where the cursor is, and
  * a failed one says so. A pick of another stage than the one last named (A
- * during a glide) names the stage picked. It compares each snapshot with the
- * previous one and touches no game state itself. */
+ * during a glide) names the stage picked. Online, a pick says the player
+ * waits for their opponent, and once both have picked, the stage the coin
+ * flip chose and whose pick it was; the opponent's pick is never said
+ * before that. It compares each snapshot with the previous one and touches
+ * no game state itself. */
 #pragma once
 #include "game_access.h"
 #include "steerer.hpp"
@@ -34,6 +37,7 @@ public:
     void forget() {
         m_seen = false;
         m_named = A11Y_SSS_NO_TILE;
+        m_resolved = false;
     }
 
     /* The screen's state this frame, and steering's glide as it stands.
@@ -43,6 +47,12 @@ public:
     /* A D-pad step goes to the tile, or at an edge stays on it: its hover
      * words, at the press. */
     void step(const A11ySssState& state, int tile);
+    /* Online, both picks are known and the coin flip chose between them:
+     * the tile of the stage the match is on (Random already rolled), and
+     * the picks of this machine's player and the other
+     * (A11Y_SSS_RANDOM_TILE or A11Y_SSS_NO_TILE for Random). Says the stage
+     * and whose pick it was, once a visit; nothing offline. */
+    void resolved(const A11ySssState& state, int stage_tile, int local_pick, int remote_pick);
 
     /* A tile as named: "Corneria", "Random", "Locked stage". */
     std::string tile_words(const A11ySssState& state, int tile);
@@ -52,6 +62,7 @@ public:
 
 private:
     std::string opening(const A11ySssState& state);
+    std::string result(const A11ySssState& state, int stage_tile, int local_pick, int remote_pick);
     /* A stage's name; a missing one is spoken by number and logged. */
     std::string name(A11yStage stage);
 
@@ -61,6 +72,8 @@ private:
     /* The tile last named by a hover or a step: a pick of another one was
      * made where the player did not hear. */
     int m_named = A11Y_SSS_NO_TILE;
+    /* The online result was said this visit. */
+    bool m_resolved = false;
     /* The stages missing from the names table that were logged. */
     std::set<A11yStage> m_logged_missing;
 };

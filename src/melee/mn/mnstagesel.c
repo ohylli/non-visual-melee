@@ -1198,6 +1198,7 @@ void mnStageSel_Scene_OnFrame(void)
             pc_log_line("sss: resolved cell %d stage %d", mnStageSel_804D6CAE,
                         sss_data->vs.start.rules.stkind);
 #endif
+        pc_a11y_sss_resolved(mnStageSel_804D6CAE, net_local_pick, net_remote_pick);
         gm_801A4B60();
     }
 }

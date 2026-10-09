@@ -2,7 +2,9 @@
 # instances in one session over loopback. Player 1 (instance a) steps with
 # the D-pad to a portrait three columns and one row from the first it
 # reaches, chooses, and steps down to its player slot; player 2 (instance b)
-# chooses by stick. Each hears the other's choice. Then Start into the
+# chooses by stick. Each hears the other's choice. Then Start into stage
+# select, where each steps to a stage by D-pad and picks it, hears that it
+# waits, and hears the coin flip's result from its own side; then the
 # match.
 #   python tools/a11y/drive_net.py [--delay N] [--sim-delay-ms MS] tools/a11y/css_net.drive
 # Each step waits for its glide to arrive, so the summary lists every glide's
@@ -79,18 +81,45 @@ a wait ': "Player 2: (Dr\. Mario|Mario|Luigi|Bowser|Peach|Yoshi|DK|C\. Falcon|Ga
 b-fork wait 'Ready to fight\. Press Start\.'
 sleep 1
 
-# Start leaves for stage select. Online each player picks a stage there, and
-# a coin flip on the session's seed chooses between the two picks; Start is
-# a random stage.
+# Start leaves for stage select. Online each player picks a stage there on
+# their own stage cursor, and a coin flip on the session's seed chooses
+# between the two picks.
 a press Start
 a wait '"Stage select\. D-pad to choose, Start picks a random stage\."'
 b-fork wait '"Stage select\. D-pad to choose, Start picks a random stage\."'
 b-base wait 'boot scene: state \d+ scene 9$'
 sleep 1
-a press Start
-a wait "sss: we picked"
-b press Start
-b wait "sss: we picked"
+
+# Player 1 steps to Princess Peach's Castle and picks it, then waits.
+a press DDown
+a wait ': "Icicle Mountain\. '
+a wait 'glide to "Icicle Mountain" ended after \d+ frames: arrived'
+a press DRight
+a wait ': "Princess Peach.s Castle\. '
+a wait 'glide to "Princess Peach.s Castle" ended after \d+ frames: arrived'
+a press A
+a wait "sss: we picked 0$"
+a wait '"Waiting for your opponent\."'
+
+# Player 2 steers its own stage cursor, by the D-pad of its controller 1,
+# to Kongo Jungle and picks it; the base port's player 2 picks Random with
+# Start. Each hears the coin flip's result from its own side.
+b-fork press DDown
+b-fork wait ': "Icicle Mountain\. '
+b-fork wait 'glide to "Icicle Mountain" ended after \d+ frames: arrived'
+b-fork press DRight
+b-fork wait ': "Princess Peach.s Castle\. '
+b-fork wait 'glide to "Princess Peach.s Castle" ended after \d+ frames: arrived'
+b-fork press DRight
+b-fork wait ': "Kongo Jungle\. '
+b-fork wait 'glide to "Kongo Jungle" ended after \d+ frames: arrived'
+b-fork press A
+b-fork wait "sss: we picked 2$"
+b-fork wait '"Waiting for your opponent\."'
+b-base press Start
+b-base wait "sss: we picked 30$"
+a wait '"(Princess Peach.s Castle, your|Kongo Jungle, opponent.s|Random: [^",]+, opponent.s) pick\."'
+b-fork wait '"(Princess Peach.s Castle, opponent.s|Kongo Jungle, your) pick\."'
 a wait 'boot scene: state \d+ scene 2$'
 b wait 'boot scene: state \d+ scene 2$'
 sleep 3

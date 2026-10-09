@@ -32,6 +32,9 @@ public:
      * (stick_x, stick_y) with the dead zone taken off. Steps, and the
      * glide's next frame. */
     void cursor(Point at, int stick_x, int stick_y);
+    /* The resolve hook: online, the stage the coin flip chose between the
+     * two picks. */
+    void resolved(int stage_tile, int local_pick, int remote_pick);
     /* The pad hook: the stick steering asks for, handed over once; false
      * when it asks for none, so the stick returns to rest by itself. */
     bool take_stick(Stick* out) { return m_steerer.take_stick(out); }

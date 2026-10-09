@@ -70,7 +70,7 @@ Flakes: a step that logs "no pad change seen for that press" lost its press to t
 
 `tools/a11y/drive_net.py` runs two instances of the game in one netplay session over loopback (see "Driving the game" in `CLAUDE.md`), from one script whose steps are addressed to instance a (player 1) or b (player 2); each is a `drive.py` run with its own key pipe, log and recording of controller data. A session starts at boot, unless `--lan` leaves it to the LAN lobby, and walks the ordinary menus in sync, so a's presses move both. After the script it fails on a missing session, a `net: DESYNC` in either log, or recordings that differ over the frames both recorded, and it lists each side's delay and every glide's frames. Primer: `docs/a11y/netplay.md`.
 
-`tools/a11y/css_net.drive` steps player 1 over the portraits into its player slot while player 2 chooses by stick, each hearing the other's choice, and starts the match. Its five runs, below; each writes to `build/drive/net` unless given its own `--out-dir`, so give each one to keep all five:
+`tools/a11y/css_net.drive` steps player 1 over the portraits into its player slot while player 2 chooses by stick, each hearing the other's choice. On stage select each steps to a stage by D-pad and picks it (player 1 Princess Peach's Castle, player 2 Kongo Jungle; a base port player 2 presses Start for Random), each hears "Waiting for your opponent." after its own pick, and the coin flip's result from its own side ("Princess Peach's Castle, your pick." on a, "Princess Peach's Castle, opponent's pick." on b), then the match starts. The default seed 7 always lets player 1's pick win; `--seed 4` lets player 2's win ("Kongo Jungle, opponent's pick." or, against a base port build, "Random: Kongo Jungle, opponent's pick." on a), worth a run after a change to the result's words. Its five runs, below; each writes to `build/drive/net` unless given its own `--out-dir`, so give each one to keep all five:
 
 ```
 python tools/a11y/drive_net.py --delay 0 tools/a11y/css_net.drive
@@ -87,6 +87,8 @@ python tools/a11y/drive_net.py --lan --out-dir build/drive/lan tools/a11y/lan_lo
 ```
 
 The LAN run needs a network interface up (Ethernet or Wi-Fi with an address; `lan: no usable network interface` in a log means none) and a Windows Firewall rule letting that build's `melee.exe` take UDP in. A build directory without a rule makes the first run prompt and take focus, so ask the maintainer to allow it first.
+
+A run can end with instance b exiting with code 3221226505 (0xC0000409) as the match loads, its log showing `ARCHIVE SdIntro.dat: implausible header` and a PANIC in `lbarchive.c`: an intermittent base port crash reading an archive from the file cache, seen before at the memory card screen. Rerun unchanged.
 
 At the base merge level, add `--base-b <dir>` to each, instance b then being a base port build of the merged commit from that build directory: build it in a git worktree outside the repo with its own build directory, with the fork's native Windows build fix applied (`docs/a11y/netplay.md`).
 

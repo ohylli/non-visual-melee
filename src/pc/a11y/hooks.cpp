@@ -189,6 +189,13 @@ extern "C" void pc_a11y_sss_frame(const SSSData* data, const void* tiles, int ti
     s_sss->frame(screen, pc_net_active());
 }
 
+extern "C" void pc_a11y_sss_resolved(int stage_tile, int local_pick, int remote_pick) {
+    if (!game_hook_may_speak()) {
+        return;
+    }
+    s_sss->resolved(stage_tile, local_pick, remote_pick);
+}
+
 extern "C" void pc_a11y_sss_cursor(float x, float y, int stick_x, int stick_y) {
     if (!game_hook_may_speak()) {
         return;

@@ -95,6 +95,14 @@ struct SSSData;
 void pc_a11y_sss_frame(const struct SSSData* data, const void* tiles, int tile_size, int hovered,
     int pick, int frozen, int buttons, int owner, int local_pick, int remote_pick);
 
+/* Stage select is leaving for the match (mnStageSel_Scene_OnFrame): the
+ * tile of the stage chosen (mnStageSel_804D6CAE, Random already rolled),
+ * and online the two picks it was chosen from, this machine's player's and
+ * the other's (net_local_pick, net_remote_pick; -1 offline). Online the
+ * coin flip between the picks has just been made here; reached once both
+ * picks are known, on a different frame on each machine. */
+void pc_a11y_sss_resolved(int stage_tile, int local_pick, int remote_pick);
+
 /* Stage select's cursor has moved this simulated frame (fn_8025A310, after
  * its clamp, before it tests the tiles): where it is, in the units the tiles
  * are tested in, and the stick that moved it, each axis with the dead zone

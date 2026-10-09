@@ -61,6 +61,12 @@ void SssReader::cursor(Point at, int stick_x, int stick_y) {
     m_steerer.frame(at, stick_as_held(stick_x, stick_y));
 }
 
+void SssReader::resolved(int stage_tile, int local_pick, int remote_pick) {
+    if (m_have_state) {
+        m_speech.resolved(m_state, stage_tile, local_pick, remote_pick);
+    }
+}
+
 void SssReader::press(Direction direction, Point at) {
     /* A press during a glide steps on from where it was going. */
     int from = m_steerer.active() ? m_steerer.status().destination : tile_at(m_state, at);

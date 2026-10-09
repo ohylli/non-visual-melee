@@ -278,20 +278,125 @@ void a_on_an_unlocked_tile_that_did_not_pick_says_nothing() {
     assert(f.spoken().empty());
 }
 
-void online_picks_are_left_to_their_own_rules() {
-    /* Online Random is rolled only once both players have picked; until
-     * then the hovered index keeps the random tile. */
+/* Stage select in a netplay session, on no tile yet. */
+A11ySssState online_screen() {
     A11ySssState state = screen();
     state.online = true;
+    state.owner = 1;
+    return state;
+}
+
+void an_online_pick_says_to_wait() {
+    A11ySssState state = online_screen();
+    Fixture f(state);
+    hover(f, state, kCorneriaTile);
+    f.spoken();
+    state.pressed_a = true;
+    pick(f, state, kCorneriaTile);
+    assert((f.spoken() == Texts{"Waiting for your opponent."}));
+    /* The preview shows, then the screen waits for the other pick. */
+    state.pressed_a = false;
+    f.sss.frame(state);
+    state.pick = A11Y_SSS_LEAVING;
+    f.sss.frame(state);
+    assert(f.spoken().empty());
+}
+
+void an_online_random_pick_waits_for_its_roll() {
+    /* Online Random is rolled only once both players have picked; until
+     * then the hovered index keeps the random tile, or none. */
+    A11ySssState state = online_screen();
     Fixture f(state);
     hover(f, state, A11Y_SSS_RANDOM_TILE);
     f.spoken();
     state.pressed_a = true;
     pick(f, state, A11Y_SSS_RANDOM_TILE);
+    assert((f.spoken() == Texts{"Waiting for your opponent."}));
+
+    A11ySssState start = online_screen();
+    Fixture g(start);
+    start.pressed_start = true;
+    pick(g, start, A11Y_SSS_NO_TILE);
+    assert((g.spoken() == Texts{"Waiting for your opponent."}));
+}
+
+void the_opponents_pick_is_not_said_before_the_result() {
+    A11ySssState state = online_screen();
+    Fixture f(state);
+    hover(f, state, kCorneriaTile);
+    state.pressed_a = true;
+    pick(f, state, kCorneriaTile);
+    f.spoken();
     state.pressed_a = false;
+    state.local_pick = kCorneriaTile;
     state.pick = A11Y_SSS_LEAVING;
-    state.hovered = kCorneriaTile;
     f.sss.frame(state);
+    state.remote_pick = kOnettTile;
+    f.sss.frame(state);
+    assert(f.spoken().empty());
+}
+
+/* Online stage select once the local player has picked and waits, then the
+ * coin flip's result: the stage's tile and the two picks. */
+Texts result(int stage_tile, int local_pick, int remote_pick) {
+    A11ySssState state = online_screen();
+    Fixture f(state);
+    state.pick = A11Y_SSS_LEAVING;
+    f.sss.frame(state);
+    f.spoken();
+    f.sss.resolved(state, stage_tile, local_pick, remote_pick);
+    return f.spoken();
+}
+
+void the_result_says_whose_pick_won() {
+    assert((result(kCorneriaTile, kCorneriaTile, kOnettTile) == Texts{"Corneria, your pick."}));
+    assert((result(kOnettTile, kCorneriaTile, kOnettTile) == Texts{"Onett, opponent's pick."}));
+}
+
+void the_result_of_one_stage_picked_twice_names_it_alone() {
+    assert((result(kCorneriaTile, kCorneriaTile, kCorneriaTile) == Texts{"Corneria."}));
+}
+
+void a_random_pick_that_won_says_its_roll_and_whose_it_was() {
+    /* Random is the random tile or Start before any tile. */
+    assert((result(kFountainTile, A11Y_SSS_RANDOM_TILE, kOnettTile) ==
+            Texts{"Random: Fountain of Dreams, your pick."}));
+    assert((result(kFountainTile, kOnettTile, A11Y_SSS_NO_TILE) ==
+            Texts{"Random: Fountain of Dreams, opponent's pick."}));
+    /* The named pick that won beside a Random one. */
+    assert((result(kOnettTile, A11Y_SSS_NO_TILE, kOnettTile) == Texts{"Onett, opponent's pick."}));
+    assert((result(kOnettTile, kOnettTile, A11Y_SSS_RANDOM_TILE) == Texts{"Onett, your pick."}));
+}
+
+void two_random_picks_say_the_roll_alone() {
+    assert((result(kBattlefieldTile, A11Y_SSS_RANDOM_TILE, A11Y_SSS_NO_TILE) ==
+            Texts{"Random: Battlefield."}));
+}
+
+void the_result_is_said_once() {
+    A11ySssState state = online_screen();
+    Fixture f(state);
+    state.pick = A11Y_SSS_LEAVING;
+    f.sss.frame(state);
+    f.spoken();
+    f.sss.resolved(state, kCorneriaTile, kCorneriaTile, kOnettTile);
+    f.sss.resolved(state, kCorneriaTile, kCorneriaTile, kOnettTile);
+    assert((f.spoken() == Texts{"Corneria, your pick."}));
+    /* The next visit says its own. */
+    f.sss.forget();
+    f.sss.frame(state);
+    f.spoken();
+    f.sss.resolved(state, kOnettTile, kCorneriaTile, kOnettTile);
+    assert((f.spoken() == Texts{"Onett, opponent's pick."}));
+}
+
+void offline_the_resolution_says_nothing() {
+    /* The game reaches the same line offline, where the pick was said. */
+    A11ySssState state = screen();
+    Fixture f(state);
+    state.pick = A11Y_SSS_LEAVING;
+    f.sss.frame(state);
+    f.sss.resolved(state, kCorneriaTile, -1, -1);
     assert(f.spoken().empty());
 }
 
@@ -507,6 +612,19 @@ void a_pick_during_a_glide_still_rolls_random() {
     assert((f.spoken() == Texts{"Random: Corneria."}));
 }
 
+void an_online_pick_during_a_glide_names_the_stage_picked() {
+    A11ySssState state = online_screen();
+    Fixture f(state);
+    f.sss.step(state, kFountainTile);
+    f.spoken();
+    state.hovered = kOnettTile;
+    f.sss.frame(state, Glide{GlidePhase::gliding, kFountainTile});
+    state.pressed_a = true;
+    state.pick = A11Y_SSS_PICKED;
+    f.sss.frame(state, Glide{GlidePhase::ended, kFountainTile});
+    assert((f.spoken() == Texts{"Picked Onett. Waiting for your opponent."}));
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -536,7 +654,15 @@ int main() {
     a_pick_on_a_locked_tile_is_refused();
     a_refusal_names_the_tile_entered_after_it();
     a_on_an_unlocked_tile_that_did_not_pick_says_nothing();
-    online_picks_are_left_to_their_own_rules();
+    an_online_pick_says_to_wait();
+    an_online_random_pick_waits_for_its_roll();
+    the_opponents_pick_is_not_said_before_the_result();
+    the_result_says_whose_pick_won();
+    the_result_of_one_stage_picked_twice_names_it_alone();
+    a_random_pick_that_won_says_its_roll_and_whose_it_was();
+    two_random_picks_say_the_roll_alone();
+    the_result_is_said_once();
+    offline_the_resolution_says_nothing();
     skipped_scene_names_the_stage_instead_of_the_opening();
     skipped_scene_names_the_stage_once();
     skipped_scene_with_a_stage_missing_from_the_table();
@@ -553,6 +679,7 @@ int main() {
     a_pick_during_a_glide_names_the_stage_picked();
     a_pick_where_the_step_went_says_nothing();
     a_pick_during_a_glide_still_rolls_random();
+    an_online_pick_during_a_glide_names_the_stage_picked();
     std::cout << "sss_speech: all tests passed\n";
     return 0;
 }
