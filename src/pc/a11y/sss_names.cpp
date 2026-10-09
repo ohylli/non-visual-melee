@@ -20,17 +20,17 @@ constexpr StageWords kStages[] = {
         "A climb up an icy mountain that scrolls as you fight, over ledges of rock and ice at many "
         "heights."},
     {A11Y_St_Kind_Castle, "Princess Peach's Castle",
-        "The rooftops of a castle above its moat, at several heights around a tower in the "
-        "middle."},
+        "The rooftops of a castle above its moat, at several heights around a tower in the middle. "
+        "Two platforms rise when stood on and sink back when left."},
     {A11Y_St_Kind_Kongo, "Kongo Jungle",
-        "Wooden platforms in the treetops above a waterfall. A barrel below catches fighters who "
-        "fall and shoots them back up."},
+        "Wooden platforms in the treetops above a waterfall. A moving barrel catches fighters and "
+        "fires them out, and Klaptraps appear now and then."},
     {A11Y_St_Kind_GreatBay, "Great Bay",
-        "A wooden pier over the sea, beside a floating platform that tilts and sinks under weight. "
-        "A turtle surfaces now and then, and Tingle floats above on his balloon."},
+        "A wooden pier over the sea, beside a turtle that dives and surfaces elsewhere as a "
+        "platform. Tingle floats above on a balloon that tilts and sinks when stood on."},
     {A11Y_St_Kind_Story, "Yoshi's Story",
         "A small island with three floating platforms and a cloud platform that drifts by. Shy "
-        "Guys fly past."},
+        "Guys fly past carrying food."},
     {A11Y_St_Kind_Izumi, "Fountain of Dreams",
         "A round stage over a fountain, with a platform above it and two side platforms that rise "
         "and sink."},
@@ -42,36 +42,37 @@ constexpr StageWords kStages[] = {
         "above."},
 
     {A11Y_St_Kind_RCruise, "Rainbow Cruise",
-        "A flying ship sailing through the sky. The stage scrolls, carrying the fight between its "
-        "deck and platforms in the sky."},
+        "A flying ship sailing through the sky, with platforms around it. The stage scrolls as the "
+        "fight goes on."},
     {A11Y_St_Kind_Garden, "Jungle Japes",
         "A wooden hut over a river whose current carries fallen fighters away. A Klaptrap leaps "
         "out of the water now and then."},
     {A11Y_St_Kind_Shrine, "Hyrule Temple",
         "A big temple on floating islands, with ground at many heights and lots of room to run."},
     {A11Y_St_Kind_Yoster, "Yoshi's Island",
-        "Grassy hills on either side of a row of blocks that spin away and let fighters fall "
-        "through when hit or landed on hard. A pipe stands at one end."},
+        "Grassy hills on either side of a row of blocks that spin and can be passed through for a "
+        "while when hit or landed on hard. A pipe stands at one end."},
     {A11Y_St_Kind_Greens, "Green Greens",
         "An island with Whispy Woods, a tree that blows wind and drops apples, in the middle. "
-        "Blocks stand at its sides and break when hit."},
+        "Blocks fall and stack up, and some of them are bombs."},
     {A11Y_St_Kind_Venom, "Venom",
         "A fight on top of a big ship flying through a dark red sky. Arwings fly through and "
         "fire."},
 
     {A11Y_St_Kind_Zebes, "Brinstar",
-        "A small alien stage of several pieces over acid that rises and falls and burns."},
+        "A small alien stage of several pieces over acid that rises and falls and burns. Some "
+        "pieces break when hit and grow back."},
     {A11Y_St_Kind_Onett, "Onett",
-        "A town street in front of buildings whose springy awnings and rooftops are platforms. "
-        "Cars race down the road and hit anyone in their way."},
+        "A town street in front of buildings, with springy awnings to land on that give way after "
+        "a while. Cars race down the road and hit anyone in their way."},
     {A11Y_St_Kind_MuteCity, "Mute City",
-        "Platforms flying over a race track, where race cars speed past."},
+        "Platforms flying over a race track, where race cars speed past and can hit fighters."},
     {A11Y_St_Kind_PStadium, "Pokémon Stadium",
         "A wide field with two platforms that transforms into fire, grass, water and rock layouts "
         "and back."},
     {A11Y_St_Kind_Inishie1, "Mushroom Kingdom",
         "Brick ground with gaps between, from the first Super Mario Bros., with question blocks "
-        "that give items."},
+        "that give items. Two lifts on a scale tip under weight and fall if pushed too far."},
 
     {A11Y_St_Kind_Kraid, "Brinstar Depths", "A rock that Kraid, a giant monster, tilts and turns."},
     {A11Y_St_Kind_Fourside, "Fourside",
@@ -98,8 +99,7 @@ constexpr StageWords kStages[] = {
         "A hilly stage under an orange sky, with cloud platforms that sink when stood on and "
         "vanish for a while."},
     {A11Y_St_Kind_OldKongo, "Kongo Jungle N64",
-        "A jungle stage at sunset, with a barrel below that catches fighters who fall and shoots "
-        "them back up."},
+        "A jungle stage at sunset, with a moving barrel that catches fighters and fires them out."},
 };
 
 constexpr A11yStage kAllStages[] = {

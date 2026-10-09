@@ -35,3 +35,21 @@ Implemented; judging the words by ear is issue 07.
 - **Verification**, quick level: build, style, unit tests (`sss_speech` updated; `launcher_data` fails as known), a bounded `title` run, `sss_hover.drive` (twice) and `sss_skipped.drive` passed.
 
 For issue 04: a step names its destination with `hover_words` (the description included, as on any hover); "Could not reach" and the glide log keep `tile_words`, the name alone. The longest announcement is now about two sentences, so the next step's interruption matters for quick browsing.
+
+### 2026-10-09, descriptions checked against the stage code (agent)
+
+A second pass checked each stage's claims against `src/melee/gr/`, and twelve descriptions changed:
+
+- **Great Bay:** the platform that tilts and sinks is Tingle's balloon, and the turtle dives and comes up somewhere else.
+- **Peach's Castle:** two platforms rise when stood on and sink back.
+- **Both Kongo Jungles:** a moving barrel catches fighters and fires them out. Nothing in the code places the barrel below the stage, and Klaptraps appear in Kongo Jungle too.
+- **Yoshi's Story:** the Shy Guys carry food.
+- **Rainbow Cruise:** the scroll's route is in animation data, so it is no longer described.
+- **Yoshi's Island:** the blocks become passable for a while rather than falling.
+- **Green Greens:** blocks fall and stack, some of them bombs.
+- **Brinstar:** pieces break when hit and grow back.
+- **Onett:** the awnings give way after enough landings.
+- **Mute City:** the cars can hit fighters.
+- **Mushroom Kingdom:** gained its scale lifts.
+
+Still not in the code by name: Peach's Castle's Bullet Bill, a POW block, and the acid's damage, which `docs/a11y/gameplay-state.md` records. Brinstar keeps "burns" on that primer's word. `sss_hover.drive` passed again.
