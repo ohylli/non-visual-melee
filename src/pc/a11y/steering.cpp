@@ -16,9 +16,8 @@ constexpr float kHandSpeed = 0.0002f;
 constexpr int kFullPush = 80;
 constexpr float kHandFullStep =
     kHandSpeed * (static_cast<float>(kFullPush * kFullPush) - kHandThreshold);
-/* Stage select's cursor (src/melee/mn/mnstagesel.c): the dead zone each
- * axis has to get beyond, and the speed beyond it. */
-constexpr int kStageDeadZone = 30;
+/* Stage select's cursor (src/melee/mn/mnstagesel.c): the speed beyond the
+ * dead zone. */
 constexpr float kStageSpeed = 0.03f;
 constexpr float kStageFullStep = kStageSpeed * static_cast<float>(kFullPush - kStageDeadZone);
 /* Online, a stick axis of 2 or less travels as 0 (at_rest in

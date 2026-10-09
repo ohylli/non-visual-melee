@@ -13,8 +13,6 @@ constexpr float kLevel = 0.5f;
  * in height: the tall tiles reach 1.7 into the second row, and the rows of
  * ordinary tiles have gaps between them. */
 constexpr float kReach = 1.0f;
-/* Stage select's dead zone on each stick axis (mnStageSel_Scene_OnFrame). */
-constexpr int kDeadZone = 30;
 
 bool drawn(const A11ySssState& state, int tile) {
     return tile >= 0 && tile < A11Y_SSS_TILES && state.tiles[tile].state != A11Y_SSS_NOT_DRAWN;
@@ -31,19 +29,15 @@ float overlap(const Band& a, const Band& b) {
     return std::min(a.top, b.top) - std::max(a.bottom, b.bottom);
 }
 
-bool in_row(const std::vector<Placed<int>>& row, int tile) {
-    return std::any_of(
-        row.begin(), row.end(), [&](const Placed<int>& placed) { return placed.target == tile; });
-}
-
 /* A row holding both tiles, in_row first; -1 for none. */
 int shared_row(const PlacedRows<int>& rows, int a, int b, int in) {
-    if (in >= 0 && in < static_cast<int>(rows.size()) && in_row(rows[in], a) && in_row(rows[in], b))
+    if (in >= 0 && in < static_cast<int>(rows.size()) && row_has(rows[in], a) &&
+        row_has(rows[in], b))
     {
         return in;
     }
     for (int r = 0; r < static_cast<int>(rows.size()); r++) {
-        if (in_row(rows[r], a) && in_row(rows[r], b)) {
+        if (row_has(rows[r], a) && row_has(rows[r], b)) {
             return r;
         }
     }
@@ -157,7 +151,7 @@ int steering_port(const A11ySssState& state) {
 
 Stick stick_as_held(int x, int y) {
     auto axis = [](int value) {
-        return value > 0 ? value + kDeadZone : value < 0 ? value - kDeadZone : 0;
+        return value > 0 ? value + kStageDeadZone : value < 0 ? value - kStageDeadZone : 0;
     };
     return Stick{axis(x), axis(y)};
 }

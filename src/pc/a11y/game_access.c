@@ -454,9 +454,12 @@ bool a11y_game_sss_state(const A11ySssScreen* screen, A11ySssState* out) {
     out->local_pick = screen->local_pick;
     out->remote_pick = screen->remote_pick;
 
-    const A11ySssTileRow* rows = (const A11ySssTileRow*)screen->tiles;
+    const char* rows = (const char*)screen->tiles;
     for (int i = 0; i < A11Y_SSS_TILES; i++) {
-        const A11ySssTileRow* row = &rows[i];
+        /* Copied, since the game's row is of its own type, not this one. */
+        A11ySssTileRow copy;
+        memcpy(&copy, rows + (size_t)i * sizeof(copy), sizeof(copy));
+        const A11ySssTileRow* row = &copy;
         A11ySssTile* tile = &out->tiles[i];
         tile->stage = i == A11Y_SSS_RANDOM_TILE ? A11Y_NO_STAGE : sss_stage(row->stkind);
         tile->state =

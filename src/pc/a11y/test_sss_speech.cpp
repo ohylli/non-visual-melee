@@ -625,6 +625,31 @@ void an_online_pick_during_a_glide_names_the_stage_picked() {
     assert((f.spoken() == Texts{"Picked Onett. Waiting for your opponent."}));
 }
 
+void an_online_random_pick_during_a_glide_says_so() {
+    /* Online the roll waits for the other pick, so the pick says Random:
+     * the random tile crossed, or Start before the glide reached a tile. */
+    A11ySssState state = online_screen();
+    Fixture f(state);
+    f.sss.step(state, kBrinstarTile);
+    f.spoken();
+    state.hovered = A11Y_SSS_RANDOM_TILE;
+    f.sss.frame(state, Glide{GlidePhase::gliding, kBrinstarTile});
+    state.pressed_a = true;
+    state.pick = A11Y_SSS_PICKED;
+    f.sss.frame(state, Glide{GlidePhase::ended, kBrinstarTile});
+    assert((f.spoken() == Texts{"Picked Random. Waiting for your opponent."}));
+
+    A11ySssState start = online_screen();
+    Fixture g(start);
+    g.sss.step(start, kPeachsCastleTile);
+    g.spoken();
+    g.sss.frame(start, Glide{GlidePhase::gliding, kPeachsCastleTile});
+    start.pressed_start = true;
+    start.pick = A11Y_SSS_PICKED;
+    g.sss.frame(start, Glide{GlidePhase::ended, kPeachsCastleTile});
+    assert((g.spoken() == Texts{"Picked Random. Waiting for your opponent."}));
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -680,6 +705,7 @@ int main() {
     a_pick_where_the_step_went_says_nothing();
     a_pick_during_a_glide_still_rolls_random();
     an_online_pick_during_a_glide_names_the_stage_picked();
+    an_online_random_pick_during_a_glide_says_so();
     std::cout << "sss_speech: all tests passed\n";
     return 0;
 }

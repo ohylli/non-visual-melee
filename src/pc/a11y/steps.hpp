@@ -63,13 +63,14 @@ float row_distance(const std::vector<Placed<T>>& row, float y) {
     return y > top ? y - top : y < bottom ? bottom - y : 0.0f;
 }
 
+}  // namespace steps_detail
+
+/* The target is in the row. */
 template <typename T>
 bool row_has(const std::vector<Placed<T>>& row, const T& target) {
     return std::any_of(
         row.begin(), row.end(), [&](const Placed<T>& placed) { return placed.target == target; });
 }
-
-}  // namespace steps_detail
 
 /* A step from a target in the rows: along its row to the next target, Up and
  * Down to the target nearest in x in the next row that has any; from itself
@@ -83,7 +84,7 @@ std::optional<T> row_step(
     int top = -1;
     int bottom = -1;
     for (int r = 0; r < static_cast<int>(rows.size()); r++) {
-        if (steps_detail::row_has(rows[r], from)) {
+        if (row_has(rows[r], from)) {
             top = top < 0 ? r : top;
             bottom = r;
         }
@@ -91,8 +92,8 @@ std::optional<T> row_step(
     if (top < 0) {
         return std::nullopt;
     }
-    bool along = in_row >= 0 && in_row < static_cast<int>(rows.size()) &&
-                 steps_detail::row_has(rows[in_row], from);
+    bool along =
+        in_row >= 0 && in_row < static_cast<int>(rows.size()) && row_has(rows[in_row], from);
     const std::vector<Placed<T>>& row = rows[along ? in_row : top];
     size_t column = 0;
     while (!(row[column].target == from)) {

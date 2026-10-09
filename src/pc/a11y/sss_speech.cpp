@@ -59,10 +59,12 @@ void SssSpeech::frame(const A11ySssState& state, const GlideState<int>& glide) {
         /* Offline the roll lands in the hovered index at once; online it
          * waits for the other player's pick. */
         add(out, std::string(kRandom) + ": " + tile_words(state, state.hovered) + ".");
-    } else if (picked && !rolls(last.hovered) && last.hovered != m_named) {
+    } else if (picked && last.hovered != m_named) {
         /* A during a glide picks the tile crossed, not the one the step
-         * named. */
-        add(out, std::string(kPicked) + " " + tile_words(state, last.hovered) + ".");
+         * named; online that may be Random, or Start before the first glide
+         * reached a tile. */
+        int tile = rolls(last.hovered) ? A11Y_SSS_RANDOM_TILE : last.hovered;
+        add(out, std::string(kPicked) + " " + tile_words(state, tile) + ".");
     }
     if (state.online && picked) {
         /* The other player's pick stays unsaid until the coin flip. */

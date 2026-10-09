@@ -40,6 +40,10 @@ struct MovementRule {
     float full_step;
 };
 
+/* Stage select's dead zone on each stick axis (mnStageSel_Scene_OnFrame),
+ * which the game takes off before its cursor sees the stick. */
+inline constexpr int kStageDeadZone = 30;
+
 /* Character select's hand (getStickDelta in mncharsel.c): nothing below a
  * squared tilt of 200, else 0.0002 * (x² + y² - 200) units in the stick's
  * direction, at most 1.24. */

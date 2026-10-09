@@ -19,3 +19,13 @@ Listen for:
 Findings become new issues here. When it passes, the CLAUDE.md status line says "Play-tested by ear with NVDA".
 
 ## Comments
+
+### Code review of 01 to 06, 2026-10-09
+
+Left for the maintainer, most severe first; each worth listening for in the play test.
+
+- Start after browsing: the opening says "Start picks a random stage", but once the stage cursor has entered any tile, Start (like A) picks the last tile entered, and a named pick is silent, so a player pressing Start "for random" gets the last stage heard without being told. Options: reword the opening ("D-pad to choose, A to pick, or Start now for a random stage."), or name every pick. Recommended: reword the opening.
+- Ranked online's stage list is now silent: its scene announcement ("Stage select. No speech yet.") was removed with the grid's opening, and the frame hook never runs on the list. Recommended: say "Ranked stage list. No speech yet." at scene entry while `pc_rank_session_active()`, until the list gets its own speech.
+- A press at an edge repeats the tile's whole description. Recommended: the name alone at an edge.
+- From empty space with no tile that way, a step names the tile last hovered as if the cursor were on it. Option: "Nothing that way." with what A would pick.
+- Design: `CssReader::steer` and `SssReader::cursor` repeat one stop, pad, press and glide frame sequence, and `hooks.cpp` switches twice on the scene for the steering reader. A per-frame method on `Steerer` and one lookup of the screen's reader would remove both; worth it when a third screen steers.
