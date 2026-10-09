@@ -60,8 +60,8 @@ constexpr StageWords kStages[] = {
         "fire."},
 
     {A11Y_St_Kind_Zebes, "Brinstar",
-        "A small alien stage of several pieces over acid that rises and falls and burns. Some "
-        "pieces break when hit and grow back."},
+        "A small alien stage of several pieces over acid that rises and falls. Some pieces break "
+        "when hit and grow back."},
     {A11Y_St_Kind_Onett, "Onett",
         "A town street in front of buildings, with springy awnings to land on that give way after "
         "a while. Cars race down the road and hit anyone in their way."},
@@ -85,8 +85,8 @@ constexpr StageWords kStages[] = {
         "Giant Pokémon balloons float past one after another, and the fight moves from one to the "
         "next."},
     {A11Y_St_Kind_Inishie2, "Mushroom Kingdom II",
-        "Two grassy ledges over a waterfall, with a flying carpet drifting over the water. Birdo "
-        "appears now and then and fires eggs."},
+        "Two grassy ledges over a waterfall, and a flying carpet that crosses the stage as a "
+        "platform. Birdo appears now and then and fires eggs."},
 
     {A11Y_St_Kind_Battle, "Battlefield",
         "One floating stage with three platforms above it, two low at the sides and one higher in "

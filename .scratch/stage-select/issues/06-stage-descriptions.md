@@ -53,3 +53,32 @@ A second pass checked each stage's claims against `src/melee/gr/`, and twelve de
 - **Mushroom Kingdom:** gained its scale lifts.
 
 Still not in the code by name: Peach's Castle's Bullet Bill, a POW block, and the acid's damage, which `docs/a11y/gameplay-state.md` records. Brinstar keeps "burns" on that primer's word. `sss_hover.drive` passed again.
+
+### 2026-10-09, the rule applied to what the code does not show (agent)
+
+The lead asked that wording follow the code check strictly.
+
+- **Brinstar:** no longer says the acid burns. The code shows the acid rising and falling (`grZe_AcidLevelEntry`) but not dealing damage, and the primer's "burns" is not enough.
+- **Mushroom Kingdom II:** now says a flying carpet "crosses the stage as a platform". The tile shows the carpet, and the code shows an unnamed platform that enters from beyond the edge and crosses the stage.
+- **Big Blue:** keeps "a track racing past below". The tile shows the roads, and the code gives the stage a motion that runs past; the description no longer says the track carries anyone away.
+- **Both Kongo Jungles:** say "a moving barrel that catches fighters and fires them out", without "below" (changed in the previous pass).
+- **Poké Floats:** keeps its Pokémon balloons, which the tile shows (Chansey, Psyduck).
+
+Well-known Melee features left out for lack of code support, for the play test to add back if wanted:
+
+- the acid burning on Brinstar;
+- Peach's Castle's Banzai Bill (an unnamed object with a hit box, which the camera follows, fits it), its switches and bumpers;
+- Mushroom Kingdom's POW block, Goombas and Koopas;
+- Mushroom Kingdom II's Pidgit and log, by name;
+- the Kongo barrels sitting under the stage and shooting fighters back up;
+- Big Blue's track carrying fighters away;
+- Rainbow Cruise's route, from the ship to the platforms and back;
+- Dream Land N64's three platforms;
+- Kraid's attacks hurting fighters;
+- Icicle Mountain scrolling mostly upward;
+- Fountain of Dreams' rising platforms being the side ones (the primer says they are);
+- Great Bay's falling moon and Tingle knocking the balloon over;
+- Venom's lower level;
+- Hyrule Temple's tunnel.
+
+Verification, quick level: build, style, unit tests (`launcher_data` fails as known), a bounded `title` run and `sss_hover.drive` passed.
