@@ -7,6 +7,7 @@ namespace a11y {
 
 void SssReader::forget() {
     m_speech.forget();
+    m_steerer.forget();
 }
 
 void SssReader::frame(const A11ySssScreen& screen, bool online) {
@@ -23,6 +24,7 @@ void SssReader::frame(const A11ySssScreen& screen, bool online) {
         return;
     }
     state.online = online;
+    m_state = state;
     m_speech.frame(state);
 }
 

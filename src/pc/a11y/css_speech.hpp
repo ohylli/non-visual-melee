@@ -19,6 +19,7 @@
 #pragma once
 #include "css_targets.hpp"
 #include "game_access.h"
+#include "steerer.hpp"
 #include <set>
 #include <string>
 
@@ -26,20 +27,8 @@ namespace a11y {
 
 class Speech;
 
-/* A glide as the speech follows it, kept by whoever steers. */
-struct GlideStatus {
-    enum class Phase {
-        none,
-        /* Under way to destination. */
-        gliding,
-        /* Ended since the last frame, at the destination or elsewhere. */
-        ended,
-        /* Ended since the last frame without getting there. */
-        failed,
-    };
-    Phase phase = Phase::none;
-    Target destination;
-};
+/* A glide to a target as the speech follows it, kept by the reader. */
+using GlideStatus = GlideState<Target>;
 
 class CssSpeech {
 public:

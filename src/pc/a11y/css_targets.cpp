@@ -38,9 +38,6 @@ constexpr float kSliderLength = 10.0f;
 constexpr float kLevelWidth = 1.25f;
 /* Portraits whose tops are this close are in one row. */
 constexpr float kSameRow = 0.5f;
-/* From anywhere else, a target counts as on a side of the hand when it is at
- * least this far that way. */
-constexpr float kAhead = 0.5f;
 
 using Rows = std::vector<std::vector<Target>>;
 
@@ -311,120 +308,16 @@ std::vector<Target> arrows_in_test_order(const A11yCssState& state) {
     return arrows;
 }
 
-/* The target of row nearest in x to x; the first of two as near. */
-Target nearest_in_x(const A11yCssState& state, const std::vector<Target>& row, float x) {
-    Target best = row.front();
-    for (Target target : row) {
-        if (std::fabs(step_anchor(state, target).x - x) < std::fabs(step_anchor(state, best).x - x))
-        {
-            best = target;
-        }
-    }
-    return best;
-}
-
-/* A step from a target in the rows; nothing when from is not among them. */
-std::optional<Target> row_step(
-    const A11yCssState& state, const Rows& rows, Target from, Direction direction) {
-    if (from.kind == TargetKind::none) {
-        return std::nullopt;
-    }
-    for (size_t r = 0; r < rows.size(); r++) {
-        const std::vector<Target>& row = rows[r];
-        auto found = std::find(row.begin(), row.end(), from);
-        if (found == row.end()) {
-            continue;
-        }
-        size_t column = static_cast<size_t>(found - row.begin());
-        float x = step_anchor(state, from).x;
-        switch (direction) {
-        case Direction::left:
-            return column > 0 ? row[column - 1] : from;
-        case Direction::right:
-            return column + 1 < row.size() ? row[column + 1] : from;
-        case Direction::up:
-            return r > 0 ? nearest_in_x(state, rows[r - 1], x) : from;
-        case Direction::down:
-            return r + 1 < rows.size() ? nearest_in_x(state, rows[r + 1], x) : from;
-        }
-    }
-    return std::nullopt;
-}
-
-/* How far a row is from height y: none within the heights of its targets. */
-float row_distance(const A11yCssState& state, const std::vector<Target>& row, float y) {
-    float top = step_anchor(state, row.front()).y;
-    float bottom = top;
-    for (Target target : row) {
-        top = std::max(top, step_anchor(state, target).y);
-        bottom = std::min(bottom, step_anchor(state, target).y);
-    }
-    return y > top ? y - top : y < bottom ? bottom - y : 0.0f;
-}
-
-/* The nearest target on the direction's side of the hand, or none. Up and
- * Down: the row with the target nearest that way in height, and in it the
- * target nearest in x among those that way. Left and Right: along the row the
- * hand is in or nearest to, else the nearest target that way in any row. */
-Target nearest_that_way(
-    const A11yCssState& state, const Rows& rows, float x, float y, Direction direction) {
-    if (direction == Direction::up || direction == Direction::down) {
-        float way = direction == Direction::up ? 1.0f : -1.0f;
-        std::vector<Target> best;
-        float best_ahead = 0.0f;
-        for (const std::vector<Target>& row : rows) {
-            std::vector<Target> that_way;
-            float ahead = 0.0f;
-            for (Target target : row) {
-                float by = (step_anchor(state, target).y - y) * way;
-                if (by > kAhead) {
-                    ahead = that_way.empty() ? by : std::min(ahead, by);
-                    that_way.push_back(target);
-                }
-            }
-            if (!that_way.empty() && (best.empty() || ahead < best_ahead)) {
-                best = that_way;
-                best_ahead = ahead;
-            }
-        }
-        return best.empty() ? Target{} : nearest_in_x(state, best, x);
-    }
-    if (rows.empty()) {
-        return Target{};
-    }
-    float way = direction == Direction::right ? 1.0f : -1.0f;
-    Target best;
-    float best_distance = 0.0f;
-    /* The target, at its anchor, if it lies that way and nearer than the best so
-     * far. */
-    auto consider = [&](Target target, Point at, float distance) {
-        if ((at.x - x) * way > kAhead &&
-            (best.kind == TargetKind::none || distance < best_distance))
-        {
-            best = target;
-            best_distance = distance;
-        }
-    };
-    const std::vector<Target>* nearest_row = &rows.front();
+/* The rows with each target's anchor, for the shared steps. */
+PlacedRows<Target> placed_rows(const A11yCssState& state, const Rows& rows) {
+    PlacedRows<Target> placed;
     for (const std::vector<Target>& row : rows) {
-        if (row_distance(state, row, y) < row_distance(state, *nearest_row, y)) {
-            nearest_row = &row;
-        }
-    }
-    for (Target target : *nearest_row) {
-        Point at = step_anchor(state, target);
-        consider(target, at, std::fabs(at.x - x));
-    }
-    if (best.kind != TargetKind::none) {
-        return best;
-    }
-    for (const std::vector<Target>& row : rows) {
+        placed.emplace_back();
         for (Target target : row) {
-            Point at = step_anchor(state, target);
-            consider(target, at, std::hypot(at.x - x, at.y - y));
+            placed.back().push_back(Placed<Target>{target, step_anchor(state, target)});
         }
     }
-    return best;
+    return placed;
 }
 
 /* A step of the held slider: Left and Right one value, not past the ends; Up
@@ -574,14 +467,14 @@ Target step(const A11yCssState& state, Target from, float x, float y, Direction 
     if (state.hand.slider != A11Y_CSS_NO_SLIDER) {
         return slider_step(state, from, direction);
     }
-    Rows rows = target_rows(state);
-    if (std::optional<Target> to = row_step(state, rows, from, direction)) {
+    PlacedRows<Target> rows = placed_rows(state, target_rows(state));
+    if (std::optional<Target> to = row_step(rows, from, direction)) {
         return *to;
     }
-    if (std::optional<Target> to = row_step(state, rows, locate(state, x, y), direction)) {
+    if (std::optional<Target> to = row_step(rows, locate(state, x, y), direction)) {
         return *to;
     }
-    return nearest_that_way(state, rows, x, y, direction);
+    return nearest_that_way(rows, Point{x, y}, direction).value_or(Target{});
 }
 
 Target target_at(const A11yCssState& state, float x, float y) {

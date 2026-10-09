@@ -10,7 +10,7 @@
 #include "css_speech.hpp"
 #include "css_targets.hpp"
 #include "game_access.h"
-#include "steering.hpp"
+#include "steerer.hpp"
 
 namespace a11y {
 
@@ -19,7 +19,10 @@ class Speech;
 class CssReader {
 public:
     /* steer: the D-pad steers the hand. speech must outlive this. */
-    CssReader(Speech& speech, bool steer) : m_speech(speech), m_steer(steer) {}
+    CssReader(Speech& speech, bool steer)
+        : m_speech(speech), m_steer(steer), m_steerer(kHandMovement, [this](const Target& target) {
+              return m_speech.target_words(m_state, target);
+          }) {}
 
     /* A scene was entered. */
     void forget();
@@ -32,7 +35,7 @@ public:
     void coin(int slot, float x, float y);
     /* The pad hook: the stick steering asks for, handed over once; false
      * when it asks for none, so the stick returns to rest by itself. */
-    bool take_stick(Stick* out);
+    bool take_stick(Stick* out) { return m_steerer.take_stick(out); }
     /* Whether the D-pad steers the hand, rather than doing what the game
      * or the base port would make of it. */
     bool steers() const { return m_steer; }
@@ -45,11 +48,6 @@ private:
     /* The local hand updated: steps, and the glide's next frame. */
     void steer(const A11yCssHandReport& report);
     void press(Direction direction, Point hand);
-    /* The glide ended, failed or not, for why: logged now, spoken on the
-     * next frame. */
-    void glide_ended(bool failed, const char* why);
-    /* Stops a glide under way, with no announcement unless failed. */
-    void stop_glide(const char* why, bool failed);
 
     CssSpeech m_speech;
     bool m_steer;
@@ -64,12 +62,9 @@ private:
     bool m_have_state = false;
     /* The local hand reported since the last frame hook. */
     bool m_local_updated = false;
-    Glide m_glide;
-    /* Where the glide goes, and how it ended until the frame hook says so. */
-    GlideStatus m_glide_status;
-    /* The stick the glide asks for, until the pad hook takes it. */
-    Stick m_request;
-    bool m_request_waiting = false;
+    /* The glide, where it goes, and how it ended until the frame hook says
+     * so. */
+    Steerer<Target> m_steerer;
 };
 
 }  // namespace a11y

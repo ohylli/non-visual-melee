@@ -45,7 +45,8 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/sss_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sss_names.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sss_reader.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/steering.cpp)
+        ${CMAKE_CURRENT_LIST_DIR}/steering.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/steerer.cpp)
 target_include_directories(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 # game_access.c reads the decomp's structs, so it lays out their bitfields as
 # the game's own files do (melee_game's options in CMakeLists.txt); MinGW's
@@ -187,7 +188,7 @@ if (TARGET unit_tests)
     set_tests_properties(lobby_speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests lobby_speech_test)
 
-    # The glide against a simulated hand that moves as the game's does.
+    # The glide against simulated cursors that move as the game's do.
     add_executable(steering_test EXCLUDE_FROM_ALL
             ${CMAKE_CURRENT_LIST_DIR}/test_steering.cpp
             ${CMAKE_CURRENT_LIST_DIR}/steering.cpp
@@ -197,6 +198,15 @@ if (TARGET unit_tests)
     add_test(NAME steering COMMAND steering_test)
     set_tests_properties(steering PROPERTIES LABELS melee)
     add_dependencies(unit_tests steering_test)
+
+    # The shared steps over rows of plain targets.
+    add_executable(steps_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_steps.cpp)
+    target_include_directories(steps_test PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(steps_test PRIVATE -UNDEBUG)
+    add_test(NAME steps COMMAND steps_test)
+    set_tests_properties(steps PROPERTIES LABELS melee)
+    add_dependencies(unit_tests steps_test)
 
     # Character select's targets against hand-written snapshots.
     add_executable(css_targets_test EXCLUDE_FROM_ALL

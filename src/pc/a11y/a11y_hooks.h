@@ -105,7 +105,8 @@ void pc_a11y_lobby_frame(const struct OnlineLobbyView* view);
 /* Port 1's virtual pad is about to be published (publish_locked in
  * src/pc/keyboard.c, once per video frame, after the keyboard, the key
  * driver and a GameCube adapter are merged). The one place the fork writes:
- * steering adds its stick to the pad, as a player's controller would, before
+ * steering on the screen on now (character select's hand, stage select's
+ * cursor) adds its stick to the pad, as a player's controller would, before
  * the game and the netplay code sample it. Returns true when it did, so the
  * pad is published even with no other source active. What it asks for is
  * published once and then dropped, so the stick returns to rest by itself. */
@@ -114,8 +115,8 @@ bool pc_a11y_pad(struct PADStatus* pad);
 
 /* Controller 1's physical buttons are about to reach online quick chat
  * (pc_net_chat_poll in src/pc/vi.c, once per video frame). Returns the
- * buttons chat may see: on character select, while the D-pad steers, the
- * D-pad is left out, so steering sends no phrases. Chat is presentation
+ * buttons chat may see: on character and stage select, while the D-pad
+ * steers, the D-pad is left out, so steering sends no phrases. Chat is presentation
  * only; the game and the netplay code read the pads elsewhere. */
 uint16_t pc_a11y_chat_buttons(uint16_t buttons);
 

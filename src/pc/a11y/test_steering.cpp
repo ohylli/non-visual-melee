@@ -1,11 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* The glide against a simulated hand that moves as character select's does:
- * the game's formula, its clamping and the hand's bounds, with each stick
- * the glide asks for applied some frames after it was published. Glides run
- * between character select's targets (test_css_screen.hpp). */
+/* The glide against simulated cursors that move as the game's do: each
+ * cursor's movement rule, the pad's clamping and the cursor's bounds, with
+ * each stick the glide asks for applied some frames after it was published.
+ * The cases every glide must survive run for both cursors: character
+ * select's hand between its portraits (test_css_screen.hpp), and stage
+ * select's cursor between its tiles (test_sss_screen.hpp). The hand's own
+ * targets (buttons, knobs, coins, a held slider) follow. */
 #include "css_targets.hpp"
 #include "steering.hpp"
 #include "test_css_screen.hpp"
+#include "test_sss_screen.hpp"
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
@@ -27,11 +31,65 @@ using namespace css_test;
 /* Where the hand starts, over player 1's slot. */
 constexpr Point kHome{-31.0f, -21.5f};
 constexpr int kPeachPortrait = 4, kRoyPortrait = 24;
-/* A frame of movement at a full push: the hand must end at least this far
- * inside its portrait. */
+/* A frame of the hand's movement at a full push: the hand must end at least
+ * this far inside a target. */
 constexpr float kMargin = 1.24f;
 /* The longest glide at no delay, in frames: 1.5 seconds. */
 constexpr int kLongestGlide = 90;
+
+/* A rectangle a cursor at rest must be inside. */
+struct Area {
+    float left = 0.0f;
+    float right = 0.0f;
+    float bottom = 0.0f;
+    float top = 0.0f;
+};
+
+/* A point glides go to, and where the cursor must come to rest for it. */
+struct Place {
+    Point aim;
+    Area area;
+};
+
+/* A cursor as a test moves it: the game's rule, the bounds the game keeps it
+ * in, where it starts, and the places glides go between. */
+struct Cursor {
+    const char* name;
+    const a11y::MovementRule* rule;
+    Area bounds;
+    Point home;
+    std::vector<Place> places;
+};
+
+Point aim(int portrait) {
+    return a11y::aim_point(vs_screen(), Target{TargetKind::portrait, portrait});
+}
+
+/* Character select's hand over the portraits, within mnCharSel_CursorThink's
+ * bounds; a portrait is tested where the hand would carry a coin. */
+Cursor hand_cursor() {
+    Cursor cursor{"hand", &a11y::kHandMovement, Area{-35.0f, 26.0f, -22.0f, 25.0f}, kHome, {}};
+    for (int i = 0; i < A11Y_CSS_PORTRAITS; i++) {
+        A11yCssRect rect = portrait_rect(i);
+        cursor.places.push_back(
+            Place{aim(i), Area{rect.left - a11y::kCoinOffsetX, rect.right - a11y::kCoinOffsetX,
+                              rect.bottom - a11y::kCoinOffsetY, rect.top - a11y::kCoinOffsetY}});
+    }
+    return cursor;
+}
+
+/* Stage select's cursor over the tiles, aimed at their centres, within
+ * fn_8025A310's bounds; it starts below every tile, about here. */
+Cursor stage_cursor() {
+    Cursor cursor{"stage cursor", &a11y::kStageCursorMovement, Area{-27.0f, 27.0f, -19.0f, 19.0f},
+        Point{0.0f, -15.0f}, {}};
+    for (const sss_test::TileRow& tile : sss_test::kTiles) {
+        cursor.places.push_back(Place{
+            Point{tile.x, tile.y}, Area{tile.x - tile.half_width, tile.x + tile.half_width,
+                                       tile.y - tile.half_height, tile.y + tile.half_height}});
+    }
+    return cursor;
+}
 
 /* The game's clamping (HSD_PadClamp, as gmmain.c sets it up), as a run
  * measured it: a stick within a full push of 80 arrives as sent, one further
@@ -59,23 +117,23 @@ struct Slider {
     float y = 0.0f;
 };
 
-/* The hand after one frame, kept inside the screen as mnCharSel_CursorThink
- * keeps it, or on its slider. */
-Point moved(Point hand, Stick applied, const Slider& slider) {
-    Point step = a11y::cursor_step(applied);
-    hand.x = std::fmin(std::fmax(hand.x + step.x, -35.0f), 26.0f);
-    hand.y = std::fmin(std::fmax(hand.y + step.y, -22.0f), 25.0f);
+/* The cursor after one frame, kept inside its bounds as the game keeps it,
+ * or on its slider. */
+Point moved(const Cursor& cursor, Point at, Stick applied, const Slider& slider) {
+    Point step = cursor.rule->step(applied);
+    at.x = std::fmin(std::fmax(at.x + step.x, cursor.bounds.left), cursor.bounds.right);
+    at.y = std::fmin(std::fmax(at.y + step.y, cursor.bounds.bottom), cursor.bounds.top);
     if (slider.held) {
-        hand.x = std::fmin(std::fmax(hand.x, slider.origin), slider.origin + 10.0f);
-        hand.y = slider.y;
+        at.x = std::fmin(std::fmax(at.x, slider.origin), slider.origin + 10.0f);
+        at.y = slider.y;
     }
-    return hand;
+    return at;
 }
 
 /* How the sticks the glide asks for reach the game. Once a video frame the
  * pad is published; each simulated frame then takes a sample of it and
  * applies the sample taken delay frames before. Offline the delay is 0: a
- * stick asked for at the end of one frame moves the hand in the next. */
+ * stick asked for at the end of one frame moves the cursor in the next. */
 struct Channel {
     int delay = 0;
     /* The stick published in this video frame is lost: no sample takes it. */
@@ -101,20 +159,20 @@ struct Channel {
 struct Run {
     GlideEnd end = GlideEnd::none;
     int frames = 0;
-    Point hand;
+    Point at;
 };
 
 int dominant(int a, int b) {
     return std::abs(a) > std::abs(b) ? a : b;
 }
 
-/* A glide from the hand at from to the point to, until it ends. restart_at
- * turns it to restart_to in that video frame, as a press during a glide
- * does. */
-Run glide(
-    Point from, Point to, const Channel& channel, int restart_at = -1, Point restart_to = Point{}) {
-    Glide glide;
-    Point hand = from;
+/* A glide of the cursor from the point from to the point to, until it ends.
+ * restart_at turns it to restart_to in that video frame, as a press during
+ * a glide does. */
+Run glide(const Cursor& cursor, Point from, Point to, const Channel& channel, int restart_at = -1,
+    Point restart_to = Point{}) {
+    Glide glide(*cursor.rule);
+    Point at = from;
     /* The samples by simulated frame. */
     std::map<int, Stick> samples;
     Stick request;
@@ -135,11 +193,11 @@ Run glide(
             Stick own = channel.player_from >= 0 && tick >= channel.player_from ? channel.player :
                                                                                   channel.drift;
             Stick applied = clamped(Stick{dominant(sent.x, own.x), dominant(sent.y, own.y)});
-            hand = moved(hand, applied, channel.slider);
+            at = moved(cursor, at, applied, channel.slider);
             if (tick == channel.click_at) {
-                hand.y = channel.click_y;
+                at.y = channel.click_y;
             }
-            GlideFrame out = glide.frame(hand, applied);
+            GlideFrame out = glide.frame(at, applied);
             if (out.end != GlideEnd::none) {
                 if (out.end == GlideEnd::arrived) {
                     /* Nothing is still on its way. */
@@ -147,7 +205,7 @@ Run glide(
                         assert(samples[later] == Stick{});
                     }
                 }
-                return Run{out.end, glide.frames(), hand};
+                return Run{out.end, glide.frames(), at};
             }
             request = out.stick;
             /* Within a full push, and nothing the wire would round to
@@ -157,66 +215,106 @@ Run glide(
             assert(request.y == 0 || std::abs(request.y) > 2);
         }
     }
-    return Run{GlideEnd::none, 400, hand};
+    return Run{GlideEnd::none, 400, at};
 }
 
-/* The hand has come to rest with the coin inside the portrait, a frame's
- * movement away from each edge. */
+/* The cursor has come to rest inside the place, a frame's movement at a
+ * full push away from each edge. */
+bool well_inside(const Cursor& cursor, Point at, const Place& place) {
+    float margin = cursor.rule->full_step;
+    return at.x > place.area.left + margin && at.x < place.area.right - margin &&
+           at.y < place.area.top - margin && at.y > place.area.bottom + margin;
+}
+
+/* The hand has come to rest with the coin inside the portrait. */
 bool well_inside(Point hand, int portrait) {
-    A11yCssRect rect = portrait_rect(portrait);
-    float x = hand.x + a11y::kCoinOffsetX;
-    float y = hand.y + a11y::kCoinOffsetY;
-    return x > rect.left + kMargin && x < rect.right - kMargin && y < rect.top - kMargin &&
-           y > rect.bottom + kMargin;
+    Cursor cursor = hand_cursor();
+    return well_inside(cursor, hand, cursor.places[portrait]);
 }
 
-Point aim(int portrait) {
-    return a11y::aim_point(vs_screen(), Target{TargetKind::portrait, portrait});
+void the_game_formulas() {
+    /* The hand's speeds the character select spec gives: a tilt of 20 moves
+     * 0.04 a frame, 40 moves 0.28, a full push 1.24; below a squared tilt of
+     * 200 nothing moves. */
+    const a11y::MovementRule& hand = a11y::kHandMovement;
+    assert(std::fabs(hand.step(Stick{20, 0}).x - 0.04f) < 1e-4f);
+    assert(std::fabs(hand.step(Stick{0, 40}).y - 0.28f) < 1e-4f);
+    assert(std::fabs(hand.step(Stick{-80, 0}).x + 1.24f) < 1e-4f);
+    assert(std::fabs(hand.full_step - kMargin) < 1e-4f);
+    assert(!hand.moves(Stick{10, 10}));
+    assert(hand.moves(Stick{15, 0}));
+    /* The stage cursor's: per axis, 0.03 for each step beyond 30, so a full
+     * push moves 1.5; nothing within 30 on both axes. */
+    const a11y::MovementRule& stage = a11y::kStageCursorMovement;
+    assert(std::fabs(stage.step(Stick{40, 0}).x - 0.3f) < 1e-4f);
+    assert(std::fabs(stage.step(Stick{-80, 0}).x + 1.5f) < 1e-4f);
+    assert(std::fabs(stage.step(Stick{31, -30}).x - 0.03f) < 1e-4f);
+    assert(stage.step(Stick{31, -30}).y == 0.0f);
+    Point diagonal = stage.step(Stick{50, -60});
+    assert(std::fabs(diagonal.x - 0.6f) < 1e-4f && std::fabs(diagonal.y + 0.9f) < 1e-4f);
+    assert(std::fabs(stage.full_step - 1.5f) < 1e-4f);
+    assert(!stage.moves(Stick{30, -30}));
+    assert(!stage.moves(Stick{25, 25}));
+    assert(stage.moves(Stick{0, -31}));
 }
 
-void the_game_formula() {
-    /* The speeds the spec gives: a tilt of 20 moves 0.04 a frame, 40 moves
-     * 0.28, a full push 1.24; below a squared tilt of 200 nothing moves. */
-    assert(std::fabs(a11y::cursor_step(Stick{20, 0}).x - 0.04f) < 1e-4f);
-    assert(std::fabs(a11y::cursor_step(Stick{0, 40}).y - 0.28f) < 1e-4f);
-    assert(std::fabs(a11y::cursor_step(Stick{-80, 0}).x + 1.24f) < 1e-4f);
-    assert(!a11y::moves(Stick{10, 10}));
-    assert(a11y::moves(Stick{15, 0}));
+/* The place furthest from the first, for the long glides below. */
+const Place& far_place(const Cursor& cursor) {
+    const Place* far = &cursor.places.front();
+    Point from = cursor.places.front().aim;
+    for (const Place& place : cursor.places) {
+        if (std::hypot(place.aim.x - from.x, place.aim.y - from.y) >
+            std::hypot(far->aim.x - from.x, far->aim.y - from.y))
+        {
+            far = &place;
+        }
+    }
+    return *far;
 }
 
-void every_portrait_to_every_other_at_each_delay() {
+void every_place_to_every_other_at_each_delay(const Cursor& cursor) {
     int longest = 0;
+    int count = static_cast<int>(cursor.places.size());
     for (int delay = 0; delay <= 10; delay++) {
         Channel channel;
         channel.delay = delay;
-        for (int from = 0; from < A11Y_CSS_PORTRAITS; from++) {
-            for (int to = 0; to < A11Y_CSS_PORTRAITS; to++) {
+        for (int from = 0; from < count; from++) {
+            for (int to = 0; to < count; to++) {
                 if (to == from) {
                     continue;
                 }
-                Run run = glide(aim(from), aim(to), channel);
+                Run run = glide(cursor, cursor.places[from].aim, cursor.places[to].aim, channel);
                 assert(run.end == GlideEnd::arrived);
-                assert(well_inside(run.hand, to));
+                assert(well_inside(cursor, run.at, cursor.places[to]));
                 if (delay == 0 && run.frames > longest) {
                     longest = run.frames;
                 }
             }
         }
     }
-    /* Corner to corner, and from the hand's start to the far corner. */
-    Run run = glide(kHome, aim(8), Channel{});
-    assert(run.end == GlideEnd::arrived && well_inside(run.hand, 8));
-    if (run.frames > longest) {
-        longest = run.frames;
+    /* From the start and from the corners of the bounds, to every place. */
+    const Area& bounds = cursor.bounds;
+    for (Point from : {cursor.home, Point{bounds.left, bounds.top}, Point{bounds.right, bounds.top},
+             Point{bounds.left, bounds.bottom}, Point{bounds.right, bounds.bottom}})
+    {
+        for (const Place& to : cursor.places) {
+            Run run = glide(cursor, from, to.aim, Channel{});
+            assert(run.end == GlideEnd::arrived && well_inside(cursor, run.at, to));
+            if (run.frames > longest) {
+                longest = run.frames;
+            }
+        }
     }
-    std::cout << "steering: longest glide at no delay " << longest << " frames\n";
+    std::cout << "steering: longest " << cursor.name << " glide at no delay " << longest
+              << " frames\n";
     assert(longest < kLongestGlide);
 }
 
-void a_repeated_sample() {
+void a_repeated_sample(const Cursor& cursor) {
+    int count = static_cast<int>(cursor.places.size());
     for (int delay : {0, 2, 10}) {
-        for (int from = 0; from < A11Y_CSS_PORTRAITS; from++) {
-            for (int to = 0; to < A11Y_CSS_PORTRAITS; to += 3) {
+        for (int from = 0; from < count; from++) {
+            for (int to = 0; to < count; to += 3) {
                 if (to == from) {
                     continue;
                 }
@@ -224,57 +322,71 @@ void a_repeated_sample() {
                 channel.delay = delay;
                 /* At full speed, slowing down, and near the end. */
                 channel.repeat_at = 2 + (from * 7 + to) % 40;
-                Run run = glide(aim(from), aim(to), channel);
+                Run run = glide(cursor, cursor.places[from].aim, cursor.places[to].aim, channel);
                 assert(run.end == GlideEnd::arrived);
-                assert(well_inside(run.hand, to));
+                assert(well_inside(cursor, run.at, cursor.places[to]));
             }
         }
     }
 }
 
-void a_skipped_sample() {
+void a_skipped_sample(const Cursor& cursor) {
+    int count = static_cast<int>(cursor.places.size());
     for (int delay : {0, 2, 10}) {
-        for (int from = 0; from < A11Y_CSS_PORTRAITS; from++) {
-            for (int to = 0; to < A11Y_CSS_PORTRAITS; to += 3) {
+        for (int from = 0; from < count; from++) {
+            for (int to = 0; to < count; to += 3) {
                 if (to == from) {
                     continue;
                 }
                 Channel channel;
                 channel.delay = delay;
                 channel.skip_at = 1 + (from * 5 + to) % 40;
-                Run run = glide(aim(from), aim(to), channel);
+                Run run = glide(cursor, cursor.places[from].aim, cursor.places[to].aim, channel);
                 assert(run.end == GlideEnd::arrived);
-                assert(well_inside(run.hand, to));
+                assert(well_inside(cursor, run.at, cursor.places[to]));
             }
         }
     }
 }
 
-void a_resting_stick_does_not_stop_it() {
-    Channel channel;
-    channel.delay = 2;
-    channel.drift = Stick{6, -9};
-    Run run = glide(kHome, aim(kFoxPortrait), channel);
-    assert(run.end == GlideEnd::arrived);
-    assert(well_inside(run.hand, kFoxPortrait));
+void a_resting_stick_does_not_stop_it(const Cursor& cursor) {
+    for (const Place& to : cursor.places) {
+        Channel channel;
+        channel.delay = 2;
+        channel.drift = Stick{6, -9};
+        Run run = glide(cursor, cursor.home, to.aim, channel);
+        assert(run.end == GlideEnd::arrived);
+        assert(well_inside(cursor, run.at, to));
+    }
 }
 
-void the_players_stick_takes_over() {
+void the_players_stick_takes_over(const Cursor& cursor) {
     Channel channel;
     channel.delay = 3;
     channel.player_from = 20;
     channel.player = Stick{0, -80};
-    Run run = glide(aim(0), aim(8), channel);
+    Run run = glide(cursor, cursor.places.front().aim, far_place(cursor).aim, channel);
     assert(run.end == GlideEnd::abandoned);
     assert(run.frames == 20);
 }
 
-void a_new_destination_on_the_way() {
-    Channel channel;
-    channel.delay = 4;
-    Run run = glide(aim(0), aim(8), channel, 15, aim(kMarthPortrait));
-    assert(run.end == GlideEnd::arrived);
-    assert(well_inside(run.hand, kMarthPortrait));
+void a_new_destination_on_the_way(const Cursor& cursor) {
+    const Place& middle = cursor.places[cursor.places.size() / 2];
+    for (int delay : {0, 4, 10}) {
+        Channel channel;
+        channel.delay = delay;
+        Run run = glide(
+            cursor, cursor.places.front().aim, far_place(cursor).aim, channel, 15, middle.aim);
+        assert(run.end == GlideEnd::arrived);
+        assert(well_inside(cursor, run.at, middle));
+    }
+}
+
+void out_of_reach_fails(const Cursor& cursor) {
+    /* Beyond the right edge the cursor is kept inside. */
+    Run run = glide(
+        cursor, cursor.places.front().aim, Point{cursor.bounds.right + 14.0f, 10.0f}, Channel{});
+    assert(run.end == GlideEnd::failed);
 }
 
 /* The hand has come to rest on the target: a frame's movement at a full push
@@ -324,6 +436,7 @@ A11yCssState every_kind_of_target() {
  * well on its target, or where A picks up the coin resting there. The
  * longest at no delay. */
 int glides_among_the_rows(const A11yCssState& state) {
+    Cursor hand = hand_cursor();
     std::vector<Target> targets;
     for (const std::vector<Target>& row : a11y::target_rows(state)) {
         targets.insert(targets.end(), row.begin(), row.end());
@@ -339,16 +452,17 @@ int glides_among_the_rows(const A11yCssState& state) {
                 if (to == from || portraits) {
                     continue;
                 }
-                Run run = glide(a11y::aim_point(state, from), a11y::aim_point(state, to), channel);
+                Run run =
+                    glide(hand, a11y::aim_point(state, from), a11y::aim_point(state, to), channel);
                 assert(run.end == GlideEnd::arrived);
                 int coin =
                     to.kind == TargetKind::portrait ? a11y::pickable_coin(state, to.index) : -1;
                 if (coin >= 0) {
-                    assert(picks_up(state, run.hand, coin));
+                    assert(picks_up(state, run.at, coin));
                 } else if (to.kind == TargetKind::portrait) {
-                    assert(well_inside(run.hand, to.index));
+                    assert(well_inside(run.at, to.index));
                 } else {
-                    assert(well_on(state, to, run.hand));
+                    assert(well_on(state, to, run.at));
                 }
                 if (delay == 0 && run.frames > longest) {
                     longest = run.frames;
@@ -382,6 +496,7 @@ void onto_every_single_player_target_at_each_delay() {
 void onto_a_coin_to_pick_up_at_each_delay() {
     /* Player 2's coin where the game put it on Yoshi, drifted to the corners
      * of Yoshi's portrait, and player 1's own on Fox. */
+    Cursor hand = hand_cursor();
     A11yCssState state = every_kind_of_target();
     A11yCssRect yoshi = portrait_rect(kYoshiPortrait);
     const Point corners[] = {Point{yoshi.left + kCoinRestRight, yoshi.top - kCoinRestDown},
@@ -394,20 +509,21 @@ void onto_a_coin_to_pick_up_at_each_delay() {
             state.slots[1].coin.x = coin.x;
             state.slots[1].coin.y = coin.y;
             for (Point from : {kHome, Point{20.0f, 24.0f}, aim(kRoyPortrait)}) {
-                Run run = glide(from,
+                Run run = glide(hand, from,
                     a11y::aim_point(state, Target{TargetKind::portrait, kYoshiPortrait}), channel);
                 assert(run.end == GlideEnd::arrived);
-                assert(picks_up(state, run.hand, 1));
+                assert(picks_up(state, run.at, 1));
             }
         }
-        Run run = glide(
-            kHome, a11y::aim_point(state, Target{TargetKind::portrait, kFoxPortrait}), channel);
+        Run run = glide(hand, kHome,
+            a11y::aim_point(state, Target{TargetKind::portrait, kFoxPortrait}), channel);
         assert(run.end == GlideEnd::arrived);
-        assert(picks_up(state, run.hand, 0));
+        assert(picks_up(state, run.at, 0));
     }
 }
 
 void a_held_slider_from_each_value_to_each_other_at_each_delay() {
+    Cursor hand = hand_cursor();
     A11yCssState state = vs_screen();
     state.hand.slider = A11Y_CSS_CPU_LEVEL;
     state.hand.slider_slot = 1;
@@ -423,11 +539,11 @@ void a_held_slider_from_each_value_to_each_other_at_each_delay() {
                 }
                 Point start = a11y::aim_point(state, Target{TargetKind::cpu_level, 1, from});
                 Point end = a11y::aim_point(state, Target{TargetKind::cpu_level, 1, to});
-                Run run = glide(start, end, channel);
+                Run run = glide(hand, start, end, channel);
                 assert(run.end == GlideEnd::arrived);
                 /* On the value, and a little movement either way still is. */
-                assert(slider_value(knob.origin_x, run.hand.x - 0.25f) == to);
-                assert(slider_value(knob.origin_x, run.hand.x + 0.25f) == to);
+                assert(slider_value(knob.origin_x, run.at.x - 0.25f) == to);
+                assert(slider_value(knob.origin_x, run.at.x + 0.25f) == to);
             }
         }
     }
@@ -436,6 +552,7 @@ void a_held_slider_from_each_value_to_each_other_at_each_delay() {
 void a_click_on_the_hmn_cpu_button_on_the_way() {
     /* A pressed as the hand reaches player 2's button moves it to the
      * button's middle height, which is where the glide aims. */
+    Cursor hand = hand_cursor();
     A11yCssState state = vs_screen();
     Target button{TargetKind::slot_button, 1};
     for (int delay : {0, 3, 10}) {
@@ -444,35 +561,31 @@ void a_click_on_the_hmn_cpu_button_on_the_way() {
             channel.delay = delay;
             channel.click_at = click_at;
             channel.click_y = -2.2f;
-            Run run = glide(aim(kPeachPortrait), a11y::aim_point(state, button), channel);
+            Run run = glide(hand, aim(kPeachPortrait), a11y::aim_point(state, button), channel);
             assert(run.end == GlideEnd::arrived);
-            assert(well_on(state, button, run.hand));
+            assert(well_on(state, button, run.at));
         }
     }
-}
-
-void out_of_reach_fails() {
-    /* Beyond the right edge the hand is kept inside. */
-    Run run = glide(aim(0), Point{40.0f, 10.0f}, Channel{});
-    assert(run.end == GlideEnd::failed);
 }
 
 }  // namespace
 
 int main() {
-    the_game_formula();
-    every_portrait_to_every_other_at_each_delay();
-    a_repeated_sample();
-    a_skipped_sample();
-    a_resting_stick_does_not_stop_it();
-    the_players_stick_takes_over();
-    a_new_destination_on_the_way();
+    the_game_formulas();
+    for (const Cursor& cursor : {hand_cursor(), stage_cursor()}) {
+        every_place_to_every_other_at_each_delay(cursor);
+        a_repeated_sample(cursor);
+        a_skipped_sample(cursor);
+        a_resting_stick_does_not_stop_it(cursor);
+        the_players_stick_takes_over(cursor);
+        a_new_destination_on_the_way(cursor);
+        out_of_reach_fails(cursor);
+    }
     onto_every_kind_of_target_at_each_delay();
     onto_every_single_player_target_at_each_delay();
     onto_a_coin_to_pick_up_at_each_delay();
     a_held_slider_from_each_value_to_each_other_at_each_delay();
     a_click_on_the_hmn_cpu_button_on_the_way();
-    out_of_reach_fails();
     std::cout << "steering: all tests passed\n";
     return 0;
 }

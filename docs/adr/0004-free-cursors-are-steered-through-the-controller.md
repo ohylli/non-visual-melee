@@ -19,4 +19,4 @@ Online this keeps the fork compatible with base port builds. Both machines simul
 - A steered stick is published once and then dropped unless the next simulated frame asks again, so a scene change, a pause or the port menu cannot leave the stick tilted.
 - The D-pad presses that steer also reach the game and the peer. Character select ignores the D-pad, so they change nothing there.
 - Steering follows the accessibility switch. With it off, the D-pad does nothing on character select, as in the base port.
-- The glide (`steering.cpp`) knows character select's cursor formula and nothing else about the screen. Stage select moves its cursor by its own formula, so reusing the glide there means making the formula a parameter.
+- The glide (`steering.cpp`) knows how its cursor moves and nothing else about the screen. Stage select moves its cursor by its own formula (per axis and linear, where the hand's is radial and quadratic), so the formula is a parameter of the glide, its movement rule; the delay, loss and takeover handling stay shared.

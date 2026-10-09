@@ -2,10 +2,10 @@
 /* Steering: moving a free cursor to a point by asking for stick input, the
  * way a player would (.scratch/character-select/spec.md, "Stage 2: the
  * glide"; docs/adr/0004-free-cursors-are-steered-through-the-controller.md).
- * The glide knows how the game moves a cursor for a stick value and nothing
- * about any screen. Pure: the hand's position and the stick the game applied
- * go in once per simulated frame, the stick to ask for comes out, and the
- * caller publishes it. */
+ * The glide knows how the game moves the cursor for a stick value, its
+ * movement rule, and nothing else about the screen. Pure: the cursor's
+ * position and the stick the game applied go in once per simulated frame,
+ * the stick to ask for comes out, and the caller publishes it. */
 #pragma once
 #include <deque>
 
@@ -25,22 +25,38 @@ struct Point {
     float y = 0.0f;
 };
 
-/* How far a free cursor moves in one frame for a stick value, as character
- * select's getStickDelta computes it: nothing below a squared tilt of 200,
- * else 0.0002 * (x² + y² - 200) units in the stick's direction. */
-Point cursor_step(Stick stick);
+/* How a screen's cursor moves for a stick value, as the game computes it.
+ * Every stick is within a full push, a circle of radius 80. */
+struct MovementRule {
+    /* How far the cursor moves in one frame for the stick. */
+    Point (*step)(Stick stick);
+    /* The stick is pushed far enough to move the cursor at all. */
+    bool (*moves)(Stick stick);
+    /* The stick that moves the cursor by distance in one frame, or as far
+     * as one frame goes towards it; either axis may be further out than a
+     * full push allows, which the glide takes back. */
+    Stick (*stick_for)(Point distance);
+    /* The furthest one frame moves the cursor along an axis. */
+    float full_step;
+};
 
-/* The stick is pushed far enough to move a cursor. */
-bool moves(Stick stick);
+/* Character select's hand (getStickDelta in mncharsel.c): nothing below a
+ * squared tilt of 200, else 0.0002 * (x² + y² - 200) units in the stick's
+ * direction, at most 1.24. */
+extern const MovementRule kHandMovement;
+/* Stage select's cursor (mnStageSel_Scene_OnFrame and fn_8025A310 in
+ * mnstagesel.c): per axis, nothing within 30 of rest, else 0.03 units for
+ * each step of the stick beyond 30, at most 1.5. */
+extern const MovementRule kStageCursorMovement;
 
 /* How a glide ended, reported once by the frame it ended in. */
 enum class GlideEnd {
     none,
-    /* The hand is at rest at the destination. */
+    /* The cursor is at rest at the destination. */
     arrived,
-    /* The hand did not get there in time. */
+    /* The cursor did not get there in time. */
     failed,
-    /* A stick the glide did not ask for moved the hand: the player's own. */
+    /* A stick the glide did not ask for moved the cursor: the player's own. */
     abandoned,
 };
 
@@ -52,7 +68,10 @@ struct GlideFrame {
 
 class Glide {
 public:
-    /* Glides to destination from wherever the hand is, or turns a glide
+    /* rule must outlive this. */
+    explicit Glide(const MovementRule& rule) : m_rule(&rule) {}
+
+    /* Glides to destination from wherever the cursor is, or turns a glide
      * under way there. */
     void start(Point destination);
     /* Moves the destination of a glide under way, as a target that moves
@@ -64,9 +83,10 @@ public:
     /* Simulated frames since the last start. */
     int frames() const { return m_now - m_started; }
 
-    /* Once per simulated frame: where the hand is after this frame's
-     * movement, and the stick the game applied to it this frame. */
-    GlideFrame frame(Point hand, Stick applied);
+    /* Once per simulated frame: where the cursor is after this frame's
+     * movement, and the stick the game applied to it this frame, as the pad
+     * held it. */
+    GlideFrame frame(Point cursor, Stick applied);
     /* The pad was published, once a video frame: the stick the last frame
      * asked for, if any, went out with it, and the game will apply it some
      * frames on. A request not published before the next frame is dropped.
@@ -79,12 +99,12 @@ private:
         Stick stick;
         /* The frame that asked for it. */
         int frame = 0;
-        /* How far it moves the hand. */
+        /* How far it moves the cursor. */
         Point step;
     };
 
     /* Matches what arrived against what was sent; false when a stick the
-     * glide never asked for moved the hand. */
+     * glide never asked for moved the cursor. */
     bool account(Stick applied);
     Stick stick_for(Point distance) const;
 
@@ -92,6 +112,7 @@ private:
      * input delay. */
     static constexpr int kUnmeasuredDelay = 30;
 
+    const MovementRule* m_rule;
     bool m_active = false;
     Point m_destination;
     int m_now = 0;

@@ -44,6 +44,31 @@ bool game_hook_may_speak() {
     return s_speech != nullptr && !pc_net_resim();
 }
 
+/* The screen on now steers a cursor with the D-pad: character select's hand
+ * or stage select's cursor. */
+bool screen_steers() {
+    switch (static_cast<a11y::SceneKind>(s_scene)) {
+    case a11y::SceneKind::GS_CSS:
+        return s_css != nullptr && s_css->steers();
+    case a11y::SceneKind::GS_SSS:
+        return s_sss != nullptr && s_sss->steers();
+    default:
+        return false;
+    }
+}
+
+/* The stick the screen on now asks for, handed over once; false for none. */
+bool take_screen_stick(a11y::Stick* out) {
+    switch (static_cast<a11y::SceneKind>(s_scene)) {
+    case a11y::SceneKind::GS_CSS:
+        return s_css != nullptr && s_css->take_stick(out);
+    case a11y::SceneKind::GS_SSS:
+        return s_sss != nullptr && s_sss->take_stick(out);
+    default:
+        return false;
+    }
+}
+
 }  // namespace
 
 extern "C" void pc_a11y_init(void) {
@@ -60,7 +85,7 @@ extern "C" void pc_a11y_init(void) {
     game_text.resolve = a11y_game_resolve;
     s_menu_speech = std::make_unique<a11y::MenuSpeech>(*s_speech, game_text);
     s_css = std::make_unique<a11y::CssReader>(*s_speech, config.steer);
-    s_sss = std::make_unique<a11y::SssReader>(*s_speech);
+    s_sss = std::make_unique<a11y::SssReader>(*s_speech, config.steer);
     s_lobby = std::make_unique<a11y::LobbySpeech>(*s_speech);
     a11y::launcher_speech_start(*s_speech);
 }
@@ -175,7 +200,7 @@ extern "C" void pc_a11y_lobby_frame(const OnlineLobbyView* view) {
 
 extern "C" bool pc_a11y_pad(PADStatus* pad) {
     a11y::Stick stick;
-    if (s_css == nullptr || !s_css->take_stick(&stick)) {
+    if (!take_screen_stick(&stick)) {
         return false;
     }
     /* As the pad's other sources merge: each axis the one pushed further,
@@ -193,9 +218,7 @@ extern "C" uint16_t pc_a11y_chat_buttons(uint16_t buttons) {
     /* Not gated on rollback: chat runs once per video frame, outside the
      * simulation, and what it is handed changes nothing the peer sees but
      * phrases. */
-    if (s_css == nullptr || !s_css->steers() ||
-        s_scene != static_cast<int>(a11y::SceneKind::GS_CSS))
-    {
+    if (!screen_steers()) {
         return buttons;
     }
     constexpr uint16_t dpad = PAD_BUTTON_LEFT | PAD_BUTTON_RIGHT | PAD_BUTTON_DOWN | PAD_BUTTON_UP;

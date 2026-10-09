@@ -1,11 +1,14 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Stage select as the fork follows it: what the frame hook reports, and the
- * speech (.scratch/stage-select/spec.md). It holds everything the fork keeps
- * about the screen, so a scene change forgets it all in one call. It reads
- * the game through game_access.h and writes nothing. */
+/* Stage select as the fork follows it: what the frame hook reports, the
+ * speech, and steering the stage cursor with the D-pad
+ * (.scratch/stage-select/spec.md). It holds everything the fork keeps about
+ * the screen, so a scene change forgets it all in one call. It reads the
+ * game through game_access.h and writes nothing but the stick it hands the
+ * pad hook. */
 #pragma once
 #include "game_access.h"
 #include "sss_speech.hpp"
+#include "steerer.hpp"
 
 namespace a11y {
 
@@ -13,19 +16,33 @@ class Speech;
 
 class SssReader {
 public:
-    /* speech must outlive this. */
-    explicit SssReader(Speech& speech) : m_speech(speech) {}
+    /* steer: the D-pad steers the stage cursor. speech must outlive this. */
+    SssReader(Speech& speech, bool steer)
+        : m_speech(speech), m_steer(steer),
+          m_steerer(kStageCursorMovement,
+              [this](const int& tile) { return m_speech.tile_words(m_state, tile); }) {}
 
     /* A scene was entered. */
     void forget();
     /* The frame hook: the screen this frame, and whether the session is
      * online. */
     void frame(const A11ySssScreen& screen, bool online);
+    /* The pad hook: the stick steering asks for, handed over once; false
+     * when it asks for none, so the stick returns to rest by itself. */
+    bool take_stick(Stick* out) { return m_steerer.take_stick(out); }
+    /* Whether the D-pad steers the stage cursor, rather than doing what the
+     * base port would make of it. */
+    bool steers() const { return m_steer; }
 
 private:
     SssSpeech m_speech;
+    bool m_steer;
     /* The table's layout was found changed and logged. */
     bool m_layout_logged = false;
+    /* This frame's snapshot, from the frame hook. */
+    A11ySssState m_state{};
+    /* The glide to a tile, by its index in the game's table. */
+    Steerer<int> m_steerer;
 };
 
 }  // namespace a11y

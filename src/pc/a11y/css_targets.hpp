@@ -8,6 +8,7 @@
 #pragma once
 #include "game_access.h"
 #include "steering.hpp"
+#include "steps.hpp"
 #include <optional>
 #include <vector>
 
@@ -102,9 +103,6 @@ inline constexpr int kHighestLevel = 9;
  * portrait, while the hand holds a slider, and while the player's name tag
  * window is open. */
 Target target_at(const A11yCssState& state, float x, float y);
-
-/* A D-pad direction. */
-enum class Direction { left, right, up, down };
 
 /* The targets a step reaches, in rows top to bottom, each left to right: the
  * top bar, the rows of unlocked portraits as drawn, and in VS modes the
