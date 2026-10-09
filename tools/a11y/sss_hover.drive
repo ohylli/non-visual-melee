@@ -1,7 +1,7 @@
 # Stage select with the stick: the opening, the stage cursor entering tiles
-# and naming each, the random tile, and A on it saying the stage it rolled
-# before the match begins. Character select is set up by D-pad, as in
-# css_setup.drive: Fox for player 1 and a CPU for player 2.
+# and naming each with its description, the random tile, and A on it saying
+# the stage it rolled before the match begins. Character select is set up by
+# D-pad, as in css_setup.drive: Fox for player 1 and a CPU for player 2.
 # Run with the default --scene title:
 #   python tools/a11y/drive.py tools/a11y/sss_hover.drive
 # --no-card unlocks every stage, so no tile is locked here. Positions are in
@@ -51,10 +51,10 @@ sleep 1
 # Up from below every tile: through Battlefield in the bottom row into the
 # block beside the random tile (Fourside), then up a row (Onett).
 press Up 120
-wait ': "Battlefield"$'
-wait ': "(Fourside|Brinstar Depths|Big Blue|Final Destination)"$'
+wait ': "Battlefield\. One '
+wait ': "(Fourside|Brinstar Depths|Big Blue|Final Destination)\. [^"]+\."$'
 press Up 70
-wait ': "(Onett|Brinstar|Mute City)"$'
+wait ': "(Onett|Brinstar|Mute City)\. [^"]+\."$'
 
 # Left along that row, through Brinstar to the random tile, and A rolls a
 # stage, said before the match begins.

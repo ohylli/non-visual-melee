@@ -13,7 +13,9 @@
 #include <cstdio>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -78,6 +80,12 @@ struct Fixture {
 };
 
 using Texts = std::vector<std::string>;
+
+/* A stage tile's hover as spoken: its name, then its description. */
+std::string described(A11yStage stage) {
+    return std::string(*a11y::stage_name(stage)) + ". " +
+           std::string(*a11y::stage_description(stage));
+}
 
 std::size_t count_logged(const std::string& line) {
     return static_cast<std::size_t>(std::count(s_lines.begin(), s_lines.end(), line));
@@ -148,7 +156,17 @@ void hover_names_each_stage_entered() {
     hover(f, state, kFoursideTile);
     hover(f, state, kOnettTile);
     hover(f, state, kCorneriaTile);
-    assert((f.spoken() == Texts{"Battlefield", "Fourside", "Onett", "Corneria"}));
+    assert((f.spoken() == Texts{described(A11Y_St_Kind_Battle), described(A11Y_St_Kind_Fourside),
+                              described(A11Y_St_Kind_Onett), described(A11Y_St_Kind_Corneria)}));
+}
+
+void hover_says_the_name_and_the_description_as_one() {
+    A11ySssState state = screen();
+    Fixture f(state);
+    hover(f, state, kCorneriaTile);
+    assert((f.spoken() ==
+            Texts{"Corneria. A fight on the hull of a big ship flying over a city. Arwings fly "
+                  "past and fire, and so does the ship's cannon."}));
 }
 
 void hover_names_the_random_tile() {
@@ -163,7 +181,7 @@ void hover_on_a_locked_tile_hides_its_stage() {
     Fixture f(state);
     hover(f, state, kOnettTile);
     hover(f, state, kFoursideTile);
-    assert((f.spoken() == Texts{"Onett", "Locked stage"}));
+    assert((f.spoken() == Texts{described(A11Y_St_Kind_Onett), "Locked stage"}));
 }
 
 void leaving_a_tile_into_empty_space_says_nothing() {
@@ -175,7 +193,7 @@ void leaving_a_tile_into_empty_space_says_nothing() {
     hover(f, state, kCorneriaTile);
     f.sss.frame(state);
     f.sss.frame(state);
-    assert((f.spoken() == Texts{"Corneria"}));
+    assert((f.spoken() == Texts{described(A11Y_St_Kind_Corneria)}));
 }
 
 void random_says_the_stage_it_rolled() {
@@ -246,7 +264,7 @@ void a_refusal_names_the_tile_entered_after_it() {
     f.spoken();
     state.pressed_a = true;
     hover(f, state, kBrinstarTile);
-    assert((f.spoken() == Texts{"Locked. Brinstar"}));
+    assert((f.spoken() == Texts{"Locked. " + described(A11Y_St_Kind_Zebes)}));
 }
 
 void a_on_an_unlocked_tile_that_did_not_pick_says_nothing() {
@@ -335,7 +353,8 @@ void missing_name_is_spoken_by_number_and_logged_once() {
     hover(f, state, kCorneriaTile);
     hover(f, state, kOnettTile);
     hover(f, state, kCorneriaTile);
-    assert((f.spoken() == Texts{"Unknown stage 21", "Onett", "Unknown stage 21"}));
+    assert((f.spoken() ==
+            Texts{"Unknown stage 21", described(A11Y_St_Kind_Onett), "Unknown stage 21"}));
     assert(count_logged("[a11y] stage 21: not in the stage names table") == 1);
 }
 
@@ -346,6 +365,33 @@ void every_tile_has_a_name() {
     assert(a11y::stage_name(A11Y_St_Kind_Shrine) == "Hyrule Temple");
     assert(a11y::stage_name(A11Y_St_Kind_OldPupupu) == "Dream Land N64");
     assert(!a11y::stage_name(A11Y_NO_STAGE).has_value());
+}
+
+void every_tile_has_a_description_of_one_or_two_sentences() {
+    for (const TileRow& row : kTiles) {
+        if (row.stage == A11Y_NO_STAGE) {
+            continue;
+        }
+        std::optional<std::string_view> text = a11y::stage_description(row.stage);
+        assert(text.has_value() && !text->empty());
+        assert(text->back() == '.');
+        std::size_t sentences = 0;
+        for (std::size_t i = 0; i < text->size(); i++) {
+            sentences += (*text)[i] == '.' && (i + 1 == text->size() || (*text)[i + 1] == ' ');
+        }
+        assert(sentences == 1 || sentences == 2);
+    }
+    assert(!a11y::stage_description(A11Y_NO_STAGE).has_value());
+}
+
+void glide_words_name_the_stage_alone() {
+    /* "Could not reach Corneria" and "Random: Corneria." say no
+     * description. */
+    A11ySssState state = screen();
+    Fixture f(state);
+    assert(f.sss.tile_words(state, kCorneriaTile) == "Corneria");
+    assert(f.sss.hover_words(state, kCorneriaTile) == described(A11Y_St_Kind_Corneria));
+    assert(f.sss.hover_words(state, A11Y_SSS_RANDOM_TILE) == "Random");
 }
 
 }  // namespace
@@ -366,6 +412,7 @@ int main() {
     opening_online_names_no_player();
     unchanged_snapshot_speaks_nothing();
     hover_names_each_stage_entered();
+    hover_says_the_name_and_the_description_as_one();
     hover_names_the_random_tile();
     hover_on_a_locked_tile_hides_its_stage();
     leaving_a_tile_into_empty_space_says_nothing();
@@ -384,6 +431,8 @@ int main() {
     forgetting_makes_the_next_frame_an_arrival();
     missing_name_is_spoken_by_number_and_logged_once();
     every_tile_has_a_name();
+    every_tile_has_a_description_of_one_or_two_sentences();
+    glide_words_name_the_stage_alone();
     std::cout << "sss_speech: all tests passed\n";
     return 0;
 }

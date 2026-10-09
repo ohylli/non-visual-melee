@@ -70,7 +70,7 @@ void SssSpeech::frame(const A11ySssState& state) {
      * holds what was picked. */
     if (state.pick == A11Y_SSS_CHOOSING && state.hovered != last.hovered && is_tile(state.hovered))
     {
-        add(out, tile_words(state, state.hovered));
+        add(out, hover_words(state, state.hovered));
     }
     if (!out.empty()) {
         m_speech.announce(out, Mode::interrupt);
@@ -85,6 +85,17 @@ std::string SssSpeech::tile_words(const A11ySssState& state, int tile) {
         return std::string(kLockedStage);
     }
     return name(state.tiles[tile].stage);
+}
+
+std::string SssSpeech::hover_words(const A11ySssState& state, int tile) {
+    std::string out = tile_words(state, tile);
+    if (tile == A11Y_SSS_RANDOM_TILE || state.tiles[tile].state == A11Y_SSS_LOCKED) {
+        return out;
+    }
+    if (std::optional<std::string_view> description = stage_description(state.tiles[tile].stage)) {
+        out += ". " + std::string(*description);
+    }
+    return out;
 }
 
 std::string SssSpeech::opening(const A11ySssState& state) {

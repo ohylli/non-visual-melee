@@ -7,8 +7,12 @@
  * is the stage's world ("Eagleland" over "Onett"), and is part of the name
  * only where the two read as one ("Hyrule" over "Temple", "Mushroom" over
  * "Kingdom"). The three stages under "Past Stages" share their names with
- * newer ones, so they add "N64" ("Dream Land N64"). Every other word stage
- * select speech says is here too. */
+ * newer ones, so they add "N64" ("Dream Land N64"). Each stage also has a
+ * description of a sentence or two, said after its name on every hover: the
+ * ground's shape, what moves or harms, its feel. The fork wrote them from the
+ * tiles' pictures (the screen shows no larger preview) and from the stages'
+ * code in src/melee/gr/, and says nothing either does not show. Every other
+ * word stage select speech says is here too. */
 #pragma once
 #include "stage_kinds.h"
 #include <optional>
@@ -18,6 +22,9 @@ namespace a11y {
 
 /* A stage's name; nothing for none or a kind missing from the table. */
 std::optional<std::string_view> stage_name(A11yStage stage);
+/* A stage's description, one or two sentences ending in a full stop;
+ * nothing for none or a kind missing from the table. */
+std::optional<std::string_view> stage_description(A11yStage stage);
 
 /* The opening: the screen's name, then how to choose. */
 inline constexpr std::string_view kStageSelect = "Stage select";

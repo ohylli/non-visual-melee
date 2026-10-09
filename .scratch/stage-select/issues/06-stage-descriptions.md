@@ -1,6 +1,6 @@
 # 06 Stage descriptions
 
-Status: ready-for-agent
+Status: resolved (2026-10-09)
 Type: task
 Blocked by: 01
 
@@ -21,3 +21,17 @@ Spec: `.scratch/stage-select/spec.md`, "Stage names and descriptions".
 - Issue 07 asks the maintainer to judge the descriptions.
 
 ## Comments
+
+### 2026-10-09, implementation (agent)
+
+Implemented; judging the words by ear is issue 07.
+
+- **No large preview.** Stage select draws no bigger picture of the hovered stage: hovering changes only the two-line name, and after a pick the screen dims under "Now loading" (screenshots of an offline run with `--no-card`, which unlocks every stage like an online session). The previews are the tiles themselves, about 140 by 120 pixels in a 1920 by 1080 window; each was cropped from one screenshot, enlarged four times and looked at. The three past stages' tiles show only a background (a rainbow over a sea, an orange sky with clouds, a sunset), so their descriptions lean on the stages' code.
+- **Sources.** Each description says only what its tile shows or what the stage's code in `src/melee/gr/` (named parameters, parts, item kinds) or `docs/a11y/gameplay-state.md` supports: for example Great Bay's floating floor that tilts and sinks (`floatfloor_*`) and turtle (`kame_*`), Fourside's UFO and crane beam (`ufo_*`, `crane_iron_*`), Onett's springy awnings and cars with hit boxes, Brinstar's acid (`grZe_AcidLevelEntry`), Brinstar Depths turning with Kraid's hand, Yoshi's Island's nine blocks that disable their collision after damage or a hard landing, Yoshi's Island N64's clouds that sink while stood on and vanish, the barrels of both Kongo Jungles (`ftCo_BarrelWait`), Corneria's Great Fox laser. Claims the code did not show clearly were left out: Peach's Castle's moving parts, Green Greens' bombs, which way Icicle Mountain scrolls, whether Mute City's and Big Blue's cars hit, platform counts for the past stages.
+- **Table.** `sss_names.cpp` holds the description beside each name (`stage_description`), one or two sentences each. Hover says them as one announcement after the name ("Corneria. A fight on the hull of a big ship flying over a city. Arwings fly past and fire, and so does the ship's cannon."); the random tile and locked tiles have none. `SssSpeech::hover_words` builds it; `tile_words` stays the name alone, for "Random: Corneria.", "Stage: Corneria." and, in issue 04, "Could not reach Corneria".
+- **Tests.** `test_sss_speech`: the hover lines with descriptions, Corneria's whole announcement as a literal, every stage's description one or two sentences ending in a full stop, and `tile_words` without a description. `sss_hover.drive` waits on "Battlefield. One ..." and on any description after the other stages it meets.
+- **Issue 07** names the descriptions in its listening list: length, usefulness, whether they slow browsing, and any that mislead, since they were written without playing.
+- **CLAUDE.md.** The stale scene announcement wording the lead reported was already gone (issue 01's commit rewrote that line); the stage select status line now names the descriptions and the skipped scene, which it still listed as to come.
+- **Verification**, quick level: build, style, unit tests (`sss_speech` updated; `launcher_data` fails as known), a bounded `title` run, `sss_hover.drive` (twice) and `sss_skipped.drive` passed.
+
+For issue 04: a step names its destination with `hover_words` (the description included, as on any hover); "Could not reach" and the glide log keep `tile_words`, the name alone. The longest announcement is now about two sentences, so the next step's interruption matters for quick browsing.
