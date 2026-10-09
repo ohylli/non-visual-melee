@@ -27,6 +27,11 @@ public:
     /* The frame hook: the screen this frame, and whether the session is
      * online. */
     void frame(const A11ySssScreen& screen, bool online);
+    /* The cursor hook, once per simulated frame while no pick is made: the
+     * stage cursor at `at` after this frame's movement, moved by the stick
+     * (stick_x, stick_y) with the dead zone taken off. Steps, and the
+     * glide's next frame. */
+    void cursor(Point at, int stick_x, int stick_y);
     /* The pad hook: the stick steering asks for, handed over once; false
      * when it asks for none, so the stick returns to rest by itself. */
     bool take_stick(Stick* out) { return m_steerer.take_stick(out); }
@@ -35,12 +40,19 @@ public:
     bool steers() const { return m_steer; }
 
 private:
+    void press(Direction direction, Point at);
+
     SssSpeech m_speech;
     bool m_steer;
     /* The table's layout was found changed and logged. */
     bool m_layout_logged = false;
     /* This frame's snapshot, from the frame hook. */
     A11ySssState m_state{};
+    bool m_have_state = false;
+    /* The row the last step was taken along, and the tile it named: Left
+     * and Right from a tall tile go back along that row. */
+    int m_row = -1;
+    int m_row_tile = A11Y_SSS_NO_TILE;
     /* The glide to a tile, by its index in the game's table. */
     Steerer<int> m_steerer;
 };

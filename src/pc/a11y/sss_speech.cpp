@@ -32,7 +32,7 @@ bool rolls(int tile) {
 
 }  // namespace
 
-void SssSpeech::frame(const A11ySssState& state) {
+void SssSpeech::frame(const A11ySssState& state, const GlideState<int>& glide) {
     bool arrived = !m_seen;
     A11ySssState last = m_last;
     m_seen = true;
@@ -59,6 +59,10 @@ void SssSpeech::frame(const A11ySssState& state) {
     if (!state.online && picked && rolls(last.hovered) && is_tile(state.hovered)) {
         /* The roll lands in the hovered index at once. */
         add(out, std::string(kRandom) + ": " + tile_words(state, state.hovered) + ".");
+    } else if (!state.online && picked && !rolls(last.hovered) && last.hovered != m_named) {
+        /* A during a glide picks the tile crossed, not the one the step
+         * named. */
+        add(out, std::string(kPicked) + " " + tile_words(state, last.hovered) + ".");
     }
     bool pressed = state.pressed_a || state.pressed_start;
     if (!state.online && pressed && state.pick == A11Y_SSS_CHOOSING &&
@@ -67,14 +71,35 @@ void SssSpeech::frame(const A11ySssState& state) {
         add(out, kLocked);
     }
     /* Once a pick is made the stage cursor is hidden, and the hovered index
-     * holds what was picked. */
-    if (state.pick == A11Y_SSS_CHOOSING && state.hovered != last.hovered && is_tile(state.hovered))
+     * holds what was picked. During a glide, and on the frame it has ended,
+     * what the cursor crosses goes unsaid: the step named where it goes. */
+    bool gliding = glide.phase == GlidePhase::gliding;
+    bool glide_ended = glide.phase == GlidePhase::ended || glide.phase == GlidePhase::failed;
+    if (state.pick == A11Y_SSS_CHOOSING && glide_ended) {
+        if (glide.phase == GlidePhase::failed) {
+            add(out, std::string(kCouldNotReach) + " " + tile_words(state, glide.destination));
+        }
+        if (state.hovered != glide.destination && is_tile(state.hovered)) {
+            add(out, hover_words(state, state.hovered));
+            m_named = state.hovered;
+        }
+    } else if (state.pick == A11Y_SSS_CHOOSING && !gliding && state.hovered != last.hovered &&
+               is_tile(state.hovered))
     {
         add(out, hover_words(state, state.hovered));
+        m_named = state.hovered;
     }
     if (!out.empty()) {
         m_speech.announce(out, Mode::interrupt);
     }
+}
+
+void SssSpeech::step(const A11ySssState& state, int tile) {
+    if (!is_tile(tile)) {
+        return;
+    }
+    m_named = tile;
+    m_speech.announce(hover_words(state, tile), Mode::interrupt);
 }
 
 std::string SssSpeech::tile_words(const A11ySssState& state, int tile) {

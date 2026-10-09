@@ -573,6 +573,7 @@ void fn_8025A310(HSD_GObj* gobj)
 
     HSD_JObjSetTranslate(jobj, &sp1C);
     lb_8000B1CC(jobj, NULL, &sp1C);
+    pc_a11y_sss_cursor(sp1C.x, sp1C.y, mnStageSel_804D6CAC, mnStageSel_804D6CAD);
     for (i = 0; i < 0x1E; i++) {
         if (mnStageSel_803F06D0[i].x8 != 0) {
             lb_8000B1CC(mnStageSel_803F06D0[i].x0, NULL, &sp10);

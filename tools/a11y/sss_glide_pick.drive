@@ -1,0 +1,75 @@
+# Stage select: A pressed during a glide picks the tile the stage cursor is
+# on then, or last crossed, not the one the step named, and the pick names
+# it ("Picked Rainbow Cruise."). Steps from tile to tile glide in about 6
+# frames, quicker than drive.py presses follow each other, so the stick
+# first takes the cursor from Rainbow Cruise to the bottom left corner,
+# crossing no tile, and a step from there glides about 19 frames to
+# Battlefield, under empty space until its last frames.
+# Run with the default --scene title:
+#   python tools/a11y/drive.py tools/a11y/sss_glide_pick.drive
+# drive.py turns steering on (MELEE_A11Y_STEER=1).
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# VS. Mode, Melee.
+press Down
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press A
+wait '"Character select\. Player 1, no character\."'
+sleep 1
+
+# Fox for player 1, and player 2 made a CPU, which gets a random character
+# and makes the match ready.
+press DUp
+wait ': "Player 1: closed"$'
+press DUp
+wait ': "Pichu"$'
+press DUp
+wait ': "Fox"$'
+wait 'glide to "Fox" ended after \d+ frames: arrived'
+press A
+sleep 1
+search ': "Player 2: closed"$' DDown*2 DRight*3 DLeft*3
+wait 'glide to "Player 2: closed" ended after \d+ frames: arrived'
+press A until 'Ready to fight\. Press Start\.'
+sleep 1
+
+# Start leaves for stage select, which speaks its own opening.
+press Start
+wait ': "Stage select\. D-pad to choose, Start picks a random stage\."$'
+sleep 2
+
+# Icicle Mountain first, then Peach's Castle and Rainbow Cruise below it.
+press DUp
+wait ': "Icicle Mountain\. '
+wait 'glide to "Icicle Mountain" ended after \d+ frames: arrived'
+press DRight
+wait ': "Princess Peach.s Castle\. '
+wait 'glide to "Princess Peach.s Castle" ended after \d+ frames: arrived'
+press DDown
+wait ': "Rainbow Cruise\. '
+wait 'glide to "Rainbow Cruise" ended after \d+ frames: arrived'
+
+# The stick, down and left into the corner, a second at a diagonal push;
+# leaving the tile into empty space is silent.
+press Down+Left 1000
+sleep 0.5
+
+# Up from empty space goes to the nearest tile that way, Battlefield, and
+# A at once picks Rainbow Cruise, the tile hovered last; the pick stops the
+# glide.
+press DUp 30
+press A 30
+wait ': "Battlefield\. '
+wait 'glide to "Battlefield" ended after \d+ frames: steering is off here'
+wait ': "Picked Rainbow Cruise\."$'
+wait 'boot scene: state \d+ scene 2$'
+sleep 2

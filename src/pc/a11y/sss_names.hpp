@@ -44,5 +44,10 @@ inline constexpr std::string_view kLockedStage = "Locked stage";
 /* A or Start on a locked tile, which the game refuses. */
 inline constexpr std::string_view kLocked = "Locked.";
 inline constexpr std::string_view kUnknownStage = "Unknown stage";
+/* A pick of another stage than the one last named, made during a glide:
+ * "Picked Fountain of Dreams." */
+inline constexpr std::string_view kPicked = "Picked";
+/* A glide that did not get there: "Could not reach Corneria". */
+inline constexpr std::string_view kCouldNotReach = "Could not reach";
 
 }  // namespace a11y

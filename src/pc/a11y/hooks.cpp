@@ -189,6 +189,14 @@ extern "C" void pc_a11y_sss_frame(const SSSData* data, const void* tiles, int ti
     s_sss->frame(screen, pc_net_active());
 }
 
+extern "C" void pc_a11y_sss_cursor(float x, float y, int stick_x, int stick_y) {
+    if (!game_hook_may_speak()) {
+        return;
+    }
+    /* Once per simulated frame: steps, and the glide's next frame. */
+    s_sss->cursor(a11y::Point{x, y}, stick_x, stick_y);
+}
+
 extern "C" void pc_a11y_lobby_frame(const OnlineLobbyView* view) {
     if (!game_hook_may_speak()) {
         return;

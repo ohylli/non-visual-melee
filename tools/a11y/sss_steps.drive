@@ -1,0 +1,103 @@
+# Stage select with the D-pad: steps over the stage tiles, each naming its
+# destination at the press, and the glides that take the stage cursor
+# there. Character select is set up by D-pad, as in sss_hover.drive.
+# Run with the default --scene title:
+#   python tools/a11y/drive.py tools/a11y/sss_steps.drive
+# drive.py turns steering on (MELEE_A11Y_STEER=1). --no-card unlocks every
+# stage, so the rows are the full five: Icicle Mountain and Flat Zone at
+# the ends of the top two, the random tile at the start of the third.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# VS. Mode, Melee.
+press Down
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press A
+wait '"Character select\. Player 1, no character\."'
+sleep 1
+
+# Fox for player 1, and player 2 made a CPU, which gets a random character
+# and makes the match ready.
+press DUp
+wait ': "Player 1: closed"$'
+press DUp
+wait ': "Pichu"$'
+press DUp
+wait ': "Fox"$'
+wait 'glide to "Fox" ended after \d+ frames: arrived'
+press A
+sleep 1
+search ': "Player 2: closed"$' DDown*2 DRight*3 DLeft*3
+wait 'glide to "Player 2: closed" ended after \d+ frames: arrived'
+press A until 'Ready to fight\. Press Start\.'
+sleep 1
+
+# Start leaves for stage select, which speaks its own opening.
+press Start
+wait ': "Stage select\. D-pad to choose, Start picks a random stage\."$'
+sleep 2
+
+# The first press goes to Icicle Mountain, whatever its direction, from the
+# stage cursor's start below every tile; what the glide crosses (the random
+# tile) goes unsaid.
+press DDown
+wait ': "Icicle Mountain\. '
+wait 'glide to "Icicle Mountain" ended after \d+ frames: arrived'
+
+# Along the top row, each name at its press.
+press DRight
+wait ': "Princess Peach.s Castle\. '
+press DRight
+wait ': "Kongo Jungle\. '
+wait 'glide to "Kongo Jungle" ended after \d+ frames: arrived'
+
+# Down a column, then left along the second row back to Icicle Mountain,
+# which spans the top two rows: Right from it returns along the second.
+press DDown
+wait ': "Jungle Japes\. '
+press DLeft
+wait ': "Rainbow Cruise\. '
+press DLeft
+wait ': "Icicle Mountain\. '
+wait 'glide to "Icicle Mountain" ended after \d+ frames: arrived'
+press DRight
+wait ': "Rainbow Cruise\. '
+wait 'glide to "Rainbow Cruise" ended after \d+ frames: arrived'
+
+# Down to the random tile, nearest in x below, and on down the rows to the
+# bottom one; Down at its edge names Battlefield again and stays.
+press DDown
+wait ': "Random"$'
+press DRight
+wait ': "Brinstar\. '
+press DDown
+wait ': "Brinstar Depths\. '
+press DDown
+wait ': "Battlefield\. '
+wait 'glide to "Battlefield" ended after \d+ frames: arrived'
+press DDown
+wait ': "Battlefield\. '
+
+# Back up and along to the random tile, and A rolls a stage, said before
+# the match begins.
+press DUp
+wait ': "Fourside\. '
+press DUp
+wait ': "Onett\. '
+press DLeft
+wait ': "Brinstar\. '
+press DLeft
+wait ': "Random"$'
+wait 'glide to "Random" ended after \d+ frames: arrived'
+press A
+wait ': "Random: [^"]+\."$'
+wait 'boot scene: state \d+ scene 2$'
+sleep 2

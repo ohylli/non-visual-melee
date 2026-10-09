@@ -79,10 +79,10 @@ Cursor hand_cursor() {
 }
 
 /* Stage select's cursor over the tiles, aimed at their centres, within
- * fn_8025A310's bounds; it starts below every tile, about here. */
+ * fn_8025A310's bounds; it starts below every tile, at (0, -13) as a run reported. */
 Cursor stage_cursor() {
     Cursor cursor{"stage cursor", &a11y::kStageCursorMovement, Area{-27.0f, 27.0f, -19.0f, 19.0f},
-        Point{0.0f, -15.0f}, {}};
+        Point{0.0f, -13.0f}, {}};
     for (const sss_test::TileRow& tile : sss_test::kTiles) {
         cursor.places.push_back(Place{
             Point{tile.x, tile.y}, Area{tile.x - tile.half_width, tile.x + tile.half_width,

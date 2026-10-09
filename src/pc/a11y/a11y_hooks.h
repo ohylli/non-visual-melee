@@ -95,6 +95,15 @@ struct SSSData;
 void pc_a11y_sss_frame(const struct SSSData* data, const void* tiles, int tile_size, int hovered,
     int pick, int frozen, int buttons, int owner, int local_pick, int remote_pick);
 
+/* Stage select's cursor has moved this simulated frame (fn_8025A310, after
+ * its clamp, before it tests the tiles): where it is, in the units the tiles
+ * are tested in, and the stick that moved it, each axis with the dead zone
+ * of 30 already taken off (mnStageSel_804D6CAC and 804D6CAD). Offline that
+ * stick is the first port's pushed past the dead zone, which may be another
+ * player's. Not reached once a pick is made. Steering's glide advances
+ * here. */
+void pc_a11y_sss_cursor(float x, float y, int stick_x, int stick_y);
+
 /* Once a frame of the online lobby's LAN path (gm_Scene_OnlineLobby_OnFrame
  * in src/melee/gm/gmonlinemode.c), after the view is drawn: the view the
  * scene filled this frame (OnlineLobbyView, gmonlinemode.h). Lobby speech

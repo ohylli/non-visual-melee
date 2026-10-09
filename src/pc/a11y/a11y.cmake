@@ -45,6 +45,7 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/sss_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sss_names.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sss_reader.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/sss_targets.cpp
         ${CMAKE_CURRENT_LIST_DIR}/steering.cpp
         ${CMAKE_CURRENT_LIST_DIR}/steerer.cpp)
 target_include_directories(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR})
@@ -207,6 +208,16 @@ if (TARGET unit_tests)
     add_test(NAME steps COMMAND steps_test)
     set_tests_properties(steps PROPERTIES LABELS melee)
     add_dependencies(unit_tests steps_test)
+
+    # Stage select's targets against hand-written snapshots.
+    add_executable(sss_targets_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_sss_targets.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/sss_targets.cpp)
+    target_include_directories(sss_targets_test PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(sss_targets_test PRIVATE -UNDEBUG)
+    add_test(NAME sss_targets COMMAND sss_targets_test)
+    set_tests_properties(sss_targets PROPERTIES LABELS melee)
+    add_dependencies(unit_tests sss_targets_test)
 
     # Character select's targets against hand-written snapshots.
     add_executable(css_targets_test EXCLUDE_FROM_ALL

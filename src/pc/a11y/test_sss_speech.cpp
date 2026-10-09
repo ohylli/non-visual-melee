@@ -394,6 +394,119 @@ void glide_words_name_the_stage_alone() {
     assert(f.sss.hover_words(state, A11Y_SSS_RANDOM_TILE) == "Random");
 }
 
+using Glide = a11y::GlideState<int>;
+using a11y::GlidePhase;
+
+void a_step_names_its_destination_at_the_press() {
+    A11ySssState state = screen();
+    Fixture f(state);
+    f.sss.step(state, kCorneriaTile);
+    f.sss.step(state, A11Y_SSS_RANDOM_TILE);
+    assert((f.spoken() == Texts{described(A11Y_St_Kind_Corneria), "Random"}));
+    /* At an edge the step names the same tile again. */
+    f.sss.step(state, A11Y_SSS_RANDOM_TILE);
+    assert((f.spoken() == Texts{"Random"}));
+    f.sss.step(screen_with_locked_stages(), kFoursideTile);
+    assert((f.spoken() == Texts{"Locked stage"}));
+}
+
+void a_glide_crosses_tiles_and_arrives_in_silence() {
+    A11ySssState state = screen();
+    Fixture f(state);
+    f.sss.step(state, kFountainTile);
+    f.spoken();
+    Glide glide{GlidePhase::gliding, kFountainTile};
+    state.hovered = kBattlefieldTile;
+    f.sss.frame(state, glide);
+    state.hovered = kFoursideTile;
+    f.sss.frame(state, glide);
+    state.hovered = kFountainTile;
+    f.sss.frame(state, glide);
+    f.sss.frame(state, Glide{GlidePhase::ended, kFountainTile});
+    f.sss.frame(state);
+    assert(f.spoken().empty());
+    /* The stick takes over from there: hovers are said again. */
+    hover(f, state, kCorneriaTile);
+    assert((f.spoken() == Texts{described(A11Y_St_Kind_Corneria)}));
+}
+
+void a_glide_ending_elsewhere_names_where_the_cursor_is() {
+    /* The player's stick took over on Onett. */
+    A11ySssState state = screen();
+    Fixture f(state);
+    f.sss.step(state, kFountainTile);
+    f.spoken();
+    state.hovered = kOnettTile;
+    f.sss.frame(state, Glide{GlidePhase::gliding, kFountainTile});
+    assert(f.spoken().empty());
+    f.sss.frame(state, Glide{GlidePhase::ended, kFountainTile});
+    assert((f.spoken() == Texts{described(A11Y_St_Kind_Onett)}));
+}
+
+void a_failed_glide_says_so_and_where_the_cursor_is() {
+    A11ySssState state = screen();
+    Fixture f(state);
+    f.sss.step(state, kCorneriaTile);
+    f.spoken();
+    state.hovered = kFountainTile;
+    f.sss.frame(state, Glide{GlidePhase::gliding, kCorneriaTile});
+    f.sss.frame(state, Glide{GlidePhase::failed, kCorneriaTile});
+    assert((f.spoken() == Texts{"Could not reach Corneria. " + described(A11Y_St_Kind_Izumi)}));
+    /* Failed on the tile itself: only that it failed. */
+    state.hovered = kCorneriaTile;
+    f.sss.frame(state, Glide{GlidePhase::gliding, kCorneriaTile});
+    f.sss.frame(state, Glide{GlidePhase::failed, kCorneriaTile});
+    assert((f.spoken() == Texts{"Could not reach Corneria"}));
+}
+
+void a_pick_during_a_glide_names_the_stage_picked() {
+    /* The step named Fountain of Dreams; A while the cursor crossed Onett
+     * picks Onett, and the glide stops with the pick. */
+    A11ySssState state = screen();
+    Fixture f(state);
+    f.sss.step(state, kFountainTile);
+    f.spoken();
+    state.hovered = kOnettTile;
+    f.sss.frame(state, Glide{GlidePhase::gliding, kFountainTile});
+    state.pressed_a = true;
+    state.pick = A11Y_SSS_PICKED;
+    f.sss.frame(state, Glide{GlidePhase::ended, kFountainTile});
+    assert((f.spoken() == Texts{"Picked Onett."}));
+    state.pressed_a = false;
+    state.pick = A11Y_SSS_LEAVING;
+    f.sss.frame(state);
+    assert(f.spoken().empty());
+}
+
+void a_pick_where_the_step_went_says_nothing() {
+    A11ySssState state = screen();
+    Fixture f(state);
+    f.sss.step(state, kFountainTile);
+    f.spoken();
+    state.hovered = kFountainTile;
+    f.sss.frame(state, Glide{GlidePhase::gliding, kFountainTile});
+    f.sss.frame(state, Glide{GlidePhase::ended, kFountainTile});
+    state.pressed_a = true;
+    state.pick = A11Y_SSS_PICKED;
+    f.sss.frame(state);
+    assert(f.spoken().empty());
+}
+
+void a_pick_during_a_glide_still_rolls_random() {
+    /* A on the random tile crossed on the way: its roll, no "Picked". */
+    A11ySssState state = screen();
+    Fixture f(state);
+    f.sss.step(state, kBrinstarTile);
+    f.spoken();
+    state.hovered = A11Y_SSS_RANDOM_TILE;
+    f.sss.frame(state, Glide{GlidePhase::gliding, kBrinstarTile});
+    state.pressed_a = true;
+    state.pick = A11Y_SSS_PICKED;
+    state.hovered = kCorneriaTile;
+    f.sss.frame(state, Glide{GlidePhase::ended, kBrinstarTile});
+    assert((f.spoken() == Texts{"Random: Corneria."}));
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -433,6 +546,13 @@ int main() {
     every_tile_has_a_name();
     every_tile_has_a_description_of_one_or_two_sentences();
     glide_words_name_the_stage_alone();
+    a_step_names_its_destination_at_the_press();
+    a_glide_crosses_tiles_and_arrives_in_silence();
+    a_glide_ending_elsewhere_names_where_the_cursor_is();
+    a_failed_glide_says_so_and_where_the_cursor_is();
+    a_pick_during_a_glide_names_the_stage_picked();
+    a_pick_where_the_step_went_says_nothing();
+    a_pick_during_a_glide_still_rolls_random();
     std::cout << "sss_speech: all tests passed\n";
     return 0;
 }
