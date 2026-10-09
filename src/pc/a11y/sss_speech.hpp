@@ -6,8 +6,10 @@
  * enters says its stage, "Random" or "Locked stage"; crossing empty space is
  * silent. Offline, Random says the stage it rolled, and a pick on a locked
  * tile that the game refuses says so; a pick of a named stage is silent,
- * since its name was just heard. It compares each snapshot with the
- * previous one and touches no game state itself. */
+ * since its name was just heard. With the stage-select rule Random or
+ * Ordered the screen is skipped, and the stage chosen in advance is said
+ * instead of the opening. It compares each snapshot with the previous one
+ * and touches no game state itself. */
 #pragma once
 #include "game_access.h"
 #include <set>
@@ -27,8 +29,7 @@ public:
     void forget() { m_seen = false; }
 
     /* The screen's state this frame. Speaks what changed since the last
-     * one, interrupting; nothing when nothing did. The skipped scene is
-     * silent. */
+     * one, interrupting; nothing when nothing did. */
     void frame(const A11ySssState& state);
 
     /* A tile as spoken: "Corneria", "Random", "Locked stage". */

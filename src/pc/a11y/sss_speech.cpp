@@ -33,13 +33,19 @@ bool rolls(int tile) {
 }  // namespace
 
 void SssSpeech::frame(const A11ySssState& state) {
-    if (state.skipped) {
-        return;
-    }
     bool arrived = !m_seen;
     A11ySssState last = m_last;
     m_seen = true;
     m_last = state;
+    if (state.skipped) {
+        /* The screen is never shown: the stage chosen in advance stands in
+         * for the opening. */
+        if (arrived) {
+            m_speech.announce(
+                std::string(kStage) + ": " + name(state.skipped_stage) + ".", Mode::interrupt);
+        }
+        return;
+    }
     if (arrived) {
         m_speech.announce(opening(state), Mode::interrupt);
         return;

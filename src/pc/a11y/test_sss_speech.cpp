@@ -277,13 +277,44 @@ void online_picks_are_left_to_their_own_rules() {
     assert(f.spoken().empty());
 }
 
-void skipped_scene_says_nothing() {
-    Fixture f;
+/* The stage-select rule Random or Ordered: the scene leaves on its first
+ * frame with the stage already chosen. */
+A11ySssState skipped_scene(A11yStage stage) {
     A11ySssState state{};
     state.skipped = true;
-    state.skipped_stage = A11Y_St_Kind_Corneria;
+    state.skipped_stage = stage;
+    return state;
+}
+
+void skipped_scene_names_the_stage_instead_of_the_opening() {
+    Fixture f;
+    f.sss.frame(skipped_scene(A11Y_St_Kind_Corneria));
+    assert((f.spoken() == Texts{"Stage: Corneria."}));
+}
+
+void skipped_scene_names_the_stage_once() {
+    Fixture f;
+    A11ySssState state = skipped_scene(A11Y_St_Kind_OldPupupu);
     f.sss.frame(state);
-    assert(f.spoken().empty());
+    f.sss.frame(state);
+    assert((f.spoken() == Texts{"Stage: Dream Land N64."}));
+}
+
+void skipped_scene_with_a_stage_missing_from_the_table() {
+    Fixture f;
+    f.sss.frame(skipped_scene(static_cast<A11yStage>(0x15)));
+    assert((f.spoken() == Texts{"Stage: Unknown stage 21."}));
+    assert(count_logged("[a11y] stage 21: not in the stage names table") == 1);
+}
+
+void stage_select_after_a_skipped_scene_says_its_opening() {
+    /* The rule changed back to On between two matches. */
+    Fixture f;
+    f.sss.frame(skipped_scene(A11Y_St_Kind_Corneria));
+    f.spoken();
+    f.sss.forget();
+    f.sss.frame(screen());
+    assert((f.spoken() == Texts{kOpening}));
 }
 
 void forgetting_makes_the_next_frame_an_arrival() {
@@ -346,7 +377,10 @@ int main() {
     a_refusal_names_the_tile_entered_after_it();
     a_on_an_unlocked_tile_that_did_not_pick_says_nothing();
     online_picks_are_left_to_their_own_rules();
-    skipped_scene_says_nothing();
+    skipped_scene_names_the_stage_instead_of_the_opening();
+    skipped_scene_names_the_stage_once();
+    skipped_scene_with_a_stage_missing_from_the_table();
+    stage_select_after_a_skipped_scene_says_its_opening();
     forgetting_makes_the_next_frame_an_arrival();
     missing_name_is_spoken_by_number_and_logged_once();
     every_tile_has_a_name();
