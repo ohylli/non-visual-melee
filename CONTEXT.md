@@ -106,6 +106,10 @@ _Avoid_: Tree menu, list menu, submenu
 A menu screen at the end of the tree, where the player sets or views something.
 _Avoid_: Settings screen, option screen, sub-screen
 
+**Rules screens**:
+Custom Rules and the three leaf screens under it (Item Switch, Additional Rules, Random Stage), the same screens whether opened from the main menu tree or from character select's rules header.
+_Avoid_: Rules menu, rules screen (when the whole group is meant), options
+
 **Entry**:
 One line of a tree screen that the player can choose.
 _Avoid_: Item (the game has items in matches), option, row, button
@@ -115,7 +119,7 @@ The entry the cursor is on, as distinct from one the player has confirmed.
 _Avoid_: Selected entry, focused entry, current entry
 
 **Row**:
-One line of a leaf screen, holding a value the player can change.
+One line of a leaf screen, holding either a value the player can change or a way into another leaf screen (Custom Rules' "Item Switch").
 _Avoid_: Setting (that is the port's), option, entry (that belongs to a tree screen)
 
 **Value**:
@@ -167,6 +171,10 @@ _Avoid_: Token, chip, puck
 **Portrait**:
 One character's picture on character select, with the character's name drawn under it.
 _Avoid_: Icon (the decomp's word), character slot, cell
+
+**Rules header**:
+The line across the top of character select that states the current rules ("2-minute KO fest!") and opens the rules screens.
+_Avoid_: Rules button, rules banner, header
 
 **Player slot**:
 One of the four panels along the bottom of character select, with its HMN/CPU tab and name box.
