@@ -87,10 +87,11 @@ bool take_stage_switch_refused() {
 }
 
 /* The menu reader's frame: the main menu tree's, or the rules screens'
- * inside character select. */
-void feed_menu_speech(bool refused) {
+ * inside character select, which set no centre text (-1); the main menu's
+ * last one would be looked up in character select's string table. */
+void feed_menu_speech(int center_text, bool refused) {
     A11yMenuState state;
-    a11y_game_menu_state(s_center_text, &state);
+    a11y_game_menu_state(center_text, &state);
     state.refused = refused;
     s_menu_speech->frame(state);
 }
@@ -164,7 +165,7 @@ extern "C" void pc_a11y_menu_frame(void) {
     if (!game_hook_may_speak()) {
         return;
     }
-    feed_menu_speech(refused);
+    feed_menu_speech(s_center_text, refused);
 }
 
 extern "C" void pc_a11y_stage_switch_refused(void) {
@@ -209,7 +210,7 @@ extern "C" void pc_a11y_css_frame(const CSSData* css, const CSSDoorsData* doors,
     }
     s_css_menu_fed = rules_open;
     if (rules_open) {
-        feed_menu_speech(refused);
+        feed_menu_speech(-1, refused);
     }
 }
 

@@ -11,13 +11,19 @@
 namespace a11y {
 namespace {
 
+/* Whether the words already end a sentence, as the rules header's text does
+ * ("2-minute KO fest!"). */
+bool ends_sentence(std::string_view words) {
+    return !words.empty() && (words.back() == '.' || words.back() == '!' || words.back() == '?');
+}
+
 /* Appends one part of an announcement as its own sentence. */
 void add(std::string& out, std::string_view part) {
     if (part.empty()) {
         return;
     }
     if (!out.empty()) {
-        out += ". ";
+        out += ends_sentence(out) ? " " : ". ";
     }
     out += part;
 }
@@ -29,6 +35,13 @@ std::string capitalised(std::string_view words) {
         out[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(out[0])));
     }
     return out;
+}
+
+/* Appends a clause to a target's words: "Teams: off, not while holding a
+ * coin", or after words that end a sentence, as its own: "Rules: 2-minute KO
+ * fest! Not while holding a coin". */
+void add_clause(std::string& words, std::string_view clause) {
+    words += ends_sentence(words) ? " " + capitalised(clause) : ", " + std::string(clause);
 }
 
 /* "Player 2" for player number 1, as the hand's badge shows "P2". */
@@ -228,11 +241,11 @@ void CssSpeech::step(const A11yCssState& state, Target to) {
         add(out, drop_words(state, carrying));
         m_drop_said = true;
     } else if (carrying >= 0 && area(to) == Area::top_bar) {
-        words += ", " + std::string(kNotWhileHoldingACoin);
+        add_clause(words, kNotWhileHoldingACoin);
     } else if (to.kind == TargetKind::portrait) {
         int coin = pickable_coin(state, to.index);
         if (coin >= 0) {
-            words += ", " + coin_words(state, coin);
+            add_clause(words, coin_words(state, coin));
         }
     }
     add(out, words);

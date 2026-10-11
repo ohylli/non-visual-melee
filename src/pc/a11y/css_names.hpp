@@ -8,10 +8,13 @@
 #pragma once
 #include "character_kinds.h"
 #include "css_kinds.h"
-#include "game_access.h"
 #include <optional>
 #include <string>
 #include <string_view>
+
+/* The match rules (game_access.h), kept off this header like the screen's
+ * other state. */
+struct A11yRules;
 
 namespace a11y {
 

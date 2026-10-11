@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "css_names.hpp"
+#include "game_access.h"
 #include "menu_kinds.h"
 #include <iterator>
 
