@@ -10,7 +10,7 @@ The agent cannot hear the game, so verification reads the game's log: every anno
 Four levels, each including the one before it. Choose the one the change calls for by your own judgement, unless the maintainer names one; when torn between two, take the higher. Times are from one sequential run on the maintainer's machine. Nearly all of it is the game running scripts in real time, and a failed wait adds its timeout.
 
 1. **Quick** (about 1 minute), after any change and while iterating: the build, the style check, the unit tests, a bounded run of the scene the change touches (`title` when none fits), and the drive scripts covering the screen or feature the change touched.
-2. **Menus** (about 5 minutes more), after a change to menu speech or to code every screen shares (`hooks.cpp`, the speech subsystem), and before committing a menu feature: all fourteen menu drive scripts.
+2. **Menus** (about 6 minutes more), after a change to menu speech or to code every screen shares (`hooks.cpp`, the speech subsystem), and before committing a menu feature: all fifteen menu drive scripts.
 3. **Online** (about 4 minutes more), after a change to steering, the pad hook, cues, the online lobby, or anything that could reach game state, input or sound handles: the five `css_net.drive` runs and the `lan_lobby.drive` run.
 4. **Base merge** (about 4 minutes more): the five `css_net.drive` runs and the `lan_lobby.drive` run again against a base port build, alongside the `base-merge` skill's own checks.
 
@@ -48,11 +48,12 @@ A bounded run boots straight into a scene and exits after a fixed frame count:
 
 ## Menu drive scripts
 
-`tools/a11y/drive.py` is described under "Driving the game" in `CLAUDE.md`. Run a script as `python tools/a11y/drive.py tools/a11y/<name>.drive`; its transcript goes to `build/drive/last.log` unless `--out` names another. The fourteen menu drive scripts each fail on a missing announcement:
+`tools/a11y/drive.py` is described under "Driving the game" in `CLAUDE.md`. Run a script as `python tools/a11y/drive.py tools/a11y/<name>.drive`; its transcript goes to `build/drive/last.log` unless `--out` names another. The fifteen menu drive scripts each fail on a missing announcement:
 
 - `tree_walk.drive`: every tree screen of the main menu tree, a leaf screen and a return from character select.
 - `leaf_screens.drive`: the leaf screens with a reader.
 - `rules_screens.drive`: Custom Rules and Additional Rules from the main menu tree: each row, a value changed and put back on each, Rules to Stock renaming the next row, the returns from Item Switch and Random Stage, and the wrap. Score Display stays hidden in agent runs.
+- `rules_switches.drive`: Item Switch and Random Stage from the main menu tree. Item Switch: an item toggled and back, a move to the other column, the frequency strip from the right column with its hint ("Item frequency: Medium. Left and right to adjust.") and from the left without it, the frequency changed and back. Random Stage: every stage turned off but Rainbow Cruise, A on it saying "At least one stage must stay on.", and every stage turned back on. About a minute and a half, most of it the 29 stages.
 - `css_portraits.drive`: character select's portraits and coin, moving the hand with the stick.
 - `css_slots.drive`: its player slots, CPU level slider, Ready to Fight, Teams button and rules screen.
 - `css_steps.drive`: D-pad steps over the portraits and their glides.

@@ -334,6 +334,7 @@ static void fn_80235F80(HSD_GObj* gobj)
                     }
                     if (enabled != 0) {
                         lbAudioAx_80024030(3);
+                        pc_a11y_stage_switch_refused();
                     } else {
                         sfxMove();
                         *confirmed = 0;

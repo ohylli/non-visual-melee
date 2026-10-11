@@ -90,10 +90,22 @@ typedef struct A11yMenuState {
     int balance;
     bool deflicker;
     A11yRules rules;
+    /* The hovered row's value as the screen's input last set it
+     * (mn_804A04F0.confirmed_selection). On Item Switch an item's 1 on or 0
+     * off, or on the frequency strip the frequency, 0 None to 5 Very High;
+     * on Random Stage the stage's 1 on or 0 off. The screens copy it into
+     * their own data when it changes, and into GamePrefs' masks only at the
+     * next A press or on leaving, so the masks lag for the row last
+     * changed. */
+    int confirmed;
+    /* Random Stage refused to turn off the last stage that was on, since the
+     * last snapshot (pc_a11y_stage_switch_refused). Set by the caller, not
+     * read from the screen. */
+    bool refused;
 } A11yMenuState;
 
-/* Fills the snapshot from game memory; center_text is the number the hook
- * last passed, or -1. */
+/* Fills the snapshot from game memory, refused left false; center_text is
+ * the number the hook last passed, or -1. */
 void a11y_game_menu_state(int center_text, A11yMenuState* out);
 
 /* Character select: four player slots and 25 portraits. */

@@ -100,6 +100,21 @@ constexpr const char* kSelfDestructsMinus2Text =
 constexpr const char* kRandomStageText =
     "If stage selection is set at Random, players\nwill be able to choose stages to exclude.";
 
+/* Item Switch and Random Stage's key hint. */
+constexpr const char* kSwitchHint =
+    "Up and down to move, left and right to change column, A to turn on or off.";
+/* Item Switch's rows: the columns' first and last items, and the frequency
+ * strip above them, entered from the left column or the right. */
+constexpr int kFood = 0;
+constexpr int kMaximTomato = 1;
+constexpr int kFlipper = 15;
+constexpr int kFreezie = 16;
+constexpr int kMrSaturn = 17;
+constexpr int kPartyBall = 30;
+constexpr int kStripLeft = 31;
+constexpr int kStripRight = 32;
+constexpr int kMedium = 3;
+
 /* The rules as a new save has them: a 2-minute time match. */
 A11yRules default_rules() {
     A11yRules rules{};
@@ -216,6 +231,19 @@ struct Fixture {
         state.hovered = row;
         state.description = description != nullptr ? bytes.data() : nullptr;
         state.rules = rules;
+        this->menu.frame(state);
+    }
+
+    /* One frame on Item Switch or Random Stage: the row and its value as
+     * the screen's input set it, and whether a toggle was refused since the
+     * last frame. */
+    void switch_frame(int menu, int row, int value, bool refused = false) {
+        A11yMenuState state{};
+        state.menu = menu;
+        state.hovered = row;
+        state.confirmed = value;
+        state.refused = refused;
+        state.rules = default_rules();
         this->menu.frame(state);
     }
 
@@ -665,18 +693,18 @@ void returns_from_the_screens_rows_open() {
     A11yRules rules = default_rules();
     f.rules_frame(kRules, 5, rules, kItemSwitchText);
     f.spoken();
-    f.frame(kItemSwitch, 0);
+    f.switch_frame(kItemSwitch, 0, 1);
     f.rules_frame(kRules, 5, rules, kItemSwitchText);
     f.rules_frame(kRules, 6, rules, kAdditionalRulesText);
     f.rules_frame(kAdditionalRules, 0, rules, kStockTimeLimitText);
     f.rules_frame(kAdditionalRules, 5, rules, kRandomStageText);
-    f.frame(kRandomStage, 0);
+    f.switch_frame(kRandomStage, 0, 1);
     f.rules_frame(kAdditionalRules, 5, rules, kRandomStageText);
     f.rules_frame(kRules, 6, rules, kAdditionalRulesText);
     f.frame(kVs, 3, "Set the rules for VS. matches.");
     assert((f.spoken() ==
             Texts{
-                "Item Switch. No speech yet.",
+                std::string("Item Switch. Food: on. ") + kSwitchHint,
                 "Custom Rules. Item Switch. Choose how often items will appear and turn specific "
                 "items on or off.",
                 "Additional Rules. Set even more detailed rules.",
@@ -684,7 +712,7 @@ void returns_from_the_screens_rows_open() {
                 "Set a time limit for Stock Matches.",
                 "Random Stage. If stage selection is set at Random, players will be able to "
                 "choose stages to exclude.",
-                "Random Stage. No speech yet.",
+                std::string("Random Stage. Princess Peach's Castle: on. ") + kSwitchHint,
                 "Additional Rules. Random Stage. If stage selection is set at Random, players "
                 "will be able to choose stages to exclude.",
                 "Custom Rules. Additional Rules. Set even more detailed rules.",
@@ -715,6 +743,190 @@ void unknown_rules_row_and_value_are_spoken_and_logged() {
     assert(count_logged("[a11y] menu 13 row 9: not in the menu names table") == 1);
     assert(count_logged("[a11y] menu 13 row 9: no description") == 1);
     assert(count_logged("[a11y] menu 13 row 2: value 7 not in the menu names table") == 1);
+}
+
+void item_switch_opens_from_custom_rules() {
+    Fixture f;
+    f.rules_frame(kRules, 5, default_rules(), kItemSwitchText);
+    f.spoken();
+    f.switch_frame(kItemSwitch, kFood, 1);
+    assert((f.spoken() == Texts{std::string("Item Switch. Food: on. ") + kSwitchHint}));
+}
+
+void item_switch_moves_within_and_between_columns() {
+    Fixture f;
+    f.switch_frame(kItemSwitch, kFood, 1);
+    f.spoken();
+    f.switch_frame(kItemSwitch, kMaximTomato, 1);
+    /* Right: the other column at the same row. */
+    f.switch_frame(kItemSwitch, kMrSaturn, 0);
+    f.switch_frame(kItemSwitch, kFreezie, 1);
+    /* Left: back. */
+    f.switch_frame(kItemSwitch, kFood, 1);
+    f.switch_frame(kItemSwitch, kFlipper, 1);
+    /* Right from Flipper clamps to Party Ball. */
+    f.switch_frame(kItemSwitch, kPartyBall, 0);
+    assert((f.spoken() == Texts{
+                              "Maxim Tomato: on",
+                              "Mr. Saturn: off",
+                              "Freezie: on",
+                              "Food: on",
+                              "Flipper: on",
+                              "Party Ball: off",
+                          }));
+}
+
+void item_names_are_the_columns_as_drawn() {
+    const char* names[] = {"Food", "Maxim Tomato", "Heart Container", "Warp Star", "Ray Gun",
+        "Super Scope", "Fire Flower", "Lip's Stick", "Star Rod", "Beam Sword", "Home-Run Bat",
+        "Fan", "Hammer", "Green Shell", "Red Shell", "Flipper", "Freezie", "Mr. Saturn",
+        "Poké Ball", "Bob-omb", "Motion-Sensor Bomb", "Super Mushroom", "Poison Mushroom",
+        "Starman", "Parasol", "Screw Attack", "Metal Box", "Bunny Hood", "Cloaking Device",
+        "Barrel Cannon", "Party Ball"};
+    Fixture f;
+    f.switch_frame(kItemSwitch, kFood, 1);
+    f.spoken();
+    for (int row = 1; row <= kPartyBall; row++) {
+        f.switch_frame(kItemSwitch, row, 1);
+        assert((f.spoken() == Texts{std::string(names[row]) + ": on"}));
+    }
+}
+
+void item_frequency_strip_wraps_with_its_hint_once() {
+    Fixture f;
+    f.switch_frame(kItemSwitch, kFood, 1);
+    f.spoken();
+    /* Up from Food wraps to the strip, Up again to the column's foot. */
+    f.switch_frame(kItemSwitch, kStripLeft, kMedium);
+    f.switch_frame(kItemSwitch, kFlipper, 1);
+    f.switch_frame(kItemSwitch, kStripLeft, kMedium);
+    f.switch_frame(kItemSwitch, kFood, 1);
+    /* Right column: Down from Party Ball to the strip, then to Freezie. */
+    f.switch_frame(kItemSwitch, kFreezie, 1);
+    f.switch_frame(kItemSwitch, kPartyBall, 1);
+    f.switch_frame(kItemSwitch, kStripRight, kMedium);
+    f.switch_frame(kItemSwitch, kFreezie, 1);
+    assert((f.spoken() == Texts{
+                              "Item frequency: Medium. Left and right to adjust.",
+                              "Flipper: on",
+                              "Item frequency: Medium",
+                              "Food: on",
+                              "Freezie: on",
+                              "Party Ball: on",
+                              "Item frequency: Medium",
+                              "Freezie: on",
+                          }));
+}
+
+void item_frequency_hint_again_after_reopening() {
+    Fixture f;
+    A11yRules rules = default_rules();
+    f.switch_frame(kItemSwitch, kFood, 1);
+    f.switch_frame(kItemSwitch, kStripLeft, kMedium);
+    f.rules_frame(kRules, 5, rules, kItemSwitchText);
+    f.switch_frame(kItemSwitch, kFood, 1);
+    f.spoken();
+    f.switch_frame(kItemSwitch, kStripLeft, kMedium);
+    assert((f.spoken() == Texts{"Item frequency: Medium. Left and right to adjust."}));
+    /* A scene entered (character select's rules screens) reopens it too. */
+    f.menu.forget();
+    f.switch_frame(kItemSwitch, kFood, 1);
+    f.spoken();
+    f.switch_frame(kItemSwitch, kStripRight, kMedium);
+    assert((f.spoken() == Texts{"Item frequency: Medium. Left and right to adjust."}));
+}
+
+void item_frequency_says_every_word() {
+    Fixture f;
+    f.switch_frame(kItemSwitch, kFood, 1);
+    f.switch_frame(kItemSwitch, kStripLeft, kMedium);
+    f.spoken();
+    /* Left is more, wrapping from Very High to None. */
+    for (int frequency : {4, 5, 0, 1, 2, 3}) {
+        f.switch_frame(kItemSwitch, kStripLeft, frequency);
+    }
+    assert((f.spoken() == Texts{"High", "Very high", "None", "Very low", "Low", "Medium"}));
+    f.switch_frame(kItemSwitch, kFood, 1);
+    f.spoken();
+    f.switch_frame(kItemSwitch, kStripLeft, 0);
+    assert((f.spoken() == Texts{"Item frequency: None"}));
+}
+
+void item_toggles_both_ways() {
+    Fixture f;
+    f.switch_frame(kItemSwitch, kFood, 1);
+    f.spoken();
+    f.switch_frame(kItemSwitch, kFood, 0);
+    f.switch_frame(kItemSwitch, kFood, 1);
+    assert((f.spoken() == Texts{"Off", "On"}));
+}
+
+void a_switch_press_that_changes_nothing_says_nothing() {
+    Fixture f;
+    f.switch_frame(kItemSwitch, kFood, 1);
+    f.spoken();
+    /* Left on the left column; A on the strip. */
+    f.switch_frame(kItemSwitch, kFood, 1);
+    f.switch_frame(kItemSwitch, kStripLeft, kMedium);
+    f.spoken();
+    f.switch_frame(kItemSwitch, kStripLeft, kMedium);
+    /* Item Switch refuses nothing; a stray report says nothing. */
+    f.switch_frame(kItemSwitch, kStripLeft, kMedium, true);
+    assert(f.spoken().empty());
+}
+
+void unknown_item_frequency_is_spoken_and_logged() {
+    Fixture f;
+    f.switch_frame(kItemSwitch, kFood, 1);
+    f.spoken();
+    f.switch_frame(kItemSwitch, kStripLeft, 9);
+    assert((f.spoken() == Texts{"Item frequency: 9. Left and right to adjust."}));
+    assert(count_logged("[a11y] menu 16 row 31: value 9 not in the menu names table") == 1);
+    /* The switch screens have no description line, so none is missed. */
+    assert(count_logged("[a11y] menu 16 row 31: no description") == 0);
+    assert(count_logged("[a11y] menu 16 row 0: no description") == 0);
+}
+
+void random_stage_opens_from_additional_rules() {
+    Fixture f;
+    f.rules_frame(kAdditionalRules, 5, default_rules(), kRandomStageText);
+    f.spoken();
+    f.switch_frame(kRandomStage, 0, 1);
+    assert((f.spoken() ==
+            Texts{std::string("Random Stage. Princess Peach's Castle: on. ") + kSwitchHint}));
+}
+
+void random_stage_names_every_row() {
+    const char* names[] = {"Princess Peach's Castle", "Kongo Jungle", "Great Bay", "Brinstar",
+        "Yoshi's Story", "Fountain of Dreams", "Corneria", "Pokémon Stadium", "Mute City", "Onett",
+        "Mushroom Kingdom", "Icicle Mountain", "Battlefield", "Dream Land N64", "Kongo Jungle N64",
+        "Rainbow Cruise", "Jungle Japes", "Hyrule Temple", "Brinstar Depths", "Yoshi's Island",
+        "Green Greens", "Venom", "Poké Floats", "Big Blue", "Fourside", "Mushroom Kingdom II",
+        "Flat Zone", "Final Destination", "Yoshi's Island N64"};
+    Fixture f;
+    f.switch_frame(kRandomStage, 0, 1);
+    f.spoken();
+    for (int row = 1; row < 29; row++) {
+        f.switch_frame(kRandomStage, row, row % 2);
+        assert((f.spoken() == Texts{std::string(names[row]) + (row % 2 != 0 ? ": on" : ": off")}));
+    }
+}
+
+void random_stage_toggles_and_refuses() {
+    constexpr int kCorneria = 6;
+    Fixture f;
+    f.switch_frame(kRandomStage, 0, 1);
+    f.switch_frame(kRandomStage, kCorneria, 1);
+    f.spoken();
+    f.switch_frame(kRandomStage, kCorneria, 0);
+    f.switch_frame(kRandomStage, kCorneria, 1);
+    /* Turning off the last stage that is on: the game keeps it on. */
+    f.switch_frame(kRandomStage, kCorneria, 1, true);
+    /* A press that changes nothing, as Left on the left column. */
+    f.switch_frame(kRandomStage, kCorneria, 1);
+    f.switch_frame(kRandomStage, kCorneria, 1, true);
+    assert((f.spoken() == Texts{"Off", "On", "At least one stage must stay on.",
+                              "At least one stage must stay on."}));
 }
 
 void plain_capitals_keeps_abbreviations() {
@@ -773,6 +985,18 @@ int main() {
     returns_from_the_screens_rows_open();
     a_forgotten_return_is_an_opening();
     unknown_rules_row_and_value_are_spoken_and_logged();
+    item_switch_opens_from_custom_rules();
+    item_switch_moves_within_and_between_columns();
+    item_names_are_the_columns_as_drawn();
+    item_frequency_strip_wraps_with_its_hint_once();
+    item_frequency_hint_again_after_reopening();
+    item_frequency_says_every_word();
+    item_toggles_both_ways();
+    a_switch_press_that_changes_nothing_says_nothing();
+    unknown_item_frequency_is_spoken_and_logged();
+    random_stage_opens_from_additional_rules();
+    random_stage_names_every_row();
+    random_stage_toggles_and_refuses();
     plain_capitals_keeps_abbreviations();
     std::cout << "menu_speech: all tests passed\n";
     return 0;

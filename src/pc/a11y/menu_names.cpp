@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "menu_names.hpp"
 #include "menu_kinds.h"
+#include "sss_names.hpp"
 #include <iterator>
 #include <span>
 
@@ -205,6 +206,98 @@ constexpr ReaderRow kAdditionalRulesRows[] = {
     {5, "Random Stage", RowValue::none, false, kind(MenuKind::MENU_KIND_RULES_STAGE)},
 };
 
+/* Item Switch's rows: the left column (0 to 15) and the right (16 to 30), each
+ * top to bottom, then the frequency strip above them, a row of its own for
+ * each column it is entered from. The names are drawn as two game texts, one
+ * per column (SdMenu strings 2 and 3); mnItemSw_803ED438 maps each row to its
+ * item. */
+constexpr std::string_view kFrequencyHint = "Left and right to adjust.";
+constexpr ReaderRow kItemSwitchRows[] = {
+    {0, "Food", RowValue::switched},
+    {1, "Maxim Tomato", RowValue::switched},
+    {2, "Heart Container", RowValue::switched},
+    {3, "Warp Star", RowValue::switched},
+    {4, "Ray Gun", RowValue::switched},
+    {5, "Super Scope", RowValue::switched},
+    {6, "Fire Flower", RowValue::switched},
+    {7, "Lip's Stick", RowValue::switched},
+    {8, "Star Rod", RowValue::switched},
+    {9, "Beam Sword", RowValue::switched},
+    {10, "Home-Run Bat", RowValue::switched},
+    {11, "Fan", RowValue::switched},
+    {12, "Hammer", RowValue::switched},
+    {13, "Green Shell", RowValue::switched},
+    {14, "Red Shell", RowValue::switched},
+    {15, "Flipper", RowValue::switched},
+    {16, "Freezie", RowValue::switched},
+    {17, "Mr. Saturn", RowValue::switched},
+    {18, "Poké Ball", RowValue::switched},
+    {19, "Bob-omb", RowValue::switched},
+    {20, "Motion-Sensor Bomb", RowValue::switched},
+    {21, "Super Mushroom", RowValue::switched},
+    {22, "Poison Mushroom", RowValue::switched},
+    {23, "Starman", RowValue::switched},
+    {24, "Parasol", RowValue::switched},
+    {25, "Screw Attack", RowValue::switched},
+    {26, "Metal Box", RowValue::switched},
+    {27, "Bunny Hood", RowValue::switched},
+    {28, "Cloaking Device", RowValue::switched},
+    {29, "Barrel Cannon", RowValue::switched},
+    {30, "Party Ball", RowValue::switched},
+    {.key = 31,
+        .name = "Item frequency",
+        .value = RowValue::item_frequency,
+        .hint = kFrequencyHint},
+    {.key = 32,
+        .name = "Item frequency",
+        .value = RowValue::item_frequency,
+        .hint = kFrequencyHint},
+};
+
+constexpr ReaderRow stage_switch(int row, A11yStage stage) {
+    return {.key = row, .value = RowValue::switched, .stage = stage};
+}
+
+/* Random Stage's rows: the left column (0 to 14) and the right (15 to 28),
+ * each top to bottom. A copy of mnStageSw_803ED4C4 (static in mnstagesw.c),
+ * which maps each row to its place in the stage switch, carried through to
+ * the stage by gm_801641CC's table (lbl_803B7808 in gm_1601.c). The cursor
+ * skips locked stages. */
+constexpr ReaderRow kRandomStageRows[] = {
+    stage_switch(0, A11Y_St_Kind_Castle),
+    stage_switch(1, A11Y_St_Kind_Kongo),
+    stage_switch(2, A11Y_St_Kind_GreatBay),
+    stage_switch(3, A11Y_St_Kind_Zebes),
+    stage_switch(4, A11Y_St_Kind_Story),
+    stage_switch(5, A11Y_St_Kind_Izumi),
+    stage_switch(6, A11Y_St_Kind_Corneria),
+    stage_switch(7, A11Y_St_Kind_PStadium),
+    stage_switch(8, A11Y_St_Kind_MuteCity),
+    stage_switch(9, A11Y_St_Kind_Onett),
+    stage_switch(10, A11Y_St_Kind_Inishie1),
+    stage_switch(11, A11Y_St_Kind_Icemt),
+    stage_switch(12, A11Y_St_Kind_Battle),
+    stage_switch(13, A11Y_St_Kind_OldPupupu),
+    stage_switch(14, A11Y_St_Kind_OldKongo),
+    stage_switch(15, A11Y_St_Kind_RCruise),
+    stage_switch(16, A11Y_St_Kind_Garden),
+    stage_switch(17, A11Y_St_Kind_Shrine),
+    stage_switch(18, A11Y_St_Kind_Kraid),
+    stage_switch(19, A11Y_St_Kind_Yoster),
+    stage_switch(20, A11Y_St_Kind_Greens),
+    stage_switch(21, A11Y_St_Kind_Venom),
+    stage_switch(22, A11Y_St_Kind_Pura),
+    stage_switch(23, A11Y_St_Kind_BigBlue),
+    stage_switch(24, A11Y_St_Kind_Fourside),
+    stage_switch(25, A11Y_St_Kind_Inishie2),
+    stage_switch(26, A11Y_St_Kind_Flatzone),
+    stage_switch(27, A11Y_St_Kind_Last),
+    stage_switch(28, A11Y_St_Kind_OldYoshi),
+};
+
+constexpr std::string_view kSwitchHint =
+    "Up and down to move, left and right to change column, A to turn on or off.";
+
 struct ScreenReader {
     MenuKind menu;
     Reader reader;
@@ -219,6 +312,14 @@ constexpr ScreenReader kReaders[] = {
     {MenuKind::MENU_KIND_RULES, {"Left and right to change.", RowKey::hovered, kCustomRulesRows}},
     {MenuKind::MENU_KIND_RULES_EXTRA,
         {"Left and right to change.", RowKey::hovered, kAdditionalRulesRows}},
+    {MenuKind::MENU_KIND_RULES_ITEMS,
+        {.hint = kSwitchHint, .key = RowKey::hovered, .rows = kItemSwitchRows, .described = false}},
+    /* Turning off the last stage that is on plays the refused sound. */
+    {MenuKind::MENU_KIND_RULES_STAGE, {.hint = kSwitchHint,
+                                          .key = RowKey::hovered,
+                                          .rows = kRandomStageRows,
+                                          .described = false,
+                                          .refused = "At least one stage must stay on."}},
 };
 
 /* Values as the rules screens draw them, by their stored numbers. */
@@ -226,6 +327,9 @@ constexpr std::string_view kRulesModeWords[] = {"Time", "Stock", "Coin", "Bonus"
 constexpr std::string_view kHandicapWords[] = {"Off", "Auto", "On"};
 constexpr std::string_view kStageSelectionWords[] = {"On", "Random", "Ordered", "Turns", "Loser"};
 constexpr std::string_view kSelfDestructsWords[] = {"minus 1", "0", "minus 2"};
+constexpr std::string_view kSwitchWords[] = {"off", "on"};
+constexpr std::string_view kItemFrequencyWords[] = {
+    "None", "Very low", "Low", "Medium", "High", "Very high"};
 static_assert(std::size(kRulesModeWords) == static_cast<std::size_t>(RulesMode::Mode_Bonus) + 1);
 static_assert(std::size(kStageSelectionWords) ==
               static_cast<std::size_t>(StageSelectMode::StageSelectMode_Loser) + 1);
@@ -288,6 +392,13 @@ std::optional<std::string_view> menu_entry_name(int menu, int entry) {
         }
     }
     return std::nullopt;
+}
+
+std::string_view ReaderRow::spoken_name() const {
+    if (stage != A11Y_NO_STAGE) {
+        return stage_name(stage).value_or(kUnknownStage);
+    }
+    return name;
 }
 
 const ReaderRow* Reader::row(int key) const {
@@ -366,6 +477,14 @@ std::optional<std::string_view> stage_selection_word(int stage_selection) {
 
 std::optional<std::string_view> self_destructs_words(int stored) {
     return word(kSelfDestructsWords, stored);
+}
+
+std::optional<std::string_view> switch_word(int on) {
+    return word(kSwitchWords, on);
+}
+
+std::optional<std::string_view> item_frequency_word(int frequency) {
+    return word(kItemFrequencyWords, frequency);
 }
 
 std::string plain_capitals(std::string_view label) {

@@ -142,6 +142,7 @@ if (TARGET unit_tests)
             ${CMAKE_CURRENT_LIST_DIR}/test_menu_speech.cpp
             ${CMAKE_CURRENT_LIST_DIR}/menu_speech.cpp
             ${CMAKE_CURRENT_LIST_DIR}/menu_names.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/sss_names.cpp
             ${CMAKE_CURRENT_LIST_DIR}/game_text.cpp
             ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
     target_include_directories(menu_speech_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})

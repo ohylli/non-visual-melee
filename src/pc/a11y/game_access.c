@@ -210,6 +210,8 @@ void a11y_game_menu_state(int center_text, A11yMenuState* out) {
     out->balance = (s8)gmMainLib_8015ED74();
     out->deflicker = gmMainLib_8015F4E8() != 0;
     rules_state(&out->rules);
+    out->confirmed = mn_804A04F0.confirmed_selection;
+    out->refused = false;
     /* The same precedence as mn_80229A7C, which draws the description line:
      * the base port's text first, then SdMenu's by the table's number. */
     if (out->pc_description != NULL || (int)menu >= A11Y_MENU_TABLE_LEN) {

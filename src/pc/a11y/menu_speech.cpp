@@ -105,6 +105,10 @@ void MenuSpeech::frame(const A11yMenuState& state) {
     bool row_changed = !arrived && reader != nullptr && key != m_row;
     std::optional<std::string> value = row_value(state);
     bool value_changed = !arrived && reader != nullptr && !row_changed && value && value != m_value;
+    bool refused = !arrived && reader != nullptr && state.refused && !reader->refused.empty();
+    if (arrived) {
+        m_row_hints.clear();
+    }
     m_seen = true;
     m_menu = state.menu;
     m_hovered = state.hovered;
@@ -115,8 +119,10 @@ void MenuSpeech::frame(const A11yMenuState& state) {
     } else if (moved) {
         m_speech.announce(hovered_entry(state), Mode::interrupt);
     } else if (row_changed) {
-        std::string out = row(state);
-        add_sentence(out, row_description(state));
+        std::string out = row_reached(state);
+        if (reader->described) {
+            add_sentence(out, row_description(state));
+        }
         m_speech.announce(out, Mode::interrupt);
     } else if (value_changed) {
         std::string out = capitalised(*value);
@@ -124,6 +130,8 @@ void MenuSpeech::frame(const A11yMenuState& state) {
             add_sentence(out, row_description(state));
         }
         m_speech.announce(out, Mode::interrupt);
+    } else if (refused) {
+        m_speech.announce(std::string(reader->refused), Mode::interrupt);
     }
 }
 
@@ -138,11 +146,13 @@ std::string MenuSpeech::opening(const A11yMenuState& state, bool returned) {
     if (is_tree_screen(state.menu)) {
         add_sentence(out, hovered_entry(state));
     } else if (const Reader* reader = menu_reader(state.menu)) {
-        add_sentence(out, row(state));
+        add_sentence(out, row_reached(state));
         if (!returned) {
             add_sentence(out, reader->hint);
         }
-        add_sentence(out, row_description(state));
+        if (reader->described) {
+            add_sentence(out, row_description(state));
+        }
     } else {
         add_sentence(out, "No speech yet.");
     }
@@ -163,10 +173,19 @@ std::string MenuSpeech::hovered_entry(const A11yMenuState& state) {
     return out;
 }
 
+std::string MenuSpeech::row_reached(const A11yMenuState& state) {
+    std::string out = row(state);
+    const ReaderRow* named = reader_row(state);
+    if (named != nullptr && !named->hint.empty() && m_row_hints.insert(named->hint).second) {
+        add_sentence(out, named->hint);
+    }
+    return out;
+}
+
 std::string MenuSpeech::row(const A11yMenuState& state) {
     std::string out;
     if (const ReaderRow* named = reader_row(state)) {
-        out = named->name;
+        out = named->spoken_name();
     } else {
         log_once(row_where(state) + ": not in the menu names table");
         const Reader* reader = menu_reader(state.menu);
@@ -213,6 +232,10 @@ std::optional<std::string> MenuSpeech::row_value(const A11yMenuState& state) {
         return std::string(on_off_word(rules.score_display));
     case RowValue::self_destructs:
         return known(self_destructs_words(rules.self_destructs), rules.self_destructs, state);
+    case RowValue::switched:
+        return known(switch_word(state.confirmed), state.confirmed, state);
+    case RowValue::item_frequency:
+        return known(item_frequency_word(state.confirmed), state.confirmed, state);
     case RowValue::none:
         break;
     }

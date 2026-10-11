@@ -30,6 +30,8 @@ std::unique_ptr<a11y::LobbySpeech> s_lobby;
  * menu scene opens on, as Multi-Man Melee after its match, sets it before
  * the scene hook runs. */
 int s_center_text = -1;
+/* Random Stage refused a toggle since the last menu frame. */
+bool s_stage_switch_refused = false;
 /* The scene entered last, and character select's pending exit on its last
  * frame, recorded even while rollback re-runs frames: the frame where a
  * back-out shows may be a re-run. They tell the lobby how it was reached. */
@@ -132,12 +134,21 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
 
 extern "C" void pc_a11y_menu_frame(void) {
     a11y::menu_text_dump_once();
+    /* Taken even while silent, so a refusal in a re-run frame is said by
+     * the next frame read, once. */
+    bool refused = s_stage_switch_refused;
+    s_stage_switch_refused = false;
     if (!game_hook_may_speak()) {
         return;
     }
     A11yMenuState state;
     a11y_game_menu_state(s_center_text, &state);
+    state.refused = refused;
     s_menu_speech->frame(state);
+}
+
+extern "C" void pc_a11y_stage_switch_refused(void) {
+    s_stage_switch_refused = true;
 }
 
 extern "C" void pc_a11y_menu_center_text(int string_number) {

@@ -3,9 +3,13 @@
  * entries of its tree screens, and of the rows, choices and values of the
  * leaf screens with a reader, as drawn on the English screen
  * (.scratch/main-menu-tree/spec.md, "The string table";
- * .scratch/rules-screens/spec.md for the rules screens). The game draws them
- * as pictures, so there is no game text to read. */
+ * .scratch/rules-screens/spec.md for the rules screens). The game draws most
+ * of them as pictures, so there is no game text to read; Item Switch and
+ * Random Stage draw theirs as game text, named here all the same so the
+ * words do not depend on the table a scene loaded, Random Stage's from stage
+ * select's table (sss_names.hpp). */
 #pragma once
+#include "stage_kinds.h"
 #include <optional>
 #include <span>
 #include <string>
@@ -33,6 +37,10 @@ enum class RowValue {
     pause,
     score_display,
     self_destructs,
+    /* Item Switch and Random Stage: the hovered item or stage on or off. */
+    switched,
+    /* Item Switch's frequency strip. */
+    item_frequency,
 };
 
 /* What tells a reader's rows apart. Sound, Screen display and Multi-Man
@@ -57,6 +65,16 @@ struct ReaderRow {
     /* The row as a stock match shows it, where that renames it: Custom
      * Rules' Time Limit becomes Stock. */
     const ReaderRow* in_stock_match = nullptr;
+    /* Said after the row the first time it is reached after the screen
+     * opens: Item Switch's frequency strip, whose keys differ from the
+     * screen's. Rows that share a hint share the first time. */
+    std::string_view hint = {};
+    /* A Random Stage row's stage, named by stage select's table; name is
+     * empty then. */
+    A11yStage stage = A11Y_NO_STAGE;
+
+    /* The row's name as spoken: its stage's or its own. */
+    std::string_view spoken_name() const;
 };
 
 /* A leaf screen with a reader: the key hint spoken once as it opens, and its
@@ -65,6 +83,11 @@ struct Reader {
     std::string_view hint;
     RowKey key;
     std::span<const ReaderRow> rows;
+    /* The screen draws a description line for the row in view
+     * (A11yMenuState.description or center_text_string). */
+    bool described = true;
+    /* Said when the screen refuses a change (A11yMenuState.refused). */
+    std::string_view refused = {};
 
     /* The row the key names; nothing for one this reader lacks. */
     const ReaderRow* row(int key) const;
@@ -73,7 +96,8 @@ struct Reader {
 };
 
 /* The reader of a leaf screen: Sound, Screen display, Multi-Man Melee,
- * Custom Rules or Additional Rules. Nothing for any other screen. */
+ * Custom Rules, Additional Rules, Item Switch or Random Stage. Nothing for
+ * any other screen. */
 const Reader* menu_reader(int menu);
 
 /* A menu screen's name: a tree screen's title, a leaf screen's name as it
@@ -106,6 +130,12 @@ std::optional<std::string_view> handicap_word(int handicap);
 std::string damage_ratio_words(int tenths);
 std::optional<std::string_view> stage_selection_word(int stage_selection);
 std::optional<std::string_view> self_destructs_words(int stored);
+
+/* Item Switch and Random Stage's values: an item or stage "on" or "off" (1
+ * or 0), and the item frequency, 0 "None" to 5 "Very high". Nothing for a
+ * number outside the range. */
+std::optional<std::string_view> switch_word(int on);
+std::optional<std::string_view> item_frequency_word(int frequency);
 
 /* A label the base port draws in capitals ("DIRECT CONNECT"), in normal
  * capitalisation ("Direct connect"), keeping abbreviations such as LAN. A

@@ -83,12 +83,13 @@ wait '"Random\. Stages chosen randomly\."'
 press Left
 wait '"On\. Choose stages to battle on\."'
 
-# Item Switch opens a screen; Left and Right do nothing there. Its own speech
-# comes later; the return names the row without the hint.
+# Item Switch opens a screen; Left and Right do nothing there. The screen
+# itself is rules_switches.drive's; the return names the row without the
+# hint.
 press Down
 wait '"Item Switch\. Choose how often items will appear and turn specific items on or off\."'
 press A
-wait '"Item Switch\. No speech yet\."'
+wait '"Item Switch\. Food: on\. '
 sleep 1
 press B
 wait '"Custom Rules\. Item Switch\. Choose how often items will appear and turn specific items on or off\."'
@@ -128,7 +129,7 @@ wait '"Minus 1\. Self-destructs will subtract one point from players. scores\."'
 press Down
 wait '"Random Stage\. If stage selection is set at Random, players will be able to choose stages to exclude\."'
 press A
-wait '"Random Stage\. No speech yet\."'
+wait '"Random Stage\. Princess Peach.s Castle: on\. '
 sleep 1
 press B
 wait '"Additional Rules\. Random Stage\. If stage selection is set at Random, '

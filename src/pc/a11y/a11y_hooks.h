@@ -41,6 +41,11 @@ void pc_a11y_menu_frame(void);
  * which those screens keep in private state. The next menu frame reads it. */
 void pc_a11y_menu_center_text(int string_number);
 
+/* Random Stage refused to turn off the last stage that was on and played the
+ * refused sound (fn_80235F80 in src/melee/mn/mnstagesw.c); nothing in the
+ * screen's state records it. The next menu frame reads it. */
+void pc_a11y_stage_switch_refused(void);
+
 /* Character select's state lives in static variables of
  * src/melee/mn/mncharsel.c, so its hooks hand the fork what it reads. Only
  * game_access.c looks inside these types. */

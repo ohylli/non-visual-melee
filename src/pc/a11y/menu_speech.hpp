@@ -3,10 +3,13 @@
  * taken once a frame (docs/adr/0003-main-menu-tree-is-polled.md). A tree
  * screen opening says its title, hovered entry and description; the cursor
  * moving says the entry and description. Sound, Screen display, Multi-Man
- * Melee, Custom Rules and Additional Rules have a reader: opening says the
- * title, row and value, key hint and description; a row or choice changing
- * says it with its description; a value changing says the value alone, then
- * the description where the description depends on the value. Coming back
+ * Melee and the four rules screens have a reader: opening says the title,
+ * row and value, key hint and description; a row or choice changing says it
+ * with its description; a value changing says the value alone, then the
+ * description where the description depends on the value. Item Switch and
+ * Random Stage draw no description; a row with a hint of its own (the item
+ * frequency) says it the first time it is reached after the screen opens,
+ * and a refused change (Random Stage's last stage) says why. Coming back
  * from a screen a row opens is an opening without the hint. Any other leaf
  * screen opening says its name and "No speech yet."
  * (.scratch/main-menu-tree/spec.md, .scratch/rules-screens/spec.md). It
@@ -42,6 +45,9 @@ private:
     /* returned: back from a screen one of its rows opens. */
     std::string opening(const A11yMenuState& state, bool returned);
     std::string hovered_entry(const A11yMenuState& state);
+    /* The row in view as it is reached: row(), with the row's own hint the
+     * first time since the screen opened. */
+    std::string row_reached(const A11yMenuState& state);
     /* On a leaf screen with a reader, the row or choice in view, with the
      * row's value: "Channel: Stereo", "10-Man Melee", "Time limit: none". */
     std::string row(const A11yMenuState& state);
@@ -67,6 +73,8 @@ private:
     /* The row in view on a reader's screen, by its key (RowKey). */
     int m_row = -1;
     std::optional<std::string> m_value;
+    /* The rows' own hints said since the screen opened. */
+    std::set<std::string_view> m_row_hints;
     std::set<std::string> m_logged;
 };
 
