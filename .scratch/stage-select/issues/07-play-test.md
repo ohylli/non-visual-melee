@@ -1,6 +1,6 @@
 # 07 Play test by ear
 
-Status: ready-for-human
+Status: resolved (2026-10-11)
 Type: task
 Blocked by: 04, 05, 06
 
@@ -30,3 +30,7 @@ Left for the maintainer, most severe first; each worth listening for in the play
 - A press at an edge repeats the tile's whole description. Recommended: the name alone at an edge.
 - From empty space with no tile that way, a step names the tile last hovered as if the cursor were on it. Option: "Nothing that way." with what A would pick.
 - Design: `CssReader::steer` and `SssReader::cursor` repeat one stop, pad, press and glide frame sequence, and `hooks.cpp` switches twice on the scene for the steering reader. A per-frame method on `Steerer` and one lookup of the screen's reader would remove both; worth it when a third screen steers.
+
+### Play test, 2026-10-11
+
+The maintainer play-tested stage select offline by ear with NVDA: the opening, steps, glides, picks and descriptions passed with no findings. The two multiplayer items, online waiting and result wording and the Turns or Loser rule with another player choosing, moved to issue 08 for a later test with a friend.
