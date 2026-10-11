@@ -138,12 +138,10 @@ void ftPk_SpecialLw_Enter(HSD_GObj* gobj)
     Fighter* fp = GET_FIGHTER(gobj);
     fp->cmd_vars[0] = 0;
     fp->throw_flags = 0;
-    /* The original wrote these through the specialhi view, which on
-     * GameCube aliased speciallw's { thunder gobj, state }. On host the
-     * thunder pointer lives at +08 (ftPikachu/types.h), so writing
-     * specialhi.x0 left it holding whatever the previous state put there:
-     * SpawnEffect then never spawned a thunder and 8012765C dereferenced
-     * the stale bytes. Initialise the view this state owns. */
+    /* Retail resets this through the specialhi view, which on GameCube is
+     * the same bytes. On host speciallw.x0 lives at +08 (see types.h), so
+     * it must be cleared through its own view or it keeps the previous
+     * state's gp+08 data and is later dereferenced as the thunder gobj. */
     fp->mv.pk.speciallw.x4 = 1;
     fp->mv.pk.speciallw.x0 = NULL;
     Fighter_ChangeMotionState(gobj, 359, Ft_MF_None, 0.0f, 1.0f, 0.0f, 0);
@@ -155,7 +153,6 @@ void ftPk_SpecialAirLw_Enter(HSD_GObj* gobj)
     Fighter* fp = GET_FIGHTER(gobj);
     fp->cmd_vars[0] = 0;
     fp->throw_flags = 0;
-    /* See ftPk_SpecialLw_Enter. */
     fp->mv.pk.speciallw.x4 = 1;
     fp->mv.pk.speciallw.x0 = NULL;
     Fighter_ChangeMotionState(gobj, 363, Ft_MF_None, 0.0f, 1.0f, 0.0f, 0);

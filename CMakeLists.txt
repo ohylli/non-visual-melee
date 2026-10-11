@@ -74,9 +74,13 @@ target_compile_options(aurora_gd PRIVATE ${MELEE_FP_FLAGS})
 # melee_game, melee and the test targets created below; aurora's own targets
 # get it by hand, its fetched dependencies keep their defaults.
 add_compile_options(-fsigned-char)
+# __FILE__ (assert and PANIC messages, shown to players and in their logs)
+# relative to the checkout, so a release does not carry the builder's home
+# directory. GCC 8+ and Clang 10+ accept it.
+add_compile_options(-ffile-prefix-map=${CMAKE_SOURCE_DIR}/=)
 get_property(_aurora_targets DIRECTORY extern/aurora PROPERTY BUILDSYSTEM_TARGETS)
 foreach (_target IN LISTS _aurora_targets)
-    target_compile_options(${_target} PRIVATE -fsigned-char)
+    target_compile_options(${_target} PRIVATE -fsigned-char -ffile-prefix-map=${CMAKE_SOURCE_DIR}/=)
 endforeach ()
 
 # Determinism-harness hook, off by default: perturb one routed trig function
@@ -607,17 +611,21 @@ if (NOT ANDROID AND NOT IOS AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
         add_test(NAME wobble COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_wobble.py)
         set_tests_properties(wobble PROPERTIES LABELS melee TIMEOUT 60)
+        add_test(NAME mndiagram_sort COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_mndiagram_sort.py)
+        set_tests_properties(mndiagram_sort PROPERTIES LABELS melee TIMEOUT 60)
     endif ()
 
-    if (NOT WIN32)
-        add_executable(updater_test EXCLUDE_FROM_ALL tools/test_updater.cpp src/pc/version.cpp)
-        target_include_directories(updater_test PRIVATE src)
-        target_link_libraries(updater_test PRIVATE ${MELEE_NETWORK_LIBS} aurora::main)
-        target_compile_options(updater_test PRIVATE -UNDEBUG)
-        add_test(NAME updater COMMAND updater_test)
-        add_test(NAME updater_browser COMMAND updater_test browser)
-        set_tests_properties(updater updater_browser PROPERTIES LABELS melee TIMEOUT 10)
-        add_dependencies(unit_tests updater_test)
+    add_executable(updater_test EXCLUDE_FROM_ALL tools/test_updater.cpp src/pc/version.cpp)
+    target_include_directories(updater_test PRIVATE src)
+    target_link_libraries(updater_test PRIVATE ${MELEE_NETWORK_LIBS} aurora::main)
+    if (WIN32)
+        target_link_libraries(updater_test PRIVATE shell32)
     endif ()
+    target_compile_options(updater_test PRIVATE -UNDEBUG)
+    add_test(NAME updater COMMAND updater_test)
+    add_test(NAME updater_browser COMMAND updater_test browser)
+    set_tests_properties(updater updater_browser PROPERTIES LABELS melee TIMEOUT 10)
+    add_dependencies(unit_tests updater_test)
 endif ()
 include(src/pc/a11y/a11y.cmake)
