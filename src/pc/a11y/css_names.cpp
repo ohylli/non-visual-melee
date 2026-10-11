@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "css_names.hpp"
+#include "menu_kinds.h"
 #include <iterator>
 
 namespace a11y {
@@ -114,6 +115,40 @@ std::optional<std::string_view> mode_name(int match_type) {
         }
     }
     return std::nullopt;
+}
+
+std::string rules_header(int match_type, const A11yRules& rules) {
+    enum class RulesMode : int {
+#define A11Y_RULES_MODE_ENUMERATOR(name, number) name = number,
+        A11Y_RULES_MODES(A11Y_RULES_MODE_ENUMERATOR)
+#undef A11Y_RULES_MODE_ENUMERATOR
+    };
+    if (match_type == A11Y_CSS_VS_CAMERA) {
+        return "Take Snapshots!";
+    }
+    /* The pieces after the number: 0x4B to 0x4E by mode, and for stock
+     * 0x54 or 0x55 before 0x4C. A mode the game does not use is said as
+     * time's, as PAL draws it. */
+    std::string_view tail;
+    switch (static_cast<RulesMode>(rules.mode)) {
+    case RulesMode::Mode_Stock:
+        return std::to_string(rules.stock_count) + (rules.stock_count < 2 ? "-life" : "-man") +
+               " survival test!";
+    case RulesMode::Mode_Coin:
+        tail = "coin fest!";
+        break;
+    case RulesMode::Mode_Bonus:
+        tail = "skills test!";
+        break;
+    case RulesMode::Mode_Time:
+    default:
+        tail = "KO fest!";
+        break;
+    }
+    /* "An endless" (0x51) without a time limit, "-minute" (0x53) with one. */
+    std::string limit =
+        rules.time_limit == 0 ? "An endless" : std::to_string(rules.time_limit) + "-minute";
+    return limit + " " + std::string(tail);
 }
 
 std::optional<std::string_view> difficulty_word(int difficulty) {

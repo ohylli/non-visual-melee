@@ -36,3 +36,7 @@ typedef enum A11yCssMatchType {
     A11Y_CSS_MATCH_TYPES(A11Y_CSS_MATCH_TYPE_ENUMERATOR)
 #undef A11Y_CSS_MATCH_TYPE_ENUMERATOR
 } A11yCssMatchType;
+
+/* Camera mode's CSSMatchType, a VS mode whose rules header has words of its
+ * own; game_access.c checks it against the decomp's. */
+enum { A11Y_CSS_VS_CAMERA = 0x1 };

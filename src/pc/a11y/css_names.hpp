@@ -8,7 +8,9 @@
 #pragma once
 #include "character_kinds.h"
 #include "css_kinds.h"
+#include "game_access.h"
 #include <optional>
+#include <string>
 #include <string_view>
 
 namespace a11y {
@@ -32,6 +34,12 @@ std::optional<std::string_view> mode_name(int match_type);
  * "Very easy" to "Very hard"; nothing outside 0 to 4. */
 std::optional<std::string_view> difficulty_word(int difficulty);
 
+/* The rules header's text as mnCharSel_8025BD30 composes it from SdSlChr's
+ * pieces on the English screen: "2-minute KO fest!", "An endless coin
+ * fest!", "3-man survival test!", "1-life survival test!", Camera mode's
+ * "Take Snapshots!". */
+std::string rules_header(int match_type, const A11yRules& rules);
+
 /* The top bar's buttons, the sliders and the name box, as spoken. */
 inline constexpr std::string_view kTeamsButton = "Teams";
 inline constexpr std::string_view kRulesButton = "Rules";
@@ -53,9 +61,8 @@ inline constexpr std::string_view kHigher = "higher";
 inline constexpr std::string_view kFewer = "fewer";
 inline constexpr std::string_view kMore = "more";
 
-/* The screens character select opens inside itself, as the main menu tree
- * names them, and the name tag window. */
-inline constexpr std::string_view kRulesScreen = "Custom Rules";
+/* The screen character select opens inside itself, as the main menu tree
+ * names it, and the name tag window. */
 inline constexpr std::string_view kNameEntryScreen = "Name Entry";
 inline constexpr std::string_view kNameTagsWindow = "Name tags";
 

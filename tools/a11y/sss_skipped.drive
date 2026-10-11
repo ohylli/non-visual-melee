@@ -2,9 +2,9 @@
 # character select enters stage select, which leaves on its first frame with
 # the stage already chosen. The fork says "Stage: Corneria." there instead of
 # the stage select opening, then the match begins. Character select is set
-# up by D-pad as in sss_hover.drive, then the rules screen, which has no
-# speech yet, is worked by stick: Down to its fifth row, Stage Selection, and
-# Right from On to Random.
+# up by D-pad as in sss_hover.drive, then Custom Rules is worked from the
+# rules header: Down to its fifth row, Stage Selection, and Right from On to
+# Random.
 # Run with the default --scene title:
 #   python tools/a11y/drive.py tools/a11y/sss_skipped.drive
 # --no-card starts from the default rules each run, so the rule is On on
@@ -42,26 +42,26 @@ wait 'glide to "Player 2: closed" ended after \d+ frames: arrived'
 press A until 'Ready to fight\. Press Start\.'
 sleep 1
 
-# Up to the top bar and right to the rules header; A opens the rules screen.
-search ': "Rules"$' DUp*4 DRight*3
-wait 'glide to "Rules" ended after \d+ frames: arrived'
+# Up to the top bar and right to the rules header; A opens Custom Rules.
+search ': "Rules: 2-minute KO fest!"$' DUp*4 DRight*3
+wait 'glide to "Rules: 2-minute KO fest!" ended after \d+ frames: arrived'
 press A
-wait '"Custom Rules\. No speech yet\."'
+wait '"Custom Rules\. Rules: Time\. Left and right to change\. '
 sleep 1
 
 # Down four rows to Stage Selection, Right from On to Random, and B back to
 # character select, which keeps the rule.
 press Down
-sleep 0.3
+wait '"Time limit: 2 minutes\. '
 press Down
-sleep 0.3
+wait '"Handicap: Off\. '
 press Down
-sleep 0.3
+wait '"Damage ratio: 1\.0\. '
 press Down
-sleep 0.3
+wait '"Stage selection: On\. '
 shot build/drive/sss_skipped_row.png
 press Right
-sleep 0.3
+wait '"Random\. Stages chosen randomly\."'
 shot build/drive/sss_skipped_random.png
 press B
 wait '"Character select\. Player 1, '

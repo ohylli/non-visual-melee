@@ -39,6 +39,7 @@ A11Y_CHARACTER_KINDS(A11Y_CHECK_NUMBER)
 A11Y_CSS_MATCH_TYPES(A11Y_CHECK_NUMBER)
 A11Y_STAGE_KINDS(A11Y_CHECK_NUMBER)
 #undef A11Y_CHECK_NUMBER
+_Static_assert(A11Y_CSS_VS_CAMERA == VS_CAMERA, "VS_CAMERA no longer has the fork's number");
 
 /* The match rules before the players' data on character select have
  * bitfields. Laid out as MinGW does by default they take 144 bytes instead of
@@ -105,10 +106,16 @@ const uint8_t* a11y_game_string(int font_idx, int idx) {
 }
 
 /* A string of the main menu's table by the number the game's code uses (NTSC-U
- * numbering), or NULL while font slot 0 holds another table. */
+ * numbering), or NULL while font slot 0 holds another table. Character
+ * select loads its own table there (SdSlChr) and runs the rules screens
+ * inside itself; they draw the same numbers from it, which hold the same
+ * text at every number they use (docs/a11y/native-menus.md, "The rules
+ * screens on character select"). PAL remaps each table its own way. */
 static const uint8_t* menu_string(int number) {
     const char* symbol = a11y_game_font_symbol(A11Y_MENU_FONT);
-    if (number < 0 || symbol == NULL || strcmp(symbol, "SIS_MenuData") != 0) {
+    if (number < 0 || symbol == NULL ||
+        (strcmp(symbol, "SIS_MenuData") != 0 && strcmp(symbol, "SIS_SelCharData") != 0))
+    {
         return NULL;
     }
     return a11y_game_string(A11Y_MENU_FONT, pc_region_sis_index(symbol, number));
@@ -403,6 +410,7 @@ void a11y_game_css_state(const A11yCssScreen* screen,
                                                      A11Y_CSS_SLOTS;
     out->has_teams_button = vs && css->match_type <= VS_SLOWMO;
     out->has_rules_button = vs && css->match_type != VS_STAMINA;
+    rules_state(&out->rules);
     out->handicap_sliders = vs && handicap_rule == A11Y_HANDICAP_ON;
     out->teams = vs && css->vs.start.rules.is_teams != 0;
     out->arrows = css_arrows(css, vs, screen->misc, screen->data2);

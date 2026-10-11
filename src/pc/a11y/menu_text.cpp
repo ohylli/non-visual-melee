@@ -7,19 +7,21 @@
 #include "speech.hpp"
 #include <cstdlib>
 #include <cstring>
+#include <set>
 #include <string>
 
 namespace a11y {
 namespace {
 
 /* The main menu's strings sit in font slot 0 (mnMain_Scene_OnEnter in
- * mnmain.c loads SdMenu there). */
+ * mnmain.c loads SdMenu there), and character select's (SdSlChr) too. */
 constexpr int k_menu_font = 0;
 /* Far past the few hundred strings of any table, in case a table's end is
  * not followed by a word that resolves nowhere. */
 constexpr int k_max_strings = 4096;
 
-bool s_dumped = false;
+/* The symbols of the tables dumped so far. */
+std::set<std::string> s_dumped;
 
 GameTextSource game_source() {
     GameTextSource source;
@@ -64,10 +66,13 @@ void menu_text_dump_once() {
         const char* dump = std::getenv("MELEE_A11Y_TEXT_DUMP");
         return dump != nullptr && std::strcmp(dump, "0") != 0;
     }();
-    if (!wanted || s_dumped || !log_enabled() || a11y_game_font_symbol(k_menu_font) == nullptr) {
+    if (!wanted || !log_enabled()) {
         return;
     }
-    s_dumped = true;
+    const char* symbol = a11y_game_font_symbol(k_menu_font);
+    if (symbol == nullptr || !s_dumped.insert(symbol).second) {
+        return;
+    }
     dump_table();
 }
 

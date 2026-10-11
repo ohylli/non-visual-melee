@@ -1,6 +1,6 @@
 # Character select's player slots, sliders and top bar with the stick: the
 # hand's buttons, making player 2 a CPU, its CPU level slider, a choice that
-# brings Ready to Fight, the Teams button, and the rules screen and back.
+# brings Ready to Fight, the Teams button, and the rules screens and back.
 # Run with the default --scene title:
 #   python tools/a11y/drive.py tools/a11y/css_slots.drive
 # Positions are in the screen's units: the hand starts at (-31, -21.5) and a
@@ -64,12 +64,13 @@ wait '"Teams: on"'
 press A
 wait '"Teams: off\. Ready to fight\. Press Start\."'
 
-# Right to the rules header; A opens the rules screen, B comes back to a
+# Right to the rules header, which says the rules; A opens Custom Rules
+# (tools/a11y/css_rules.drive has the rules screens), B comes back to a
 # screen built afresh.
 press Right 250
-wait '"Rules"'
+wait '"Rules: 2-minute KO fest!"'
 press A
-wait '"Custom Rules\. No speech yet\."'
+wait '"Custom Rules\. Rules: Time\. Left and right to change\. '
 sleep 1
 press B
 wait '"Character select\. Player 1, '

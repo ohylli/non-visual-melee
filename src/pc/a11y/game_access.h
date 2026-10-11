@@ -321,6 +321,8 @@ typedef struct A11yCssState {
     bool handicap_sliders;
     /* A team match. */
     bool teams;
+    /* The match rules, which the rules header shows. */
+    A11yRules rules;
     /* Ready to Fight is shown. */
     bool ready;
     A11yCssArrows arrows;

@@ -37,6 +37,13 @@ bool s_stage_switch_refused = false;
  * back-out shows may be a re-run. They tell the lobby how it was reached. */
 int s_scene = -1;
 int s_css_exit = A11Y_CSS_STAYING;
+/* Character select's pending exit last asked for the rules screens rather
+ * than name entry; both then read "away" while open. Recorded even while
+ * rollback re-runs frames, like the exit. */
+bool s_css_to_rules = false;
+/* The menu reader was fed from character select on the last frame read,
+ * so the next frame it is not is a new visit. */
+bool s_css_menu_fed = false;
 
 /* The gate every hook from game code passes through. While rollback re-runs
  * frames (pc_net_resim), each hook is reached again for a frame that was
@@ -69,6 +76,23 @@ bool take_screen_stick(a11y::Stick* out) {
     default:
         return false;
     }
+}
+
+/* Taken by the next frame read even while silent, so a refusal in a re-run
+ * frame is said once. */
+bool take_stage_switch_refused() {
+    bool refused = s_stage_switch_refused;
+    s_stage_switch_refused = false;
+    return refused;
+}
+
+/* The menu reader's frame: the main menu tree's, or the rules screens'
+ * inside character select. */
+void feed_menu_speech(bool refused) {
+    A11yMenuState state;
+    a11y_game_menu_state(s_center_text, &state);
+    state.refused = refused;
+    s_menu_speech->frame(state);
 }
 
 }  // namespace
@@ -116,6 +140,8 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
     int css_exit = s_css_exit;
     s_scene = scene_kind;
     s_css_exit = A11Y_CSS_STAYING;
+    s_css_to_rules = false;
+    s_css_menu_fed = false;
     if (!game_hook_may_speak()) {
         return;
     }
@@ -134,17 +160,11 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
 
 extern "C" void pc_a11y_menu_frame(void) {
     a11y::menu_text_dump_once();
-    /* Taken even while silent, so a refusal in a re-run frame is said by
-     * the next frame read, once. */
-    bool refused = s_stage_switch_refused;
-    s_stage_switch_refused = false;
+    bool refused = take_stage_switch_refused();
     if (!game_hook_may_speak()) {
         return;
     }
-    A11yMenuState state;
-    a11y_game_menu_state(s_center_text, &state);
-    state.refused = refused;
-    s_menu_speech->frame(state);
+    feed_menu_speech(refused);
 }
 
 extern "C" void pc_a11y_stage_switch_refused(void) {
@@ -160,7 +180,14 @@ extern "C" void pc_a11y_menu_center_text(int string_number) {
 extern "C" void pc_a11y_css_frame(const CSSData* css, const CSSDoorsData* doors,
     const CSSIcon* icons, const CSSTag* tags, const CSSDoorsMisc* misc, const CSSDoorsData2* data2,
     HSD_JObj* model_root, int hand_count, int pending_exit, int ready) {
+    a11y::menu_text_dump_once();
     s_css_exit = pending_exit;
+    if (pending_exit == A11Y_CSS_TO_RULES) {
+        s_css_to_rules = true;
+    } else if (pending_exit != A11Y_CSS_AWAY) {
+        s_css_to_rules = false;
+    }
+    bool refused = take_stage_switch_refused();
     if (!game_hook_may_speak()) {
         return;
     }
@@ -170,6 +197,20 @@ extern "C" void pc_a11y_css_frame(const CSSData* css, const CSSDoorsData* doors,
     A11yCssScreen screen{
         css, doors, icons, tags, misc, data2, model_root, hand_count, pending_exit, ready};
     s_css->frame(screen, local_port, pc_net_active());
+    /* The rules screens open inside this scene, run by the main menu tree's
+     * code, and this hook keeps running meanwhile: the menu reader speaks
+     * for them. The frame that asks for them still shows the menu tree's
+     * last screen, and once they close it stays behind in mn_804A04F0, so
+     * the pending exit is the gate (ADR-0003). */
+    bool rules_open = pending_exit == A11Y_CSS_AWAY && s_css_to_rules;
+    if (rules_open && !s_css_menu_fed) {
+        /* Each visit is an arrival. */
+        s_menu_speech->forget();
+    }
+    s_css_menu_fed = rules_open;
+    if (rules_open) {
+        feed_menu_speech(refused);
+    }
 }
 
 extern "C" void pc_a11y_css_hand(int hand, int state, int held, float x, float y) {

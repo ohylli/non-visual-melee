@@ -46,8 +46,8 @@ press DUp
 wait ': "Teams: off"$'
 wait 'glide to "Teams: off" ended after \d+ frames: arrived'
 press DRight
-wait ': "Rules"$'
-wait 'glide to "Rules" ended after \d+ frames: arrived'
+wait ': "Rules: 2-minute KO fest!"$'
+wait 'glide to "Rules: 2-minute KO fest!" ended after \d+ frames: arrived'
 press DRight
 wait ': "Back"$'
 wait 'glide to "Back" ended after \d+ frames: arrived'

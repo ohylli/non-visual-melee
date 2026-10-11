@@ -5,9 +5,10 @@
  * opening says the player and their character; a coin the hand carries says
  * each portrait it enters, and being picked up (with the portrait under it),
  * cleared or put back on its earlier choice; the costume changing says its
- * number. A free hand says each button or slider knob it reaches, a slider
- * says being grabbed, its value and being let go, and a player slot or team
- * the hand changes says its new state. Ready to Fight appearing is said.
+ * number. A free hand says each button or slider knob it reaches (the
+ * rules header with the rules it shows), a slider says being grabbed, its
+ * value and being let go, and a player slot or team the hand changes says
+ * its new state. Ready to Fight appearing is said.
  * In single-player modes, a free hand on an arrow says its row's value and
  * way, and A says the new value, or the same at the end of the range.
  * A choice is silent: the game's announcer names the character. Online,

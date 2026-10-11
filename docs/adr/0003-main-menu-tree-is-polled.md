@@ -15,7 +15,7 @@ The fork also looks up each description itself, from the game's table of descrip
 ## Consequences
 
 - A change is seen at most one frame late, which nobody hears.
-- The poll runs in the menu scene only. The rules screen, the item switch and the name keyboard also open inside character select, where this hook does not run; reading them there needs a second call site.
+- The poll runs in the menu scene only. The rules screens and the name keyboard also open inside character select, where this hook does not run. The rules screens are read there by the same reader, fed from character select's own frame hook (`pc_a11y_css_frame`) while character select's pending exit says they are open; that hook keeps running meanwhile, so no second call site in the decomp layer was needed (resolved 2026-10-11, `.scratch/rules-screens/issues/03`). The name keyboard is still unread.
 - Re-entering the scene on the same screen and entry as before looks like no change, so the reader forgets its previous state whenever a scene is entered.
 - Leaf screens that keep their row in private state are out of the poll's reach. Sound, Screen display, Language and Multi-Man Melee set their centre text through one shared helper, `Menu_InitCenterText`, and a hook there tells the fork which text was set, which identifies the row or choice.
 - The fork reads unnamed decomp globals and tables (`mn_804A04F0`, `mn_803EB6B0`). A decomp sync that renames them breaks the build, not the behaviour, and the reads are confined to `game_access.c`.

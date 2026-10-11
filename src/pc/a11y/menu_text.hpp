@@ -3,10 +3,11 @@
 
 namespace a11y {
 
-/* With MELEE_A11Y_TEXT_DUMP=1, logs every string of the main menu's loaded
- * string table (SdMenu) decoded, once per run, for checking the decoder
- * against a disc (docs/a11y/native-menus.md, "Decoding game text"). Called
- * every frame of the menu scene; does nothing until the table is loaded. */
+/* With MELEE_A11Y_TEXT_DUMP=1, logs every string of the string table loaded
+ * in font slot 0 decoded, once per table and run, for checking the decoder
+ * against a disc (docs/a11y/native-menus.md, "Decoding game text"): SdMenu
+ * in the menu scene, SdSlChr on character select. Called every frame of
+ * those scenes; does nothing until a table is loaded. */
 void menu_text_dump_once();
 
 }  // namespace a11y

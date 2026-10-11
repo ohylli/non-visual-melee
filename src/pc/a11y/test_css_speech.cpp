@@ -678,8 +678,8 @@ void free_hand_enters_and_leaves_each_button() {
     move(state, 16.0f, 24.0f);
     f.frame(state);
     assert((f.spoken() == Texts{"Player 1 name tag", "Player 1 handicap: 9", "Player 1: human",
-                              "Player 2: CPU", "Player 2 CPU level: 1", "Teams: off", "Rules",
-                              "Back"}));
+                              "Player 2: CPU", "Player 2 CPU level: 1", "Teams: off",
+                              "Rules: 2-minute KO fest!", "Back"}));
 }
 
 void moving_within_a_button_says_it_once() {
@@ -858,23 +858,59 @@ void choosing_for_a_cpu_says_nothing() {
     assert(f.said().empty());
 }
 
-void rules_screen_and_name_entry_open_and_return() {
+void rules_screens_and_name_entry_open_and_return() {
     A11yCssState state = vs_screen();
     move(state, 0.0f, 24.0f);
     Fixture f(state);
+    /* The menu reader speaks for the rules screens (hooks.cpp). */
     state.exit = A11Y_CSS_TO_RULES;
     f.frame(state);
     state.exit = A11Y_CSS_AWAY;
     f.frame(state);
-    /* Coming back builds the screen afresh, the hand at home. */
+    /* A rule changed there; coming back builds the screen afresh, the hand
+     * at home, and says the opening only. */
+    state.rules.mode = 1;
     state.exit = A11Y_CSS_STAYING;
     move(state, -31.0f, -21.5f);
     f.frame(state);
     state.exit = A11Y_CSS_TO_NAME_ENTRY;
     f.frame(state);
-    assert((f.spoken() == Texts{"Custom Rules. No speech yet.",
-                              "Character select. Player 1, no character.",
-                              "Name Entry. No speech yet."}));
+    assert((f.spoken() ==
+            Texts{"Character select. Player 1, no character.", "Name Entry. No speech yet."}));
+}
+
+void rules_header_says_the_rules() {
+    struct Case {
+        int match_type;
+        int mode;
+        int time_limit;
+        int stock_count;
+        std::string said;
+    };
+    const Case cases[] = {
+        {0, 0, 2, 3, "Rules: 2-minute KO fest!"},
+        {0, 0, 1, 3, "Rules: 1-minute KO fest!"},
+        {0, 0, 0, 3, "Rules: An endless KO fest!"},
+        {0, 1, 2, 3, "Rules: 3-man survival test!"},
+        {0, 1, 2, 99, "Rules: 99-man survival test!"},
+        {0, 1, 2, 1, "Rules: 1-life survival test!"},
+        {0, 2, 5, 3, "Rules: 5-minute coin fest!"},
+        {0, 2, 0, 3, "Rules: An endless coin fest!"},
+        {0, 3, 99, 3, "Rules: 99-minute skills test!"},
+        {0, 3, 0, 3, "Rules: An endless skills test!"},
+        {A11Y_CSS_VS_CAMERA, 1, 2, 3, "Rules: Take Snapshots!"},
+    };
+    for (const Case& c : cases) {
+        A11yCssState state = vs_screen();
+        state.match_type = c.match_type;
+        state.rules.mode = c.mode;
+        state.rules.time_limit = c.time_limit;
+        state.rules.stock_count = c.stock_count;
+        Fixture f(state);
+        move(state, 0.0f, 24.0f);
+        f.frame(state);
+        assert((f.spoken() == Texts{c.said}));
+    }
 }
 
 void name_tag_window_opening() {
@@ -1182,7 +1218,8 @@ int main() {
     another_player_online_is_queued();
     another_players_choice_that_makes_it_ready_is_queued_with_it();
     choosing_for_a_cpu_says_nothing();
-    rules_screen_and_name_entry_open_and_return();
+    rules_screens_and_name_entry_open_and_return();
+    rules_header_says_the_rules();
     name_tag_window_opening();
     a_step_names_where_it_goes();
     a_glide_crosses_portraits_in_silence_and_arrives_silently();

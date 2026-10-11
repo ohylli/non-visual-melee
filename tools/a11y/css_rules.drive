@@ -1,0 +1,111 @@
+# The rules screens opened from character select's rules header: the header
+# says the rules, A opens Custom Rules, whose speech is the main menu tree's
+# reader fed from character select's frame hook. Rules changed to Stock,
+# each sub-screen visited and returned from, back to character select, the
+# header saying the new rules, and a second visit opening with the hint
+# again. Every wait is on a whole line, so a missing or changed one fails
+# the run. Run with the default --scene title:
+#   python tools/a11y/drive.py tools/a11y/css_rules.drive
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# VS. Mode, Melee.
+press Down
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press A
+wait '"Character select\. Player 1, no character\."'
+sleep 1
+
+# Fox for player 1, which leaves the hand free.
+press DUp
+wait ': "Player 1: closed"$'
+press DUp
+wait ': "Pichu"$'
+press DUp
+wait ': "Fox"$'
+wait 'glide to "Fox" ended after \d+ frames: arrived'
+press A
+sleep 1
+
+# Up to the top bar and right to the rules header, which says the rules a
+# new save starts with; A opens Custom Rules on its first row, with the hint.
+# Input is ignored there for 20 frames.
+search ': "Rules: 2-minute KO fest!"$' DUp*4 DRight*3
+wait 'glide to "Rules: 2-minute KO fest!" ended after \d+ frames: arrived'
+press A
+wait ': "Custom Rules\. Rules: Time\. Left and right to change\. Compete for points based on KOs and Falls in a timed battle\."$'
+sleep 1
+
+# Rules to Stock, read from character select's own string table.
+press Right
+wait ': "Stock\. Battle to be the last one standing\."$'
+press Down
+wait ': "Stock: 3\. Set the number of stock lives\."$'
+
+# Down to Item Switch, in and back.
+press Down
+wait ': "Handicap: Off\. Play without handicaps\."$'
+press Down
+wait ': "Damage ratio: 1\.0\. The larger the damage ratio, the faster you get KO.d\."$'
+press Down
+wait ': "Stage selection: On\. Choose stages to battle on\."$'
+press Down
+wait ': "Item Switch\. Choose how often items will appear and turn specific items on or off\."$'
+press A
+wait ': "Item Switch\. Food: on\. Up and down to move, left and right to change column, A to turn on or off\."$'
+sleep 1
+press Down
+wait ': "Maxim Tomato: on"$'
+press B
+wait ': "Custom Rules\. Item Switch\. Choose how often items will appear and turn specific items on or off\."$'
+sleep 0.5
+
+# Additional Rules, and from it Random Stage, Up from the first row wrapping
+# to the last.
+press Down
+wait ': "Additional Rules\. Set even more detailed rules\."$'
+press A
+wait ': "Additional Rules\. Stock match time limit: [^.]+\. Left and right to change\. Set a time limit for Stock Matches\."$'
+sleep 1
+press Up
+wait ': "Random Stage\. If stage selection is set at Random, players will be able to choose stages to exclude\."$'
+press A
+wait ': "Random Stage\. Princess Peach.s Castle: on\. Up and down to move, left and right to change column, A to turn on or off\."$'
+sleep 1
+press Down
+wait ': "Kongo Jungle: on"$'
+press B
+wait ': "Additional Rules\. Random Stage\. If stage selection is set at Random, players will be able to choose stages to exclude\."$'
+sleep 0.5
+press B
+wait ': "Custom Rules\. Additional Rules\. Set even more detailed rules\."$'
+sleep 0.5
+
+# B back to character select, built afresh with the hand at home.
+press B
+wait ': "Character select\. Player 1, Fox\."$'
+sleep 1
+
+# The header says the new rules; a second visit is an arrival again, with
+# the hint, on the Rules row now set to Stock.
+search ': "Rules: 3-man survival test!"$' DUp*6 DRight*3
+wait 'glide to "Rules: 3-man survival test!" ended after \d+ frames: arrived'
+press A
+wait ': "Custom Rules\. Rules: Stock\. Left and right to change\. Battle to be the last one standing\."$'
+sleep 1
+
+# Back to Time, and Start back to character select.
+press Left
+wait ': "Time\. Compete for points based on KOs and Falls in a timed battle\."$'
+press Start
+wait ': "Character select\. Player 1, Fox\."$'
+sleep 1
+search ': "Rules: 2-minute KO fest!"$' DUp*6 DRight*3

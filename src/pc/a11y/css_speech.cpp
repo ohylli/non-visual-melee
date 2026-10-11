@@ -154,11 +154,10 @@ void CssSpeech::frame(const A11yCssState& state, const GlideStatus& glide) {
         m_speech.announce(opening(state), Mode::interrupt);
         return;
     }
-    /* The rules screen and name entry open inside this scene. */
-    if (state.exit != last.exit &&
-        (state.exit == A11Y_CSS_TO_RULES || state.exit == A11Y_CSS_TO_NAME_ENTRY))
-    {
-        std::string out(state.exit == A11Y_CSS_TO_RULES ? kRulesScreen : kNameEntryScreen);
+    /* Name entry opens inside this scene. So do the rules screens, which
+     * the menu reader speaks for (hooks.cpp). */
+    if (state.exit != last.exit && state.exit == A11Y_CSS_TO_NAME_ENTRY) {
+        std::string out(kNameEntryScreen);
         add(out, kNoSpeechYet);
         m_speech.announce(out, Mode::interrupt);
     }
@@ -457,7 +456,7 @@ std::string CssSpeech::target_words(const A11yCssState& state, Target target) {
     case TargetKind::teams:
         return std::string(kTeamsButton) + ": " + std::string(state.teams ? kOn : kOff);
     case TargetKind::rules:
-        return std::string(kRulesButton);
+        return std::string(kRulesButton) + ": " + rules_header(state.match_type, state.rules);
     case TargetKind::back:
         return std::string(kBackButton);
     case TargetKind::arrow: {

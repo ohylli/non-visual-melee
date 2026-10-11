@@ -103,14 +103,25 @@ inline A11yCssSlot cpu(int index, int portrait) {
     return out;
 }
 
+/* The match rules a new save starts with: a 2-minute time match. */
+inline A11yRules default_rules() {
+    A11yRules rules{};
+    rules.time_limit = 2;
+    rules.stock_count = 3;
+    rules.damage_ratio = 10;
+    return rules;
+}
+
 /* VS Melee, player 1 at home with no character and a free hand, player 2 a
- * CPU with Yoshi, the others closed; every portrait unlocked. */
+ * CPU with Yoshi, the others closed; every portrait unlocked; the rules a
+ * new save starts with. */
 inline A11yCssState vs_screen() {
     A11yCssState state{};
     state.hand_count = A11Y_CSS_SLOTS;
     state.slot_count = A11Y_CSS_SLOTS;
     state.has_teams_button = true;
     state.has_rules_button = true;
+    state.rules = default_rules();
     state.hand = A11yCssHand{true, -1, A11Y_CSS_NO_SLIDER, -1, -31.0f, -21.5f};
     for (int i = 0; i < A11Y_CSS_SLOTS; i++) {
         state.slots[i] = slot(A11Y_CSS_CLOSED, i);
