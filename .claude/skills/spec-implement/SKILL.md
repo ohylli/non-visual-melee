@@ -14,6 +14,7 @@ The argument is a spec (`.scratch/<feature>/spec.md` or its folder) or one issue
 - The **task graph**: each issue's `Blocked by:` line. Implementable means `Status: ready-for-agent`. `resolved` issues are done; `ready-for-human` ones (a play test by ear) and the other statuses are left for the maintainer.
 - With one issue as the argument, its blockers must already be `resolved`; if one is not, stop and say which.
 - Write down the **base commit** (`git rev-parse HEAD`) and confirm the tree is clean: the review range starts there.
+- Confirm no game runs from `build/melee.exe` (`Get-Process melee`). The maintainer may be playing; a running exe blocks the link and every drive run. If one runs, ask the maintainer to close it before the first implementer starts.
 
 ## 2. Plan the order and tell the maintainer
 
@@ -39,7 +40,7 @@ Your issue: <issue path>. Spec: <spec path>. Issues <list> are committed; read t
 
 Do:
 1. Implement the issue fully, test-first where there is a natural seam.
-2. Verify with the `verify` skill at the level the change calls for, plus `python tools/check_style.py`. Run every build, test and game run in the foreground and read its result before going on. <Known failures, e.g. a unit test that already fails.>
+2. Verify with the `verify` skill at the level the change calls for, plus `python tools/check_style.py`. Run every build, test and game run in the foreground and read its result before going on. If build/melee.exe is locked by a game the maintainer started, tell the coordinator (SendMessage to main) and do not kill or rename it. <Known failures, e.g. a unit test that already fails.>
 3. Do every "Done when" item, docs and the `verify` skill included. Answer any spec open question that is yours.
 4. Update the issue file: `Status: resolved (<today>)`, and a dated entry under `## Comments` with what was implemented, findings worth keeping, and anything left open, in the style of the resolved issues.
 5. Commit to <branch> in the style of `git log`, ending each message with `<attribution line>`. Do not push.
@@ -61,7 +62,8 @@ When a report arrives:
 Messages from subagents need judgement, not relay:
 
 - An **idle notification** from a finished teammate repeats its report; mention only what it adds.
-- A **misrouted report**: a helper's report (a fact-checker, a review viewpoint) often reaches you instead of the agent that started it, and that agent then waits for it forever. Forward each one with `SendMessage` to its spawner, saying it came to you.
+- A **misrouted report**: a helper's report (a fact-checker, a review viewpoint) often reaches you instead of the agent that started it, and that agent then waits for it forever. Forward each one with `SendMessage` to its spawner, saying it came to you, unless the report says it was also sent to its spawner directly.
+- A **locked exe**: an implementer reporting that `build/melee.exe` is locked means the maintainer's game is running. Ask the maintainer to close it, and tell the implementer once they have; never kill or rename it.
 - A **stall**: when an agent's last message says it is waiting on scripts or helpers, look at once rather than wait. Its background tasks write to the `tasks/` folder of this session's temp directory (`*.output`); if they finished, send the agent their results and tell it to go on in the foreground.
 - **Overlap**: a follow-up you send to a finished implementer runs beside the next one in the same tree. Afterwards check with `git show --stat` that its commit holds only its own files.
 
@@ -72,14 +74,14 @@ Once every implementable issue is done, spawn a reviewer (`name: reviewer`):
 ```
 Review and fix the <feature> work in the Non-Visual Melee fork (repo <repo path>, branch <branch>). Follow CLAUDE.md and CLAUDE.local.md exactly.
 
-Invoke the `code-review` skill on the range <base commit>..HEAD (<one line per commit: hash, issue>; spec <spec path>). <Changes outside the feature the review must keep in view, e.g. a refactor shared with another screen.> Follow the skill: fix what is plainly yours in a separate commit, verified with the `verify` skill, and leave the rest for the maintainer. Run verification in the foreground. The four viewpoint reports may come to you through the coordinator; carry on once all four are in. <Known failures.>
+Invoke the `code-review` skill on the range <base commit>..HEAD (<one line per commit: hash, issue>; spec <spec path>). <Changes outside the feature the review must keep in view, e.g. a refactor shared with another screen.> Follow the skill: fix what is plainly yours in a separate commit, and leave the rest for the maintainer. After the fixes, verify with the `verify` skill at <highest level any issue needed>, or say in your report why a lower level suffices. Run verification in the foreground; if build/melee.exe is locked by a game the maintainer started, tell the coordinator (SendMessage to main) and do not kill or rename it. The four viewpoint reports may come to you through the coordinator; carry on once all four are in. <Known failures.> A failure or flake not among the known ones: if it recurred or has a clear cause, record it in the `verify` skill in your fix commit; if seen once, list it in your report.
 
 Commit in the style of `git log`, ending each message with `<attribution line>`. Do not push. Record the items left for the maintainer where the skill or the feature's issues say (the play test issue's Comments, if there is one).
 
 Final report, short: fix commit hash with what each fix changed, verification and results, items left for the maintainer each with a one-line why, and dropped findings the maintainer might question.
 ```
 
-The four viewpoint reports usually reach you: forward each to the reviewer, and once all four are in, tell it so. The step is done when the reviewer's fix commit is in, the tree is clean, and its report has arrived.
+The four viewpoint reports usually reach you as hand-backs, and often go to the reviewer directly as well. Forward only those that do not say they were sent to the reviewer. If the reviewer says it is still waiting, tell it which reports are already in its inbox rather than sending them again. The step is done when the reviewer's fix commit is in, the tree is clean, and its report has arrived.
 
 ## 6. Summarize
 
@@ -88,7 +90,7 @@ The maintainer reads with a screen reader and navigates by heading. Summarize un
 - **What a player hears now**: the feature as a player meets it.
 - **Commits**: a table of issue, commits and one line each, the review fix commit last.
 - **Changes outside the feature**: anything a shared refactor or fix changed elsewhere, such as another screen's behaviour.
-- **Verification**: the highest level that passed after the review fixes, known failures, flakes and their reruns.
+- **Verification**: the highest level that passed after the review fixes, and why if it is lower than an issue needed; known failures, flakes and their reruns, and whether a new flake was recorded in the `verify` skill.
 - **What the review fixed**.
 - **Open remarks**: everything left for the maintainer from implementers and the reviewer, merged and deduplicated, most important first, each with its recommendation.
 - **For the play test**: what only a listener can judge, and what no drive run reached.
