@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "menu_names.hpp"
 #include "menu_kinds.h"
+#include <iterator>
 #include <span>
 
 namespace a11y {
@@ -11,6 +12,22 @@ enum class MenuKind : int {
     A11Y_MENU_KINDS(A11Y_MENU_KIND_ENUMERATOR)
 #undef A11Y_MENU_KIND_ENUMERATOR
 };
+
+enum class RulesMode : int {
+#define A11Y_RULES_MODE_ENUMERATOR(name, number) name = number,
+    A11Y_RULES_MODES(A11Y_RULES_MODE_ENUMERATOR)
+#undef A11Y_RULES_MODE_ENUMERATOR
+};
+
+enum class StageSelectMode : int {
+#define A11Y_STAGE_SELECT_MODE_ENUMERATOR(name, number) name = number,
+    A11Y_STAGE_SELECT_MODES(A11Y_STAGE_SELECT_MODE_ENUMERATOR)
+#undef A11Y_STAGE_SELECT_MODE_ENUMERATOR
+};
+
+constexpr int kind(MenuKind menu) {
+    return static_cast<int>(menu);
+}
 
 /* Unscoped: each tree screen has its own enum in the decomp, and the names do
  * not collide. */
@@ -165,16 +182,60 @@ constexpr ReaderRow kMultiManChoices[] = {
     {176, "Cruel Melee", RowValue::none},
 };
 
+/* The rules screens' rows by their numbers in the hovered entry, in cursor
+ * order. Additional Rules hides Score Display and Random Stage until they are
+ * unlocked (mnRulePlus_IsOptionVisible); the cursor skips them then, so the
+ * reader meets only the rows the game shows. */
+constexpr ReaderRow kStockRow = {1, "Stock", RowValue::stock_count};
+constexpr ReaderRow kCustomRulesRows[] = {
+    {0, "Rules", RowValue::rules_mode, true},
+    {1, "Time limit", RowValue::time_limit, false, -1, &kStockRow},
+    {2, "Handicap", RowValue::handicap, true},
+    {3, "Damage ratio", RowValue::damage_ratio},
+    {4, "Stage selection", RowValue::stage_selection, true},
+    {5, "Item Switch", RowValue::none, false, kind(MenuKind::MENU_KIND_RULES_ITEMS)},
+    {6, "Additional Rules", RowValue::none, false, kind(MenuKind::MENU_KIND_RULES_EXTRA)},
+};
+constexpr ReaderRow kAdditionalRulesRows[] = {
+    {0, "Stock match time limit", RowValue::stock_time_limit},
+    {1, "Friendly fire", RowValue::friendly_fire, true},
+    {2, "Pause", RowValue::pause, true},
+    {3, "Score display", RowValue::score_display, true},
+    {4, "Self-destructs", RowValue::self_destructs, true},
+    {5, "Random Stage", RowValue::none, false, kind(MenuKind::MENU_KIND_RULES_STAGE)},
+};
+
 struct ScreenReader {
     MenuKind menu;
     Reader reader;
 };
 
 constexpr ScreenReader kReaders[] = {
-    {MenuKind::MENU_KIND_SETTINGS_SOUND, {"Left and right to change.", kSoundRows}},
-    {MenuKind::MENU_KIND_DISPLAY, {"A to change.", kDisplayRows}},
-    {MenuKind::MENU_KIND_MULTI_VS, {"Left and right to choose.", kMultiManChoices}},
+    {MenuKind::MENU_KIND_SETTINGS_SOUND,
+        {"Left and right to change.", RowKey::center_text, kSoundRows}},
+    {MenuKind::MENU_KIND_DISPLAY, {"A to change.", RowKey::center_text, kDisplayRows}},
+    {MenuKind::MENU_KIND_MULTI_VS,
+        {"Left and right to choose.", RowKey::center_text, kMultiManChoices}},
+    {MenuKind::MENU_KIND_RULES, {"Left and right to change.", RowKey::hovered, kCustomRulesRows}},
+    {MenuKind::MENU_KIND_RULES_EXTRA,
+        {"Left and right to change.", RowKey::hovered, kAdditionalRulesRows}},
 };
+
+/* Values as the rules screens draw them, by their stored numbers. */
+constexpr std::string_view kRulesModeWords[] = {"Time", "Stock", "Coin", "Bonus"};
+constexpr std::string_view kHandicapWords[] = {"Off", "Auto", "On"};
+constexpr std::string_view kStageSelectionWords[] = {"On", "Random", "Ordered", "Turns", "Loser"};
+constexpr std::string_view kSelfDestructsWords[] = {"minus 1", "0", "minus 2"};
+static_assert(std::size(kRulesModeWords) == static_cast<std::size_t>(RulesMode::Mode_Bonus) + 1);
+static_assert(std::size(kStageSelectionWords) ==
+              static_cast<std::size_t>(StageSelectMode::StageSelectMode_Loser) + 1);
+
+std::optional<std::string_view> word(std::span<const std::string_view> words, int number) {
+    if (number < 0 || number >= static_cast<int>(words.size())) {
+        return std::nullopt;
+    }
+    return words[static_cast<std::size_t>(number)];
+}
 
 const ScreenName* find_screen(int menu) {
     for (const ScreenName& screen : kScreens) {
@@ -229,13 +290,22 @@ std::optional<std::string_view> menu_entry_name(int menu, int entry) {
     return std::nullopt;
 }
 
-const ReaderRow* Reader::row(int center_text) const {
+const ReaderRow* Reader::row(int key) const {
     for (const ReaderRow& row : rows) {
-        if (row.center_text == center_text) {
+        if (row.key == key) {
             return &row;
         }
     }
     return nullptr;
+}
+
+bool Reader::opens(int menu) const {
+    for (const ReaderRow& row : rows) {
+        if (row.opens == menu) {
+            return true;
+        }
+    }
+    return false;
 }
 
 const Reader* menu_reader(int menu) {
@@ -265,6 +335,37 @@ std::string balance_words(int balance) {
 
 std::string_view on_off_word(bool on) {
     return on ? "On" : "Off";
+}
+
+bool is_stock_match(int mode) {
+    return mode == static_cast<int>(RulesMode::Mode_Stock);
+}
+
+std::optional<std::string_view> rules_mode_word(int mode) {
+    return word(kRulesModeWords, mode);
+}
+
+std::string minutes_words(int minutes) {
+    if (minutes == 0) {
+        return "none";
+    }
+    return std::to_string(minutes) + (minutes == 1 ? " minute" : " minutes");
+}
+
+std::optional<std::string_view> handicap_word(int handicap) {
+    return word(kHandicapWords, handicap);
+}
+
+std::string damage_ratio_words(int tenths) {
+    return std::to_string(tenths / 10) + "." + std::to_string(tenths % 10);
+}
+
+std::optional<std::string_view> stage_selection_word(int stage_selection) {
+    return word(kStageSelectionWords, stage_selection);
+}
+
+std::optional<std::string_view> self_destructs_words(int stored) {
+    return word(kSelfDestructsWords, stored);
 }
 
 std::string plain_capitals(std::string_view label) {

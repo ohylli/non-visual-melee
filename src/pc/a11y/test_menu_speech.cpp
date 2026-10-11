@@ -48,6 +48,10 @@ constexpr int k1P = 1;
 constexpr int kVs = 2;
 constexpr int kSettings = 4;
 constexpr int kReg = 6;
+constexpr int kRules = 13;
+constexpr int kAdditionalRules = 15;
+constexpr int kItemSwitch = 16;
+constexpr int kRandomStage = 17;
 constexpr int kRumble = 19;
 constexpr int kSound = 20;
 constexpr int kDisplay = 21;
@@ -66,6 +70,52 @@ constexpr const char* kChannelText = "Choose between Stereo\nand Mono sound.";
 constexpr const char* kVolumeText = "Adjust music and sound\neffect volume balance.";
 constexpr const char* kDeflickerText =
     "ON: Display will be smoother and softer.\nOFF: Display will be sharper and harder.";
+
+/* The rules screens' descriptions as the game's text has them, by row, and
+ * by value where the row has one per value. */
+constexpr const char* kTimeText = "Compete for points based on KOs\nand Falls in a timed battle.";
+constexpr const char* kStockModeText = "Battle to be the last one standing.";
+constexpr const char* kCoinText = "Battle to collect the most Coins.";
+constexpr const char* kTimeLimitText =
+    "Set the time limit from 1 to 99\nminutes, turn the time limit OFF.";
+constexpr const char* kStockCountText = "Set the number of stock lives.";
+constexpr const char* kHandicapOffText = "Play without handicaps.";
+constexpr const char* kHandicapAutoText =
+    "Handicaps are set automatically\nbased on win percentages.";
+constexpr const char* kDamageRatioText = "The larger the damage ratio,\nthe faster you get KO'd.";
+constexpr const char* kStageOnText = "Choose stages to battle on.";
+constexpr const char* kStageTurnsText = "Players take turns choosing stages.";
+constexpr const char* kItemSwitchText =
+    "Choose how often items will appear\nand turn specific items on or off.";
+constexpr const char* kAdditionalRulesText = "Set even more detailed rules.";
+constexpr const char* kStockTimeLimitText = "Set a time limit for Stock Matches.";
+constexpr const char* kFriendlyFireOffText = "Team members cannot damage\neach other.";
+constexpr const char* kPauseOnText = "Players will be able to pause\nin mid-game.";
+constexpr const char* kScoreOffText = "Score will not be displayed on screen.";
+constexpr const char* kSelfDestructsMinus1Text =
+    "Self-destructs will subtract one\npoint from players' scores.";
+constexpr const char* kSelfDestructs0Text = "Self-destructs will not affect\nplayers' scores.";
+constexpr const char* kSelfDestructsMinus2Text =
+    "Self-destructs will subtract two\npoints from players' scores.";
+constexpr const char* kRandomStageText =
+    "If stage selection is set at Random, players\nwill be able to choose stages to exclude.";
+
+/* The rules as a new save has them: a 2-minute time match. */
+A11yRules default_rules() {
+    A11yRules rules{};
+    rules.mode = 0;
+    rules.time_limit = 2;
+    rules.stock_count = 3;
+    rules.handicap = 0;
+    rules.damage_ratio = 10;
+    rules.stage_selection = 0;
+    rules.stock_time_limit = 8;
+    rules.friendly_fire = false;
+    rules.pause = true;
+    rules.score_display = false;
+    rules.self_destructs = 0;
+    return rules;
+}
 
 /* What a leaf screen with a reader shows: its centre text and the settings
  * it changes. Stereo, centred and deflickered unless a test says otherwise. */
@@ -107,6 +157,12 @@ Bytes game_text(const char* text) {
             glyph(0x20E9);
         } else if (c == '?') {
             glyph(0x20EB);
+        } else if (c == ',') {
+            glyph(0x20E6);
+        } else if (c == '\'') {
+            glyph(0x20F3);
+        } else if (c == '-') {
+            glyph(0x20FC);
         } else {
             assert(c == '!');
             glyph(0x20EC);
@@ -148,6 +204,18 @@ struct Fixture {
         state.mono = leaf.mono;
         state.balance = leaf.balance;
         state.deflicker = leaf.deflicker;
+        this->menu.frame(state);
+    }
+
+    /* One frame on a rules screen: the row, the rules, and the row's
+     * description as the screen shows it for the row's value. */
+    void rules_frame(int menu, int row, const A11yRules& rules, const char* description) {
+        Bytes bytes = description != nullptr ? game_text(description) : Bytes{};
+        A11yMenuState state{};
+        state.menu = menu;
+        state.hovered = row;
+        state.description = description != nullptr ? bytes.data() : nullptr;
+        state.rules = rules;
         this->menu.frame(state);
     }
 
@@ -406,6 +474,249 @@ void unknown_centre_text_is_spoken_and_logged() {
     assert(count_logged("[a11y] menu 20 centre text 191: no description") == 1);
 }
 
+void custom_rules_opens_from_vs_mode() {
+    Fixture f;
+    f.frame(kVs, 3, "Set the rules for VS. matches.");
+    f.spoken();
+    f.rules_frame(kRules, 0, default_rules(), kTimeText);
+    assert((f.spoken() == Texts{"Custom Rules. Rules: Time. Left and right to change. Compete for "
+                                "points based on KOs and Falls in a timed battle."}));
+}
+
+void additional_rules_opens_from_custom_rules() {
+    Fixture f;
+    f.rules_frame(kRules, 6, default_rules(), kAdditionalRulesText);
+    f.spoken();
+    A11yRules rules = default_rules();
+    rules.stock_time_limit = 0;
+    f.rules_frame(kAdditionalRules, 0, rules, kStockTimeLimitText);
+    assert((f.spoken() == Texts{"Additional Rules. Stock match time limit: none. Left and right to "
+                                "change. Set a time limit for Stock Matches."}));
+}
+
+void custom_rules_rows_down_and_wrap() {
+    Fixture f;
+    A11yRules rules = default_rules();
+    f.rules_frame(kRules, 0, rules, kTimeText);
+    f.spoken();
+    f.rules_frame(kRules, 1, rules, kTimeLimitText);
+    f.rules_frame(kRules, 2, rules, kHandicapOffText);
+    f.rules_frame(kRules, 3, rules, kDamageRatioText);
+    f.rules_frame(kRules, 4, rules, kStageOnText);
+    f.rules_frame(kRules, 5, rules, kItemSwitchText);
+    f.rules_frame(kRules, 6, rules, kAdditionalRulesText);
+    /* Down on the last row goes to the first: nothing extra for the wrap. */
+    f.rules_frame(kRules, 0, rules, kTimeText);
+    /* And Up from the first to the last. */
+    f.rules_frame(kRules, 6, rules, kAdditionalRulesText);
+    assert((
+        f.spoken() ==
+        Texts{
+            "Time limit: 2 minutes. Set the time limit from 1 to 99 minutes, turn the time "
+            "limit OFF.",
+            "Handicap: Off. Play without handicaps.",
+            "Damage ratio: 1.0. The larger the damage ratio, the faster you get KO'd.",
+            "Stage selection: On. Choose stages to battle on.",
+            "Item Switch. Choose how often items will appear and turn specific items on or off.",
+            "Additional Rules. Set even more detailed rules.",
+            "Rules: Time. Compete for points based on KOs and Falls in a timed battle.",
+            "Additional Rules. Set even more detailed rules.",
+        }));
+}
+
+void rules_change_to_stock_renames_the_next_row() {
+    Fixture f;
+    A11yRules rules = default_rules();
+    f.rules_frame(kRules, 0, rules, kTimeText);
+    f.spoken();
+    rules.mode = 1;
+    f.rules_frame(kRules, 0, rules, kStockModeText);
+    f.rules_frame(kRules, 1, rules, kStockCountText);
+    rules.stock_count = 4;
+    f.rules_frame(kRules, 1, rules, kStockCountText);
+    f.rules_frame(kRules, 0, rules, kStockModeText);
+    rules.mode = 2;
+    f.rules_frame(kRules, 0, rules, kCoinText);
+    f.rules_frame(kRules, 1, rules, kTimeLimitText);
+    assert((f.spoken() == Texts{
+                              "Stock. Battle to be the last one standing.",
+                              "Stock: 3. Set the number of stock lives.",
+                              "4",
+                              "Rules: Stock. Battle to be the last one standing.",
+                              "Coin. Battle to collect the most Coins.",
+                              "Time limit: 2 minutes. Set the time limit from 1 to 99 minutes, "
+                              "turn the time limit OFF.",
+                          }));
+}
+
+void value_change_with_and_without_its_description() {
+    Fixture f;
+    A11yRules rules = default_rules();
+    f.rules_frame(kRules, 2, rules, kHandicapOffText);
+    f.spoken();
+    rules.handicap = 1;
+    f.rules_frame(kRules, 2, rules, kHandicapAutoText);
+    /* An unchanged frame says nothing. */
+    f.rules_frame(kRules, 2, rules, kHandicapAutoText);
+    f.rules_frame(kRules, 4, rules, kStageOnText);
+    rules.stage_selection = 3;
+    f.rules_frame(kRules, 4, rules, kStageTurnsText);
+    f.rules_frame(kRules, 3, rules, kDamageRatioText);
+    rules.damage_ratio = 12;
+    f.rules_frame(kRules, 3, rules, kDamageRatioText);
+    assert((f.spoken() ==
+            Texts{
+                "Auto. Handicaps are set automatically based on win percentages.",
+                "Stage selection: On. Choose stages to battle on.",
+                "Turns. Players take turns choosing stages.",
+                "Damage ratio: 1.0. The larger the damage ratio, the faster you get KO'd.",
+                "1.2",
+            }));
+}
+
+void time_limit_none_one_minute_and_99() {
+    Fixture f;
+    A11yRules rules = default_rules();
+    f.rules_frame(kRules, 1, rules, kTimeLimitText);
+    f.spoken();
+    /* Left from 2 to none, then on round to 99 and back. */
+    for (int minutes : {1, 0, 99, 0, 1}) {
+        rules.time_limit = minutes;
+        f.rules_frame(kRules, 1, rules, kTimeLimitText);
+    }
+    assert((f.spoken() == Texts{"1 minute", "None", "99 minutes", "None", "1 minute"}));
+}
+
+void damage_ratio_at_both_ends() {
+    Fixture f;
+    A11yRules rules = default_rules();
+    rules.damage_ratio = 5;
+    f.rules_frame(kRules, 3, rules, kDamageRatioText);
+    rules.damage_ratio = 20;
+    f.rules_frame(kRules, 3, rules, kDamageRatioText);
+    rules.damage_ratio = 5;
+    f.rules_frame(kRules, 3, rules, kDamageRatioText);
+    assert((f.spoken() == Texts{"Custom Rules. Damage ratio: 0.5. Left and right to change. The "
+                                "larger the damage ratio, the faster you get KO'd.",
+                              "2.0", "0.5"}));
+}
+
+void self_destruct_values() {
+    Fixture f;
+    A11yRules rules = default_rules();
+    f.rules_frame(kAdditionalRules, 2, rules, kPauseOnText);
+    f.spoken();
+    f.rules_frame(kAdditionalRules, 4, rules, kSelfDestructsMinus1Text);
+    rules.self_destructs = 1;
+    f.rules_frame(kAdditionalRules, 4, rules, kSelfDestructs0Text);
+    rules.self_destructs = 2;
+    f.rules_frame(kAdditionalRules, 4, rules, kSelfDestructsMinus2Text);
+    rules.self_destructs = 0;
+    f.rules_frame(kAdditionalRules, 4, rules, kSelfDestructsMinus1Text);
+    assert((f.spoken() ==
+            Texts{
+                /* Pause to Self-destructs: Score Display is hidden, and the
+                 * cursor skips it. */
+                "Self-destructs: minus 1. Self-destructs will subtract one point from players' "
+                "scores.",
+                "0. Self-destructs will not affect players' scores.",
+                "Minus 2. Self-destructs will subtract two points from players' scores.",
+                "Minus 1. Self-destructs will subtract one point from players' scores.",
+            }));
+}
+
+void additional_rules_rows_and_wrap() {
+    Fixture f;
+    A11yRules rules = default_rules();
+    rules.score_display = false;
+    f.rules_frame(kAdditionalRules, 0, rules, kStockTimeLimitText);
+    f.spoken();
+    f.rules_frame(kAdditionalRules, 1, rules, kFriendlyFireOffText);
+    f.rules_frame(kAdditionalRules, 2, rules, kPauseOnText);
+    /* Score Display shown, once it is unlocked. */
+    f.rules_frame(kAdditionalRules, 3, rules, kScoreOffText);
+    f.rules_frame(kAdditionalRules, 4, rules, kSelfDestructsMinus1Text);
+    f.rules_frame(kAdditionalRules, 5, rules, kRandomStageText);
+    f.rules_frame(kAdditionalRules, 0, rules, kStockTimeLimitText);
+    assert((f.spoken() ==
+            Texts{
+                "Friendly fire: Off. Team members cannot damage each other.",
+                "Pause: On. Players will be able to pause in mid-game.",
+                "Score display: Off. Score will not be displayed on screen.",
+                "Self-destructs: minus 1. Self-destructs will subtract one point from players' "
+                "scores.",
+                "Random Stage. If stage selection is set at Random, players will be able to "
+                "choose stages to exclude.",
+                "Stock match time limit: 8 minutes. Set a time limit for Stock Matches.",
+            }));
+}
+
+void left_and_right_on_a_row_that_opens_a_screen_say_nothing() {
+    Fixture f;
+    A11yRules rules = default_rules();
+    f.rules_frame(kRules, 5, rules, kItemSwitchText);
+    f.spoken();
+    f.rules_frame(kRules, 5, rules, kItemSwitchText);
+    assert(f.spoken().empty());
+}
+
+void returns_from_the_screens_rows_open() {
+    Fixture f;
+    A11yRules rules = default_rules();
+    f.rules_frame(kRules, 5, rules, kItemSwitchText);
+    f.spoken();
+    f.frame(kItemSwitch, 0);
+    f.rules_frame(kRules, 5, rules, kItemSwitchText);
+    f.rules_frame(kRules, 6, rules, kAdditionalRulesText);
+    f.rules_frame(kAdditionalRules, 0, rules, kStockTimeLimitText);
+    f.rules_frame(kAdditionalRules, 5, rules, kRandomStageText);
+    f.frame(kRandomStage, 0);
+    f.rules_frame(kAdditionalRules, 5, rules, kRandomStageText);
+    f.rules_frame(kRules, 6, rules, kAdditionalRulesText);
+    f.frame(kVs, 3, "Set the rules for VS. matches.");
+    assert((f.spoken() ==
+            Texts{
+                "Item Switch. No speech yet.",
+                "Custom Rules. Item Switch. Choose how often items will appear and turn specific "
+                "items on or off.",
+                "Additional Rules. Set even more detailed rules.",
+                "Additional Rules. Stock match time limit: 8 minutes. Left and right to change. "
+                "Set a time limit for Stock Matches.",
+                "Random Stage. If stage selection is set at Random, players will be able to "
+                "choose stages to exclude.",
+                "Random Stage. No speech yet.",
+                "Additional Rules. Random Stage. If stage selection is set at Random, players "
+                "will be able to choose stages to exclude.",
+                "Custom Rules. Additional Rules. Set even more detailed rules.",
+                "VS. Mode. Custom Rules. Set the rules for VS. matches.",
+            }));
+}
+
+void a_forgotten_return_is_an_opening() {
+    Fixture f;
+    A11yRules rules = default_rules();
+    f.frame(kItemSwitch, 0);
+    f.spoken();
+    f.menu.forget();
+    f.rules_frame(kRules, 5, rules, kItemSwitchText);
+    assert((f.spoken() == Texts{"Custom Rules. Item Switch. Left and right to change. Choose how "
+                                "often items will appear and turn specific items on or off."}));
+}
+
+void unknown_rules_row_and_value_are_spoken_and_logged() {
+    Fixture f;
+    A11yRules rules = default_rules();
+    f.rules_frame(kRules, 0, rules, kTimeText);
+    f.spoken();
+    f.rules_frame(kRules, 9, rules, nullptr);
+    rules.handicap = 7;
+    f.rules_frame(kRules, 2, rules, nullptr);
+    assert((f.spoken() == Texts{"Unknown row 9", "Handicap: 7"}));
+    assert(count_logged("[a11y] menu 13 row 9: not in the menu names table") == 1);
+    assert(count_logged("[a11y] menu 13 row 9: no description") == 1);
+    assert(count_logged("[a11y] menu 13 row 2: value 7 not in the menu names table") == 1);
+}
+
 void plain_capitals_keeps_abbreviations() {
     assert(a11y::plain_capitals("DIRECT CONNECT") == "Direct connect");
     assert(a11y::plain_capitals("LAN PLAY") == "LAN play");
@@ -449,6 +760,19 @@ int main() {
     multi_man_opens_on_the_mode_just_played();
     reader_screen_leaves_to_the_tree();
     unknown_centre_text_is_spoken_and_logged();
+    custom_rules_opens_from_vs_mode();
+    additional_rules_opens_from_custom_rules();
+    custom_rules_rows_down_and_wrap();
+    rules_change_to_stock_renames_the_next_row();
+    value_change_with_and_without_its_description();
+    time_limit_none_one_minute_and_99();
+    damage_ratio_at_both_ends();
+    self_destruct_values();
+    additional_rules_rows_and_wrap();
+    left_and_right_on_a_row_that_opens_a_screen_say_nothing();
+    returns_from_the_screens_rows_open();
+    a_forgotten_return_is_an_opening();
+    unknown_rules_row_and_value_are_spoken_and_logged();
     plain_capitals_keeps_abbreviations();
     std::cout << "menu_speech: all tests passed\n";
     return 0;

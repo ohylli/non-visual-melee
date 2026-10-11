@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* MenuKind and the tree screens' selection enums (src/melee/mn/forward.h)
- * mirrored for fork code, which does not include the decomp's headers.
- * game_access.c checks every number against the decomp's own at compile time,
- * so a base merge that renumbers a screen or an entry fails the build instead
- * of naming the wrong one. */
+/* MenuKind, the tree screens' selection enums and the rules screens' value
+ * enums (src/melee/mn/forward.h) mirrored for fork code, which does not
+ * include the decomp's headers. game_access.c checks every number against the
+ * decomp's own at compile time, so a base merge that renumbers a screen, an
+ * entry or a value fails the build instead of naming the wrong one. */
 #pragma once
 
 /* X(name, number) for every named kind; MENU_KIND_34, the retail table length,
@@ -97,3 +97,20 @@
     X(SEL_RECORDS_VS, 0)                                                                           \
     X(SEL_RECORDS_BONUS, 1)                                                                        \
     X(SEL_RECORDS_MISC, 2)
+
+/* X(name, number) for the match modes of the Rules row on Custom Rules
+ * (Mode, GameRules.mode). */
+#define A11Y_RULES_MODES(X)                                                                        \
+    X(Mode_Time, 0)                                                                                \
+    X(Mode_Stock, 1)                                                                               \
+    X(Mode_Coin, 2)                                                                                \
+    X(Mode_Bonus, 3)
+
+/* X(name, number) for the values of the Stage Selection row on Custom Rules
+ * (StageSelectMode, GameRules.stage_sel). */
+#define A11Y_STAGE_SELECT_MODES(X)                                                                 \
+    X(StageSelectMode_On, 0)                                                                       \
+    X(StageSelectMode_Random, 1)                                                                   \
+    X(StageSelectMode_Ordered, 2)                                                                  \
+    X(StageSelectMode_Turns, 3)                                                                    \
+    X(StageSelectMode_Loser, 4)

@@ -1,0 +1,149 @@
+# Opens Custom Rules from the main menu tree, walks every row, changes a value
+# on each row that has one and puts it back, then does the same on Additional
+# Rules, and waits on each announcement, so a missing or changed line fails
+# the run. Run with the default --scene title:
+#   python tools/a11y/drive.py tools/a11y/rules_screens.drive
+# Score Display stays hidden: its unlock needs a KO count no run reaches. With
+# --no-card every stage is unlocked, which shows Random Stage.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+wait '"Main Menu\. 1-P Mode\. '
+# The menu ignores input for its first 20 frames.
+sleep 1
+
+# VS. Mode, then Custom Rules.
+press Down
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press Down
+wait '"Tournament Melee\. '
+press Down
+wait '"Special Melee\. '
+press Down
+wait '"Custom Rules\. '
+
+# Custom Rules opens on the Rules row, a 2-minute time match. Input is
+# ignored for 20 frames.
+press A
+wait '"Custom Rules\. Rules: Time\. Left and right to change\. Compete for points based on KOs and Falls in a timed battle\."'
+sleep 1
+
+# Rules to Stock renames the next row; back to Time.
+press Right
+wait '"Stock\. Battle to be the last one standing\."'
+press Down
+wait '"Stock: 3\. Set the number of stock lives\."'
+press Right
+wait '"4"'
+press Left
+wait '"3"'
+press Up
+wait '"Rules: Stock\. '
+press Left
+wait '"Time\. Compete for points based on KOs and Falls in a timed battle\."'
+
+# Time limit, down to none and back.
+press Down
+wait '"Time limit: 2 minutes\. Set the time limit from 1 to 99 minutes, turn the time limit OFF\."'
+press Left
+wait '"1 minute"'
+press Left
+wait '"None"'
+press Right
+wait '"1 minute"'
+press Right
+wait '"2 minutes"'
+
+# Handicap: a description per value.
+press Down
+wait '"Handicap: Off\. Play without handicaps\."'
+press Right
+wait '"Auto\. Handicaps are set automatically based on win percentages\."'
+press Left
+wait '"Off\. Play without handicaps\."'
+
+# Damage ratio: one description for every value.
+press Down
+wait '"Damage ratio: 1\.0\. The larger the damage ratio, the faster you get KO.d\."'
+press Right
+wait '"1\.1"'
+press Left
+wait '"1\.0"'
+
+# Stage selection: a description per value.
+press Down
+wait '"Stage selection: On\. Choose stages to battle on\."'
+press Right
+wait '"Random\. Stages chosen randomly\."'
+press Left
+wait '"On\. Choose stages to battle on\."'
+
+# Item Switch opens a screen; Left and Right do nothing there. Its own speech
+# comes later; the return names the row without the hint.
+press Down
+wait '"Item Switch\. Choose how often items will appear and turn specific items on or off\."'
+press A
+wait '"Item Switch\. No speech yet\."'
+sleep 1
+press B
+wait '"Custom Rules\. Item Switch\. Choose how often items will appear and turn specific items on or off\."'
+sleep 0.5
+
+# Additional Rules.
+press Down
+wait '"Additional Rules\. Set even more detailed rules\."'
+press A
+wait '"Additional Rules\. Stock match time limit: (?P<limit>[^.]+)\. Left and right to change\. Set a time limit for Stock Matches\."'
+sleep 1
+press Right
+wait '"\d+ minutes?"'
+press Left
+wait '"(?i:%limit%)"'
+press Down
+wait '"Friendly fire: Off\. Team members cannot damage each other\."'
+press Right
+wait '"On\. Team members can damage each other\."'
+press Left
+wait '"Off\. Team members cannot damage each other\."'
+press Down
+wait '"Pause: On\. Players will be able to pause in mid-game\."'
+press Left
+wait '"Off\. Players will not be able to pause in mid-game\."'
+press Right
+wait '"On\. Players will be able to pause in mid-game\."'
+# Score Display is hidden, so Down skips it.
+press Down
+wait '"Self-destructs: minus 1\. Self-destructs will subtract one point from players. scores\."'
+press Right
+wait '"0\. Self-destructs will not affect players. scores\."'
+press Right
+wait '"Minus 2\. Self-destructs will subtract two points from players. scores\."'
+press Right
+wait '"Minus 1\. Self-destructs will subtract one point from players. scores\."'
+press Down
+wait '"Random Stage\. If stage selection is set at Random, players will be able to choose stages to exclude\."'
+press A
+wait '"Random Stage\. No speech yet\."'
+sleep 1
+press B
+wait '"Additional Rules\. Random Stage\. If stage selection is set at Random, '
+sleep 0.5
+# Down from the last row wraps to the first.
+press Down
+wait '"Stock match time limit: %limit%\. '
+
+# Back to Custom Rules on its Additional Rules row, round to the Rules row,
+# and out to VS. Mode.
+press B
+wait '"Custom Rules\. Additional Rules\. Set even more detailed rules\."'
+sleep 0.5
+press Down
+wait '"Rules: Time\. '
+press B
+wait '"VS\. Mode\. Custom Rules\. '
+sleep 0.3

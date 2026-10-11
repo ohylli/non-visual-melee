@@ -33,6 +33,8 @@
 A11Y_SCENE_KINDS(A11Y_CHECK_NUMBER)
 A11Y_MENU_KINDS(A11Y_CHECK_NUMBER)
 A11Y_MENU_SELECTIONS(A11Y_CHECK_NUMBER)
+A11Y_RULES_MODES(A11Y_CHECK_NUMBER)
+A11Y_STAGE_SELECT_MODES(A11Y_CHECK_NUMBER)
 A11Y_CHARACTER_KINDS(A11Y_CHECK_NUMBER)
 A11Y_CSS_MATCH_TYPES(A11Y_CHECK_NUMBER)
 A11Y_STAGE_KINDS(A11Y_CHECK_NUMBER)
@@ -48,6 +50,25 @@ _Static_assert(sizeof(StartMeleeRules) == 136, "StartMeleeRules is laid out unli
  * It has one row per MenuKind up to MENU_KIND_ONLINE, the base port's last. */
 extern MenuKindData mn_803EB6B0[];
 enum { A11Y_MENU_TABLE_LEN = MENU_KIND_ONLINE + 1 };
+
+/* Custom Rules' description numbers (mnmainrule.c), declared in no header:
+ * one per row, and on the Rules, Handicap and Stage Selection rows one per
+ * value, the value's at the byte its number gives from x0. The stock count's
+ * is its own. */
+struct mn_803EC818_t {
+    u8 x0;
+    u8 pad_1[4];
+};
+extern struct mn_803EC818_t mn_803EC818[7];
+extern u8 mn_StockCountTextId;
+
+/* Additional Rules' value bounds and description numbers (mnruleplus.c), as
+ * that file declares the table. */
+extern struct {
+    u8 stat[6][2];
+    u8 desc[6][3];
+    u8 pad[2];
+} mn_803ED2E8;
 
 /* The main menu's strings sit in font slot 0 (mnMain_Scene_OnEnter). */
 enum { A11Y_MENU_FONT = 0 };
@@ -93,6 +114,84 @@ static const uint8_t* menu_string(int number) {
     return a11y_game_string(A11Y_MENU_FONT, pc_region_sis_index(symbol, number));
 }
 
+static void rules_state(A11yRules* out) {
+    const GameRules* rules = gmMainLib_GetGameRules();
+    out->mode = rules->mode;
+    out->time_limit = rules->time_limit;
+    out->stock_count = rules->stock_count;
+    out->handicap = rules->handicap;
+    out->damage_ratio = rules->damage_ratio;
+    out->stage_selection = rules->stage_sel;
+    out->stock_time_limit = rules->stock_time_limit;
+    out->friendly_fire = rules->friendly_fire != 0;
+    out->pause = rules->pause != 0;
+    out->score_display = rules->score_display != 0;
+    out->self_destructs = rules->unk_xc;
+}
+
+/* A Custom Rules row's description for the row's value, as mn_802307F8
+ * chooses it; NULL for a row or value outside its table. */
+static const uint8_t* custom_rules_description(int row, const GameRules* rules) {
+    if (row < 0 || row >= (int)ARRAY_SIZE(mn_803EC818)) {
+        return NULL;
+    }
+    const struct mn_803EC818_t* numbers = &mn_803EC818[row];
+    int value;
+    switch (row) {
+    case 0:
+        value = rules->mode;
+        break;
+    case 1:
+        return menu_string(rules->mode == Mode_Stock ? mn_StockCountTextId : numbers->x0);
+    case 2:
+        value = rules->handicap;
+        break;
+    case 4:
+        value = rules->stage_sel;
+        break;
+    default:
+        return menu_string(numbers->x0);
+    }
+    if (value == 0) {
+        return menu_string(numbers->x0);
+    }
+    if (value > (int)ARRAY_SIZE(numbers->pad_1)) {
+        return NULL;
+    }
+    return menu_string(numbers->pad_1[value - 1]);
+}
+
+/* An Additional Rules row's description for the row's value, as
+ * mnRulePlus_GetDescIdx chooses it; NULL for a row or value outside its
+ * table. */
+static const uint8_t* additional_rules_description(int row, const GameRules* rules) {
+    if (row < 0 || row >= (int)ARRAY_SIZE(mn_803ED2E8.desc)) {
+        return NULL;
+    }
+    int value;
+    switch (row) {
+    case 1:
+        value = rules->friendly_fire;
+        break;
+    case 2:
+        value = rules->pause;
+        break;
+    case 3:
+        value = rules->score_display;
+        break;
+    case 4:
+        value = rules->unk_xc;
+        break;
+    default:
+        value = 0;
+        break;
+    }
+    if (value >= (int)ARRAY_SIZE(mn_803ED2E8.desc[row])) {
+        return NULL;
+    }
+    return menu_string(mn_803ED2E8.desc[row][value]);
+}
+
 void a11y_game_menu_state(int center_text, A11yMenuState* out) {
     MenuKind menu = (MenuKind)mn_804A04F0.cur_menu;
     int hovered = mn_804A04F0.hovered_selection;
@@ -110,9 +209,19 @@ void a11y_game_menu_state(int center_text, A11yMenuState* out) {
     out->mono = HSD_SynthGetSoundMode() != 1;
     out->balance = (s8)gmMainLib_8015ED74();
     out->deflicker = gmMainLib_8015F4E8() != 0;
+    rules_state(&out->rules);
     /* The same precedence as mn_80229A7C, which draws the description line:
      * the base port's text first, then SdMenu's by the table's number. */
     if (out->pc_description != NULL || (int)menu >= A11Y_MENU_TABLE_LEN) {
+        return;
+    }
+    /* The rules screens draw their own description line. */
+    if (menu == MENU_KIND_RULES) {
+        out->description = custom_rules_description(hovered, gmMainLib_GetGameRules());
+        return;
+    }
+    if (menu == MENU_KIND_RULES_EXTRA) {
+        out->description = additional_rules_description(hovered, gmMainLib_GetGameRules());
         return;
     }
     const MenuKindData* row = &mn_803EB6B0[menu];

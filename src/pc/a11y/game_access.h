@@ -37,15 +37,42 @@ const char* a11y_game_font_symbol(int font_idx);
  * how the end of the table shows: the table stores no length. */
 const uint8_t* a11y_game_string(int font_idx, int idx);
 
+/* The match rules the rules screens change, from GameRules. Custom Rules and
+ * Additional Rules copy their values there on the frame a value changes
+ * (fn_802309F0, fn_80232F44), so the next poll sees it. */
+typedef struct A11yRules {
+    /* Mode: time, stock, coin or bonus (A11Y_RULES_MODES). */
+    int mode;
+    /* Minutes, 1 to 99, or 0 for no limit. */
+    int time_limit;
+    int stock_count;
+    /* 0 off, 1 auto, 2 on. */
+    int handicap;
+    /* In tenths: 5 to 20, drawn 0.5 to 2.0. */
+    int damage_ratio;
+    /* StageSelectMode (A11Y_STAGE_SELECT_MODES). */
+    int stage_selection;
+    /* Minutes, 1 to 99, or 0 for no limit. */
+    int stock_time_limit;
+    bool friendly_fire;
+    bool pause;
+    bool score_display;
+    /* As stored (GameRules.unk_xc): 0 counts a self-destruct as -1, 1 as 0,
+     * 2 as -2. */
+    int self_destructs;
+} A11yRules;
+
 /* What the main menu tree shows, read once a frame by the menu reader. */
 typedef struct A11yMenuState {
     /* The menu screen (MenuKind) and its hovered entry, from mn_804A04F0. On
      * a leaf screen the entry number means whatever that screen uses it
-     * for. */
+     * for: the row on Custom Rules and Additional Rules. */
     int menu;
     int hovered;
     /* The hovered entry's description as game text, from SdMenu; NULL where
-     * the screen has none or the base port supplies it. */
+     * the screen has none or the base port supplies it. On Custom Rules and
+     * Additional Rules, the hovered row's, as the screen chooses it for the
+     * row's value in rules. */
     const uint8_t* description;
     /* The base port's plain label and description for the hovered entry
      * (mnOnline_Label, mnOnline_Description), or NULL. */
@@ -62,6 +89,7 @@ typedef struct A11yMenuState {
     bool mono;
     int balance;
     bool deflicker;
+    A11yRules rules;
 } A11yMenuState;
 
 /* Fills the snapshot from game memory; center_text is the number the hook
