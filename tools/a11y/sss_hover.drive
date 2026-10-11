@@ -45,7 +45,7 @@ sleep 1
 
 # Start leaves for stage select, which speaks its own opening.
 press Start
-wait ': "Stage select\. D-pad to choose, Start picks a random stage\."$'
+wait ': "Stage select\. D-pad to choose, A to pick\. Start before moving picks a random stage\."$'
 sleep 1
 
 # Up from below every tile: through Battlefield in the bottom row into the

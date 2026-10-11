@@ -28,7 +28,8 @@ std::optional<std::string_view> stage_description(A11yStage stage);
 
 /* The opening: the screen's name, then how to choose. */
 inline constexpr std::string_view kStageSelect = "Stage select";
-inline constexpr std::string_view kHowToChoose = "D-pad to choose, Start picks a random stage.";
+inline constexpr std::string_view kHowToChoose =
+    "D-pad to choose, A to pick. Start before moving picks a random stage.";
 /* The skipped scene, where the stage-select rule Random or Ordered chose
  * the stage: "Stage: Corneria." */
 inline constexpr std::string_view kStage = "Stage";

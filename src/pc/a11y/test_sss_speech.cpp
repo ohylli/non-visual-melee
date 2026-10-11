@@ -46,7 +46,8 @@ private:
 
 using namespace sss_test;
 
-constexpr const char* kOpening = "Stage select. D-pad to choose, Start picks a random stage.";
+constexpr const char* kOpening =
+    "Stage select. D-pad to choose, A to pick. Start before moving picks a random stage.";
 
 /* Speech over a fake bridge, and stage select speech over that; s_lines only
  * ever holds the lines of the test that is running. */

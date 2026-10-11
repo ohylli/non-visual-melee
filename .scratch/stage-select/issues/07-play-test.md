@@ -8,7 +8,7 @@ The maintainer plays stage select with NVDA, offline and online against a friend
 
 Listen for:
 
-- The opening, and whether "Start picks a random stage" is understood.
+- The opening, and whether "A to pick. Start before moving picks a random stage." is understood.
 - Steps: rows, the tall tiles, the first press going to Icicle Mountain, edges, locked tiles.
 - Glides: speed, and whether the game's move sound for each crossed tile helps or is a nuisance.
 - Picks: Random's roll, "Locked.", "Picked ..." after an early A.
@@ -25,6 +25,7 @@ Findings become new issues here. When it passes, the CLAUDE.md status line says 
 Left for the maintainer, most severe first; each worth listening for in the play test.
 
 - Start after browsing: the opening says "Start picks a random stage", but once the stage cursor has entered any tile, Start (like A) picks the last tile entered, and a named pick is silent, so a player pressing Start "for random" gets the last stage heard without being told. Options: reword the opening ("D-pad to choose, A to pick, or Start now for a random stage."), or name every pick. Recommended: reword the opening.
+  - Done 2026-10-11: the opening now says "D-pad to choose, A to pick. Start before moving picks a random stage." A Start pick after browsing stays unannounced.
 - Ranked online's stage list is now silent: its scene announcement ("Stage select. No speech yet.") was removed with the grid's opening, and the frame hook never runs on the list. Recommended: say "Ranked stage list. No speech yet." at scene entry while `pc_rank_session_active()`, until the list gets its own speech.
 - A press at an edge repeats the tile's whole description. Recommended: the name alone at an edge.
 - From empty space with no tile that way, a step names the tile last hovered as if the cursor were on it. Option: "Nothing that way." with what A would pick.
