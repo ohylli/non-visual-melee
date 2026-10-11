@@ -30,7 +30,7 @@ Name the level, then each step's result, known failures and reruns included. "Wo
 
 - Build: `cmake --build build`.
 - Style: `python tools/check_style.py` (needs `clang-format` on `PATH`; covers `src/pc/` only).
-- Unit tests: `cmake --build build --target unit_tests` then `ctest --test-dir build -L melee`. On Windows the suite is `launcher_data`, `version`, `endian`, `thp` and the fork's own suites, each an `add_test` in `src/pc/a11y/a11y.cmake`; the netplay tests are Linux-only. `launcher_data` currently fails on Windows, a base port bug in the test's file handling (it can pass on a first run).
+- Unit tests: `cmake --build build --target unit_tests` then `ctest --test-dir build -L melee`. On Windows the suite is `launcher_data`, `version`, `endian`, `thp`, `updater`, `updater_browser` and the fork's own suites, each an `add_test` in `src/pc/a11y/a11y.cmake`; the netplay tests are Linux-only. `launcher_data` currently fails on Windows, a base port bug in the test's file handling (it can pass on a first run).
 - `tools/smoke_test.py` runs on Windows only as `MELEE_BIN=<full path to melee.exe> python tools/smoke_test.py --no-disc`; its disc cases isolate save data on Linux only and would touch the real memory card here.
 
 ## Bounded runs
@@ -89,6 +89,8 @@ python tools/a11y/drive_net.py --lan --out-dir build/drive/lan tools/a11y/lan_lo
 The LAN run needs a network interface up (Ethernet or Wi-Fi with an address; `lan: no usable network interface` in a log means none) and a Windows Firewall rule letting that build's `melee.exe` take UDP in. A build directory without a rule makes the first run prompt and take focus, so ask the maintainer to allow it first.
 
 A run can end with instance b exiting with code 3221226505 (0xC0000409) as the match loads, its log showing `ARCHIVE SdIntro.dat: implausible header` and a PANIC in `lbarchive.c`: an intermittent base port crash reading an archive from the file cache, seen before at the memory card screen. Rerun unchanged.
+
+The `lan_lobby.drive` run against a base port build failed once (base merge of 6f6ffc8, 2026-10-11) at `b wait lobby: LAN: searching` after holding B back to the lobby: b's log showed `lan: found` for a again with no searching line, so the wait timed out. It passed on an unchanged rerun. If it repeats, check whether b can find a before it logs that it is searching; if so, the script's wait needs loosening.
 
 At the base merge level, add `--base-b <dir>` to each, instance b then being a base port build of the merged commit from that build directory: build it in a git worktree outside the repo with its own build directory, with the fork's native Windows build fix applied (`docs/a11y/netplay.md`).
 
