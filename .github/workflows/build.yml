@@ -204,7 +204,7 @@ jobs:
 
       - name: Build APK
         env:
-          MELEE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.2.2' }}
+          MELEE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.3.0' }}
           MELEE_KEYSTORE_BASE64: ${{ secrets.MELEE_KEYSTORE_BASE64 }}
           MELEE_KEYSTORE_PASSWORD: ${{ secrets.MELEE_KEYSTORE_PASSWORD }}
           MELEE_KEY_ALIAS: ${{ secrets.MELEE_KEY_ALIAS }}
@@ -253,7 +253,7 @@ jobs:
 
       - name: Build and package
         env:
-          MELEE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.2.2' }}
+          MELEE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.3.0' }}
         run: tools/package_macos.sh
 
       - uses: actions/upload-artifact@v4
@@ -331,8 +331,14 @@ jobs:
           # A tag containing a hyphen (v0.1.0-beta) is a prerelease.
           prerelease=""
           [[ "${GITHUB_REF_NAME}" == *-* ]] && prerelease="--prerelease"
-          gh release create "${GITHUB_REF_NAME}" \
-            --title "${GITHUB_REF_NAME}" \
-            --notes-file .github/RELEASE_NOTES.md \
-            ${prerelease} \
-            artifacts/*
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" artifacts/* --clobber
+            gh release edit "${GITHUB_REF_NAME}" \
+              --notes-file .github/RELEASE_NOTES.md
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "${GITHUB_REF_NAME}" \
+              --notes-file .github/RELEASE_NOTES.md \
+              ${prerelease} \
+              artifacts/*
+          fi
