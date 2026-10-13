@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "a11y_hooks.h"
 #include "css_reader.hpp"
+#include "cue_engine.hpp"
+#include "cue_output.hpp"
 #include "game_access.h"
 #include "game_text.hpp"
 #include "launcher_speech.hpp"
@@ -8,6 +10,7 @@
 #include "menu_speech.hpp"
 #include "menu_text.hpp"
 #include "pc/net.h"
+#include "pc/pc.h"
 #include "pc/region.h"
 #include "scene_speech.hpp"
 #include "speech.hpp"
@@ -15,6 +18,7 @@
 #include <cstdlib>
 #include <dolphin/pad.h>
 #include <memory>
+#include <string>
 
 namespace {
 
@@ -26,6 +30,13 @@ std::unique_ptr<a11y::MenuSpeech> s_menu_speech;
 std::unique_ptr<a11y::CssReader> s_css;
 std::unique_ptr<a11y::SssReader> s_sss;
 std::unique_ptr<a11y::LobbySpeech> s_lobby;
+/* The cue engine and its output, both null while cues are off or the output
+ * could not open. The output goes first: its callback renders the engine. */
+std::unique_ptr<a11y::CueEngine> s_cues;
+std::unique_ptr<a11y::CueOutput> s_cue_output;
+/* The launcher's master volume with mute applied, kept from before the
+ * engine opens. */
+float s_master_volume = 1.0f;
 /* The centre text a leaf screen last set, kept across scenes: a screen the
  * menu scene opens on, as Multi-Man Melee after its match, sets it before
  * the scene hook runs. */
@@ -96,6 +107,29 @@ void feed_menu_speech(int center_text, bool refused) {
     s_menu_speech->frame(state);
 }
 
+/* Opens the cue engine as the game starts, not on first use: opening the
+ * stream takes part of a frame (ADR-0005). */
+void open_cues(const a11y::Config& config) {
+    if (!config.cues) {
+        return;
+    }
+    a11y::CueEngineOptions options;
+    options.log = config.log;
+    options.dump = config.cue_dump;
+    options.trace = config.cue_trace;
+    s_cues = std::make_unique<a11y::CueEngine>(options);
+    s_cues->set_master_volume(s_master_volume);
+    std::string why;
+    s_cue_output = a11y::CueOutput::open(*s_cues, config.log, why);
+    if (s_cue_output == nullptr) {
+        s_cues.reset();
+        if (config.log) {
+            pc_log_line("[a11y] cue engine could not start: %s", why.c_str());
+        }
+        s_speech->announce("Audio cues could not start.", a11y::Mode::queue);
+    }
+}
+
 }  // namespace
 
 extern "C" void pc_a11y_init(void) {
@@ -114,6 +148,7 @@ extern "C" void pc_a11y_init(void) {
     s_css = std::make_unique<a11y::CssReader>(*s_speech, config.steer);
     s_sss = std::make_unique<a11y::SssReader>(*s_speech, config.steer);
     s_lobby = std::make_unique<a11y::LobbySpeech>(*s_speech);
+    open_cues(config);
     a11y::launcher_speech_start(*s_speech);
 }
 
@@ -122,6 +157,8 @@ extern "C" void pc_a11y_shutdown(void) {
         return;
     }
     a11y::launcher_speech_stop();
+    s_cue_output.reset();
+    s_cues.reset();
     s_lobby.reset();
     s_sss.reset();
     s_css.reset();
@@ -143,6 +180,10 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
     s_css_exit = A11Y_CSS_STAYING;
     s_css_to_rules = false;
     s_css_menu_fed = false;
+    if (s_cues != nullptr) {
+        /* Every cue belongs to the screen it plays on. */
+        s_cues->stop_all();
+    }
     if (!game_hook_may_speak()) {
         return;
     }
@@ -157,6 +198,13 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
         return;
     }
     s_scene_speech->entered(scene_kind, pc_net_active());
+}
+
+extern "C" void pc_a11y_master_volume(float volume) {
+    s_master_volume = volume;
+    if (s_cues != nullptr) {
+        s_cues->set_master_volume(volume);
+    }
 }
 
 extern "C" void pc_a11y_menu_frame(void) {

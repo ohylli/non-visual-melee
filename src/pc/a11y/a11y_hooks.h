@@ -18,6 +18,13 @@ void pc_a11y_init(void);
  * closed. */
 void pc_a11y_shutdown(void);
 
+/* The game's master volume has been set (pc_audio_set_volume in
+ * src/pc/audio.c), 0 to 1 with mute already applied as 0: every launcher and
+ * port menu change goes through it. The cue engine's own stream does not see
+ * the game's, so it follows the value itself; it is kept even before the
+ * engine opens. */
+void pc_a11y_master_volume(float volume);
+
 /* Once per turn of the launcher's loop (src/pc/launcher.cpp), after the page
  * has been drawn. Launcher speech compares the page with the last turn here. */
 void pc_a11y_launcher_frame(void);

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Accessibility fork: speech, its screen reader library (Prism), and the
-# readers that turn RmlUi pages and the game's screens into speech.
+# Accessibility fork: speech, its screen reader library (Prism), the readers
+# that turn RmlUi pages and the game's screens into speech, and the cue engine
+# with its sound library (miniaudio).
 # Included from the root CMakeLists.txt with one line, after the melee target
 # and the unit_tests target exist. Everything the fork adds to the build lives
 # here, so base merges never touch it.
@@ -47,7 +48,10 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/sss_reader.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sss_targets.cpp
         ${CMAKE_CURRENT_LIST_DIR}/steering.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/steerer.cpp)
+        ${CMAKE_CURRENT_LIST_DIR}/steerer.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/cue_engine.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/cue_output.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/cue_sounds.cpp)
 target_include_directories(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 # game_access.c reads the decomp's structs, so it lays out their bitfields as
 # the game's own files do (melee_game's options in CMakeLists.txt); MinGW's
@@ -99,6 +103,40 @@ if (A11Y_PRISM_ASSET)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${_prism_dir}/${A11Y_PRISM_RUNTIME_LIB}" "$<TARGET_FILE_DIR:melee>")
 endif ()
+
+# miniaudio, the cue engine's sound library (docs/adr/0005-cues-play-through-
+# the-forks-own-audio-stream.md): one header, downloaded at configure like
+# Prism and compiled once in its own library. It must be 0.11.25 or later:
+# 0.11.21 crackled on every pitch change. The directory name carries the
+# version, so a bump downloads afresh.
+set(A11Y_MINIAUDIO_VERSION 0.11.25)
+set(A11Y_MINIAUDIO_SHA256 ac7af4de748b7e26b777f37e01cee313a308a7296a3eb080e2906b320cc55c89)
+set(_miniaudio_dir "${CMAKE_BINARY_DIR}/miniaudio-${A11Y_MINIAUDIO_VERSION}")
+if (NOT EXISTS "${_miniaudio_dir}/miniaudio.h")
+    message(STATUS "a11y: downloading miniaudio ${A11Y_MINIAUDIO_VERSION}")
+    set(_miniaudio_url
+            "https://raw.githubusercontent.com/mackron/miniaudio/${A11Y_MINIAUDIO_VERSION}/miniaudio.h")
+    file(DOWNLOAD "${_miniaudio_url}" "${_miniaudio_dir}/miniaudio.h.part"
+            EXPECTED_HASH SHA256=${A11Y_MINIAUDIO_SHA256}
+            STATUS _miniaudio_status)
+    list(GET _miniaudio_status 0 _miniaudio_code)
+    if (NOT _miniaudio_code EQUAL 0)
+        list(GET _miniaudio_status 1 _miniaudio_error)
+        file(REMOVE "${_miniaudio_dir}/miniaudio.h.part")
+        message(FATAL_ERROR "a11y: could not download ${_miniaudio_url}: ${_miniaudio_error}. "
+                "The first configure needs network access.")
+    endif ()
+    file(RENAME "${_miniaudio_dir}/miniaudio.h.part" "${_miniaudio_dir}/miniaudio.h")
+endif ()
+add_library(a11y_miniaudio STATIC ${CMAKE_CURRENT_LIST_DIR}/miniaudio_impl.c)
+# A system include, so its warnings stay out of the files that include it.
+target_include_directories(a11y_miniaudio SYSTEM PUBLIC "${_miniaudio_dir}")
+# Public: these change the layout of miniaudio's structs, so every file that
+# includes the header gets them. SDL plays the mix, so no device code; the
+# cues never write audio files.
+target_compile_definitions(a11y_miniaudio PUBLIC MA_NO_DEVICE_IO MA_NO_ENCODING)
+target_compile_options(a11y_miniaudio PRIVATE -w)
+target_link_libraries(melee PRIVATE a11y_miniaudio)
 
 if (TARGET unit_tests)
     # Speech against a fake bridge; the test defines its own pc_log_line.
@@ -239,4 +277,23 @@ if (TARGET unit_tests)
     add_test(NAME game_text COMMAND game_text_test)
     set_tests_properties(game_text PROPERTIES LABELS melee)
     add_dependencies(unit_tests game_text_test)
+
+    # The cue engine rendered into buffers, with no device; its own
+    # pc_log_line. It also writes a dump of a known pulse train, which the
+    # dump analysis script must then read back correctly.
+    add_executable(cue_engine_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_cue_engine.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/cue_engine.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/cue_sounds.cpp)
+    target_include_directories(cue_engine_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_link_libraries(cue_engine_test PRIVATE a11y_miniaudio)
+    target_compile_options(cue_engine_test PRIVATE -UNDEBUG)
+    add_test(NAME cue_engine COMMAND cue_engine_test ${CMAKE_BINARY_DIR}/cue_pulse_train.f32)
+    set_tests_properties(cue_engine PROPERTIES LABELS melee FIXTURES_SETUP cue_dump)
+    add_dependencies(unit_tests cue_engine_test)
+    if (MELEE_PYTHON)
+        add_test(NAME cue_dump_analysis COMMAND ${MELEE_PYTHON}
+                ${PROJECT_SOURCE_DIR}/tools/a11y/test_cue_dump.py ${CMAKE_BINARY_DIR}/cue_pulse_train.f32)
+        set_tests_properties(cue_dump_analysis PROPERTIES LABELS melee FIXTURES_REQUIRED cue_dump)
+    endif ()
 endif ()

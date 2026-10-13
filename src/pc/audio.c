@@ -20,6 +20,7 @@
 #include <dolphin/ai.h>
 #include "pc/pc.h"
 #include "pc/music_stream.h"
+#include "pc/a11y/a11y_hooks.h"
 #include <dolphin/ar.h>
 #include <dolphin/ax.h>
 #include <dolphin/axfx.h>
@@ -100,6 +101,7 @@ static float s_sfx_volume = 1.0f;
 
 void pc_audio_set_volume(float volume) {
     s_master_volume = volume;
+    pc_a11y_master_volume(volume);
     if (s_stream)
         SDL_SetAudioStreamGain(s_stream, volume);
 }

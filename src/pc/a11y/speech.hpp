@@ -19,6 +19,14 @@ struct Config {
      * MELEE_A11Y_STEER=1 turns it on by itself, for agent runs with speech
      * off. */
     bool steer = true;
+    /* The cue engine (docs/a11y/cues.md): follows the accessibility switch;
+     * MELEE_A11Y_CUES=1 turns it on by itself, for agent runs with speech
+     * off, and MELEE_A11Y_CUES=0 off. Off, the engine never opens. */
+    bool cues = true;
+    /* MELEE_A11Y_CUE_DUMP and MELEE_A11Y_CUE_TRACE: files for the cue
+     * engine's mix and its voices' targets; empty for none. */
+    std::string cue_dump;
+    std::string cue_trace;
 };
 
 /* The only place the configuration is read from; swap its body when fork

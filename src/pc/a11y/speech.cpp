@@ -32,6 +32,12 @@ Config config_from_environment() {
     config.log = env_switch("MELEE_A11Y_LOG");
     const char* steer = std::getenv("MELEE_A11Y_STEER");
     config.steer = config.enabled || (steer != nullptr && std::strcmp(steer, "1") == 0);
+    const char* cues = std::getenv("MELEE_A11Y_CUES");
+    config.cues = cues == nullptr ? config.enabled : std::strcmp(cues, "0") != 0;
+    const char* dump = std::getenv("MELEE_A11Y_CUE_DUMP");
+    config.cue_dump = dump != nullptr ? dump : "";
+    const char* trace = std::getenv("MELEE_A11Y_CUE_TRACE");
+    config.cue_trace = trace != nullptr ? trace : "";
     return config;
 }
 
