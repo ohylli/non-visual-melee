@@ -39,7 +39,9 @@ Config config_from_environment() {
     const char* trace = std::getenv("MELEE_A11Y_CUE_TRACE");
     config.cue_trace = trace != nullptr ? trace : "";
     const char* cue_settings = std::getenv("MELEE_A11Y_CUE_SETTINGS");
-    config.cue_settings = cue_settings != nullptr ? cue_settings : "";
+    if (cue_settings != nullptr) {
+        config.cue_settings = cue_settings;
+    }
     return config;
 }
 

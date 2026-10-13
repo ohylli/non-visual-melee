@@ -37,3 +37,13 @@ Findings become new issues here, and tuned defaults go back into the code. When 
   - Stages outside the six tournament ones: the frame is found the same way but was not checked. On Princess Peach's Castle the floor found across the middle is the raised roof, so its lower sides sound below the floor.
   - Online with a friend: the agent runs showed each side's cue following its own player.
   - Venom crashes the game as its match starts (a base port bug, cues on or off), so avoid it, and Random, for now.
+
+### 2026-10-13, review of issues 01 to 03 (agent): for the maintainer to decide
+
+The review fixed what was plainly wrong (commit "A11y: match cues, review fixes"). These need your judgement, most important first:
+
+- **Tuning gives no spoken feedback for a clamped value or an applied save.** `your_position.down_range = 2` silently becomes 1, `boost = 20` silently 8; only the log says so. A save that applies is silent too, which is hard to tell from one that did not take when the change is subtle. Options: speak clamped lines in the same one announcement as unreadable ones ("Cue settings, line 14: 2 is past the most, 1."); also queue a short "Cue settings applied." on a reload in a match; or leave both until this play test says they are missed. Recommendation: speak the clamps; decide the confirmation by ear here.
+- **The settings model's class names clash with CONTEXT.md.** The code calls it `Setting`, `Settings` and `SettingsFile`; CONTEXT.md keeps "setting" for the port's options and says "values" for cue settings. Options: rename the classes (`Value`, `ValueModel`, `ValueFile`) before the port menu builds on them, or reword the glossary. Recommendation: rename, before issue 05 adds more users.
+- **hooks.cpp now runs the cue system's whole lifetime**: the engine and its output, three settings objects built in order, the settings path, polling and the match-start repeat. Options: a `CueSystem` (open, scene entered, tick, master volume) with hooks.cpp forwarding, or leave it. Recommendation: extract it with issue 05, when the second cue joins.
+- **A netplay stall keeps the tick pulsing.** While the game waits for a stalled peer no tick runs, so your position cue keeps pulsing at its last place until the session times out. Options: the engine fades a voice whose targets are older than about a quarter second, or leave it. Recommendation: listen for it in the online play test.
+- **`tools/smoke_test.py` reaches the default cue settings file** unless the variable is set: its launcher cases leave speech, and so cues, on. The `verify` skill now says to set `MELEE_A11Y_CUE_SETTINGS` for it; making the script set it would be a new edit to a base port file. Recommendation: leave the script alone.

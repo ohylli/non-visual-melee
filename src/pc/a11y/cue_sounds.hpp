@@ -19,6 +19,10 @@ Sound read_sound(ma_data_source* source, int frames);
  * and ends in silence. */
 void shape_edges(Sound& sound, float seconds);
 
+/* A raised-cosine edge of the given length at the end alone, so the sound
+ * ends in silence. */
+void fade_out(Sound& sound, float seconds);
+
 /* Silence of the given length before the sound: room for the start ramp, so
  * it does not eat the sound's attack. */
 void lead_in(Sound& sound, float seconds);

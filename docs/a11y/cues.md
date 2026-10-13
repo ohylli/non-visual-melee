@@ -31,7 +31,7 @@ master, mix and cue levels  --->  pulses retriggered on the audio clock
 
 Each cue's sound is made by code when the engine starts, as a `Sound` buffer: `cue_sounds.cpp` reads one from any miniaudio data source (a waveform, noise, later a decoded file) and shapes its edges. A sound from a file fills the same kind of buffer, so changing a cue to a file changes its definition, not the engine.
 
-miniaudio 0.11.25 is downloaded at configure and compiled once into its own library (`a11y_miniaudio` in `a11y.cmake`), without its device code: SDL plays the mix. The engine renders the voices itself, since the per-sample glides and pulse timing need it; miniaudio supplies the generators and, later, file decoding. Its version must stay 0.11.25 or later: 0.11.21 crackled on every pitch change (ADR-0005).
+miniaudio 0.11.25 is downloaded at configure and compiled once into its own library (`a11y_miniaudio` in `a11y.cmake`), without its device code: SDL plays the mix. The engine renders the voices itself, since the per-sample glides and pulse timing need it; miniaudio supplies the generators and, later, file decoding. Keep it at 0.11.25 or later should a cue ever play through miniaudio's own sounds: 0.11.21 crackled on every pitch change (ADR-0005).
 
 ## Lifecycle and switches
 
@@ -39,7 +39,7 @@ miniaudio 0.11.25 is downloaded at configure and compiled once into its own libr
 - Opening early moves the process's heap layout. That once made a base port bug much likelier: the file cache took heap buffers below 0x01000000 for ARAM offsets and cached garbled archives (fixed in `file_cache.cpp`, see `store_host`). If a crash rate rises only with cues on, suspect another place where a low host address is taken for ARAM.
 - Every voice stops, with its ramp, when a scene is entered (`pc_a11y_scene_entered`): cues belong to the screen they play on.
 - `MELEE_A11Y_CUES`: unset follows `MELEE_A11Y`; `1` opens the engine with speech off, for agent runs; `0` keeps it closed.
-- If the engine cannot open, the log says why ("cue engine could not start: ..."), speech says "Audio cues could not start." and the game goes on without cues.
+- If the engine cannot open, the log says why, speech says "Audio cues could not start." and the game goes on without cues.
 - Master volume comes from the `pc_a11y_master_volume` hook in `pc_audio_set_volume`, the launcher's volume with mute applied, kept even before the engine opens. The second stream does not see the game's gain, so the engine applies it itself. The game's sound effect and music sliders do not affect cues.
 - Online, the engine needs no `net_sfx_private`: it never reaches the game's sounds. The hooks that drive cues stay silent while `pc_net_resim()` is true, so voices keep their last targets through a rollback.
 
@@ -61,11 +61,11 @@ a11y::Number edge_pan = cue.group.add_number({"edge_pan", "Edge pan",
     "Pan at the main stage's edges.", "", 0.7f, 0.0f, 1.0f, 0.05f});
 ```
 
-Every cue registers in `open_cue_settings` (`hooks.cpp`), before the file is read. These values feed the volume chain: the all-cues switch and cue volume become the mix level, each cue's switch, volume and boost its cue level. A switch turned off is a level turned off: the engine glides that cue to silence while its voices keep running underneath, and turning it back on brings them back where they are.
+Every cue registers before the file is read, so a value the file lacks can be added to it. These values feed the volume chain: the all-cues switch and cue volume become the mix level, each cue's switch, volume and boost its cue level. A switch turned off is a level turned off: the engine glides that cue to silence while its voices keep running underneath, and turning it back on brings them back where they are.
 
 ### The file
 
-- **Where.** `a11y-cues.ini` in `SDL_GetPrefPath(NULL, "melee-pc")`, the folder where the base port keeps its own settings (`%APPDATA%\melee-pc` on Windows). `MELEE_A11Y_CUE_SETTINGS=<path>` names another file. `drive.py` and `drive_net.py` set it to a file of each run's own, removed before the run, so no agent run reads or writes the maintainer's file.
+- **Where.** `a11y-cues.ini` in `SDL_GetPrefPath(NULL, "melee-pc")`, the folder where the base port keeps its own settings (`%APPDATA%\melee-pc` on Windows). `MELEE_A11Y_CUE_SETTINGS=<path>` names another file; set but empty, it means no file and the defaults, so a run that meant a scratch file and lost its path never falls back to the player's. `drive.py` and `drive_net.py` set it to a file of each run's own, removed before the run, so no agent run reads or writes the maintainer's file.
 - **What it looks like.** Plain text, one `key = value` a line, each value under its group's `#` heading and right below its description, which ends with the range and the default. A switch is `on` or `off` (also yes, no, true, false, 1, 0); a number may carry its unit (`80%`) and a decimal comma. `#` starts a comment anywhere on a line.
 - **A missing file** is written with every value at its default, so there is something to edit. A value the code has and the file lacks, as after an update that adds a cue, takes its default and is appended to the end of the file under its heading, leaving everything the player wrote as it was. A key the file has and the code does not is logged once and left in the file; the model keeps it too, for a front end that rewrites the whole file.
 - **Errors.** A line that cannot be read keeps its value's last setting, is logged and is spoken as one announcement ("Cue settings, lines 3 and 7 not understood."); the other lines apply. A value out of range is clamped and logged, not spoken.
@@ -114,31 +114,21 @@ So pausing stops a cue and unpausing starts it again: a stop is the engine's 5 m
 
 A tick whose pan says where you are across the stage, whose pitch says how high, and whose speed says how near the opponent is.
 
-- **Pan**, piecewise linear in x: the main floor's centre 0, its ends ±`edge_pan` (0.7), the side blast zones ±1, held there beyond.
-- **Pitch**, piecewise linear in octaves of y: the main floor 1, the camera box's top `up_range` octaves up (1), the bottom blast zone `down_range` octaves down (1), held beyond both.
-- **Interval**: from `slow_interval` (0.8 s) at `far_distance` (120 units) and beyond to `fast_interval` (0.08 s) at `near_distance` (10 units) and closer, interpolated in the log of the interval, so each unit of distance closed speeds the tick by the same ratio. With no opponent, the slow interval.
+- **Pan**, piecewise linear in x: the main floor's centre 0, its ends ±`edge_pan`, the side blast zones ±1, held there beyond.
+- **Pitch**, piecewise linear in octaves of y: the main floor 1, the camera box's top `up_range` octaves up, the bottom blast zone `down_range` octaves down, held beyond both.
+- **Interval**: from `slow_interval` at `far_distance` and beyond to `fast_interval` at `near_distance` and closer, interpolated in the log of the interval, so each unit of distance closed speeds the tick by the same ratio. With no opponent, the slow interval.
 - **Silent** outside a match, while paused, before GO and while you are out.
-- **The sound**: the Star Fox 64 fork's aim click, a 1500 Hz sine decaying over 20 ms after 12 ms of lead-in. Its boost starts at 1.5.
+- **The sound**: the Star Fox 64 fork's aim click, a short decaying sine after 12 ms of lead-in.
 - **Its limits go together.** The tick must end inside the fastest pulse even an octave down, where it plays twice as long: 32 ms there is 64 ms, so the fast interval goes no lower than 0.07 s and the down range no wider than 1 octave. A wider down range or a faster pulse needs a shorter tick first (`MatchCues::kFastestInterval`, `kWidestDownRange`).
 
 ## Checking a cue without hearing it
 
-Three records, all off unless asked for:
+The agent cannot hear a cue, so the engine keeps three records, the last two off unless asked for:
 
-- **Log lines.** Each voice's start and stop is an `[a11y] cue <name> start|stop` line with its targets at that moment, and the engine's opening is an `[a11y] cue engine:` line with the SDL driver, the device's rate and its buffer size.
-- **The trace.** `MELEE_A11Y_CUE_TRACE=<file>` writes, each tick, one tab-separated line per voice: tick, voice, on or off, pan, pitch, gain and interval (`-` for a looped voice). It checks a mapping by numbers.
-- **The dump.** `MELEE_A11Y_CUE_DUMP=<file>` writes the cue mix as raw 32-bit float stereo at 48 kHz, from the audio thread, from the moment the engine opens. SDL's dummy driver (`SDL_AUDIO_DRIVER=dummy`, used by every agent run) still pulls the mix in real time, so a silent run records a true dump.
+- **Log lines**: each voice's start and stop with its targets at that moment, and the engine's opening. Per-tick changes are left out, so the log tells when a cue sounds, not how.
+- **The trace** (`MELEE_A11Y_CUE_TRACE`): every voice's targets every tick, for checking a mapping by numbers against what the game did.
+- **The dump** (`MELEE_A11Y_CUE_DUMP`): the cue mix itself, from the audio thread. SDL's dummy driver, which every agent run uses, still pulls the mix in real time, so a silent run records a true dump.
 
-`tools/a11y/cue_dump.py` reads a dump and reports, per window: level and peak in dBFS, the left-right balance as the pan that would give it, the pulses starting in the window with their intervals, and the dominant pitch:
+`tools/a11y/cue_dump.py` turns a dump into what an ear would notice, window by window: level, the left-right balance as a pan, pulse onsets with their intervals, and the dominant pitch. Its measures are simple ones (onsets by a level threshold, pitch by zero crossings), so two cues sounding at once blur pan and pitch: check one cue at a time, or windows where only one sounds.
 
-```
-python tools/a11y/cue_dump.py build/drive/cues.f32 --window 0.5 --onsets
-   time   level    peak    pan  onsets  interval s (min-max)    pitch Hz
-   0.00   -22.2    -8.6  +0.50       2  0.250 (0.250-0.250)      1000
-```
-
-Its measures are simple ones (onsets by a level threshold after 5 ms of quiet, pitch by zero crossings), so two cues sounding at once blur pan and pitch: check one cue at a time, or windows where only one sounds. `--start` and `--end` narrow a long dump; it runs on the standard library alone, about a second per ten seconds of dump.
-
-`tools/a11y/match_position.drive` walks your position cue through a Training match on Final Destination; run it with the trace and the dump, as its header says, and the `verify` skill says what its log and dump show.
-
-The engine's unit tests (`test_cue_engine.cpp`) render it into buffers with no device, and also write a dump of a known pulse train, which `tools/a11y/test_cue_dump.py` reads back through the script.
+The `verify` skill has the commands, the expected lines and the match drive scripts.

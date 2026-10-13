@@ -24,3 +24,7 @@ A prototype on the local branch `prototype/audio-cues` answered the question, me
 - Online, a cue on the fork's stream never touches the game's voices or netplay sound handles, so only the speech gate applies: silent while `pc_net_resim()` is true. A cue played through the game's path is still wrapped in `net_sfx_private`.
 - The agent cannot hear either stream. The cue engine needs its own dump of its mix, as `MELEE_AUDIO_DUMP` is for the game's, for verification by analysing the recording.
 - miniaudio is public domain or MIT No Attribution, so it is compatible with the fork's GPL.
+
+## Update (2026-10-13): the engine mixes its voices itself
+
+The decision stands: the fork's own SDL stream, filled by fork code, with miniaudio as a library without its device code. Building the first cue changed the division of work. The engine renders its voices itself rather than through miniaudio's sounds and engine: per-sample glides of pan, gain and pitch, pitch by playback rate, the ramps, and pulses retriggered by the engine on its own audio clock, which is this ADR's scheduling on the audio clock without miniaudio's engine clock. miniaudio makes the sounds (its waveform and noise generators now, file decoding later). The consequences about miniaudio's pitch crackle and fade schedules therefore bind only a cue that goes back to miniaudio's own sounds. Primer: `docs/a11y/cues.md`.

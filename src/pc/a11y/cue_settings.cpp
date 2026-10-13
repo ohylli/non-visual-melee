@@ -47,8 +47,8 @@ CueGroup CueSettings::add_cue(
     std::string lifts = "Lifts " + name +
                         " under its volume, for a sound that reads quieter "
                         "than the others at the same volume.";
-    Number boost = group.add_number(NumberSpec{
-        "boost", title + " boost", lifts, "times", default_boost, 1.0f, kMostBoost, 0.1f});
+    Number boost = group.add_number(NumberSpec{"boost", title + " boost", lifts, "times",
+        default_boost, 1.0f, CueEngine::kMostBoost, 0.1f});
     CueValues values{static_cast<int>(m_cues.size()), on, volume, boost};
     m_cues.push_back(values);
     return CueGroup{group, values};

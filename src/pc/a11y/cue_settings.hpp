@@ -17,7 +17,7 @@ struct CueValues {
     int cue; /* the cue's number in the engine, for its VoiceSpec */
     Switch on;
     Number volume; /* 0 to 100% */
-    Number boost;  /* a factor, 1 to CueSettings::kMostBoost */
+    Number boost;  /* a factor, 1 to CueEngine::kMostBoost */
 
     CueLevel level() const;
 };
@@ -31,8 +31,6 @@ struct CueGroup {
 
 class CueSettings {
 public:
-    static constexpr float kMostBoost = 8.0f;
-
     /* Registers the values for all cues: the switch and the cue volume. */
     explicit CueSettings(Settings& settings);
 

@@ -3,6 +3,7 @@
 #include "pc/pc.h"
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <utility>
 
 namespace a11y {
@@ -16,7 +17,6 @@ constexpr float kKnee = 0.6f;
 
 constexpr float kHighestPitch = 4.0f;
 constexpr float kLongestInterval = 30.0f;
-constexpr float kMostBoost = 8.0f;
 
 /* Start and stop: a straight ramp of 5 ms, enough that a sound cut at full
  * level does not click. */
@@ -31,7 +31,7 @@ float glide_coefficient(float seconds) {
 const float kGlide = glide_coefficient(0.010f);
 const float kPitchGlide = glide_coefficient(0.020f);
 
-constexpr float kQuarterPi = 0.78539816f;
+constexpr float kQuarterPi = std::numbers::pi_v<float> / 4.0f;
 
 float clamped(float value, float low, float high, float fallback) {
     if (!std::isfinite(value)) {

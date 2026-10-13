@@ -77,6 +77,8 @@ class CueEngine {
 public:
     static constexpr int kMaxVoices = 16;
     static constexpr int kMaxCues = 16;
+    /* The largest boost a cue level takes; cue settings offer up to it. */
+    static constexpr float kMostBoost = 8.0f;
 
     explicit CueEngine(CueEngineOptions options = {});
     ~CueEngine();

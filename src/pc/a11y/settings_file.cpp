@@ -168,6 +168,7 @@ void SettingsFile::report(const SettingsRead& read) {
     if (!read.bad_lines.empty()) {
         m_problem = m_name + ", " + line_list(read.bad_lines) + " not understood.";
         m_speech.announce(m_problem, Mode::queue);
+        m_problems_spoken++;
     }
 }
 

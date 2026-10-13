@@ -3,6 +3,7 @@
 #include "miniaudio.h"
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 
 namespace a11y {
 
@@ -19,15 +20,35 @@ Sound read_sound(ma_data_source* source, int frames) {
     return sound;
 }
 
+namespace {
+
+/* Raised-cosine gain i frames into an edge of edge frames: 0 to nearly 1. */
+float edge_gain(int i, int edge) {
+    return 0.5f - 0.5f * std::cos(std::numbers::pi_v<float> * static_cast<float>(i) /
+                                  static_cast<float>(edge));
+}
+
+void fade_out_frames(Sound& sound, int edge) {
+    const int size = static_cast<int>(sound.samples.size());
+    for (int i = 0; i < edge; i++) {
+        sound.samples[static_cast<size_t>(size - 1 - i)] *= edge_gain(i, edge);
+    }
+}
+
+}  // namespace
+
 void shape_edges(Sound& sound, float seconds) {
     const int size = static_cast<int>(sound.samples.size());
     const int edge = std::min(static_cast<int>(seconds * kCueRate), size / 2);
     for (int i = 0; i < edge; i++) {
-        const float gain =
-            0.5f - 0.5f * std::cos(3.14159265f * static_cast<float>(i) / static_cast<float>(edge));
-        sound.samples[static_cast<size_t>(i)] *= gain;
-        sound.samples[static_cast<size_t>(size - 1 - i)] *= gain;
+        sound.samples[static_cast<size_t>(i)] *= edge_gain(i, edge);
     }
+    fade_out_frames(sound, edge);
+}
+
+void fade_out(Sound& sound, float seconds) {
+    const int size = static_cast<int>(sound.samples.size());
+    fade_out_frames(sound, std::min(static_cast<int>(seconds * kCueRate), size));
 }
 
 void lead_in(Sound& sound, float seconds) {

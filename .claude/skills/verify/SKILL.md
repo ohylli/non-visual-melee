@@ -12,9 +12,9 @@ Four levels, each including the one before it. Choose the one the change calls f
 1. **Quick** (about 1 minute), after any change and while iterating: the build, the style check, the unit tests, a bounded run of the scene the change touches (`title` when none fits), and the drive scripts covering the screen or feature the change touched (a match cue: the match drive scripts below).
 2. **Menus** (about 7 minutes more), after a change to menu speech or to code every screen shares (`hooks.cpp`, the speech subsystem), and before committing a menu feature: all sixteen menu drive scripts.
 3. **Online** (about 4 minutes more), after a change to steering, the pad hook, cues, the online lobby, or anything that could reach game state, input or sound handles: the five `css_net.drive` runs and the `lan_lobby.drive` run.
+4. **Base merge** (about 4 minutes more): the five `css_net.drive` runs and the `lan_lobby.drive` run again against a base port build, alongside the `base-merge` skill's own checks.
 
 After a change to cues or the match tick hook, export `MELEE_A11Y_CUES=1` for every scripted run of the level: without it the cue engine stays closed and the tick hook returns at once, so the runs would not exercise the change.
-4. **Base merge** (about 4 minutes more): the five `css_net.drive` runs and the `lan_lobby.drive` run again against a base port build, alongside the `base-merge` skill's own checks.
 
 ## 2. Run it
 
@@ -26,14 +26,14 @@ Name the level, then each step's result, known failures and reruns included. "Wo
 
 ## Every game run
 
-`SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0` keeps the game window from taking focus away from a running screen reader, `SDL_AUDIO_DRIVER=dummy` sends the game's audio to SDL's silent driver so the run makes no sound (the mixer still runs; `MELEE_AUDIO_DUMP=<file>` captures the mix if it needs inspecting), and `--no-card` keeps the run off the real memory card (the base port then builds a save with everything unlocked, but All-Star and Sound Test appear in the main menu tree only once Start is pressed on the title screen, not from the save itself). Use all three on every agent-started run. A run with cues on (below) also reads and writes the cue settings file, which by default is the maintainer's own in `%APPDATA%\melee-pc`: give a hand-started run `MELEE_A11Y_CUE_SETTINGS=<scratch file>`, and check that it is not empty, since an empty value falls back to the maintainer's file. `drive.py` and `drive_net.py` set it themselves (below). A run with speech on talks through the maintainer's screen reader and interrupts it; add `MELEE_A11Y=0` when the run is not checking speech itself (the log still records each announcement, marked `(off)`). Screenshots are fine when they help.
+`SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0` keeps the game window from taking focus away from a running screen reader, `SDL_AUDIO_DRIVER=dummy` sends the game's audio to SDL's silent driver so the run makes no sound (the mixer still runs; `MELEE_AUDIO_DUMP=<file>` captures the mix if it needs inspecting), and `--no-card` keeps the run off the real memory card (the base port then builds a save with everything unlocked, but All-Star and Sound Test appear in the main menu tree only once Start is pressed on the title screen, not from the save itself). Use all three on every agent-started run. A run with cues on (below) also reads and writes the cue settings file, which by default is the maintainer's own in `%APPDATA%\melee-pc`: give a hand-started run, `tools/smoke_test.py` included (its launcher cases leave speech, and so cues, on), `MELEE_A11Y_CUE_SETTINGS=<scratch file>`. Set but empty, it means no file at all (`[a11y] cue settings: MELEE_A11Y_CUE_SETTINGS is empty; using the defaults, no file`); only unset falls back to the maintainer's file. `drive.py` and `drive_net.py` set it themselves (below). A run with speech on talks through the maintainer's screen reader and interrupts it; add `MELEE_A11Y=0` when the run is not checking speech itself (the log still records each announcement, marked `(off)`). Screenshots are fine when they help.
 
 ## Build, style and unit tests
 
 - Build: `cmake --build build`.
 - Style: `python tools/check_style.py` (needs `clang-format` on `PATH`; covers `src/pc/` only).
 - Unit tests: `cmake --build build --target unit_tests` then `ctest --test-dir build -L melee`. On Windows the suite is `launcher_data`, `version`, `endian`, `thp`, `updater`, `updater_browser` and the fork's own suites, each an `add_test` in `src/pc/a11y/a11y.cmake`; the netplay tests are Linux-only. `cue_engine` writes `build/cue_pulse_train.f32`, which `cue_dump_analysis` then reads through the dump analysis script (it needs the Python CMake found, standard library only). `launcher_data` currently fails on Windows, a base port bug in the test's file handling (it can pass on a first run).
-- `tools/smoke_test.py` runs on Windows only as `MELEE_BIN=<full path to melee.exe> python tools/smoke_test.py --no-disc`; its disc cases isolate save data on Linux only and would touch the real memory card here.
+- `tools/smoke_test.py` runs on Windows only as `MELEE_A11Y_CUE_SETTINGS=<scratch file> MELEE_BIN=<full path to melee.exe> python tools/smoke_test.py --no-disc` (the variable keeps its launcher cases off the maintainer's cue settings); its disc cases isolate save data on Linux only and would touch the real memory card here.
 
 ## Bounded runs
 

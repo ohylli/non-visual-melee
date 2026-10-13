@@ -29,17 +29,10 @@ Sound tick_sound() {
         sound = read_sound(&wave, static_cast<int>(kSeconds * kCueRate));
         ma_waveform_uninit(&wave);
     }
-    const int size = static_cast<int>(sound.samples.size());
-    const int tail = static_cast<int>(kTailSeconds * kCueRate);
-    for (int i = 0; i < size; i++) {
-        float gain = std::exp(-kDecayPerSecond * static_cast<float>(i) / kCueRate);
-        int remaining = size - 1 - i;
-        if (remaining < tail) {
-            gain *= 0.5f - 0.5f * std::cos(3.14159265f * static_cast<float>(remaining) /
-                                           static_cast<float>(tail));
-        }
-        sound.samples[static_cast<size_t>(i)] *= gain;
+    for (size_t i = 0; i < sound.samples.size(); i++) {
+        sound.samples[i] *= std::exp(-kDecayPerSecond * static_cast<float>(i) / kCueRate);
     }
+    fade_out(sound, kTailSeconds);
     lead_in(sound, kLeadInSeconds);
     return sound;
 }

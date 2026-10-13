@@ -21,6 +21,7 @@
 #include "sss_reader.hpp"
 #include <SDL3/SDL.h>
 #include <cstdlib>
+#include <exception>
 #include <dolphin/pad.h>
 #include <memory>
 #include <string>
@@ -50,6 +51,9 @@ std::unique_ptr<a11y::SettingsFile> s_settings_file;
 std::unique_ptr<a11y::MatchCues> s_match_cues;
 /* The last tick read had a match running, since the scene was entered. */
 bool s_match_running = false;
+/* The settings file's count of spoken errors as the scene was entered: one
+ * spoken since then, in the scene's own quiet, is not repeated. */
+int s_problems_at_scene = 0;
 /* The launcher's master volume with mute applied, kept from before the
  * engine opens. */
 float s_master_volume = 1.0f;
@@ -124,10 +128,15 @@ void feed_menu_speech(int center_text, bool refused) {
 }
 
 /* MELEE_A11Y_CUE_SETTINGS, or a11y-cues.ini where the base port keeps its
- * own settings; empty when there is no such folder. UTF-8. */
+ * own settings; empty for no file: no such folder, or the variable set but
+ * empty. UTF-8. */
 std::string cue_settings_path(const a11y::Config& config) {
-    if (!config.cue_settings.empty()) {
-        return config.cue_settings;
+    if (config.cue_settings.has_value()) {
+        if (config.cue_settings->empty() && config.log) {
+            pc_log_line("[a11y] cue settings: MELEE_A11Y_CUE_SETTINGS is empty; using the "
+                        "defaults, no file");
+        }
+        return *config.cue_settings;
     }
     char* folder = SDL_GetPrefPath(nullptr, "melee-pc");
     if (folder == nullptr) {
@@ -152,9 +161,20 @@ void open_cue_settings(const a11y::Config& config) {
     s_match_cues = std::make_unique<a11y::MatchCues>(*s_cue_settings, *s_cues);
     std::string path = cue_settings_path(config);
     if (!path.empty()) {
-        s_settings_file = std::make_unique<a11y::SettingsFile>(
-            *s_settings, *s_speech, "Cue settings", path, config.log);
-        s_settings_file->load(a11y::Clock::now());
+        /* The one place a path from outside meets std::filesystem, which
+         * throws on text that is not UTF-8 (getenv gives the ANSI code page
+         * on Windows); nothing may escape into the game's C. */
+        try {
+            s_settings_file = std::make_unique<a11y::SettingsFile>(
+                *s_settings, *s_speech, "Cue settings", path, config.log);
+            s_settings_file->load(a11y::Clock::now());
+        } catch (const std::exception& error) {
+            s_settings_file.reset();
+            if (config.log) {
+                pc_log_line("[a11y] cue settings: cannot use %s (%s); using the defaults",
+                    path.c_str(), error.what());
+            }
+        }
     }
     s_cue_settings->apply(*s_cues);
 }
@@ -275,6 +295,9 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
         s_cues->stop_all();
     }
     announce_scene(previous_scene, css_exit, scene_kind);
+    if (s_settings_file != nullptr) {
+        s_problems_at_scene = s_settings_file->problems_spoken();
+    }
     /* After the scene's announcement, which interrupts, so an error in the
      * file is queued behind it. A screen that speaks its opening on its
      * first frame still cuts the error off. */
@@ -403,9 +426,13 @@ extern "C" void pc_a11y_match_tick(uint64_t held_mask) {
     A11yMatchState match;
     a11y_game_match_state(local_port, pc_net_active(), held_mask, &match);
     if (match.running) {
-        if (!s_match_running && s_settings_file != nullptr && !s_settings_file->problem().empty()) {
-            /* Said once already, where the scene's own speech may have cut
-             * it off; a match is where the player tunes and listens. */
+        if (!s_match_running && s_settings_file != nullptr && !s_settings_file->problem().empty() &&
+            s_settings_file->problems_spoken() == s_problems_at_scene)
+        {
+            /* Said once already, where an earlier scene's own speech may
+             * have cut it off; a match is where the player tunes and
+             * listens. Said in this scene, as the match scene was entered,
+             * it was heard. */
             s_speech->announce(s_settings_file->problem(), a11y::Mode::queue);
         }
         poll_cue_settings();

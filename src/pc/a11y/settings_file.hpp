@@ -39,6 +39,9 @@ public:
      * to repeat where it will be heard, since speech at startup or at a
      * scene change is easily cut off. */
     const std::string& problem() const { return m_problem; }
+    /* How many times a read's error has been spoken so far, so a caller can
+     * tell whether it was said since a moment it marked. */
+    int problems_spoken() const { return m_problems_spoken; }
 
     static constexpr std::chrono::milliseconds kPollInterval{500};
 
@@ -68,6 +71,7 @@ private:
     std::string m_text; /* the text last read */
     std::vector<std::string> m_unknown_logged;
     std::string m_problem;
+    int m_problems_spoken = 0;
 };
 
 }  // namespace a11y
