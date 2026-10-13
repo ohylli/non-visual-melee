@@ -176,6 +176,9 @@ std::string resolve_loose_path(const char* filename) {
     return dir + "/" + rel;
 }
 
+void store_host_locked(const std::string& key, const uint8_t* host, size_t size, bool from_aram);
+void store_host(const char* filename, const uint8_t* host, size_t size);
+
 bool preload_single_file(const char* name, int entryNum) {
     std::string key = normalize_key(name);
 
@@ -195,7 +198,7 @@ bool preload_single_file(const char* name, int entryNum) {
             if (in.is_open()) {
                 std::vector<uint8_t> buf(st.st_size);
                 in.read(reinterpret_cast<char*>(buf.data()), st.st_size);
-                pc_file_cache_put(key.c_str(), buf.data(), buf.size());
+                store_host(key.c_str(), buf.data(), buf.size());
                 return true;
             }
         }
@@ -224,7 +227,7 @@ bool preload_single_file(const char* name, int entryNum) {
                 (reinterpret_cast<uintptr_t>(raw_mem) + 31) & ~uintptr_t(31));
             s32 bytesRead = DVDReadPrio(&fi, raw_buf, static_cast<s32>(aligned_sz), 0, 1);
             if (bytesRead >= 0) {
-                pc_file_cache_put(key.c_str(), raw_buf, file_len);
+                store_host(key.c_str(), static_cast<const uint8_t*>(raw_buf), file_len);
                 success = true;
             }
             free(raw_mem);
@@ -272,6 +275,44 @@ const uint8_t* resolve_host_src(const void* src, size_t size) {
         return aram + offset;
     }
     return static_cast<const uint8_t*>(src);
+}
+
+/* Stores bytes already in host memory. The file cache's own buffers (a disc
+ * read into a malloc'd buffer, a loose file's vector) go here, never through
+ * pc_file_cache_put: the heap can hand out an address below 0x01000000, which
+ * pc_file_cache_put would take for an ARAM offset and copy ARAM instead of
+ * the file, leaving a garbled archive in the cache. */
+void store_host(const char* filename, const uint8_t* host, size_t size) {
+    if (filename == nullptr || host == nullptr || size == 0) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(s_cacheMutex);
+    store_host_locked(normalize_key(filename), host, size, false);
+}
+
+void store_host_locked(const std::string& key, const uint8_t* host, size_t size, bool from_aram) {
+    if (s_fileCache.find(key) != s_fileCache.end()) {
+        return;
+    }
+
+    bool pinned = is_pinned_file(key);
+    if (!pinned) {
+        evict_lru_locked(size);
+    }
+
+    auto& entry = s_fileCache[key];
+    entry.data.assign(host, host + size);
+    entry.pinned = pinned;
+
+    if (!pinned) {
+        s_lruList.push_front(key);
+        entry.lru_it = s_lruList.begin();
+    }
+    s_totalCacheBytes += size;
+
+    OSReport("[FileCache] STORED: %s (%zu bytes%s, total: %.2f MB)%s\n", key.c_str(), size,
+        pinned ? ", pinned" : "", s_totalCacheBytes / (1024.0 * 1024.0),
+        from_aram ? " [from ARAM]" : "");
 }
 
 }  // namespace
@@ -325,7 +366,7 @@ bool pc_file_cache_get(const char* filename, void* dst, size_t* size) {
                 in.read(reinterpret_cast<char*>(buf.data()), st.st_size);
                 *size = buf.size();
                 std::memcpy(host_dst, buf.data(), buf.size());
-                pc_file_cache_put(key.c_str(), buf.data(), buf.size());
+                store_host(key.c_str(), buf.data(), buf.size());
                 OSReport("[FileCache] LOOSE HIT: %s from %s (%zu bytes, 0ms)%s\n", key.c_str(),
                     loose_path.c_str(), buf.size(), PC_IS_ARAM_ADDR(dst) ? " [ARAM]" : "");
                 return true;
@@ -374,31 +415,8 @@ void pc_file_cache_put(const char* filename, const void* data, size_t size) {
         return;
     }
 
-    std::string key = normalize_key(filename);
-
     std::lock_guard<std::mutex> lock(s_cacheMutex);
-    if (s_fileCache.find(key) != s_fileCache.end()) {
-        return;
-    }
-
-    bool pinned = is_pinned_file(key);
-    if (!pinned) {
-        evict_lru_locked(size);
-    }
-
-    auto& entry = s_fileCache[key];
-    entry.data.assign(host_src, host_src + size);
-    entry.pinned = pinned;
-
-    if (!pinned) {
-        s_lruList.push_front(key);
-        entry.lru_it = s_lruList.begin();
-    }
-    s_totalCacheBytes += size;
-
-    OSReport("[FileCache] STORED: %s (%zu bytes%s, total: %.2f MB)%s\n", key.c_str(), size,
-        pinned ? ", pinned" : "", s_totalCacheBytes / (1024.0 * 1024.0),
-        PC_IS_ARAM_ADDR(data) ? " [from ARAM]" : "");
+    store_host_locked(normalize_key(filename), host_src, size, PC_IS_ARAM_ADDR(data));
 }
 
 bool pc_file_cache_require(const char* filename) {
