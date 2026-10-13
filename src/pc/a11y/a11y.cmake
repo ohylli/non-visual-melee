@@ -51,7 +51,10 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/steerer.cpp
         ${CMAKE_CURRENT_LIST_DIR}/cue_engine.cpp
         ${CMAKE_CURRENT_LIST_DIR}/cue_output.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/cue_sounds.cpp)
+        ${CMAKE_CURRENT_LIST_DIR}/cue_sounds.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/cue_settings.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/settings_file.cpp)
 target_include_directories(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 # game_access.c reads the decomp's structs, so it lays out their bitfields as
 # the game's own files do (melee_game's options in CMakeLists.txt); MinGW's
@@ -296,4 +299,20 @@ if (TARGET unit_tests)
                 ${PROJECT_SOURCE_DIR}/tools/a11y/test_cue_dump.py ${CMAKE_BINARY_DIR}/cue_pulse_train.f32)
         set_tests_properties(cue_dump_analysis PROPERTIES LABELS melee FIXTURES_REQUIRED cue_dump)
     endif ()
+
+    # The settings model and its file against files in a scratch folder, and
+    # the cue settings feeding the cue engine rendered into a buffer; a fake
+    # bridge and its own pc_log_line.
+    add_executable(settings_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_settings.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/settings_file.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/cue_settings.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/cue_engine.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
+    target_include_directories(settings_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(settings_test PRIVATE -UNDEBUG)
+    add_test(NAME settings COMMAND settings_test ${CMAKE_BINARY_DIR}/settings_test)
+    set_tests_properties(settings PROPERTIES LABELS melee)
+    add_dependencies(unit_tests settings_test)
 endif ()

@@ -50,6 +50,10 @@ _Avoid_: Beep, sound effect, SFX, earcon
 The fork's own sound player for cues, with its own output beside the game's audio. Cues that are game sounds go through the game's audio instead.
 _Avoid_: Mixer, audio backend, sound system
 
+**Cue settings**:
+The values that switch, set the loudness of and tune the cues, as one model of named values with a file behind it now and the port menu later. Each value has a key, a default, a range, a unit and a one-line description.
+_Avoid_: Cue config, cue options, tuning file (that is only the model's file), setting (that is the port's)
+
 **Speech log**:
 The developer-facing record of every announcement and cue, written as it happens.
 _Avoid_: TTS log, debug output

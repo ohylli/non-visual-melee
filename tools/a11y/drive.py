@@ -40,6 +40,10 @@ DRight. They drive controller port 1, merged with any real controller there.
 Steering is on (MELEE_A11Y_STEER=1), so on character select the D-pad moves
 the hand from target to target.
 
+Cue settings come from a file of the run's own, --out's path plus
+.cues.ini, removed before the game starts so it is written afresh with the
+defaults; MELEE_A11Y_CUE_SETTINGS in the environment names another.
+
 The run ends with an implicit quit. A failed wait quits too and exits 1, and
 so does the game exiting before the script ends, as on a crash.
 """
@@ -463,6 +467,14 @@ class Game:
             "MELEE_EXIT_AFTER_FRAMES": str(args.max_frames),
             "MELEE_LOG_FILE": os.path.abspath(out) + ".game.log",
         })
+        if not os.environ.get("MELEE_A11Y_CUE_SETTINGS"):
+            # A cue settings file of the run's own, never the maintainer's;
+            # removed first, so each run starts from the defaults. Empty
+            # counts as unset: the game would take the maintainer's file.
+            cue_settings = os.path.abspath(out) + ".cues.ini"
+            if os.path.exists(cue_settings):
+                os.remove(cue_settings)
+            full_env["MELEE_A11Y_CUE_SETTINGS"] = cue_settings
         if not args.speech:
             full_env["MELEE_A11Y"] = "0"
         if not args.sound:

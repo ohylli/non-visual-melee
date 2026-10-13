@@ -3,6 +3,7 @@
 #include "css_reader.hpp"
 #include "cue_engine.hpp"
 #include "cue_output.hpp"
+#include "cue_settings.hpp"
 #include "game_access.h"
 #include "game_text.hpp"
 #include "launcher_speech.hpp"
@@ -13,12 +14,16 @@
 #include "pc/pc.h"
 #include "pc/region.h"
 #include "scene_speech.hpp"
+#include "settings.hpp"
+#include "settings_file.hpp"
 #include "speech.hpp"
 #include "sss_reader.hpp"
+#include <SDL3/SDL.h>
 #include <cstdlib>
 #include <dolphin/pad.h>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -34,6 +39,12 @@ std::unique_ptr<a11y::LobbySpeech> s_lobby;
  * could not open. The output goes first: its callback renders the engine. */
 std::unique_ptr<a11y::CueEngine> s_cues;
 std::unique_ptr<a11y::CueOutput> s_cue_output;
+/* Cue settings (docs/a11y/cues.md): the model, the cues' values in it and
+ * the file behind it, made once the engine opens; the file is null when it
+ * has no path. */
+std::unique_ptr<a11y::Settings> s_settings;
+std::unique_ptr<a11y::CueSettings> s_cue_settings;
+std::unique_ptr<a11y::SettingsFile> s_settings_file;
 /* The launcher's master volume with mute applied, kept from before the
  * engine opens. */
 float s_master_volume = 1.0f;
@@ -107,6 +118,54 @@ void feed_menu_speech(int center_text, bool refused) {
     s_menu_speech->frame(state);
 }
 
+/* MELEE_A11Y_CUE_SETTINGS, or a11y-cues.ini where the base port keeps its
+ * own settings; empty when there is no such folder. UTF-8. */
+std::string cue_settings_path(const a11y::Config& config) {
+    if (!config.cue_settings.empty()) {
+        return config.cue_settings;
+    }
+    char* folder = SDL_GetPrefPath(nullptr, "melee-pc");
+    if (folder == nullptr) {
+        if (config.log) {
+            pc_log_line(
+                "[a11y] cue settings: no settings folder (%s); using the defaults", SDL_GetError());
+        }
+        return "";
+    }
+    std::string path = std::string(folder) + "a11y-cues.ini";
+    SDL_free(folder);
+    return path;
+}
+
+/* The cue settings, once every cue has registered its values: read from the
+ * file and fed to the engine. */
+void open_cue_settings(const a11y::Config& config) {
+    s_settings = std::make_unique<a11y::Settings>();
+    s_cue_settings = std::make_unique<a11y::CueSettings>(*s_settings);
+    /* Each cue registers its values here, before the file is read, so a
+     * value the file lacks is added to it. */
+    std::string path = cue_settings_path(config);
+    if (!path.empty()) {
+        s_settings_file = std::make_unique<a11y::SettingsFile>(
+            *s_settings, *s_speech, "Cue settings", path, config.log);
+        s_settings_file->load(a11y::Clock::now());
+    }
+    s_cue_settings->apply(*s_cues);
+}
+
+/* About twice a second at most, it looks whether the cue settings file
+ * changed and applies what did. Called from scene entry and, in a match,
+ * each tick. */
+void poll_cue_settings() {
+    if (s_settings_file == nullptr) {
+        return;
+    }
+    std::vector<const a11y::Setting*> changed = s_settings_file->poll(a11y::Clock::now());
+    if (!changed.empty()) {
+        s_cue_settings->apply(*s_cues, changed);
+    }
+}
+
 /* Opens the cue engine as the game starts, not on first use: opening the
  * stream takes part of a frame (ADR-0005). */
 void open_cues(const a11y::Config& config) {
@@ -127,7 +186,27 @@ void open_cues(const a11y::Config& config) {
             pc_log_line("[a11y] cue engine could not start: %s", why.c_str());
         }
         s_speech->announce("Audio cues could not start.", a11y::Mode::queue);
+        return;
     }
+    open_cue_settings(config);
+}
+
+/* What a scene's arrival says, for pc_a11y_scene_entered. */
+void announce_scene(int previous_scene, int css_exit, int scene_kind) {
+    if (!game_hook_may_speak()) {
+        return;
+    }
+    /* Arriving on the screen and entry just left, as when character select
+     * goes back, is still an arrival. */
+    s_menu_speech->forget();
+    s_css->forget();
+    s_sss->forget();
+    if (scene_kind == static_cast<int>(a11y::SceneKind::GS_ONLINE_LOBBY) && a11y_game_lan_play()) {
+        /* LAN play's lobby speaks its own opening on its first frame. */
+        s_lobby->entered(a11y::lobby_arrival(previous_scene, css_exit));
+        return;
+    }
+    s_scene_speech->entered(scene_kind, pc_net_active());
 }
 
 }  // namespace
@@ -158,6 +237,9 @@ extern "C" void pc_a11y_shutdown(void) {
     }
     a11y::launcher_speech_stop();
     s_cue_output.reset();
+    s_settings_file.reset();
+    s_cue_settings.reset();
+    s_settings.reset();
     s_cues.reset();
     s_lobby.reset();
     s_sss.reset();
@@ -184,20 +266,11 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
         /* Every cue belongs to the screen it plays on. */
         s_cues->stop_all();
     }
-    if (!game_hook_may_speak()) {
-        return;
-    }
-    /* Arriving on the screen and entry just left, as when character select
-     * goes back, is still an arrival. */
-    s_menu_speech->forget();
-    s_css->forget();
-    s_sss->forget();
-    if (scene_kind == static_cast<int>(a11y::SceneKind::GS_ONLINE_LOBBY) && a11y_game_lan_play()) {
-        /* LAN play's lobby speaks its own opening on its first frame. */
-        s_lobby->entered(a11y::lobby_arrival(previous_scene, css_exit));
-        return;
-    }
-    s_scene_speech->entered(scene_kind, pc_net_active());
+    announce_scene(previous_scene, css_exit, scene_kind);
+    /* After the scene's announcement, which interrupts, so an error in the
+     * file is queued behind it. A screen that speaks its opening on its
+     * first frame still cuts the error off. */
+    poll_cue_settings();
 }
 
 extern "C" void pc_a11y_master_volume(float volume) {

@@ -27,6 +27,9 @@ struct Config {
      * engine's mix and its voices' targets; empty for none. */
     std::string cue_dump;
     std::string cue_trace;
+    /* MELEE_A11Y_CUE_SETTINGS: the cue settings file; empty for the one in
+     * the folder where the base port keeps its settings. */
+    std::string cue_settings;
 };
 
 /* The only place the configuration is read from; swap its body when fork

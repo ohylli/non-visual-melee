@@ -43,6 +43,39 @@ miniaudio 0.11.25 is downloaded at configure and compiled once into its own libr
 - Master volume comes from the `pc_a11y_master_volume` hook in `pc_audio_set_volume`, the launcher's volume with mute applied, kept even before the engine opens. The second stream does not see the game's gain, so the engine applies it itself. The game's sound effect and music sliders do not affect cues.
 - Online, the engine needs no `net_sfx_private`: it never reaches the game's sounds. The hooks that drive cues stay silent while `pc_net_resim()` is true, so voices keep their last targets through a rollback.
 
+## Cue settings
+
+### The model
+
+Cue settings are one model of named values (`settings.hpp`), with a text file as its first front end and the port menu meant as the second. Each value has a key (`cues.volume`), a short label for a menu row, a one-line description, a unit, a default and a range; a switch is a value of 0 or 1. That is enough to draw a switch or a slider for every value, and for the file to explain itself. Values sit in groups, one for all cues and one per cue, and a group's title heads it in the file.
+
+The model knows nothing about any cue. A feature registers its own values and keeps the typed handles it gets back (`Switch`, `Number`), which read the current value without looking up a key, so reading them every tick costs nothing. The model is fork-wide in principle: steering's values could join it later.
+
+### The cues' values
+
+`cue_settings.hpp` registers the values for all cues (a switch and the cue volume, 0 to 100%) and gives every cue the same three of its own through `add_cue`: a switch, its volume and its boost (a factor of 1 to 8 under the volume, for a short click that reads quieter than a held tone). `add_cue` also hands out the cue's number in the engine. The cue then adds its mapping values to the group it got back:
+
+```cpp
+a11y::CueGroup cue = cue_settings.add_cue("your_position", "Your position cue", 1.5f);
+a11y::Number edge_pan = cue.group.add_number({"edge_pan", "Edge pan",
+    "Pan at the main stage's edges.", "", 0.7f, 0.0f, 1.0f, 0.05f});
+```
+
+Every cue registers in `open_cue_settings` (`hooks.cpp`), before the file is read. These values feed the volume chain: the all-cues switch and cue volume become the mix level, each cue's switch, volume and boost its cue level. A switch turned off is a level turned off: the engine glides that cue to silence while its voices keep running underneath, and turning it back on brings them back where they are.
+
+### The file
+
+- **Where.** `a11y-cues.ini` in `SDL_GetPrefPath(NULL, "melee-pc")`, the folder where the base port keeps its own settings (`%APPDATA%\melee-pc` on Windows). `MELEE_A11Y_CUE_SETTINGS=<path>` names another file. `drive.py` and `drive_net.py` set it to a file of each run's own, removed before the run, so no agent run reads or writes the maintainer's file.
+- **What it looks like.** Plain text, one `key = value` a line, each value under its group's `#` heading and right below its description, which ends with the range and the default. A switch is `on` or `off` (also yes, no, true, false, 1, 0); a number may carry its unit (`80%`) and a decimal comma. `#` starts a comment anywhere on a line.
+- **A missing file** is written with every value at its default, so there is something to edit. A value the code has and the file lacks, as after an update that adds a cue, takes its default and is appended to the end of the file under its heading, leaving everything the player wrote as it was. A key the file has and the code does not is logged once and left in the file; the model keeps it too, for a front end that rewrites the whole file.
+- **Errors.** A line that cannot be read keeps its value's last setting, is logged and is spoken as one announcement ("Cue settings, lines 3 and 7 not understood."); the other lines apply. A value out of range is clamped and logged, not spoken.
+
+### Live reload
+
+The file is read once as the engine opens, then `poll` looks at it about twice a second from scene entry and, in a match, from the match tick. Only a file whose time or size changed is read, only a text that changed is parsed, and only values that changed are applied and logged. Deleting the file brings every value back to its default and writes the file afresh. A line removed from the file goes back to its default too.
+
+The spoken error is queued, and speech right at startup or at a scene change can cut it off: the launcher and the screens that speak their opening on their first frame interrupt. `SettingsFile::problem` keeps the last read's error so a later moment, such as a match starting, can say it again.
+
 ## Checking a cue without hearing it
 
 Three records, all off unless asked for:
