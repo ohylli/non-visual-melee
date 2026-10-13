@@ -76,6 +76,51 @@ The file is read once as the engine opens, then `poll` looks at it about twice a
 
 The spoken error is queued, and speech right at startup or at a scene change can cut it off: the launcher and the screens that speak their opening on their first frame interrupt. `SettingsFile::problem` keeps the last read's error so a later moment, such as a match starting, can say it again.
 
+## The match cues
+
+The cues of a match follow one idea: once a tick, read the match into a snapshot, hand the snapshot to each cue's driver, and give the voices the targets the drivers return. Nothing in a match calls the cues; they poll, as the menu readers do (ADR-0003).
+
+```
+gm_RunSimTick --pc_a11y_match_tick--> a11y_game_match_state --> A11yMatchState
+                                                                   |
+     cue settings' values -------------------> drivers (pure) <---+
+                                                  |
+                                                  v
+                                 MatchCues: start, set targets or stop each voice
+```
+
+### The tick hook
+
+`pc_a11y_match_tick(held_mask)` runs right after each simulation tick, beside the replay recorder (`gameplay-state.md`, "The tick hook"), in every scene that ticks. While a rollback re-runs ticks it does nothing, so the voices keep their last targets and pick up from the next tick played for the first time. In a match it also polls the cue settings file, and on the first tick of a match it says the settings file's last error again, if there is one: speech at a scene change may have cut it off, and a match is where the player listens.
+
+### The match snapshot
+
+`A11yMatchState` (`game_access.h`), filled in C by `a11y_game_match_state` because the fighter's struct has bitfields laid out as the game lays them out. It only reads.
+
+- **Running**: a match is on with the local player's fighter on the live fighter list. Outside one, nothing else is filled and nothing sounds.
+- **You**: the player character select follows. Offline the human slot on controller 1, else the first human slot, as when controller 2 started a single-player mode; online the human slot on `pc_net_local_player()`'s port. The slot's main fighter: Nana and the sleeping Zelda or Sheik never count.
+- **Each fighter**: position at the feet, ground or air, out (knocked out or between death and respawn, motion states 0 to 11), whether its input is on (off before GO), its slot and team.
+- **The opponent**: the nearest other slot's main fighter in play, not on your team in a team match, by straight-line distance, chosen afresh each tick. A list of one, so more can come.
+- **Paused**: the game holds the match still on purpose: a pause, the GAME! freeze, a score tally. It comes from the game's pause word, not from the held mask, which a Training pause leaves clear and slow motion sets on its skipped ticks (`gameplay-state.md`, "Pause, freezes and slow motion"). The held mask is kept as `fighters_held`.
+- **The stage frame**: the main floor's ends and height, the blast zones and the camera box, read each tick since some stages move them. The main floor is the lowest floor line across the middle of the blast zones, a solid one before a platform, followed to its surface's ends; the box around every floor would do on most tournament stages but not on Yoshi's Story (`gameplay-state.md`, "The tournament stages' frames").
+
+### Drivers
+
+A driver is a pure function from the snapshot and its cue's mapping values to its voice's targets, or to none when the cue is silent (`position_cue.hpp`). Tests feed it hand-written snapshots (`test_position_cue.cpp`). `MatchCues` (`match_cues.cpp`) owns the rest: it registers each cue's values and voices once, as the cue settings open, and each tick starts a voice that has targets (a start while playing only changes them), and stops one that has none.
+
+So pausing stops a cue and unpausing starts it again: a stop is the engine's 5 ms ramp, and a pulsed voice started from silence pulses at once, which marks the match going on. The log shows both. Each tick of a running match is also a trace tick, numbered on from the first match's first tick, menu ticks left out.
+
+### Your position cue
+
+A tick whose pan says where you are across the stage, whose pitch says how high, and whose speed says how near the opponent is.
+
+- **Pan**, piecewise linear in x: the main floor's centre 0, its ends ±`edge_pan` (0.7), the side blast zones ±1, held there beyond.
+- **Pitch**, piecewise linear in octaves of y: the main floor 1, the camera box's top `up_range` octaves up (1), the bottom blast zone `down_range` octaves down (1), held beyond both.
+- **Interval**: from `slow_interval` (0.8 s) at `far_distance` (120 units) and beyond to `fast_interval` (0.08 s) at `near_distance` (10 units) and closer, interpolated in the log of the interval, so each unit of distance closed speeds the tick by the same ratio. With no opponent, the slow interval.
+- **Silent** outside a match, while paused, before GO and while you are out.
+- **The sound**: the Star Fox 64 fork's aim click, a 1500 Hz sine decaying over 20 ms after 12 ms of lead-in. Its boost starts at 1.5.
+- **Its limits go together.** The tick must end inside the fastest pulse even an octave down, where it plays twice as long: 32 ms there is 64 ms, so the fast interval goes no lower than 0.07 s and the down range no wider than 1 octave. A wider down range or a faster pulse needs a shorter tick first (`MatchCues::kFastestInterval`, `kWidestDownRange`).
+
 ## Checking a cue without hearing it
 
 Three records, all off unless asked for:
@@ -93,5 +138,7 @@ python tools/a11y/cue_dump.py build/drive/cues.f32 --window 0.5 --onsets
 ```
 
 Its measures are simple ones (onsets by a level threshold after 5 ms of quiet, pitch by zero crossings), so two cues sounding at once blur pan and pitch: check one cue at a time, or windows where only one sounds. `--start` and `--end` narrow a long dump; it runs on the standard library alone, about a second per ten seconds of dump.
+
+`tools/a11y/match_position.drive` walks your position cue through a Training match on Final Destination; run it with the trace and the dump, as its header says, and the `verify` skill says what its log and dump show.
 
 The engine's unit tests (`test_cue_engine.cpp`) render it into buffers with no device, and also write a dump of a known pulse train, which `tools/a11y/test_cue_dump.py` reads back through the script.

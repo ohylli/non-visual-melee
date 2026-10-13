@@ -57,6 +57,32 @@ So code at the start of `gm_Scene_Vs_OnFrame` sees the previous tick's finished 
 
 The match scene (`GS_VS`) is shared by VS, Classic, Target Test and more (`native-menus.md`, "Scenes"); Training has its own per-tick function, `gm_Scene_Training_OnFrame`.
 
+### The tick hook
+
+The fork's hook is there: `pc_a11y_match_tick(held_mask)`, right after `pc_slp_tick_end`, with the same mask. It runs in every scene that ticks, menus included, and again for each tick a rollback re-runs, which `hooks.cpp` keeps silent. `a11y_game_match_state` (`game_access.c`) reads the match from it into a snapshot, and the match cues work from that (`cues.md`). Whether a match is on is the snapshot's to say: the local player's slot must have a fighter, and that fighter must be on the live fighter list, which is empty outside a match. The second test keeps a slot's pointer from being followed should it outlive its fighter; the player slots are static and survive every scene.
+
+### Pause, freezes and slow motion
+
+The fighters' bit in the held mask does not tell a pause from slow motion, and misses one pause altogether. The game keeps a direct record: a pause word (`gm_80479D58.unk_10.x0`, read with `gm_801A4624()`; `gm_GetDbPauseFlag(bit)` tests one bit), from which `gm_RunSimTick` derives the mask's paused part. Its bits:
+
+| Bit | Set by | Holds the fighters |
+|---|---|---|
+| 0 | the debug pause (debug builds only) | no, but stops the tick |
+| 1 | a VS pause (`gm_DoPauseChecksAndRoutine`) | yes |
+| 2 | a Training pause: the Training menu is open | no: the fighters' own update stands still on it (`fighter.c`) |
+| 3 | the pause camera | yes |
+| 4 | the GAME! or TIME! freeze | yes |
+| 5 | a single-player mode's score tally | yes |
+| 6 | an event's scripted freeze | yes |
+
+Slow motion (Training's speeds, Slo-Mo Melee, events with a game speed below 1) works differently: the frame timer (`lb_80019880`) runs the simulation on fewer ticks, and a tick it skips holds every GObj list, the fighters' included, with the pause word clear. Measured in Training at half speed, every other tick was held.
+
+So "the match is held still on purpose" is the pause word being nonzero (`A11yMatchState.paused`), and a held mask with a clear pause word is a skipped tick of slow motion. Measured: a VS pause set 0x2 and held the fighters, the GAME! freeze after a last stock 0x10 and held them, and Training's menu set 0x4 with no list held.
+
+### Before GO
+
+The fighters tick from the match's first frame, but their input stays off (`fp->input_disabled`) until GO (`fn_8016B7F8` calls `ftLib_EnableAllInput`). In the debug VS match the fighters stood in `Entry` (322) for about 1.4 seconds before input came on; Training has no Ready and GO, and its fighters' input is on from the start.
+
 ## Players and fighters
 
 ### Player slots
@@ -197,7 +223,8 @@ Every tick `Ground_UpdateMapColl` (`src/melee/gr/ground.c`) moves each joint's p
 - **Which stage**: `stage_info.grkind` (`GrKind`, `src/melee/gr/forward.h`, with English names in its comments) or `Stage_80225194()` for the `StKind` the match rules use. `St_Kind_Last` is Final Destination, not an end marker. Kinds past it are single-player variants (Target Test, Adventure, events) that share a `GrKind` with a VS stage, so a name table keyed by `GrKind` covers every mode. The game has no stage names as text, so the fork will need such a string table, as it has for characters.
 - **Blast zones**: `Stage_GetBlastZoneLeftOffset()`, `…Right…`, `…Top…` and `…Bottom…` (`src/melee/gr/stage.c`), in world units. Mute City moves them mid-match, and the scrolling Adventure stages move the camera offset the getters add in, so read them each tick rather than once.
 - **The camera's box**: `Stage_GetCamBoundsLeftOffset()` and its siblings: the area the camera may show, well inside the blast zones. Between the camera box and the blast zone, a sighted player sees a fighter only in the magnifying glass.
-- **The floors' extent**: `mpLib_80458868[1]` (`mplib.c`) is the bounding box of all enabled floors, updated whenever geometry moves: a ready answer to "how big is the stage". The main stage has no marker of its own; it would come from the islands.
+- **The floors' extent**: `mpLib_80458868[1]` (`mplib.c`) is the bounding box of all enabled floors, platforms included, updated whenever geometry moves: a ready answer to "how big is the stage". The main stage has no marker of its own; it would come from the islands.
+- **The main floor**: the snapshot finds it as the lowest enabled floor line across the middle of the blast zones, a solid floor before a platform, and follows it to its surface's outer ends with `mpFloorGetLeft` and `mpFloorGetRight`. Its height there is the height reference for pitch. Where no floor crosses the middle, the floors' extent stands in. See [The tournament stages' frames](#the-tournament-stages-frames).
 - **Named points**: the stage file holds points read by `Ground_801C2D24(index, &pos)` (`ground.c`): the players' start points (0 to 3), respawn points (4 to 7), item spawn points (0x7F to 0x93), the camera's centre (0x94), and the corners of the camera box (0x95, 0x96) and blast zones (0x97, 0x98). Point 0x7F always reports found, falling back to a stand-in when the stage lacks it, and points 8 and 9 are computed midpoints, not stored ones.
 
 ## Questions the stage can answer
@@ -336,13 +363,30 @@ From the probe, in world units.
 - Camera box: x from -170 to 170, y from -80 to 114.
 - Blast zones: x from -246 to 246, y from -140 to 188.
 
+### The tournament stages' frames
+
+Measured on 2026-10-13 with temporary logging in the tick hook, a debug match of about 40 seconds on each (Final Destination about 15), in world units. "Main floor" is the main floor as the snapshot finds it.
+
+| Stage | Main floor x, at y | Floors' extent, x and y | Camera box top | Blast zones, x and bottom |
+|---|---|---|---|---|
+| Final Destination | ±85.6, 0 | ±85.6, 0 to 0 | 114 | ±246, -140 |
+| Battlefield | ±68.4, 0 | ±68.4, 0 to 54.4 | 136 | ±224, -108.8 |
+| Dream Land | ±77.3, 0 | ±77.3, 0 to 51.4 | 190 | ±255, -123 |
+| Fountain of Dreams | ±63.3, 0 | ±63.3, -1.3 to 42.8 | 112.5 | ±198.8, -146.2 |
+| Pokémon Stadium (neutral) | ±87.8, 0 | ±87.8, 0 to 25 | 120 | ±230, -111 |
+| Yoshi's Story | ±56, 0 | from as far as -103 to 59.5, -33.2 to 42 | 118.3 | -175.7 and 173.6, -91 |
+
+- **The extent is enough on five of the six.** On Battlefield, Final Destination, Dream Land and Pokémon Stadium its sides are the main floor's ends and its bottom the main floor. On Fountain of Dreams a side platform sinking into the stage takes the bottom to -1.3 for a while.
+- **Not on Yoshi's Story.** Randall, the cloud circling the stage, is an enabled platform line: as it passes under the stage it drags the extent's bottom to -33.2 or -13.6, and beside the stage the extent's side out to about -103. Its blast zones are a little off centre, so the middle the snapshot looks across is x = -1. Yoshi's Story's main floor ends in slopes down to y = -3.5 at x = ±56, which `mpFloorGetLeft` and `mpFloorGetRight` follow. Randall also crosses the stage's middle beneath it, which is why a solid floor wins over a platform there.
+- **Not checked**: Pokémon Stadium's other forms (no transformation came within the run) and every stage outside the six.
+
 ## Candidate hook points
 
 By what each would signal. Every one except the first runs inside the simulation, so it runs again during resimulation and has to stay silent then.
 
 | Signal | Where | Notes |
 |---|---|---|
-| A tick has finished | after `HSD_GObj_RunProcs()` in `gm_RunSimTick` (`gmscene.c`), beside `pc_slp_tick_end` | One hook that polls fighters, stage and items, the polling idiom of ADR-0003. It skips ticks where the fighters did not run, and stays silent during resimulation. |
+| A tick has finished | after `HSD_GObj_RunProcs()` in `gm_RunSimTick` (`gmscene.c`), beside `pc_slp_tick_end` | Built: `pc_a11y_match_tick`, see [The tick hook](#the-tick-hook). One hook that polls fighters, stage and items, the polling idiom of ADR-0003, and stays silent during resimulation. |
 | Took damage | `Fighter_TakeDamage_8006CC7C` (`fighter.c`) | Has the fighter and the amount. Healing bypasses it. |
 | Lost a stock | `ftCo_800D34E0` (`ft_0D31.c`) | Has the fighter and the attacker. Delayed for star and screen KOs. |
 | Stage loaded | end of `fn_8016E730` (`gmvs.c`) | The match setup VS and Training share. Blast zones, camera box, points and collision are ready. |

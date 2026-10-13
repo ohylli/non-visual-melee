@@ -8,6 +8,7 @@
 #include "game_text.hpp"
 #include "launcher_speech.hpp"
 #include "lobby_speech.hpp"
+#include "match_cues.hpp"
 #include "menu_speech.hpp"
 #include "menu_text.hpp"
 #include "pc/net.h"
@@ -45,6 +46,10 @@ std::unique_ptr<a11y::CueOutput> s_cue_output;
 std::unique_ptr<a11y::Settings> s_settings;
 std::unique_ptr<a11y::CueSettings> s_cue_settings;
 std::unique_ptr<a11y::SettingsFile> s_settings_file;
+/* The cues of a match, made with the cue settings. */
+std::unique_ptr<a11y::MatchCues> s_match_cues;
+/* The last tick read had a match running, since the scene was entered. */
+bool s_match_running = false;
 /* The launcher's master volume with mute applied, kept from before the
  * engine opens. */
 float s_master_volume = 1.0f;
@@ -144,6 +149,7 @@ void open_cue_settings(const a11y::Config& config) {
     s_cue_settings = std::make_unique<a11y::CueSettings>(*s_settings);
     /* Each cue registers its values here, before the file is read, so a
      * value the file lacks is added to it. */
+    s_match_cues = std::make_unique<a11y::MatchCues>(*s_cue_settings, *s_cues);
     std::string path = cue_settings_path(config);
     if (!path.empty()) {
         s_settings_file = std::make_unique<a11y::SettingsFile>(
@@ -237,6 +243,7 @@ extern "C" void pc_a11y_shutdown(void) {
     }
     a11y::launcher_speech_stop();
     s_cue_output.reset();
+    s_match_cues.reset();
     s_settings_file.reset();
     s_cue_settings.reset();
     s_settings.reset();
@@ -262,6 +269,7 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
     s_css_exit = A11Y_CSS_STAYING;
     s_css_to_rules = false;
     s_css_menu_fed = false;
+    s_match_running = false;
     if (s_cues != nullptr) {
         /* Every cue belongs to the screen it plays on. */
         s_cues->stop_all();
@@ -385,6 +393,25 @@ extern "C" void pc_a11y_lobby_frame(const OnlineLobbyView* view) {
     A11yLobbyState state;
     a11y_game_lobby_state(view, &state);
     s_lobby->frame(state);
+}
+
+extern "C" void pc_a11y_match_tick(uint64_t held_mask) {
+    if (!game_hook_may_speak() || s_match_cues == nullptr) {
+        return;
+    }
+    int local_port = pc_net_active() ? pc_net_local_player() : 0;
+    A11yMatchState match;
+    a11y_game_match_state(local_port, pc_net_active(), held_mask, &match);
+    if (match.running) {
+        if (!s_match_running && s_settings_file != nullptr && !s_settings_file->problem().empty()) {
+            /* Said once already, where the scene's own speech may have cut
+             * it off; a match is where the player tunes and listens. */
+            s_speech->announce(s_settings_file->problem(), a11y::Mode::queue);
+        }
+        poll_cue_settings();
+    }
+    s_match_running = match.running;
+    s_match_cues->tick(match);
 }
 
 extern "C" bool pc_a11y_pad(PADStatus* pad) {

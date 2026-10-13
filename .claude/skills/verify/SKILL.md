@@ -9,9 +9,11 @@ The agent cannot hear the game, so verification reads the game's log: every anno
 
 Four levels, each including the one before it. Choose the one the change calls for by your own judgement, unless the maintainer names one; when torn between two, take the higher. Times are from one sequential run on the maintainer's machine. Nearly all of it is the game running scripts in real time, and a failed wait adds its timeout.
 
-1. **Quick** (about 1 minute), after any change and while iterating: the build, the style check, the unit tests, a bounded run of the scene the change touches (`title` when none fits), and the drive scripts covering the screen or feature the change touched.
+1. **Quick** (about 1 minute), after any change and while iterating: the build, the style check, the unit tests, a bounded run of the scene the change touches (`title` when none fits), and the drive scripts covering the screen or feature the change touched (a match cue: the match drive scripts below).
 2. **Menus** (about 7 minutes more), after a change to menu speech or to code every screen shares (`hooks.cpp`, the speech subsystem), and before committing a menu feature: all sixteen menu drive scripts.
 3. **Online** (about 4 minutes more), after a change to steering, the pad hook, cues, the online lobby, or anything that could reach game state, input or sound handles: the five `css_net.drive` runs and the `lan_lobby.drive` run.
+
+After a change to cues or the match tick hook, export `MELEE_A11Y_CUES=1` for every scripted run of the level: without it the cue engine stays closed and the tick hook returns at once, so the runs would not exercise the change.
 4. **Base merge** (about 4 minutes more): the five `css_net.drive` runs and the `lan_lobby.drive` run again against a base port build, alongside the `base-merge` skill's own checks.
 
 ## 2. Run it
@@ -70,6 +72,23 @@ A bounded run boots straight into a scene and exits after a fixed frame count:
 - `results.drive`: results after a one-stock debug match the player walks out of, its announcement, and two Starts after the announcer leaving it. It needs the debug match switches: `MELEE_DEBUG_VS=cpu MELEE_DEBUG_VS_STOCKS=1 MELEE_DEBUG_VS_STAGE=31 python tools/a11y/drive.py tools/a11y/results.drive`.
 
 Flakes: a step that logs "no pad change seen for that press" lost its press to the input driver; rerun before suspecting speech. A press can also land a frame off with no such line (a cursor back where it was); a script that fails once and passes on an unchanged rerun lost a press too.
+
+Venom crashes the base port as its match starts, every time, cues on or off (found 2026-10-13; an access violation reading 0xFFFFFFFFFFFFFFFF in `lb_8000B1CC`, called from `grVenom_8020454C`; a bounded `vs` run with `MELEE_DEBUG_VS_STAGE=22` shows it). `css_training.drive` picks a random stage and `css_classic.drive` meets a random first one, so either fails whenever that stage is Venom (`game exited with code 3221225477` and a `[FATAL] crash` in the log; `speak interrupt (off): "Random: Venom."` before it in `css_training.drive`): rerun.
+
+## Match drive scripts
+
+`tools/a11y/match_position.drive` checks your position cue (primer `docs/a11y/cues.md`, "The match cues") in a Training match on Final Destination: Pichu against a standing CPU, about 45 seconds. Run it with cues on and both records:
+
+```
+MELEE_A11Y_CUES=1 MELEE_A11Y_CUE_TRACE=build/drive/match.trace MELEE_A11Y_CUE_DUMP=build/drive/match.f32 \
+  python tools/a11y/drive.py tools/a11y/match_position.drive
+```
+
+- **The log.** Six `[a11y] cue your position` lines, `grep -c '\[a11y\] cue your position st' build/drive/last.log` printing 6: the start as the match begins (`start pan -0.49 pitch 1.06 gain 1.00 interval 0.800`, Pichu on the left, the CPU far off), then stop and start for the Training menu, stop and start for it again with half speed chosen, and a stop when it opens a last time before Finish. Half speed holds the fighters every other tick and must not stop the cue: a seventh line means it did, or that Pichu fell (a stop with `pitch 0.50` below the floor; the script also fails then, waiting for the first pause's stop on the floor). The scene change comes with the cue already stopped, so it logs nothing of its own.
+- **The trace.** Pan follows the walk: about -0.49 at the start, -0.66 at the left edge's slide (x = -80.8), past -0.7 off the edge and back, rising through 0 on the run right to about +0.6 beyond the CPU; pitch dips just under 1 below the floor and rises with each jump; the interval falls from 0.800 to about 0.08 as Pichu comes near the CPU. Pan p inverts to x = p / 0.7 × 85.6 on Final Destination's main floor.
+- **The dump.** `python tools/a11y/cue_dump.py build/drive/match.f32 --window 0.5 --start 22 --end 39` (the match starts about 22 s into the run; take the start from the dump's first non-silent window): the pan column swings from about -0.66 to about +0.6, the interval column falls from 0.800 to about 0.08, windows during the menu are silent, and the half speed windows keep pulsing.
+
+Runs of the other scripts with `MELEE_A11Y_CUES=1` meet the cue too: `css_setup.drive`, `css_classic.drive`, `css_training.drive` and the four stage select scripts each log one `cue your position start` as their match begins, `results.drive` a start and the stop of its fall, and each `css_net.drive` instance one start of its own player's cue (pan about -0.79 on a, +0.79 on b).
 
 ## Online runs
 

@@ -1,5 +1,6 @@
 #include "gmscene.h"
 #ifdef TARGET_PC
+#include "pc/a11y/a11y_hooks.h"
 #include "pc/net.h"
 #include "pc/pc.h"
 #include "pc/slp.h"
@@ -331,6 +332,7 @@ static bool gm_RunSimTick(void (*on_frame)(void), struct gm_80479D58_t* temp_r25
     HSD_GObj_RunProcs();
 #ifdef TARGET_PC
     pc_slp_tick_end(temp_r25->unk_10.unk_28);
+    pc_a11y_match_tick(temp_r25->unk_10.unk_28);
 #endif
     if (temp_r25->unk_0 != -2) {
         temp_r25->unk_0++;

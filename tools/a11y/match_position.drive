@@ -1,0 +1,126 @@
+# Your position cue in a Training match on Final Destination: Pichu (player
+# 1) against a standing CPU. Pichu dashes to near the left edge, runs off
+# it and comes back with a jump, runs right and jumps over the CPU to near
+# the right edge, then the Training menu pauses the match and closes again,
+# and Finish leaves it. The cue starts at the match, stops and starts with the pause,
+# and stays on through the menu's half speed, whose skipped ticks are no
+# pause.
+# Run with cues on and a trace and a dump to check the pan, pitch and pulse:
+#   MELEE_A11Y_CUES=1 MELEE_A11Y_CUE_TRACE=build/drive/match.trace \
+#     MELEE_A11Y_CUE_DUMP=build/drive/match.f32 \
+#     python tools/a11y/drive.py tools/a11y/match_position.drive
+# then python tools/a11y/cue_dump.py build/drive/match.f32 --onsets.
+# drive.py turns steering on (MELEE_A11Y_STEER=1); --no-card unlocks every
+# stage.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$"
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# 1-P Mode, Training.
+press A
+wait '"1-P Mode\. Regular Match\. '
+sleep 0.3
+press Down
+wait '"Event Match\. '
+press Down
+wait '"Stadium\. '
+press Down
+wait '"Training\. '
+sleep 0.3
+press A
+wait '"Training character select\. Player 1, no character\. CPU, (?P<cpu>.+)\."$'
+sleep 1
+
+# Pichu, which makes the match ready (tools/a11y/css_training.drive).
+press DUp
+wait ': "Pichu(, the CPU.s coin)?"$'
+wait 'glide to "Pichu[^"]*" ended after \d+ frames: arrived'
+press A
+wait 'Ready to fight\. Press Start\.'
+sleep 0.5
+press Start
+wait '"Stage select\. '
+sleep 1
+
+# Final Destination, at the end of the bottom row.
+press DDown
+wait ': "Icicle Mountain\. '
+search ': "Final Destination\. ' DDown*4 DRight*5
+wait 'glide to "Final Destination" ended after \d+ frames: arrived'
+press A
+
+# Training has no Ready and GO: the cue starts once the fighters land, with
+# Pichu on the left half (pan below 0) and the CPU far on the right (the
+# slow pulse).
+wait 'cue your position start pan -0\.\d+ pitch [\d.]+ gain 1\.00 interval 0\.800' 60
+sleep 1
+
+# A press returns once the game sees it, and the hold goes on meanwhile, so
+# each sleep below covers its press's hold.
+
+# One dash left: let go, it slides on to near the left edge. A second dash
+# would run off it: only a slide stops at the end of the floor.
+press Left 100
+sleep 1.6
+
+# Off the left edge at a run, falling below the floor, and back with the
+# midair jump.
+press Left 200
+sleep 0.3
+press X+Right 200
+sleep 0.2
+press Right 400
+sleep 2
+
+# Another dash left, sliding on to near the edge again, so the run below
+# starts where it always does.
+press Left 100
+sleep 1.6
+
+# A run right, let go short of the CPU, and the pulse quickens on the way;
+# then a standing jump over the CPU, landing near the right edge.
+press Right 1000
+sleep 2
+press X+Right 250
+sleep 0.25
+press Right 200
+sleep 1.7
+
+# The Training menu pauses the match: the cue stops, and starts again when
+# Start closes the menu. Pichu stands on the right half (a fall would have
+# stopped the cue below the floor).
+press Start
+wait 'cue your position stop pan 0\.\d+ pitch 1\.00 '
+sleep 1
+press Start
+wait 'cue your position start '
+sleep 1
+
+# Half speed from the menu's first row: the fighters skip ticks, which is no
+# pause, so the cue plays on through a walk; then full speed again.
+press Start
+wait 'cue your position stop '
+sleep 0.5
+press Right
+sleep 0.3
+press Right
+sleep 0.3
+press Start
+wait 'cue your position start '
+press Left 300
+sleep 1.5
+press Start
+wait 'cue your position stop '
+sleep 0.5
+press Left
+sleep 0.3
+press Left
+sleep 0.3
+
+# Finish, the menu's last row, leaves Training for character select.
+search 'boot scene: state \d+ scene' Up A
+sleep 2

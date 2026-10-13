@@ -8,12 +8,13 @@ namespace {
 
 constexpr const char* kGroup = "cues";
 
-/* "Your position cue" as it reads inside a sentence. */
+/* A cue's title as it reads inside a sentence: "the gap warning", but
+ * "your position cue". */
 std::string in_sentence(std::string title) {
     if (!title.empty()) {
         title[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(title[0])));
     }
-    return title;
+    return title.starts_with("your ") ? title : "the " + title;
 }
 
 bool touches(const std::vector<const Setting*>& changed, const Setting& setting) {
@@ -40,12 +41,10 @@ CueGroup CueSettings::add_cue(
     const std::string& id, const std::string& title, float default_boost) {
     SettingsGroup group = m_settings.group(id, title);
     std::string name = in_sentence(title);
-    Switch on =
-        group.add_switch(SwitchSpec{"on", title, "Turns the " + name + " on or off.", true});
+    Switch on = group.add_switch(SwitchSpec{"on", title, "Turns " + name + " on or off.", true});
     Number volume = group.add_number(NumberSpec{"volume", title + " volume",
-        "The loudness of the " + name + ", under the cue volume.", "%", 100.0f, 0.0f, 100.0f,
-        5.0f});
-    std::string lifts = "Lifts the " + name +
+        "The loudness of " + name + ", under the cue volume.", "%", 100.0f, 0.0f, 100.0f, 5.0f});
+    std::string lifts = "Lifts " + name +
                         " under its volume, for a sound that reads quieter "
                         "than the others at the same volume.";
     Number boost = group.add_number(NumberSpec{

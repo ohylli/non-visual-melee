@@ -131,6 +131,15 @@ void pc_a11y_sss_cursor(float x, float y, int stick_x, int stick_y);
 struct OnlineLobbyView;
 void pc_a11y_lobby_frame(const struct OnlineLobbyView* view);
 
+/* A simulation tick has run (gm_RunSimTick in src/melee/gm/gmscene.c, right
+ * after the replay recorder's pc_slp_tick_end), in every scene that ticks,
+ * menus included: every GObj has updated and the fighters' collisions are
+ * settled. held_mask has a bit set for each GObj list the tick held still
+ * (1 << HSD_GOBJ_PLINK_FIGHTER for the fighters). The match cues read the
+ * match here (docs/a11y/cues.md). Reached again for re-run ticks during a
+ * rollback. */
+void pc_a11y_match_tick(uint64_t held_mask);
+
 /* Port 1's virtual pad is about to be published (publish_locked in
  * src/pc/keyboard.c, once per video frame, after the keyboard, the key
  * driver and a GameCube adapter are merged). The one place the fork writes:

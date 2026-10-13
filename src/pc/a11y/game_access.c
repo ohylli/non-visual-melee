@@ -9,20 +9,29 @@
 #include "scene_kinds.h"
 #include "stage_kinds.h"
 #include <melee/ft/forward.h>
+#include <melee/ft/inlines.h>
+#include <melee/ft/kinds/ftCommon/forward.h>
+#include <melee/ft/types.h>
 #include <melee/gm/forward.h>
 #include <melee/gm/gmmain_lib.h>
 #include <melee/gm/gmonlinemode.h>
+#include <melee/gm/gmscene.h>
+#include <melee/gm/gmvs.h>
 #include <melee/gm/types.h>
 #include <melee/gr/forward.h>
+#include <melee/gr/stage.h>
 #include <melee/lb/lb_00B0.h>
 #include <melee/lb/lbspdisplay.h>
 #include <melee/mn/forward.h>
 #include <melee/mn/mnmain.h>
 #include <melee/mn/mnonline.h>
 #include <melee/mn/types.h>
+#include <melee/mp/mplib.h>
 #include <melee/pl/forward.h>
+#include <melee/pl/player.h>
 #include <string.h>
 #include <sysdolphin/baselib/controller.h>
+#include <sysdolphin/baselib/gobj.h>
 #include <sysdolphin/baselib/sislib.h>
 #include <sysdolphin/baselib/synth.h>
 
@@ -642,4 +651,160 @@ void a11y_game_lobby_state(const OnlineLobbyView* view, A11yLobbyState* out) {
 
 bool a11y_game_lan_play(void) {
     return gmOnline_GetKind() == ONLINE_KIND_LAN;
+}
+
+/* The slot's main fighter, or NULL. The player slots are static and
+ * survive every scene, so the fighter must also be on the live fighter
+ * list, which is empty outside a match: a slot's pointer that outlived its
+ * fighter is never followed. */
+static Fighter* match_fighter(int slot) {
+    Gm_PKind kind = Player_GetPlayerSlotType(slot);
+    if (kind == Gm_PKind_NA) {
+        return NULL;
+    }
+    HSD_GObj* entity = Player_GetEntity(slot);
+    if (entity == NULL) {
+        return NULL;
+    }
+    for (HSD_GObj* g = HSD_GObjPLinkHead[HSD_GOBJ_PLINK_FIGHTER]; g != NULL; g = g->next) {
+        if (g == entity) {
+            return g->classifier == HSD_GOBJ_CLASS_FIGHTER ? GET_FIGHTER(g) : NULL;
+        }
+    }
+    return NULL;
+}
+
+static void match_fighter_state(int slot, const Fighter* fp, A11yMatchFighter* out) {
+    out->slot = slot;
+    out->x = fp->cur_pos.x;
+    out->y = fp->cur_pos.y;
+    out->airborne = fp->ground_or_air == GA_Air;
+    out->out = fp->motion_id >= ftCo_MS_DeadDown && fp->motion_id <= ftCo_MS_Sleep;
+    out->can_move = !fp->input_disabled;
+    out->team = Player_GetTeam(slot);
+}
+
+/* The main floor (A11yStageFrame): false when no enabled floor line
+ * crosses x. A solid floor wins over a platform, which can be jumped and
+ * dropped through: Yoshi's Story's cloud passes under the stage's middle.
+ * Reads the lines between ticks, which changes nothing. */
+static bool match_main_floor(float x, A11yStageFrame* out) {
+    int line_count = mpLib_8004D164()->line_count;
+    int best = -1;
+    bool best_solid = false;
+    float best_y = 0.0F;
+    for (int id = 0; id < line_count; id++) {
+        if (mpLineGetKind(id) != CollLine_Floor || !mpLib_80054ED8(id)) {
+            continue;
+        }
+        Vec3 a;
+        Vec3 b;
+        mpLineGetV0Pos(id, &a);
+        mpLineGetV1Pos(id, &b);
+        if (x < a.x || x > b.x || a.x >= b.x) {
+            continue;
+        }
+        float y = a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x);
+        bool solid = !(mpLineGetFlags(id) & LINE_FLAG_PLATFORM);
+        if (best < 0 || (solid && !best_solid) || (solid == best_solid && y < best_y)) {
+            best = id;
+            best_solid = solid;
+            best_y = y;
+        }
+    }
+    if (best < 0) {
+        return false;
+    }
+    Vec3 end;
+    mpFloorGetLeft(best, &end);
+    out->floor_left = end.x;
+    mpFloorGetRight(best, &end);
+    out->floor_right = end.x;
+    out->floor_y = best_y;
+    return true;
+}
+
+/* The slot the local player plays: see A11yMatchState.you. */
+static int match_your_slot(int local_port, bool online) {
+    int first_human = -1;
+    for (int slot = 0; slot < Gm_Player_NumMax; slot++) {
+        if (Player_GetPlayerSlotType(slot) != Gm_PKind_Human) {
+            continue;
+        }
+        if (Player_GetPadPort(slot) == local_port) {
+            return slot;
+        }
+        if (first_human < 0) {
+            first_human = slot;
+        }
+    }
+    return online ? -1 : first_human;
+}
+
+void a11y_game_match_state(int local_port, bool online, uint64_t held_mask, A11yMatchState* out) {
+    memset(out, 0, sizeof(*out));
+    int your_slot = match_your_slot(local_port, online);
+    const Fighter* you = your_slot >= 0 ? match_fighter(your_slot) : NULL;
+    if (you == NULL) {
+        return;
+    }
+    /* The box around the enabled floors, computed when a stage's geometry
+     * is set up or moves, and left inside out until then. */
+    const mpCollisionBox* floors = &mpLib_80458868[1];
+    if (floors->left > floors->right || floors->bottom > floors->top) {
+        return;
+    }
+    out->running = true;
+    /* The pause word (gm_80479D58.unk_10.x0): bit 1 a VS pause, 2 a
+     * Training pause, 3 the pause camera, 4 the GAME! freeze, 5 a
+     * single-player score tally, 6 an event's freeze, 0 the debug pause. A
+     * slow-motion mode skips ticks through the frame timer instead and
+     * leaves it clear. A Training pause holds no GObj list: the fighters'
+     * own update stands still on bit 2. */
+    out->paused = gm_801A4624() != 0;
+    out->fighters_held = (held_mask & (1ULL << HSD_GOBJ_PLINK_FIGHTER)) != 0;
+    match_fighter_state(your_slot, you, &out->you);
+
+    bool teams = gm_8016B168();
+    float nearest = 0.0F; /* squared */
+    for (int slot = 0; slot < Gm_Player_NumMax; slot++) {
+        if (slot == your_slot) {
+            continue;
+        }
+        const Fighter* fp = match_fighter(slot);
+        if (fp == NULL) {
+            continue;
+        }
+        A11yMatchFighter other;
+        match_fighter_state(slot, fp, &other);
+        if (other.out || (teams && other.team == out->you.team)) {
+            continue;
+        }
+        float dx = other.x - out->you.x;
+        float dy = other.y - out->you.y;
+        float squared = dx * dx + dy * dy;
+        if (out->opponent_count == 0 || squared < nearest) {
+            nearest = squared;
+            out->opponents[0] = other;
+            out->opponent_count = 1;
+        }
+    }
+
+    A11yStageFrame* stage = &out->stage;
+    stage->blast_left = Stage_GetBlastZoneLeftOffset();
+    stage->blast_right = Stage_GetBlastZoneRightOffset();
+    stage->blast_top = Stage_GetBlastZoneTopOffset();
+    stage->blast_bottom = Stage_GetBlastZoneBottomOffset();
+    stage->camera_left = Stage_GetCamBoundsLeftOffset();
+    stage->camera_right = Stage_GetCamBoundsRightOffset();
+    stage->camera_top = Stage_GetCamBoundsTopOffset();
+    stage->camera_bottom = Stage_GetCamBoundsBottomOffset();
+    /* The floors' box alone would do on most tournament stages, but on
+     * Yoshi's Story the cloud circling the stage drags its bottom down to
+     * -33 and its sides out past the main floor's. */
+    if (!match_main_floor((stage->blast_left + stage->blast_right) / 2.0F, stage)) {
+        stage->floor_left = floors->left;
+        stage->floor_right = floors->right;
+        stage->floor_y = floors->bottom;
+    }
 }

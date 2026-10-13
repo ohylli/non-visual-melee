@@ -54,6 +54,10 @@ _Avoid_: Mixer, audio backend, sound system
 The values that switch, set the loudness of and tune the cues, as one model of named values with a file behind it now and the port menu later. Each value has a key, a default, a range, a unit and a one-line description.
 _Avoid_: Cue config, cue options, tuning file (that is only the model's file), setting (that is the port's)
 
+**Position cue**:
+A pulsed cue whose pan and pitch say where a fighter is on the stage: pan across it, pitch how high. Two are planned: **your position cue**, whose pulse also quickens as the opponent comes near, and **the opponent's position cue**.
+_Avoid_: Locator, radar, beacon, player cue
+
 **Speech log**:
 The developer-facing record of every announcement and cue, written as it happens.
 _Avoid_: TTS log, debug output

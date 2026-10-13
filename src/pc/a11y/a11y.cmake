@@ -54,15 +54,16 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/cue_sounds.cpp
         ${CMAKE_CURRENT_LIST_DIR}/cue_settings.cpp
         ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/settings_file.cpp)
+        ${CMAKE_CURRENT_LIST_DIR}/settings_file.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/position_cue.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/match_cues.cpp)
 target_include_directories(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 # game_access.c reads the decomp's structs, so it lays out their bitfields as
 # the game's own files do (melee_game's options in CMakeLists.txt); MinGW's
-# default layout moves every field after one.
-if (WIN32)
-    set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/game_access.c
-            PROPERTIES COMPILE_OPTIONS -mno-ms-bitfields)
-endif ()
+# default layout moves every field after one. The fighter's headers also bring
+# the big-endian disc structs, whose warning the game's files turn off too.
+set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/game_access.c PROPERTIES COMPILE_OPTIONS
+        "$<$<BOOL:${WIN32}>:-mno-ms-bitfields>;$<$<C_COMPILER_ID:GNU>:-Wno-scalar-storage-order>")
 
 if (A11Y_PRISM_ASSET)
     # Prebuilt, not built from source: see docs/adr/0001-prebuilt-prism-dll.md.
@@ -315,4 +316,14 @@ if (TARGET unit_tests)
     add_test(NAME settings COMMAND settings_test ${CMAKE_BINARY_DIR}/settings_test)
     set_tests_properties(settings PROPERTIES LABELS melee)
     add_dependencies(unit_tests settings_test)
+
+    # The position cues' driver against hand-written match snapshots.
+    add_executable(position_cue_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_position_cue.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/position_cue.cpp)
+    target_include_directories(position_cue_test PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(position_cue_test PRIVATE -UNDEBUG)
+    add_test(NAME position_cue COMMAND position_cue_test)
+    set_tests_properties(position_cue PROPERTIES LABELS melee)
+    add_dependencies(unit_tests position_cue_test)
 endif ()

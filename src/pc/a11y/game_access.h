@@ -480,6 +480,82 @@ void a11y_game_lobby_state(const struct OnlineLobbyView* view, A11yLobbyState* o
 /* True when the online mode was entered for LAN play. */
 bool a11y_game_lan_play(void);
 
+/* A match, read once a tick by the match cues (docs/a11y/cues.md, "The
+ * match snapshot"), in world units: x grows to the right, y upwards. */
+
+/* One player slot's main fighter: the slot's active fighter, so Nana and
+ * the sleeping form of Zelda or Sheik never count. */
+typedef struct A11yMatchFighter {
+    int slot;
+    /* At the fighter's feet (cur_pos). */
+    float x;
+    float y;
+    bool airborne;
+    /* Knocked out, or between death and respawn (motion states 0 to 11). On
+     * the respawn platform it is back in play. */
+    bool out;
+    /* Its input is on: from GO, when the game enables every fighter's. */
+    bool can_move;
+    /* Its team in a team match, as the slot holds it. */
+    int team;
+} A11yMatchFighter;
+
+/* Where on the stage, read fresh each tick because some stages move it. */
+typedef struct A11yStageFrame {
+    /* The main floor: the lowest enabled floor line across the middle of
+     * the blast zones, a platform only where no solid floor crosses it,
+     * followed through the floor lines joined to it to its surface's outer
+     * ends. Where no floor crosses the middle, the box around every enabled
+     * floor stands in (mpLib_80458868[1]). */
+    float floor_left;
+    float floor_right;
+    /* Its height across the middle: the height reference. */
+    float floor_y;
+    /* Outside these a fighter is knocked out (the top one only in some
+     * states). */
+    float blast_left;
+    float blast_right;
+    float blast_top;
+    float blast_bottom;
+    /* The area the camera may show, well inside the blast zones. */
+    float camera_left;
+    float camera_right;
+    float camera_top;
+    float camera_bottom;
+} A11yStageFrame;
+
+/* Opponents the snapshot keeps: the nearest one for now. */
+enum { A11Y_MATCH_OPPONENTS = 1 };
+
+typedef struct A11yMatchState {
+    /* A match with your fighter in it is on, and the stage's frame is
+     * known. Nothing below is filled otherwise. */
+    bool running;
+    /* The game holds the match still on purpose: a player paused (VS or
+     * Training), the GAME! freeze, a single-player mode's score tally, an
+     * event's scripted freeze. A slow-motion mode's skipped ticks are not
+     * paused; they only hold the fighters. */
+    bool paused;
+    /* The fighters' updates did not run this tick: paused, or a skipped
+     * tick of slow motion. */
+    bool fighters_held;
+    /* The player the match cues follow, as character select does: offline
+     * the human slot on controller 1, else the first human slot (a
+     * single-player mode started from another controller); online the
+     * human slot on pc_net_local_player()'s port. */
+    A11yMatchFighter you;
+    /* The nearest other slot's main fighter in play, not on your team in a
+     * team match, by straight-line distance; none when nobody is in play. */
+    int opponent_count;
+    A11yMatchFighter opponents[A11Y_MATCH_OPPONENTS];
+    A11yStageFrame stage;
+} A11yMatchState;
+
+/* Fills the snapshot after a simulated tick (pc_a11y_match_tick). local_port
+ * is the controller port the local player plays on; held_mask is the tick's
+ * mask of GObj lists held still. Reads only. */
+void a11y_game_match_state(int local_port, bool online, uint64_t held_mask, A11yMatchState* out);
+
 #ifdef __cplusplus
 }
 #endif
