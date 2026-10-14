@@ -18,7 +18,7 @@ After a change to cues or the match tick hook, export `MELEE_A11Y_CUES=1` for ev
 
 ## 2. Run it
 
-`python tools/a11y/run_level.py` runs drive scripts side by side and reports each: `menus` and `online` name the levels' sets, script names (`css_steps sss_hover`) the quick level's, in one call (`run_level.py menus online`). Its `--help` has the rest. Games running at once each need their own shader cache slot (below) and UDP ports, which the runner hands out; start no other game run beside it. Done means every step of the level passed, or each failure is a known one below or a flake that passed on an unchanged rerun (`run_level.py <name>` reruns one).
+`python tools/a11y/run_level.py` runs drive scripts side by side and reports each: `menus` and `online` name the levels' sets, script names (`css_steps sss_hover`) the quick level's, in one call (`run_level.py menus online`). Its `--help` has the rest. Games running at once each need their own shader cache slot (below) and UDP ports, which the runner hands out; start no other game run beside it. Done means every step of the level passed, or each failure is a known one below or a flake that passed on an unchanged rerun: `run_level.py <name>` reruns one by the name its line printed, an online run included (`run_level.py lan_lobby --base-b <dir>`, the same `--base-b` as the level's).
 
 ## 3. Report
 
@@ -71,7 +71,7 @@ A bounded run boots straight into a scene and exits after a fixed frame count:
 - `sss_glide_pick.drive`: A pressed during a glide picks the tile hovered then, not the one the step named: the stick takes the stage cursor from Rainbow Cruise into the bottom left corner, a step Up glides towards Battlefield, and A at once stops the glide (`glide to "Battlefield" ended after 8 frames: steering is off here`) and says "Picked Rainbow Cruise." before the match on Rainbow Cruise begins.
 - `results.drive`: results after a one-stock debug match the player walks out of, its announcement, and two Starts after the announcer leaving it. It needs the debug match switches: `MELEE_DEBUG_VS=cpu MELEE_DEBUG_VS_STOCKS=1 MELEE_DEBUG_VS_STAGE=31 python tools/a11y/drive.py tools/a11y/results.drive`.
 
-Flakes: a step that logs "no pad change seen for that press" lost its press to the input driver; rerun before suspecting speech. A press can also land a frame off with no such line (a cursor back where it was); a script that fails once and passes on an unchanged rerun lost a press too.
+Flakes: a step that logs "no pad change seen for that press" lost its press to the input driver; rerun before suspecting speech. A press can also land a frame off with no such line (a cursor back where it was); a script that fails once and passes on an unchanged rerun lost a press too. A hang is rarer: `tree_walk.drive` failed once (2026-10-14, the menus level side by side) waiting for character select's opening after A on VS Melee, the game log ending at that press with not even its release, no archive error; it passed on a rerun.
 
 ## Match drive scripts
 
@@ -107,6 +107,8 @@ python tools/a11y/drive_net.py --lan --out-dir build/drive/lan tools/a11y/lan_lo
 The LAN run needs a network interface up (Ethernet or Wi-Fi with an address; `lan: no usable network interface` in a log means none) and a Windows Firewall rule letting that build's `melee.exe` take UDP in. A build directory without a rule makes the first run prompt and take focus, so ask the maintainer to allow it first.
 
 A garbled archive (`ARCHIVE <file>: implausible header`, then a PANIC in `lbarchive.c` and exit 3221226505, 0xC0000409, or a hang right after a scene load) was a base port bug, fixed on 2026-10-13 (`file cache: store its own host buffers without the ARAM test`): the file cache copied ARAM instead of a file whenever the heap gave its read buffer an address below 0x01000000, and the cue engine's early audio stream made that likelier (about one run in ten of `main_menu.drive` with `MELEE_A11Y_CUES=1`). It struck on the unlock notices after the title screen (`LbMcGame.usd`, `TyDatai.usd`), at the memory card screen and as a match loads (`SdIntro.dat`, `LbRf.dat`). If it comes back, look in the log for a `[FileCache] STORED: <file> ... [from ARAM]` line for that file before its failed load: a store from a host buffer must never say `[from ARAM]`.
+
+The `lan_lobby.drive` run against a base port build failed once (2026-10-14, the online level side by side) at `wait lobby: entering CSS` after the second Start: b, the base port build, dropped a's first datagram for a session it had not learned yet (`net: dropped a datagram for session ... (ours 00000000`), a disconnected at frame 2, and b hung at `lobby: Connecting...`. Passing runs drop no datagram there. It passed on two unchanged reruns; it is the base port's netcode, not the fork's.
 
 At the base merge level, `run_level.py online --base-b <dir>` (or `--base-b <dir>` on one run by hand) makes instance b a base port build of the merged commit from that build directory: build it in a git worktree outside the repo with its own build directory, with the fork's native Windows build fix applied (`docs/a11y/netplay.md`).
 

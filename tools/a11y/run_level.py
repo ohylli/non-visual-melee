@@ -17,8 +17,11 @@ side by side:
   menus   the sixteen menu drive scripts
   online  css_net.drive at delay 0, delay 10 and over a 100 ms slow link,
           and lan_lobby.drive (--lan)
-  NAME    tools/a11y/NAME.drive through drive.py; the names given in a row
-          run side by side
+  NAME    an online run by its name (css_net-delay0, css_net-delay10,
+          css_net-slow, lan_lobby), else tools/a11y/NAME.drive through
+          drive.py; the names given in a row run side by side
+
+  python tools/a11y/run_level.py lan_lobby --base-b ../melee-pc-base/build
 
 --jobs caps how many games run at once (default 8); a drive_net.py run
 counts two. The environment passes through, so MELEE_A11Y_CUES=1 in front
@@ -47,6 +50,7 @@ ENV = {"results": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE
 ABSENT = {"sss_skipped": re.compile(r'"Stage select\.')}
 NET = [("css_net-delay0", ["--delay", "0"]), ("css_net-delay10", ["--delay", "10"]),
        ("css_net-slow", ["--sim-delay-ms", "100"])]
+ONLINE = [name for name, _ in NET] + ["lan_lobby"]
 # Failure lines worth repeating in the report.
 FAILURE = re.compile(r">> .*(FAILED|warning: no pad change)")
 
@@ -71,20 +75,27 @@ def drive_run(name, out_dir):
                ENV.get(name))
 
 
-def net_runs(out_dir, base_b):
+def net_run(name, out_dir, base_b):
+    """The online run called name, which the online group holds."""
     extra = ["--base-b", base_b] if base_b else []
-    runs = []
-    for i, (name, flags) in enumerate(NET):
-        out = os.path.join(out_dir, name)
-        runs.append(Run(name, [sys.executable, os.path.join(HERE, "drive_net.py"), *flags, *extra,
-                               "--port", str(42110 + 10 * i), "--key", f"a11ylevel{i}", "--out-dir", out,
-                               os.path.join(HERE, "css_net.drive")], out, 2))
-    # The LAN lobby finds only copies in a LAN lobby, so the sessions
-    # started at boot beside it go unseen.
-    out = os.path.join(out_dir, "lan_lobby")
-    runs.append(Run("lan_lobby", [sys.executable, os.path.join(HERE, "drive_net.py"), "--lan", *extra,
-                                  "--out-dir", out, os.path.join(HERE, "lan_lobby.drive")], out, 2))
-    return runs
+    out = os.path.join(out_dir, name)
+    if name == "lan_lobby":
+        # The LAN lobby finds only copies in a LAN lobby, so the sessions
+        # started at boot beside it go unseen.
+        return Run(name, [sys.executable, os.path.join(HERE, "drive_net.py"), "--lan", *extra,
+                          "--out-dir", out, os.path.join(HERE, "lan_lobby.drive")], out, 2)
+    i = [n for n, _ in NET].index(name)
+    return Run(name, [sys.executable, os.path.join(HERE, "drive_net.py"), *NET[i][1], *extra,
+                      "--port", str(42110 + 10 * i), "--key", f"a11ylevel{i}", "--out-dir", out,
+                      os.path.join(HERE, "css_net.drive")], out, 2)
+
+
+def named_run(name, out_dir, base_b):
+    if name in ONLINE:
+        return net_run(name, out_dir, base_b)
+    if name == "css_net":
+        sys.exit("css_net takes two games; name one of its runs: " + ", ".join(n for n, _ in NET))
+    return drive_run(name, out_dir)
 
 
 class Slots:
@@ -145,9 +156,9 @@ def run_set(runs, jobs):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("what", nargs="+", help="menus, online or script names")
+    ap.add_argument("what", nargs="+", help="menus, online, online run names or script names")
     ap.add_argument("--jobs", type=int, default=8, help="games running at once (default 8)")
-    ap.add_argument("--base-b", metavar="BUILD_DIR", help="online: instance b from this base port build")
+    ap.add_argument("--base-b", metavar="BUILD_DIR", help="online runs: instance b from this base port build")
     ap.add_argument("--out-dir", default=os.path.join(REPO, "build", "drive", "level"),
                     help="where transcripts go (default build/drive/level)")
     args = ap.parse_args()
@@ -161,14 +172,14 @@ def main():
     for what in args.what:
         if what in ("menus", "online"):
             if names:
-                sets.append([drive_run(n, args.out_dir) for n in names])
+                sets.append([named_run(n, args.out_dir, args.base_b) for n in names])
                 names = []
             sets.append([drive_run(n, args.out_dir) for n in MENUS] if what == "menus"
-                        else net_runs(args.out_dir, args.base_b))
+                        else [net_run(n, args.out_dir, args.base_b) for n in ONLINE])
         else:
             names.append(what)
     if names:
-        sets.append([drive_run(n, args.out_dir) for n in names])
+        sets.append([named_run(n, args.out_dir, args.base_b) for n in names])
 
     started = time.monotonic()
     every = []

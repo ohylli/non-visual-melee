@@ -59,10 +59,8 @@ press Down
 wait '"Damage ratio: 1\.0\. '
 press Down
 wait '"Stage selection: On\. '
-shot build/drive/sss_skipped_row.png
 press Right
 wait '"Random\. Stages chosen randomly\."'
-shot build/drive/sss_skipped_random.png
 press B
 wait '"Character select\. Player 1, '
 sleep 1
@@ -71,5 +69,3 @@ sleep 1
 # instead of its opening, then the match begins.
 press Start until ': "Stage: [^"]+\."$'
 wait 'boot scene: state \d+ scene 2$'
-sleep 3
-shot build/drive/sss_skipped_match.png
