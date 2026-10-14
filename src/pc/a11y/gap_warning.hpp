@@ -17,9 +17,8 @@ struct GapMapping {
     int hold_ticks = 10;
 };
 
-/* You are over a gap this tick: in a running match, in the air, not out,
- * and the snapshot found no floor below you. Pause and GO are the
- * driver's. */
+/* The snapshot's gap: you are in the air and it found no floor below you.
+ * Whether you are in play is the driver's (you_in_play). */
 bool over_gap(const A11yMatchState& match);
 
 /* The driver: over_gap with the hold, whose count is its only state. */

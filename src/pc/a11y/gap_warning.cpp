@@ -1,16 +1,16 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "gap_warning.hpp"
+#include "match_state.hpp"
 
 namespace a11y {
 
 bool over_gap(const A11yMatchState& match) {
-    const A11yMatchFighter& you = match.you;
-    return match.running && you.airborne && !you.out && !match.below.found;
+    return match.you.airborne && !match.below.found;
 }
 
 std::optional<VoiceTargets> GapWarning::tick(
     const A11yMatchState& match, const GapMapping& mapping) {
-    if (!match.running || match.paused || !match.you.can_move || match.you.out) {
+    if (!you_in_play(match)) {
         m_hold = 0;
         return std::nullopt;
     }

@@ -120,7 +120,6 @@ void knocked_out_is_silent_at_once() {
     /* Past the bottom blast zone: out, the hold or not. */
     A11yMatchState dead = match_at(-100.0f, -150.0f, true);
     dead.you.out = true;
-    assert(!a11y::over_gap(dead));
     assert(!gap.tick(dead, GapMapping{}).has_value());
     /* Waiting to respawn, then on the respawn platform with the floor
      * below: still silent, the hold spent. */

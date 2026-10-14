@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "position_cue.hpp"
+#include "match_state.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -63,10 +64,10 @@ VoiceTargets stage_targets(
 }
 
 std::optional<VoiceTargets> your_position(const A11yMatchState& match, const YourMapping& mapping) {
-    const A11yMatchFighter& you = match.you;
-    if (!match.running || match.paused || !you.can_move || you.out) {
+    if (!you_in_play(match)) {
         return std::nullopt;
     }
+    const A11yMatchFighter& you = match.you;
     std::optional<float> distance;
     if (match.opponent_count > 0) {
         const A11yMatchFighter& opponent = match.opponents[0];
