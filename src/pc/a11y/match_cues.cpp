@@ -13,6 +13,8 @@ namespace {
 constexpr float kYourBoost = 2.0f;
 /* The opponent's lower pulse more, as tuned by ear. */
 constexpr float kOpponentBoost = 3.0f;
+/* A held tone needs no lift. */
+constexpr float kGapBoost = 1.0f;
 
 /* The tick of your position cue, the Star Fox 64 fork's aim click: a
  * 1500 Hz sine decaying fast over 20 ms, its last 3 ms faded to silence,
@@ -69,6 +71,33 @@ Sound pulse_sound() {
     return sound;
 }
 
+/* The gap warning's tone, held and below both position cues: 120 Hz with
+ * its third and fifth harmonics at a third and a fifth of its level, the
+ * start of a square wave, a hollow hum that is no pulse and no sine. Its
+ * fundamental sits under the opponent's lowest note, 200 Hz at the bottom
+ * blast zone, and the harmonics give small speakers something to play.
+ * 120 Hz is 400 samples a period, so a buffer of whole periods loops
+ * without a seam. Scaled by the amplitudes' sum, it peaks at 0.6 of full
+ * scale, 0.5 as RMS, which in the mix sits a little under the opponent's
+ * pulse, measured over a tenth of a second, and above your tick: a low
+ * tone sounds quieter than a higher one at the same level, and the warning
+ * should be heard. */
+Sound hum_sound() {
+    constexpr int kPeriod = kCueRate / 120;
+    constexpr int kPeriods = 12;
+    constexpr float kThird = 1.0f / 3.0f;
+    constexpr float kFifth = 1.0f / 5.0f;
+    Sound sound;
+    sound.samples.resize(static_cast<size_t>(kPeriod * kPeriods));
+    for (size_t i = 0; i < sound.samples.size(); i++) {
+        const double phase = 2.0 * std::numbers::pi * static_cast<double>(i % kPeriod) / kPeriod;
+        const double tone =
+            std::sin(phase) + kThird * std::sin(3.0 * phase) + kFifth * std::sin(5.0 * phase);
+        sound.samples[i] = static_cast<float>(tone) / (1.0f + kThird + kFifth);
+    }
+    return sound;
+}
+
 /* A position cue's pulsed voice, its sound made to fit the fastest interval
  * played at the lowest pitch the widest down range gives. */
 VoiceSpec position_voice(const char* name, int cue, Sound sound, float fastest_interval) {
@@ -95,6 +124,10 @@ YourMapping MatchCues::YourValues::mapping() const {
 
 OpponentMapping MatchCues::OpponentValues::mapping() const {
     return OpponentMapping{stage.mapping(), interval.value()};
+}
+
+GapMapping MatchCues::GapValues::mapping() const {
+    return GapMapping{static_cast<int>(std::lround(hold.value()))};
 }
 
 /* Worded for either position cue, each registering its own copy. */
@@ -149,17 +182,35 @@ MatchCues::OpponentValues MatchCues::add_opponent_values(ValueGroup group) {
     };
 }
 
+MatchCues::GapValues MatchCues::add_gap_values(ValueGroup group) {
+    const GapMapping defaults;
+    return GapValues{
+        group.add_number(NumberSpec{"hold", "Hold",
+            "How long the warning sounds on after you leave a gap, so it does not flicker at a "
+            "floor's edge. A tick is a sixtieth of a second.",
+            "ticks", static_cast<float>(defaults.hold_ticks), 0.0f, 60.0f, 1.0f}),
+    };
+}
+
 MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
     : m_engine(engine),
       m_your_cue(settings.add_cue("your_position", "Your position cue", kYourBoost)),
       m_your(add_your_values(m_your_cue.group)),
       m_opponent_cue(
           settings.add_cue("opponent_position", "Opponent's position cue", kOpponentBoost)),
-      m_opponent(add_opponent_values(m_opponent_cue.group)) {
+      m_opponent(add_opponent_values(m_opponent_cue.group)),
+      m_gap_cue(settings.add_cue("gap_warning", "Gap warning", kGapBoost)),
+      m_gap(add_gap_values(m_gap_cue.group)) {
     m_your_voice = m_engine.add_voice(
         position_voice("your position", m_your_cue.values.cue, tick_sound(), kFastestInterval));
     m_opponent_voice = m_engine.add_voice(position_voice(
         "opponent position", m_opponent_cue.values.cue, pulse_sound(), kOpponentFastestInterval));
+    VoiceSpec gap;
+    gap.name = "gap";
+    gap.cue = m_gap_cue.values.cue;
+    gap.sound = hum_sound();
+    gap.mode = VoiceMode::looped;
+    m_gap_voice = m_engine.add_voice(std::move(gap));
 }
 
 void MatchCues::play(int voice, const std::optional<VoiceTargets>& targets) {
@@ -176,6 +227,7 @@ void MatchCues::play(int voice, const std::optional<VoiceTargets>& targets) {
 void MatchCues::tick(const A11yMatchState& match) {
     play(m_your_voice, your_position(match, m_your.mapping()));
     play(m_opponent_voice, opponent_position(match, m_opponent.mapping()));
+    play(m_gap_voice, m_gap_warning.tick(match, m_gap.mapping()));
     if (match.running) {
         m_engine.trace_tick(m_tick++);
     }

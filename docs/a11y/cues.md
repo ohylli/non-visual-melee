@@ -103,11 +103,12 @@ gm_RunSimTick --pc_a11y_match_tick--> a11y_game_match_state --> A11yMatchState
 - **Each fighter**: position at the feet, ground or air, out (knocked out or between death and respawn, motion states 0 to 11), whether its input is on (off before GO), its slot and team.
 - **The opponent**: the nearest other slot's main fighter in play, not on your team in a team match, by straight-line distance, chosen afresh each tick. A list of one, so more can come.
 - **Paused**: the game holds the match still on purpose: a pause, the GAME! freeze, a score tally. It comes from the game's pause word, not from the held mask, which a Training pause leaves clear and slow motion sets on its skipped ticks (`gameplay-state.md`, "Pause, freezes and slow motion"). The held mask is kept as `fighters_held`.
+- **The floor below you**: on the ground the floor line under your feet; in the air the first floor the game's own downward cast (`mpCheckFloor`) meets from just above the bottom of your collision box down to the bottom blast zone, platforms included, with its line and height. None in the air is a gap. Every line id is checked against the line count before it goes into the snapshot. The cast is safe between ticks and starts at the collision box rather than the feet, which in the air sink below a floor just before landing (`gameplay-state.md`, "Is there ground below?").
 - **The stage frame**: the main floor's ends and height, the blast zones and the camera box, read each tick since some stages move them. The main floor is the lowest floor line across the middle of the blast zones, a solid one before a platform, followed to its surface's ends; the box around every floor would do on most tournament stages but not on Yoshi's Story (`gameplay-state.md`, "The tournament stages' frames").
 
 ### Drivers
 
-A driver is a pure function from the snapshot and its cue's mapping values to its voice's targets, or to none when the cue is silent (`position_cue.hpp`). Tests feed it hand-written snapshots (`test_position_cue.cpp`). `MatchCues` (`match_cues.cpp`) owns the rest: it registers each cue's values and voices once, as the cue settings open, and each tick starts a voice that has targets (a start while playing only changes them), and stops one that has none. Its own tests (`test_match_cues.cpp`) render the voices into a buffer.
+A driver is a pure function from the snapshot and its cue's mapping values to its voice's targets, or to none when the cue is silent (`position_cue.hpp`); the gap warning's keeps one count beside, its hold (`gap_warning.hpp`). Tests feed it hand-written snapshots (`test_position_cue.cpp`, `test_gap_warning.cpp`). `MatchCues` (`match_cues.cpp`) owns the rest: it registers each cue's values and voices once, as the cue settings open, and each tick starts a voice that has targets (a start while playing only changes them), and stops one that has none. Its own tests (`test_match_cues.cpp`) render the voices into a buffer.
 
 The two position cues share the stage mapping (`StageMapping`, `stage_targets`): pan and pitch from a fighter's place, the same code for both, each cue with its own copy of the values in its own group of the file.
 
@@ -136,6 +137,18 @@ A rounder, lower pulse on the same stage mapping, placed where the opponent is, 
 - **Boost** starts at 3, above your tick's 2: the play test by ear found the lower pulse too quiet at 1.5.
 - **The two rhythms.** Far apart, your cue's 0.8 s and the opponent's 0.4 s start together at GO and stay in step, every other opponent pulse landing on your tick. Whether that reads as one rhythm is the play test's question (`.scratch/match-cues/spec.md`, open questions).
 
+### The gap warning
+
+A held, centred hum while you are in the air with nothing below you, so that falling straight down would take you past the bottom blast zone.
+
+- **The test** is the snapshot's floor below you: in the air, in play, and the cast met no floor. Platforms count as floor, so the warning stays off over Battlefield's platforms and anywhere above the main floor, and comes on past the main floor's ends (about a unit past them, where the cast stops meeting the floor) and under the stage.
+- **The hold**: leaving a gap, the hum sounds on for `gap_warning.hold` ticks (default 10, a sixth of a second), so drifting back and forth over an edge does not stutter. A gap within the hold starts it afresh.
+- **Silent** outside a match, while paused, before GO and while you are out, at once and without the hold; on the respawn platform the floor is below, so it stays off.
+- **The sound**: 120 Hz with its third and fifth harmonics at a third and a fifth of its level, the start of a square wave, looped. It is the only held cue and the lowest: the opponent's pulse goes no lower than 200 Hz and your tick no lower than 750 Hz on the default mapping, and both pulse. The harmonics, at 360 and 600 Hz, let small speakers play it. Constant pitch and loudness, centred: the hum says only that there is a gap.
+- **Level**: boost 1. In the mix it sits about 2 dB under the opponent's pulse and 6 dB over your tick, measured over a tenth of a second, a low tone sounding quieter than a higher one at the same level.
+- **The game's own warning**, sound 96 as a fighter falls past the midpoint between the camera's bottom and the bottom blast zone, plays as before; the gap warning starts much earlier, as soon as nothing is below.
+- **Hanging on a ledge** is in the air with nothing below (measured: Link hanging from Final Destination's left ledge at x = -88, y = -18.8), so the hum sounds through the hang; the play test decides whether that helps.
+
 ## Checking a cue without hearing it
 
 The agent cannot hear a cue, so the engine keeps three records, the last two off unless asked for:
@@ -146,6 +159,6 @@ The agent cannot hear a cue, so the engine keeps three records, the last two off
 
 `tools/a11y/cue_dump.py` turns a dump into what an ear would notice, window by window: level, the left-right balance as a pan, pulse onsets with their intervals, and the dominant pitch. Its measures are simple ones (onsets by a level threshold, pitch by zero crossings), so two cues sounding at once blur pan and pitch, and a pulse that starts while another cue sounds is no onset at all.
 
-`--band LOW HIGH` keeps one cue's register before the analysis, a steep band-pass on both channels, so two cues at once can be checked one at a time: the opponent's pulse in 150 to 1000 Hz, your tick in 1100 to 12000 Hz, while both sit near the floor's pitch. A sharp attack such as the tick's still leaks into the other band as a short click; `--threshold 0.3` sets the onset level to 30% of the band's peak instead of 10% and leaves the leak out. A pitch far up or down moves a cue towards the other's band.
+`--band LOW HIGH` keeps one cue's register before the analysis, a steep band-pass on both channels, so two cues at once can be checked one at a time: the opponent's pulse in 150 to 1000 Hz, your tick in 1100 to 12000 Hz, while both sit near the floor's pitch. A sharp attack such as the tick's still leaks into the other band as a short click; `--threshold 0.3` sets the onset level to 30% of the band's peak instead of 10% and leaves the leak out. A pitch far up or down moves a cue towards the other's band. The gap warning's hum shows as a dominant pitch of 120 Hz, centred, in the windows it sounds alone; `--band 90 150` keeps it alone beside the pulses.
 
 The `verify` skill has the commands, the expected lines and the match drive scripts.

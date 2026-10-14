@@ -524,6 +524,15 @@ typedef struct A11yStageFrame {
     float camera_bottom;
 } A11yStageFrame;
 
+/* A floor below a fighter, platforms included. */
+typedef struct A11yFloorBelow {
+    bool found;
+    /* The floor line, a valid id whenever found; -1 otherwise. */
+    int line;
+    /* The floor's height straight below the fighter's feet. */
+    float y;
+} A11yFloorBelow;
+
 /* Opponents the snapshot keeps: the nearest one for now. */
 enum { A11Y_MATCH_OPPONENTS = 1 };
 
@@ -544,6 +553,14 @@ typedef struct A11yMatchState {
      * single-player mode started from another controller); online the
      * human slot on pc_net_local_player()'s port. */
     A11yMatchFighter you;
+    /* The floor below you while you are in play. On the ground, the floor
+     * under your feet (coll_data.floor.index). In the air, the first floor
+     * the game's own cast (mpCheckFloor) meets straight down from just
+     * above the bottom of your collision box, which sits at or above your
+     * feet, to the bottom blast zone; none means a gap, where falling
+     * straight down would cross the bottom blast zone. Not found while you
+     * are out. */
+    A11yFloorBelow below;
     /* The nearest other slot's main fighter in play, not on your team in a
      * team match, by straight-line distance; none when nobody is in play. */
     int opponent_count;

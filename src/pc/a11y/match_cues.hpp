@@ -6,6 +6,7 @@
 #pragma once
 #include "cue_engine.hpp"
 #include "cue_settings.hpp"
+#include "gap_warning.hpp"
 #include "game_access.h"
 #include "position_cue.hpp"
 #include <optional>
@@ -34,6 +35,7 @@ public:
     /* The voices' numbers in the engine, -1 for one it refused. */
     int your_voice() const { return m_your_voice; }
     int opponent_voice() const { return m_opponent_voice; }
+    int gap_voice() const { return m_gap_voice; }
 
 private:
     struct StageValues {
@@ -58,10 +60,16 @@ private:
 
         OpponentMapping mapping() const;
     };
+    struct GapValues {
+        Number hold;
+
+        GapMapping mapping() const;
+    };
 
     static StageValues add_stage_values(ValueGroup group);
     static YourValues add_your_values(ValueGroup group);
     static OpponentValues add_opponent_values(ValueGroup group);
+    static GapValues add_gap_values(ValueGroup group);
     /* A voice with targets starts, or only moves when it plays; one without
      * stops. */
     void play(int voice, const std::optional<VoiceTargets>& targets);
@@ -73,8 +81,12 @@ private:
     YourValues m_your;
     CueGroup m_opponent_cue;
     OpponentValues m_opponent;
+    CueGroup m_gap_cue;
+    GapValues m_gap;
+    GapWarning m_gap_warning;
     int m_your_voice;
     int m_opponent_voice;
+    int m_gap_voice;
     int m_tick = 0;
 };
 

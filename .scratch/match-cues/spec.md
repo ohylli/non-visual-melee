@@ -130,7 +130,7 @@ A sound that plays while you are in the air and nothing is below you: falling st
 - **The test**: each tick you are in the air, cast `mpCheckFloor` from just above your feet down to the bottom blast zone. No floor found, platforms included, means a gap.
 - **Sound**: a held, centred tone, low and distinct from both position cues, at constant pitch and loudness. It starts and stops with the ramp; a short hold (a few ticks) on stopping keeps it from flickering at a platform's edge.
 - **The game's own warning**, sound 96 near the bottom blast zone, stays as the game plays it.
-- **Settings**: on or off, volume, boost.
+- **Settings**: on or off, volume, boost, and the hold in ticks.
 
 ### The ledge warning
 

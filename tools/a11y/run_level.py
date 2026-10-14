@@ -46,9 +46,17 @@ MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens
          "css_slots", "css_portraits", "css_steps", "results"]
 # Settings a script needs from the environment.
 ENV = {"results": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE_DEBUG_VS_STAGE": "31"},
-       "match_opponent": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"}}
+       "match_opponent": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
+       "match_gap": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
+       "match_gap_battlefield": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2",
+                                 "MELEE_DEBUG_VS_STAGE": "31"}}
 # Lines a passing run must not log; drive.py cannot fail on an absent line.
 ABSENT = {"sss_skipped": re.compile(r'"Stage select\.')}
+# Lines a passing run logs exactly so many times, for the same reason: the
+# gap warning starts and stops once, at the edge, and never on the floor or
+# the platforms.
+GAP_ONCE = [(re.compile(r"\[a11y\] cue gap start "), 1), (re.compile(r"\[a11y\] cue gap stop "), 1)]
+COUNT = {"match_gap": GAP_ONCE, "match_gap_battlefield": GAP_ONCE}
 NET = [("css_net-delay0", ["--delay", "0"]), ("css_net-delay10", ["--delay", "10"]),
        ("css_net-slow", ["--sim-delay-ms", "100"])]
 ONLINE = [name for name, _ in NET] + ["lan_lobby"]
@@ -139,6 +147,12 @@ def execute(run, slots, lock):
         if found:
             run.code = run.code or 1
             run.failures += [f">> FAILED: logged {absent.pattern!r}: {line}" for line in found]
+    for pattern, times in COUNT.get(run.name, []):
+        with open(run.out, encoding="utf-8", errors="replace") as f:
+            logged = sum(1 for line in f if pattern.search(line))
+        if logged != times:
+            run.code = run.code or 1
+            run.failures.append(f">> FAILED: logged {pattern.pattern!r} {logged} times, not {times}")
     with lock:
         print(f"{'pass' if run.code == 0 else 'FAIL'}  {run.name:22} {run.seconds:5.1f} s  {run.out}", flush=True)
 

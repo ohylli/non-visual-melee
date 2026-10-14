@@ -237,6 +237,12 @@ Between ticks the call leaves no trace. To skip far-away joints it marks them wi
 
 Measured: standing anywhere on Battlefield's main floor, the cast found a main floor line at y = 0. One tick after Link walked off the left edge, at x = -69.6, it found nothing.
 
+**Cast from the collision box, not the feet.** In the air a fighter's collision box (the ECB, environment collision box: the diamond the game tests against the lines) rides above its feet, and the game lands the fighter when the box's bottom point meets a floor. So for a few ticks before landing, the feet (`cur_pos`) are below the floor's surface while the box is still above it. Measured on 2026-10-14: Link falling onto Final Destination's floor had his feet at y = -1.5 to -4.9 while still in the air, the box's bottom 5.9 units above them (`coll_data.ecb.bottom.y`, an offset from `cur_pos`), and a cast from just above his feet found nothing below. Cast from just above `cur_pos.y + coll_data.ecb.bottom.y` instead. On the ground the box's bottom is at the feet.
+
+A floor line's ends reach a unit further for the cast than the line itself where another line joins them (`mpLib_8004ED5C`), so past Final Destination's left edge at -85.6 the cast still meets the floor down to about x = -86.6.
+
+**The fork calls the game's own cast, from the tick hook.** This settles the read-only question for floor tests. What `mpCheckFloor` writes: its output parameters, and the joints' too-far mark (`CollJoint_TooFar`) with the flag `didCheckBounding` (`mplib.c`). When the flag is clear on entry, it marks every joint outside the cast's box, and every disabled or hidden joint, then clears every joint's mark and the flag before returning. Every user of the marks in the game pairs them the same way: the fighters' collision step sets them for each step and clears them after it (`mpColl_80043754`'s loop, the ledge searches), and a stage load clears them. So between ticks the flag is clear and no joint is marked, and the cast leaves both as it found them: nothing the simulation or a rollback snapshot reads changes. Everything else it calls reads: the lines, points and joints (`mpLib_8004ED5C`, `mpLineGetPrev`, `mpLineGetNext`) and the intersection helpers. Walking the line arrays in fork code would have meant copying the joined-end extension and the joint ranges, for no gain.
+
 "Nothing below" does not by itself mean death: the fighter may still jump or recover back to the stage. It means that falling straight down, the fighter will cross the bottom blast zone.
 
 ### How far to the edge? (near an edge)
@@ -398,7 +404,6 @@ Everything in the table can also be had by polling once a tick and comparing wit
 
 ## Open questions
 
-- **Raycasts and the read-only rule.** `mpCheckFloor` and its relatives briefly set and clear flags in the collision data. Called between ticks they leave no trace, but a strict reading of the rule would rather have the fork walk the line arrays itself. That is simple for "floor below" and harder for the details (joined lines, moving platforms). To decide when the first stage feature is built.
 - **Predicted ticks online.** Whether an announcement waits for its tick to be confirmed, at the cost of a few ticks' delay, or speaks at once and occasionally reports a hit that rollback undoes.
 - **Ledge grabs and held items** were not observed in the probe: where a held item's `pos` sits is unchecked, and the holder's position is a safe stand-in.
 - **Most stages' state fields** beyond Pokémon Stadium and Brinstar are unnamed in the decomp.

@@ -724,6 +724,50 @@ static bool match_main_floor(float x, A11yStageFrame* out) {
     return true;
 }
 
+/* The floor below a fighter in play (A11yMatchState.below). In the air,
+ * the game's own downward cast, which the CPU players use to judge their
+ * recoveries. Called between ticks it leaves no trace: it marks the joints
+ * outside the cast's box as too far and clears every mark before
+ * returning, and between ticks no marks are set, since the fighters'
+ * collision step clears its own (gameplay-state.md, "Is there ground
+ * below?"). The bottom blast zone is where a fall would end. */
+static void match_floor_below(const Fighter* fp, float bottom, A11yFloorBelow* out) {
+    out->found = false;
+    out->line = -1;
+    int line_count = mpLib_8004D164()->line_count;
+    if (fp->ground_or_air == GA_Ground) {
+        int line = fp->coll_data.floor.index;
+        if (line >= 0 && line < line_count) {
+            out->found = true;
+            out->line = line;
+            out->y = fp->cur_pos.y;
+        }
+        return;
+    }
+    /* From just above the bottom of the fighter's collision box, the point
+     * the game lands it on: in the air the box rises above the feet, and
+     * the feet sink up to about 6 units below a floor the box is still
+     * above (measured on Link landing), so a cast from the feet would find
+     * a gap over the floor. */
+    float x = fp->cur_pos.x;
+    float top = fp->cur_pos.y + fp->coll_data.ecb.bottom.y + 1.0F;
+    if (top <= bottom) {
+        return;
+    }
+    Vec3 hit;
+    int line = -1;
+    u32 flags;
+    Vec3 normal;
+    if (mpCheckFloor(
+            x, top, x, bottom, 0.0F, &hit, &line, &flags, &normal, -1, -1, -1, NULL, NULL) &&
+        line >= 0 && line < line_count)
+    {
+        out->found = true;
+        out->line = line;
+        out->y = hit.y;
+    }
+}
+
 /* The slot the local player plays: see A11yMatchState.you. */
 static int match_your_slot(int local_port, bool online) {
     int first_human = -1;
@@ -743,6 +787,7 @@ static int match_your_slot(int local_port, bool online) {
 
 void a11y_game_match_state(int local_port, bool online, uint64_t held_mask, A11yMatchState* out) {
     memset(out, 0, sizeof(*out));
+    out->below.line = -1;
     int your_slot = match_your_slot(local_port, online);
     const Fighter* you = your_slot >= 0 ? match_fighter(your_slot) : NULL;
     if (you == NULL) {
@@ -806,5 +851,8 @@ void a11y_game_match_state(int local_port, bool online, uint64_t held_mask, A11y
         stage->floor_left = floors->left;
         stage->floor_right = floors->right;
         stage->floor_y = floors->bottom;
+    }
+    if (!out->you.out) {
+        match_floor_below(you, stage->blast_bottom, &out->below);
     }
 }

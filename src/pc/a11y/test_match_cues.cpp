@@ -3,7 +3,9 @@
  * into a buffer with no device: both position cues register their values in
  * the file's order and their voices fit, and the opponent's cue follows a
  * change of opponent without restarting, goes quiet while the opponent is
- * knocked out and comes back at respawn. This file supplies the
+ * knocked out and comes back at respawn; the gap warning registers after
+ * them, starts over a gap, holds and stops, and its tone loops without a
+ * seam. This file supplies the
  * pc_log_line that main.c normally provides. */
 #include "cue_engine.hpp"
 #include "cue_settings.hpp"
@@ -109,7 +111,7 @@ void both_cues_register_and_fit() {
     Fixture f;
     assert(f.match_cues.your_voice() >= 0 && f.match_cues.opponent_voice() >= 0);
     const auto& groups = f.model.groups();
-    assert(groups.size() == 3);
+    assert(groups.size() == 4);
     assert(groups[1].id == "your_position" && groups[2].id == "opponent_position");
     assert(groups[2].title == "Opponent's position cue");
     std::vector<std::string> keys;
@@ -134,6 +136,77 @@ void both_cues_register_and_fit() {
     assert(f.model.find("opponent_position.boost")->default_value == 3.0f);
     assert(f.model.find("opponent_position.on")->description ==
            "Turns the opponent's position cue on or off.");
+}
+
+void the_gap_warning_registers_after_the_position_cues() {
+    Fixture f;
+    assert(f.match_cues.gap_voice() >= 0);
+    const auto& groups = f.model.groups();
+    assert(groups[3].id == "gap_warning" && groups[3].title == "Gap warning");
+    std::vector<std::string> keys;
+    for (const a11y::NamedValue* named : groups[3].values) {
+        keys.push_back(named->key);
+    }
+    assert((keys == std::vector<std::string>{"gap_warning.on", "gap_warning.volume",
+                        "gap_warning.boost", "gap_warning.hold"}));
+    const a11y::NamedValue* hold = f.model.find("gap_warning.hold");
+    assert(hold->default_value == 10.0f && hold->unit == "ticks");
+    assert(f.model.find("gap_warning.boost")->default_value == 1.0f);
+    assert(f.model.find("gap_warning.on")->description == "Turns the gap warning on or off.");
+}
+
+/* You falling past Final Destination's left edge, nothing below. */
+A11yMatchState over_the_gap() {
+    A11yMatchState match = match_with(1, 60.0f);
+    match.you = fighter(0, -100.0f, -20.0f);
+    match.you.airborne = true;
+    match.below.line = -1;
+    return match;
+}
+
+void the_gap_warning_starts_holds_and_stops() {
+    Fixture f;
+    const int voice = f.match_cues.gap_voice();
+    f.model.set(*f.model.find("gap_warning.hold"), 2.0f);
+    f.match_cues.tick(over_the_gap());
+    assert(f.engine.playing(voice));
+    assert(count_logged_starting("[a11y] cue gap start pan 0.00 pitch 1.00 gain 1.00") == 1);
+    /* Landed back on the floor: two ticks of hold, then the stop. */
+    A11yMatchState landed = match_with(1, 60.0f);
+    landed.below = A11yFloorBelow{true, 1, 0.0f};
+    f.match_cues.tick(landed);
+    f.match_cues.tick(landed);
+    assert(f.engine.playing(voice));
+    f.match_cues.tick(landed);
+    assert(!f.engine.playing(voice));
+    assert(count_logged_starting("[a11y] cue gap stop") == 1);
+}
+
+void the_gap_tone_loops_without_a_seam() {
+    Fixture f;
+    f.model.set(*f.model.find("your_position.on"), 0.0f);
+    f.model.set(*f.model.find("opponent_position.on"), 0.0f);
+    f.cues.apply(f.engine);
+    f.match_cues.tick(over_the_gap());
+    /* Past the start ramp, across many loops of the buffer: centred, with
+     * no step bigger than the tone's own steepest. */
+    std::vector<float> out = render(f.engine, 0.6f);
+    double left = 0.0;
+    double right = 0.0;
+    energy(out, 0.1, left, right);
+    assert(left > 0.0 && std::fabs(left - right) < left * 1e-3);
+    float steepest = 0.0f;
+    float loudest = 0.0f;
+    for (std::size_t frame = static_cast<std::size_t>(0.1 * a11y::kCueRate) + 1;
+        frame < out.size() / 2; ++frame)
+    {
+        steepest = std::max(steepest, std::fabs(out[frame * 2] - out[(frame - 1) * 2]));
+        loudest = std::max(loudest, std::fabs(out[frame * 2]));
+    }
+    /* At its steepest the tone moves about 0.15 of its peak in a sample; a
+     * seam would jump by far more. */
+    assert(loudest > 0.05f);
+    assert(steepest < loudest * 0.2f);
 }
 
 void a_change_of_opponent_moves_the_voice_without_restarting_it() {
@@ -205,6 +278,9 @@ extern "C" void pc_log_line(const char* fmt, ...) {
 
 int main() {
     both_cues_register_and_fit();
+    the_gap_warning_registers_after_the_position_cues();
+    the_gap_warning_starts_holds_and_stops();
+    the_gap_tone_loops_without_a_seam();
     a_change_of_opponent_moves_the_voice_without_restarting_it();
     the_opponent_cue_stops_while_knocked_out_and_comes_back();
     std::cout << "match_cues: all tests passed\n";

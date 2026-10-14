@@ -1,0 +1,36 @@
+# The gap warning in the debug VS match on Final Destination: Link (player
+# 1) against Mario (player 2), a human slot with no input, who stands still.
+# Link jumps in place over the main floor, where nothing sounds, then runs
+# off the left edge and comes back with the midair jump: the gap warning
+# starts once he is past the edge and stops a short hold after he is back
+# over the floor.
+# Run from Git Bash with the debug match switches (the debug match is on
+# Final Destination), cues on, and a dump to check the tone's level:
+#   MELEE_DEBUG_VS=1 MELEE_DEBUG_VS_STOCKS=2 MELEE_A11Y_CUES=1 \
+#     MELEE_A11Y_CUE_DUMP=build/drive/gap.f32 \
+#     python tools/a11y/drive.py tools/a11y/match_gap.drive
+# then grep -c '\[a11y\] cue gap st' build/drive/last.log prints 2: drive.py
+# cannot fail on a line too many, which run_level.py checks itself.
+
+# Start on the title screen goes straight into the debug match.
+wait "state 0 scene 0$"
+press Start until "boot scene: state \d+ scene 2$"
+
+# Both position cues start at GO, Link standing at x = -60.
+wait 'cue your position start pan -0\.42 pitch 1\.00 ' 60
+sleep 1
+
+# A full jump in place, over the main floor: no gap.
+press X 300
+sleep 1.2
+
+# A dash off the left edge, the midair jump back towards the stage and
+# drifting right onto it. The warning starts past the edge, at x = -86.6
+# where the cast stops meeting the floor, and stops on the way back.
+press Left 450
+wait 'cue gap start pan 0\.00 pitch 1\.00 gain 1\.00$' 5
+press X+Right 200
+sleep 0.2
+press Right 800
+wait 'cue gap stop pan 0\.00 pitch 1\.00 gain 1\.00$'
+sleep 1.5

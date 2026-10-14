@@ -57,6 +57,7 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/value_model.cpp
         ${CMAKE_CURRENT_LIST_DIR}/value_file.cpp
         ${CMAKE_CURRENT_LIST_DIR}/position_cue.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/gap_warning.cpp
         ${CMAKE_CURRENT_LIST_DIR}/match_cues.cpp)
 target_include_directories(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 # game_access.c reads the decomp's structs, so it lays out their bitfields as
@@ -328,12 +329,23 @@ if (TARGET unit_tests)
     set_tests_properties(position_cue PROPERTIES LABELS melee)
     add_dependencies(unit_tests position_cue_test)
 
+    # The gap warning's driver against hand-written match snapshots.
+    add_executable(gap_warning_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_gap_warning.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/gap_warning.cpp)
+    target_include_directories(gap_warning_test PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(gap_warning_test PRIVATE -UNDEBUG)
+    add_test(NAME gap_warning COMMAND gap_warning_test)
+    set_tests_properties(gap_warning PROPERTIES LABELS melee)
+    add_dependencies(unit_tests gap_warning_test)
+
     # The match cues against hand-written match snapshots, their voices
     # rendered into buffers with no device; its own pc_log_line.
     add_executable(match_cues_test EXCLUDE_FROM_ALL
             ${CMAKE_CURRENT_LIST_DIR}/test_match_cues.cpp
             ${CMAKE_CURRENT_LIST_DIR}/match_cues.cpp
             ${CMAKE_CURRENT_LIST_DIR}/position_cue.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/gap_warning.cpp
             ${CMAKE_CURRENT_LIST_DIR}/cue_settings.cpp
             ${CMAKE_CURRENT_LIST_DIR}/value_model.cpp
             ${CMAKE_CURRENT_LIST_DIR}/cue_engine.cpp

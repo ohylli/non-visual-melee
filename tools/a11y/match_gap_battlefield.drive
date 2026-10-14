@@ -1,0 +1,69 @@
+# The gap warning in the debug VS match on Battlefield: Link (player 1)
+# against Mario (player 2), a human slot with no input, standing on the top
+# platform. Link jumps from the main floor to the left platform, on to the
+# top one and down to the right one, drops through it to the main floor,
+# then runs off the right edge and comes back with the midair jump. Nothing
+# sounds over the platforms or the main floor; the gap warning starts past
+# the right edge and stops a short hold after Link is back over the floor.
+# A pause on each platform logs where Link stands, through your position
+# cue's stop line.
+# Run from Git Bash with the debug match switches (31 is Battlefield), cues
+# on:
+#   MELEE_DEBUG_VS=1 MELEE_DEBUG_VS_STOCKS=2 MELEE_DEBUG_VS_STAGE=31 \
+#     MELEE_A11Y_CUES=1 python tools/a11y/drive.py tools/a11y/match_gap_battlefield.drive
+# then grep -c '\[a11y\] cue gap st' build/drive/last.log prints 2: drive.py
+# cannot fail on a line too many, which run_level.py checks itself.
+
+# Start on the title screen goes straight into the debug match.
+wait "state 0 scene 0$"
+press Start until "boot scene: state \d+ scene 2$"
+
+# Your cue starts at GO, Link standing in the middle under the top
+# platform.
+wait 'cue your position start pan 0\.00 pitch 1\.00 ' 60
+sleep 1
+
+# A jump left onto the left platform (y = 27.2, pitch 1.15).
+press X+Left 300
+sleep 1.2
+press Start
+wait 'cue your position stop pan -0\.\d+ pitch 1\.15 '
+sleep 0.5
+press Start
+wait 'cue your position start '
+
+# A jump and the midair jump right onto the top platform (y = 54.4, pitch
+# 1.32).
+press X+Right 250
+sleep 0.25
+press X+Right 150
+sleep 1.5
+press Start
+wait 'cue your position stop pan 0\.\d+ pitch 1\.32 '
+sleep 0.5
+press Start
+wait 'cue your position start '
+
+# Off its right end, down onto the right platform.
+press Right 250
+sleep 1.5
+press Start
+wait 'cue your position stop pan 0\.\d+ pitch 1\.15 '
+sleep 0.5
+press Start
+wait 'cue your position start '
+
+# Down drops through to the main floor.
+press Down 100
+sleep 1.5
+
+# A dash off the right edge, the midair jump back and drifting left onto
+# the stage. The warning starts past the edge, at x = 69.4 where the cast
+# stops meeting the floor, and stops on the way back.
+press Right 400
+wait 'cue gap start pan 0\.00 pitch 1\.00 gain 1\.00$' 5
+press X+Left 200
+sleep 0.2
+press Left 800
+wait 'cue gap stop pan 0\.00 pitch 1\.00 gain 1\.00$'
+sleep 1.5

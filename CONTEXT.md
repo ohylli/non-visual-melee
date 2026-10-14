@@ -58,6 +58,10 @@ _Avoid_: Cue config, cue options, tuning file (that is only the model's file), s
 A pulsed cue whose pan and pitch say where a fighter is on the stage: pan across it, pitch how high. There are two: **your position cue**, whose pulse also quickens as the opponent comes near, and **the opponent's position cue**, a lower pulse at a steady pace.
 _Avoid_: Locator, radar, beacon, player cue
 
+**Gap warning**:
+A held, low cue that sounds while you are in the air with no floor anywhere below you, platforms included, so that falling straight down would take you past the bottom blast zone. It says nothing of whether you can still get back; the game's own sound near the bottom blast zone is a separate warning.
+_Avoid_: Fall cue, death warning, void cue, offstage cue
+
 **Speech log**:
 The developer-facing record of every announcement and cue, written as it happens.
 _Avoid_: TTS log, debug output
