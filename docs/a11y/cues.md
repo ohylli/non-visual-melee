@@ -160,7 +160,7 @@ A pulsed chord on the left or right while you are near a deadly end of the floor
 - **Handover**: walking off an edge, the floor below vanishes a unit past the end, so the ledge warning stops at its edge's pan and full gain on the same tick the gap warning starts. Coming back, the ledge warning starts again near the edge as soon as the floor is below, while the gap warning holds a sixth of a second. Through a ledge hang nothing is below, so only the gap warning sounds.
 - **Silent** outside a match, while paused, before GO, while you are out, and with no floor below. It has no hold: the distance changes smoothly, and the warning distance is the only place it starts or stops on the floor.
 - **The sound**: 660 and 880 Hz together, a just perfect fourth as in the Star Fox 64 fork's beside chord, 90 ms rising over 5 ms and easing off after 12 ms of lead-in, pulsed every 0.2 s (`kLedgeInterval`), at a fixed pitch. A pulse gives the ear an onset to place, which a held tone panned by level alone does not; a chord sets it apart from the other cues' single tones, and its register sits between the opponent's 400 Hz pulse and your 1500 Hz tick on the floor, where ledges are.
-- **Level**: boost 3. Measured over 0.2 s windows in the dump of `match_ledge.drive`, it is about -21 dB at the edge, level with the opponent's pulse and 2 dB over the gap hum, and about -31 dB at the warning distance, near your tick.
+- **Level**: boost 3. Measured over 0.2 s windows in a dump of a run to each edge, it is about -21 dB at the edge, level with the opponent's pulse and 2 dB over the gap hum, and about -31 dB at the warning distance, near your tick.
 
 ## Checking a cue without hearing it
 

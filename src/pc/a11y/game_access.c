@@ -724,6 +724,10 @@ static bool match_main_floor(float x, A11yStageFrame* out) {
     return true;
 }
 
+/* How far above a point a downward cast starts, so that a floor at the
+ * point's own height is still met. */
+static const float A11Y_CAST_LIFT = 1.0F;
+
 /* The game's own downward cast from (x, top) to bottom, the first floor it
  * meets, platforms included, but not the line skip (-1 for none). The CPU
  * players use it to judge their recoveries. Called between ticks it leaves
@@ -769,7 +773,8 @@ static void match_floor_end(
     /* The line joined at that end, past the floor lines: on a ledge the
      * stage's side going down, at a step a wall going up, which no walk
      * leaves the floor by. The walk is the one mpFloorGetRight and
-     * mpFloorGetLeft make, bounded in case the lines ever loop. */
+     * mpFloorGetLeft have just made unbounded, so it ends; the bound only
+     * keeps the loop's end in sight. */
     int joined = -1;
     for (int steps = 0; steps < line_count; steps++) {
         int next = right ? mpLineGetNext(line) : mpLineGetPrev(line);
@@ -779,6 +784,8 @@ static void match_floor_end(
         }
         line = next;
     }
+    /* Only a valid id reaches mpLib_80054ED8: on any other it spins
+     * forever. */
     if (joined >= 0 && mpLib_80054ED8(joined)) {
         Vec3 beyond;
         if (right) {
@@ -793,7 +800,7 @@ static void match_floor_end(
     float x = right ? end.x + edge_offset : end.x - edge_offset;
     int below;
     float y;
-    out->deadly = !match_cast_floor(x, end.y + 1.0F, bottom, -1, &below, &y);
+    out->deadly = !match_cast_floor(x, end.y + A11Y_CAST_LIFT, bottom, -1, &below, &y);
 }
 
 /* The floor below a fighter in play (A11yMatchState.below), and its ends.
@@ -818,7 +825,7 @@ static void match_floor_below(
          * feet would find a gap over the floor. A platform the fighter is
          * dropping through is skipped, as the game's own collision step
          * skips it. */
-        float top = fp->cur_pos.y + fp->coll_data.ecb.bottom.y + 1.0F;
+        float top = fp->cur_pos.y + fp->coll_data.ecb.bottom.y + A11Y_CAST_LIFT;
         out->found = match_cast_floor(
             fp->cur_pos.x, top, bottom, fp->coll_data.floor_skip, &out->line, &out->y);
     }

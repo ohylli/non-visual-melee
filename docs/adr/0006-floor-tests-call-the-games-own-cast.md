@@ -2,7 +2,7 @@
 
 Status: accepted (2026-10-14)
 
-The gap warning asks, every tick you are in the air, whether any floor lies straight below you; the ledge warning will ask the same just past each end of the floor below you. The game answers that question with `mpCheckFloor` (`src/melee/mp/mplib.c`), a raycast against every floor line, platforms included, which the CPU players also use to judge their recoveries. The fork calls it from `pc_a11y_match_tick`, the tick hook in `gm_RunSimTick`, after every fighter has moved for the tick.
+The gap warning asks, every tick you are in the air, whether any floor lies straight below you; the ledge warning asks the same just past each end of the floor below you. The game answers that question with `mpCheckFloor` (`src/melee/mp/mplib.c`), a raycast against every floor line, platforms included, which the CPU players also use to judge their recoveries. The fork calls it from `pc_a11y_match_tick`, the tick hook in `gm_RunSimTick`, after every fighter has moved for the tick.
 
 The call is not a pure read. To skip far-away parts of the stage it marks joints (`CollJoint_TooFar`) and sets the flag `didCheckBounding`, and clears both before returning, but only when the flag was clear on entry. Every user of the marks in the game pairs them the same way, and the hook runs outside the fighters' update, where the flag is clear and no joint is marked. So the call leaves the collision data exactly as it found it: nothing the simulation, a rollback snapshot or the peer's game reads changes, and online play stays in step with a base port peer. Everything else it calls only reads. The trace is in `docs/a11y/gameplay-state.md`, "Is there ground below?".
 
