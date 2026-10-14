@@ -4,7 +4,7 @@
  * together as the game starts and closed together at shutdown. The hooks
  * forward to it. Game thread only. */
 #pragma once
-#include "game_access.h"
+#include <cstdint>
 #include <memory>
 
 namespace a11y {
@@ -37,8 +37,10 @@ public:
     void scene_entered();
     /* The launcher's master volume with mute applied. */
     void set_master_volume(float volume);
-    /* After every simulated tick, not while rollback re-runs ticks. */
-    void tick(const A11yMatchState& match);
+    /* After every simulated tick, not while rollback re-runs ticks: reads
+     * the match snapshot (a11y_game_match_state, with what the cues ask of
+     * it) and hands it to the cues. */
+    void tick(int local_port, bool online, uint64_t held_mask);
 
 private:
     explicit CueSystem(Speech& speech);

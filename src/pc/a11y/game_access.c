@@ -724,14 +724,82 @@ static bool match_main_floor(float x, A11yStageFrame* out) {
     return true;
 }
 
-/* The floor below a fighter in play (A11yMatchState.below). In the air,
- * the game's own downward cast, which the CPU players use to judge their
- * recoveries. Called between ticks it leaves no trace: it marks the joints
- * outside the cast's box as too far and clears every mark before
- * returning, and between ticks no marks are set, since the fighters'
- * collision step clears its own (gameplay-state.md, "Is there ground
- * below?"). The bottom blast zone is where a fall would end. */
-static void match_floor_below(const Fighter* fp, float bottom, A11yFloorBelow* out) {
+/* The game's own downward cast from (x, top) to bottom, the first floor it
+ * meets, platforms included, but not the line skip (-1 for none). The CPU
+ * players use it to judge their recoveries. Called between ticks it leaves
+ * no trace: it marks the joints outside the cast's box as too far and
+ * clears every mark before returning, and between ticks no marks are set,
+ * since the fighters' collision step clears its own (ADR-0006,
+ * gameplay-state.md, "Is there ground below?"). */
+static bool match_cast_floor(
+    float x, float top, float bottom, int skip, int* line_out, float* y_out) {
+    if (top <= bottom) {
+        return false;
+    }
+    Vec3 hit;
+    int line = -1;
+    u32 flags;
+    Vec3 normal;
+    if (!mpCheckFloor(
+            x, top, x, bottom, 0.0F, &hit, &line, &flags, &normal, skip, -1, -1, NULL, NULL) ||
+        line < 0 || line >= mpLib_8004D164()->line_count)
+    {
+        return false;
+    }
+    *line_out = line;
+    *y_out = hit.y;
+    return true;
+}
+
+/* An end of the floor line's surface (A11yFloorEnd), the right one or the
+ * left, and whether a fall from it is deadly: edge_offset past it, the
+ * cast from just above its height down to the bottom blast zone. */
+static void match_floor_end(
+    int line, bool right, float edge_offset, float bottom, A11yFloorEnd* out) {
+    int line_count = mpLib_8004D164()->line_count;
+    Vec3 end;
+    if (right) {
+        mpFloorGetRight(line, &end);
+    } else {
+        mpFloorGetLeft(line, &end);
+    }
+    out->x = end.x;
+    out->y = end.y;
+    out->deadly = false;
+    /* The line joined at that end, past the floor lines: on a ledge the
+     * stage's side going down, at a step a wall going up, which no walk
+     * leaves the floor by. The walk is the one mpFloorGetRight and
+     * mpFloorGetLeft make, bounded in case the lines ever loop. */
+    int joined = -1;
+    for (int steps = 0; steps < line_count; steps++) {
+        int next = right ? mpLineGetNext(line) : mpLineGetPrev(line);
+        if (next < 0 || next >= line_count || mpLineGetKind(next) != CollLine_Floor) {
+            joined = next >= 0 && next < line_count ? next : -1;
+            break;
+        }
+        line = next;
+    }
+    if (joined >= 0 && mpLib_80054ED8(joined)) {
+        Vec3 beyond;
+        if (right) {
+            mpLineGetV1Pos(joined, &beyond);
+        } else {
+            mpLineGetV0Pos(joined, &beyond);
+        }
+        if (beyond.y > end.y) {
+            return;
+        }
+    }
+    float x = right ? end.x + edge_offset : end.x - edge_offset;
+    int below;
+    float y;
+    out->deadly = !match_cast_floor(x, end.y + 1.0F, bottom, -1, &below, &y);
+}
+
+/* The floor below a fighter in play (A11yMatchState.below), and its ends.
+ * The bottom blast zone is where a fall would end. */
+static void match_floor_below(
+    const Fighter* fp, float edge_offset, float bottom, A11yFloorBelow* out) {
     out->found = false;
     out->line = -1;
     int line_count = mpLib_8004D164()->line_count;
@@ -742,30 +810,21 @@ static void match_floor_below(const Fighter* fp, float bottom, A11yFloorBelow* o
             out->line = line;
             out->y = fp->cur_pos.y;
         }
-        return;
+    } else {
+        /* From just above the bottom of the fighter's collision box, the
+         * point the game lands it on: in the air the box rises above the
+         * feet, and the feet sink up to about 6 units below a floor the box
+         * is still above (measured on Link landing), so a cast from the
+         * feet would find a gap over the floor. A platform the fighter is
+         * dropping through is skipped, as the game's own collision step
+         * skips it. */
+        float top = fp->cur_pos.y + fp->coll_data.ecb.bottom.y + 1.0F;
+        out->found = match_cast_floor(
+            fp->cur_pos.x, top, bottom, fp->coll_data.floor_skip, &out->line, &out->y);
     }
-    /* From just above the bottom of the fighter's collision box, the point
-     * the game lands it on: in the air the box rises above the feet, and
-     * the feet sink up to about 6 units below a floor the box is still
-     * above (measured on Link landing), so a cast from the feet would find
-     * a gap over the floor. A platform the fighter is dropping through is
-     * skipped, as the game's own collision step skips it. */
-    float x = fp->cur_pos.x;
-    float top = fp->cur_pos.y + fp->coll_data.ecb.bottom.y + 1.0F;
-    if (top <= bottom) {
-        return;
-    }
-    Vec3 hit;
-    int line = -1;
-    u32 flags;
-    Vec3 normal;
-    if (mpCheckFloor(x, top, x, bottom, 0.0F, &hit, &line, &flags, &normal,
-            fp->coll_data.floor_skip, -1, -1, NULL, NULL) &&
-        line >= 0 && line < line_count)
-    {
-        out->found = true;
-        out->line = line;
-        out->y = hit.y;
+    if (out->found) {
+        match_floor_end(out->line, false, edge_offset, bottom, &out->left);
+        match_floor_end(out->line, true, edge_offset, bottom, &out->right);
     }
 }
 
@@ -786,7 +845,8 @@ static int match_your_slot(int local_port, bool online) {
     return online ? -1 : first_human;
 }
 
-void a11y_game_match_state(int local_port, bool online, uint64_t held_mask, A11yMatchState* out) {
+void a11y_game_match_state(
+    int local_port, bool online, uint64_t held_mask, float edge_offset, A11yMatchState* out) {
     memset(out, 0, sizeof(*out));
     out->below.line = -1;
     int your_slot = match_your_slot(local_port, online);
@@ -854,6 +914,6 @@ void a11y_game_match_state(int local_port, bool online, uint64_t held_mask, A11y
         stage->floor_y = floors->bottom;
     }
     if (!out->you.out) {
-        match_floor_below(you, stage->blast_bottom, &out->below);
+        match_floor_below(you, edge_offset, stage->blast_bottom, &out->below);
     }
 }

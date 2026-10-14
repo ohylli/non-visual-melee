@@ -297,9 +297,7 @@ extern "C" void pc_a11y_match_tick(uint64_t held_mask) {
         return;
     }
     int local_port = pc_net_active() ? pc_net_local_player() : 0;
-    A11yMatchState match;
-    a11y_game_match_state(local_port, pc_net_active(), held_mask, &match);
-    s_cue_system->tick(match);
+    s_cue_system->tick(local_port, pc_net_active(), held_mask);
 }
 
 extern "C" bool pc_a11y_pad(PADStatus* pad) {

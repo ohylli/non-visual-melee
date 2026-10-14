@@ -62,6 +62,10 @@ _Avoid_: Locator, radar, beacon, player cue
 A held, low cue that sounds while you are in the air with no floor anywhere below you, platforms included, so that falling straight down would take you past the bottom blast zone. It says nothing of whether you can still get back; the game's own sound near the bottom blast zone is a separate warning.
 _Avoid_: Fall cue, death warning, void cue, offstage cue
 
+**Ledge warning**:
+A pulsed cue on the left or right that sounds while you are near an end of the floor below you past which nothing lies, so that walking or being knocked off it would take you past the bottom blast zone. It pans from the side towards the centre and grows louder as the end comes near, on the ground and in the air. A platform's end over the main floor is no ledge here; past the end the gap warning takes over.
+_Avoid_: Edge cue, cliff warning, ledge cue (a ledge you can grab is the game's own idea, not this one)
+
 **Speech log**:
 The developer-facing record of every announcement and cue, written as it happens.
 _Avoid_: TTS log, debug output

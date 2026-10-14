@@ -524,6 +524,18 @@ typedef struct A11yStageFrame {
     float camera_bottom;
 } A11yStageFrame;
 
+/* An end of a floor's surface: its line followed through the floor lines
+ * joined to it, as mpFloorGetLeft and mpFloorGetRight follow them. */
+typedef struct A11yFloorEnd {
+    float x;
+    float y;
+    /* A fall from it would cross the bottom blast zone: no wall rises from
+     * it, and the game's own cast finds no floor straight down from just
+     * above it, the edge offset outwards. A platform's end over the main
+     * floor is not deadly. */
+    bool deadly;
+} A11yFloorEnd;
+
 /* A floor below a fighter, platforms included. */
 typedef struct A11yFloorBelow {
     bool found;
@@ -534,6 +546,11 @@ typedef struct A11yFloorBelow {
      * above the feet (see A11yMatchState.below), so the drop to it can come
      * out negative. */
     float y;
+    /* Its surface's ends, filled whenever found. A fighter in the air can
+     * be up to a unit past an end, where the cast still meets the floor
+     * (the game lets a line reach a unit further where another joins it). */
+    A11yFloorEnd left;
+    A11yFloorEnd right;
 } A11yFloorBelow;
 
 /* Opponents the snapshot keeps: the nearest one for now. */
@@ -563,7 +580,8 @@ typedef struct A11yMatchState {
      * feet, to the bottom blast zone, skipping a platform you are dropping
      * through; none in the air means a gap, where falling straight down
      * would cross the bottom blast zone (on the ground none means only an
-     * unreadable floor). Not found while you are out. */
+     * unreadable floor). Not found while you are out. Its ends, deadly or
+     * not, are the ledge warning's. */
     A11yFloorBelow below;
     /* The nearest other slot's main fighter in play, not on your team in a
      * team match, by straight-line distance; none when nobody is in play. */
@@ -572,10 +590,14 @@ typedef struct A11yMatchState {
     A11yStageFrame stage;
 } A11yMatchState;
 
-/* Fills the snapshot after a simulated tick (pc_a11y_match_tick). local_port
- * is the controller port the local player plays on; held_mask is the tick's
- * mask of GObj lists held still. Reads only. */
-void a11y_game_match_state(int local_port, bool online, uint64_t held_mask, A11yMatchState* out);
+/* Fills the snapshot after a simulated tick (pc_a11y_match_tick), and from
+ * nowhere else: its casts are only safe between ticks (ADR-0006).
+ * local_port is the controller port the local player plays on; held_mask is
+ * the tick's mask of GObj lists held still; edge_offset is how far past
+ * each end of the floor below you the deadly test casts (A11yFloorEnd).
+ * Reads only. */
+void a11y_game_match_state(
+    int local_port, bool online, uint64_t held_mask, float edge_offset, A11yMatchState* out);
 
 #ifdef __cplusplus
 }

@@ -1,0 +1,42 @@
+# The ledge warning in the debug VS match on Battlefield: Link (player 1)
+# against Mario (player 2), a human slot with no input, standing on the top
+# platform. Link jumps from the middle of the main floor onto the left
+# platform and dashes left to stand about two units short of its left end
+# (-57.6), where the main floor lies below past the end, so the warning
+# stays silent; a pause there logs his place through your position cue's
+# stop line. Down drops him through onto the main floor, 12 units from its
+# deadly left end (-68.4), and the left warning starts.
+# Run from Git Bash with the debug match switches (31 is Battlefield), cues
+# on:
+#   MELEE_DEBUG_VS=1 MELEE_DEBUG_VS_STOCKS=2 MELEE_DEBUG_VS_STAGE=31 \
+#     MELEE_A11Y_CUES=1 python tools/a11y/drive.py tools/a11y/match_ledge_battlefield.drive
+# then grep -c '\[a11y\] cue ledge' build/drive/last.log prints 1: drive.py
+# cannot fail on a line too many, which run_level.py checks itself.
+
+# Start on the title screen goes straight into the debug match.
+wait "state 0 scene 0$"
+press Start until "boot scene: state \d+ scene 2$"
+
+# Your cue starts at GO, Link standing in the middle under the top
+# platform.
+wait 'cue your position start pan 0\.00 pitch 1\.00 ' 60
+sleep 1
+
+# A jump left onto the left platform (y = 27.2, pitch 1.15), then a short
+# dash left, which stops near the platform's end: x = -55.9 is pan -0.49.
+press X+Left 300
+sleep 1.2
+press Left 150
+sleep 1.2
+press Start
+wait 'cue your position stop pan -0\.(4[7-9]|50) pitch 1\.15 '
+sleep 0.5
+press Start
+wait 'cue your position start '
+sleep 1
+
+# Down drops through: over the main floor near its left end, the warning
+# starts as he falls, about 12 units from the end.
+press Down 100
+wait 'cue ledge left start pan -0\.[56]\d pitch 1\.00 gain 0\.[67]\d interval 0\.200$' 5
+sleep 1

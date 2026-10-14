@@ -5,7 +5,9 @@
  * change of opponent without restarting, goes quiet while the opponent is
  * knocked out and comes back at respawn; the gap warning registers after
  * them, starts over a gap, holds and stops, and its tone loops without a
- * seam. This file supplies the
+ * seam; the ledge warning registers last, with the snapshot's edge offset,
+ * starts on each side near a deadly end and stops away from it or over a
+ * gap, and pulses 5 times a second on its side. This file supplies the
  * pc_log_line that main.c normally provides. */
 #include "cue_engine.hpp"
 #include "cue_settings.hpp"
@@ -111,7 +113,7 @@ void both_cues_register_and_fit() {
     Fixture f;
     assert(f.match_cues.your_voice() >= 0 && f.match_cues.opponent_voice() >= 0);
     const auto& groups = f.model.groups();
-    assert(groups.size() == 4);
+    assert(groups.size() == 5);
     assert(groups[1].id == "your_position" && groups[2].id == "opponent_position");
     assert(groups[2].title == "Opponent's position cue");
     std::vector<std::string> keys;
@@ -209,6 +211,94 @@ void the_gap_tone_loops_without_a_seam() {
     assert(steepest < loudest * 0.2f);
 }
 
+void the_ledge_warning_registers_last() {
+    Fixture f;
+    assert(f.match_cues.ledge_left_voice() >= 0 && f.match_cues.ledge_right_voice() >= 0);
+    const auto& groups = f.model.groups();
+    assert(groups[4].id == "ledge_warning" && groups[4].title == "Ledge warning");
+    std::vector<std::string> keys;
+    for (const a11y::NamedValue* named : groups[4].values) {
+        keys.push_back(named->key);
+    }
+    assert((keys == std::vector<std::string>{"ledge_warning.on", "ledge_warning.volume",
+                        "ledge_warning.boost", "ledge_warning.distance", "ledge_warning.pan_floor",
+                        "ledge_warning.level_floor", "ledge_warning.edge_offset"}));
+    const a11y::NamedValue* distance = f.model.find("ledge_warning.distance");
+    assert(distance->default_value == 30.0f && distance->unit == "units");
+    assert(f.model.find("ledge_warning.pan_floor")->default_value == 0.3f);
+    const a11y::NamedValue* level = f.model.find("ledge_warning.level_floor");
+    assert(level->default_value == 30.0f && level->unit == "%");
+    /* The snapshot's deadly test reads the offset from the settings. */
+    const a11y::NamedValue* offset = f.model.find("ledge_warning.edge_offset");
+    assert(offset->default_value == 5.0f && offset->unit == "units");
+    assert(f.match_cues.edge_offset() == 5.0f);
+    f.model.set(*offset, 8.0f);
+    assert(f.match_cues.edge_offset() == 8.0f);
+}
+
+/* You on Final Destination's main floor at x, both its ends deadly, the
+ * opponent far off on the right. */
+A11yMatchState near_the_edges(float x, bool airborne) {
+    A11yMatchState match = match_with(1, 60.0f);
+    match.you = fighter(0, x, 0.0f);
+    match.you.airborne = airborne;
+    match.below = A11yFloorBelow{true, 1, 0.0f, {-85.6f, 0.0f, true}, {85.6f, 0.0f, true}};
+    return match;
+}
+
+void the_ledge_warning_starts_on_each_side_and_stops() {
+    Fixture f;
+    const int left = f.match_cues.ledge_left_voice();
+    const int right = f.match_cues.ledge_right_voice();
+    /* 15.6 units from the left end: about halfway in. */
+    f.match_cues.tick(near_the_edges(-70.0f, false));
+    assert(f.engine.playing(left) && !f.engine.playing(right));
+    assert(count_logged_starting(
+               "[a11y] cue ledge left start pan -0.66 pitch 1.00 gain 0.64 interval 0.200") == 1);
+    /* At the edge: only its targets change. */
+    f.match_cues.tick(near_the_edges(-85.6f, false));
+    assert(count_logged_starting("[a11y] cue ledge left start") == 1);
+    /* Off the edge with nothing below: the gap warning takes over on the
+     * same tick, the ledge warning stopping where it stood. */
+    f.match_cues.tick(over_the_gap());
+    assert(!f.engine.playing(left) && f.engine.playing(f.match_cues.gap_voice()));
+    assert(count_logged_starting(
+               "[a11y] cue ledge left stop pan -0.30 pitch 1.00 gain 1.00 interval 0.200") == 1);
+    /* Near the right end, in the air. */
+    f.match_cues.tick(near_the_edges(80.0f, true));
+    assert(f.engine.playing(right) && !f.engine.playing(left));
+    assert(count_logged_starting(
+               "[a11y] cue ledge right start pan 0.43 pitch 1.00 gain 0.87 interval 0.200") == 1);
+    /* Back in the middle: silent. */
+    f.match_cues.tick(near_the_edges(0.0f, false));
+    assert(!f.engine.playing(right));
+    assert(count_logged_starting("[a11y] cue ledge right stop") == 1);
+    /* Both ends of a small floor at once. */
+    A11yMatchState small = near_the_edges(0.0f, false);
+    small.below.left.x = -20.0f;
+    small.below.right.x = 20.0f;
+    f.match_cues.tick(small);
+    assert(f.engine.playing(left) && f.engine.playing(right));
+}
+
+void the_ledge_pulse_sounds_on_its_side_five_times_a_second() {
+    Fixture f;
+    f.model.set(*f.model.find("your_position.on"), 0.0f);
+    f.model.set(*f.model.find("opponent_position.on"), 0.0f);
+    f.cues.apply(f.engine);
+    f.match_cues.tick(near_the_edges(-85.6f, false));
+    std::vector<float> out = render(f.engine, 1.0f);
+    std::vector<double> at = onsets(out);
+    assert(at.size() == 5);
+    for (std::size_t i = 1; i < at.size(); ++i) {
+        assert(std::fabs(at[i] - at[i - 1] - a11y::kLedgeInterval) < 0.002);
+    }
+    double left = 0.0;
+    double right = 0.0;
+    energy(out, 0.0, left, right);
+    assert(left > right * 2.0);
+}
+
 void a_change_of_opponent_moves_the_voice_without_restarting_it() {
     Fixture f;
     f.opponent_alone();
@@ -281,6 +371,9 @@ int main() {
     the_gap_warning_registers_after_the_position_cues();
     the_gap_warning_starts_holds_and_stops();
     the_gap_tone_loops_without_a_seam();
+    the_ledge_warning_registers_last();
+    the_ledge_warning_starts_on_each_side_and_stops();
+    the_ledge_pulse_sounds_on_its_side_five_times_a_second();
     a_change_of_opponent_moves_the_voice_without_restarting_it();
     the_opponent_cue_stops_while_knocked_out_and_comes_back();
     std::cout << "match_cues: all tests passed\n";

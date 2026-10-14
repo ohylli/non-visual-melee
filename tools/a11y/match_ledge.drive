@@ -1,0 +1,56 @@
+# The ledge warning in the debug VS match on Final Destination: Link (player
+# 1) against Mario (player 2), a human slot with no input, who stands still
+# at x = 60. Link starts at x = -60, 25.6 units from the left end, so the
+# left warning starts at GO. He dashes right until it stops, jumps twice
+# along the stage over Mario until the right warning starts in the air,
+# then dashes off the right edge: the warning rises to the edge and stops as
+# the gap warning starts past it. The midair jump brings him back over the
+# floor, where the right warning starts again near the edge, and he runs
+# left until it stops.
+# Run from Git Bash with the debug match switches (the debug match is on
+# Final Destination), cues on, and a trace to check the rise:
+#   MELEE_DEBUG_VS=1 MELEE_DEBUG_VS_STOCKS=2 MELEE_A11Y_CUES=1 \
+#     MELEE_A11Y_CUE_TRACE=build/drive/ledge.trace \
+#     python tools/a11y/drive.py tools/a11y/match_ledge.drive
+# then grep -c '\[a11y\] cue ledge' build/drive/last.log prints 6: drive.py
+# cannot fail on a line too many, which run_level.py checks itself.
+
+# Start on the title screen goes straight into the debug match.
+wait "state 0 scene 0$"
+press Start until "boot scene: state \d+ scene 2$"
+
+# At GO the left warning starts with your position cue, 25.6 units from
+# the end: well out to the left, quiet.
+wait 'cue ledge left start pan -0\.90 pitch 1\.00 gain 0\.40 interval 0\.200$' 60
+sleep 1
+
+# A dash right: the left warning stops 30 units from the end, at its
+# widest and quietest.
+press Right 300
+wait 'cue ledge left stop pan -(0\.9\d|1\.00) pitch 1\.00 gain 0\.3\d '
+sleep 1
+
+# Two jumps right along the stage, over Mario: the right warning starts in
+# the air, 30 units from the right end.
+press X+Right 300
+sleep 1.2
+press X+Right 300
+wait 'cue ledge right start pan (0\.9\d|1\.00) pitch 1\.00 gain 0\.3\d '
+sleep 1.2
+
+# A dash off the right edge: the gap warning starts a unit past it, and the
+# right warning stops on the same tick, at the edge's pan floor and full.
+press Right 450
+wait 'cue gap start pan 0\.00 pitch 1\.00 gain 1\.00$' 5
+wait 'cue ledge right stop pan 0\.3\d pitch 1\.00 gain (0\.9\d|1\.00) '
+
+# The midair jump back towards the stage and drifting left onto it: the
+# right warning starts again near the edge, the gap warning stops, and the
+# run left takes Link out of the warning distance.
+press X+Left 200
+sleep 0.2
+press Left 800
+wait 'cue ledge right start pan 0\.[3-6]\d pitch 1\.00 '
+wait 'cue gap stop pan 0\.00 pitch 1\.00 gain 1\.00$'
+wait 'cue ledge right stop pan (0\.9\d|1\.00) '
+sleep 1

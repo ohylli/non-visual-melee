@@ -15,6 +15,11 @@ constexpr float kYourBoost = 2.0f;
 constexpr float kOpponentBoost = 3.0f;
 /* A held tone needs no lift. */
 constexpr float kGapBoost = 1.0f;
+/* The ledge warning's chord at its edge's full gain about level with the
+ * opponent's pulse, at the warning distance's level floor about level with
+ * your tick: its pulse gives up part of a held tone's level between
+ * pulses. */
+constexpr float kLedgeBoost = 3.0f;
 
 /* The tick of your position cue, the Star Fox 64 fork's aim click: a
  * 1500 Hz sine decaying fast over 20 ms, its last 3 ms faded to silence,
@@ -98,6 +103,49 @@ Sound hum_sound() {
     return sound;
 }
 
+/* The ledge warning's pulse, a chord unlike the other cues' single tones:
+ * 660 and 880 Hz, a just perfect fourth (3:4) as in the Star Fox 64 fork's
+ * beside chord, between the opponent's 400 Hz pulse and your 1500 Hz tick
+ * on the floor, where ledges are. 90 ms rising over 5 ms and easing off,
+ * its last 20 ms faded to silence, after the tick's 12 ms of lead-in: 102
+ * ms in all, half of each 0.2 s pulse, so the pulses stay apart. Played
+ * only at its own pitch. */
+Sound chord_sound() {
+    constexpr double kLow = 660.0;
+    constexpr double kHigh = 880.0;
+    constexpr float kSeconds = 0.09f;
+    constexpr float kAttackSeconds = 0.005f;
+    constexpr float kDecayPerSecond = 8.0f;
+    constexpr float kAmplitude = 0.95f;
+    constexpr float kTailSeconds = 0.02f;
+    constexpr float kLeadInSeconds = 0.012f;
+    Sound sound;
+    sound.samples.resize(static_cast<size_t>(kSeconds * kCueRate));
+    for (size_t i = 0; i < sound.samples.size(); i++) {
+        const double t = static_cast<double>(i) / kCueRate;
+        const double tone = std::sin(2.0 * std::numbers::pi * kLow * t) +
+                            std::sin(2.0 * std::numbers::pi * kHigh * t);
+        sound.samples[i] = static_cast<float>(tone) * kAmplitude / 2.0f *
+                           std::exp(-kDecayPerSecond * static_cast<float>(t));
+    }
+    fade_in(sound, kAttackSeconds);
+    fade_out(sound, kTailSeconds);
+    lead_in(sound, kLeadInSeconds);
+    return sound;
+}
+
+/* A ledge warning voice, one a side. */
+VoiceSpec ledge_voice(const char* name, int cue) {
+    VoiceSpec voice;
+    voice.name = name;
+    voice.cue = cue;
+    voice.sound = chord_sound();
+    voice.mode = VoiceMode::pulsed;
+    voice.fastest_interval = kLedgeInterval;
+    voice.lowest_pitch = 1.0f;
+    return voice;
+}
+
 /* A position cue's pulsed voice, its sound made to fit the fastest interval
  * played at the lowest pitch the widest down range gives. */
 VoiceSpec position_voice(const char* name, int cue, Sound sound, float fastest_interval) {
@@ -128,6 +176,10 @@ OpponentMapping MatchCues::OpponentValues::mapping() const {
 
 GapMapping MatchCues::GapValues::mapping() const {
     return GapMapping{static_cast<int>(std::lround(hold.value()))};
+}
+
+LedgeMapping MatchCues::LedgeValues::mapping() const {
+    return LedgeMapping{distance.value(), pan_floor.value(), level_floor.value() / 100.0f};
 }
 
 /* Worded for either position cue, each registering its own copy. */
@@ -192,6 +244,28 @@ MatchCues::GapValues MatchCues::add_gap_values(ValueGroup group) {
     };
 }
 
+MatchCues::LedgeValues MatchCues::add_ledge_values(ValueGroup group) {
+    const LedgeMapping defaults;
+    return LedgeValues{
+        group.add_number(NumberSpec{"distance", "Warning distance",
+            "From this distance to a deadly end of the floor below you and nearer, the warning "
+            "sounds on that side. A dash covers 30 units in under half a second.",
+            "units", defaults.distance, 5.0f, 100.0f, 1.0f}),
+        group.add_number(NumberSpec{"pan_floor", "Pan floor",
+            "How far to the side the warning sounds at the edge itself; at the warning distance "
+            "it is fully to that side.",
+            "", defaults.pan_floor, 0.0f, 1.0f, 0.05f}),
+        group.add_number(NumberSpec{"level_floor", "Level floor",
+            "How loud the warning starts at the warning distance; at the edge it is full.", "%",
+            std::round(defaults.level_floor * 100.0f), 0.0f, 100.0f, 5.0f}),
+        group.add_number(NumberSpec{"edge_offset", "Edge offset",
+            "How far past an end of the floor below you the test for a floor further down looks; "
+            "with none there, the end is deadly. Battlefield's side platforms end about 11 units "
+            "inside its main floor, so more than 10 would take their ends for deadly.",
+            "units", kEdgeOffset, 2.0f, 10.0f, 0.5f}),
+    };
+}
+
 MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
     : m_engine(engine),
       m_your_cue(settings.add_cue("your_position", "Your position cue", kYourBoost)),
@@ -200,7 +274,9 @@ MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
           settings.add_cue("opponent_position", "Opponent's position cue", kOpponentBoost)),
       m_opponent(add_opponent_values(m_opponent_cue.group)),
       m_gap_cue(settings.add_cue("gap_warning", "Gap warning", kGapBoost)),
-      m_gap(add_gap_values(m_gap_cue.group)) {
+      m_gap(add_gap_values(m_gap_cue.group)),
+      m_ledge_cue(settings.add_cue("ledge_warning", "Ledge warning", kLedgeBoost)),
+      m_ledge(add_ledge_values(m_ledge_cue.group)) {
     m_your_voice = m_engine.add_voice(
         position_voice("your position", m_your_cue.values.cue, tick_sound(), kFastestInterval));
     m_opponent_voice = m_engine.add_voice(position_voice(
@@ -211,6 +287,8 @@ MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
     gap.sound = hum_sound();
     gap.mode = VoiceMode::looped;
     m_gap_voice = m_engine.add_voice(std::move(gap));
+    m_ledge_left_voice = m_engine.add_voice(ledge_voice("ledge left", m_ledge_cue.values.cue));
+    m_ledge_right_voice = m_engine.add_voice(ledge_voice("ledge right", m_ledge_cue.values.cue));
 }
 
 void MatchCues::play(int voice, const std::optional<VoiceTargets>& targets) {
@@ -228,6 +306,9 @@ void MatchCues::tick(const A11yMatchState& match) {
     play(m_your_voice, your_position(match, m_your.mapping()));
     play(m_opponent_voice, opponent_position(match, m_opponent.mapping()));
     play(m_gap_voice, m_gap_warning.tick(match, m_gap.mapping()));
+    const LedgeTargets ledge = ledge_warning(match, m_ledge.mapping());
+    play(m_ledge_left_voice, ledge.left);
+    play(m_ledge_right_voice, ledge.right);
     if (match.running) {
         m_engine.trace_tick(m_tick++);
     }

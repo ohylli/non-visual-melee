@@ -49,14 +49,25 @@ ENV = {"results": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE
        "match_opponent": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
        "match_gap": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
        "match_gap_battlefield": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2",
-                                 "MELEE_DEBUG_VS_STAGE": "31"}}
+                                 "MELEE_DEBUG_VS_STAGE": "31"},
+       "match_ledge": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
+       "match_ledge_battlefield": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2",
+                                   "MELEE_DEBUG_VS_STAGE": "31"}}
 # Lines a passing run must not log; drive.py cannot fail on an absent line.
 ABSENT = {"sss_skipped": re.compile(r'"Stage select\.')}
 # Lines a passing run logs exactly so many times, for the same reason: the
 # gap warning starts and stops once, at the edge, and never on the floor or
 # the platforms.
 GAP_ONCE = [(re.compile(r"\[a11y\] cue gap start "), 1), (re.compile(r"\[a11y\] cue gap stop "), 1)]
-COUNT = {"match_gap": GAP_ONCE, "match_gap_battlefield": GAP_ONCE}
+# The ledge warning on Final Destination: the left end's once, the right
+# end's twice (on the way out and back), the gap warning once between; on
+# Battlefield only the main floor's left end, never the platform's.
+LEDGE = [(re.compile(r"\[a11y\] cue ledge left start "), 1), (re.compile(r"\[a11y\] cue ledge left stop "), 1),
+         (re.compile(r"\[a11y\] cue ledge right start "), 2), (re.compile(r"\[a11y\] cue ledge right stop "), 2)]
+LEDGE_BATTLEFIELD = [(re.compile(r"\[a11y\] cue ledge left start "), 1),
+                     (re.compile(r"\[a11y\] cue ledge right start "), 0)]
+COUNT = {"match_gap": GAP_ONCE, "match_gap_battlefield": GAP_ONCE, "match_ledge": GAP_ONCE + LEDGE,
+         "match_ledge_battlefield": LEDGE_BATTLEFIELD}
 NET = [("css_net-delay0", ["--delay", "0"]), ("css_net-delay10", ["--delay", "10"]),
        ("css_net-slow", ["--sim-delay-ms", "100"])]
 ONLINE = [name for name, _ in NET] + ["lan_lobby"]

@@ -3,6 +3,7 @@
 #include "cue_engine.hpp"
 #include "cue_output.hpp"
 #include "cue_settings.hpp"
+#include "game_access.h"
 #include "match_cues.hpp"
 #include "pc/pc.h"
 #include "speech.hpp"
@@ -127,7 +128,9 @@ void CueSystem::set_master_volume(float volume) {
     m_engine->set_master_volume(volume);
 }
 
-void CueSystem::tick(const A11yMatchState& match) {
+void CueSystem::tick(int local_port, bool online, uint64_t held_mask) {
+    A11yMatchState match;
+    a11y_game_match_state(local_port, online, held_mask, m_match_cues->edge_offset(), &match);
     if (match.running) {
         if (!m_match_running && m_file != nullptr && !m_file->problem().empty() &&
             m_file->problems_spoken() == m_problems_at_scene)
