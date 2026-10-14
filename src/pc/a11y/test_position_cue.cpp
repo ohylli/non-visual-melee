@@ -134,7 +134,7 @@ void your_position_from_the_snapshot() {
     const PositionMapping mapping;
     std::optional<VoiceTargets> targets = a11y::your_position(match_at(85.6f, 114.0f), mapping);
     assert(targets.has_value());
-    assert(near(targets->pan, 0.7f));
+    assert(near(targets->pan, 0.6f));
     assert(near(targets->pitch, 2.0f));
     assert(near(targets->gain, 1.0f));
     /* The opponent at the centre, about 142 units away: slow. */

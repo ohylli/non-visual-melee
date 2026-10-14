@@ -8,7 +8,7 @@ namespace a11y {
 namespace {
 
 /* A short click lifted under its volume to sit level with held tones. */
-constexpr float kYourBoost = 1.5f;
+constexpr float kYourBoost = 2.0f;
 
 /* The tick of your position cue, the Star Fox 64 fork's aim click: a
  * 1500 Hz sine decaying fast over 20 ms, its last 3 ms faded to silence,

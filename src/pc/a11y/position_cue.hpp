@@ -14,7 +14,7 @@ namespace a11y {
 struct PositionMapping {
     /* Pan at the main stage's edges; the side blast zones are fully left
      * and right. */
-    float edge_pan = 0.7f;
+    float edge_pan = 0.6f;
     /* Octaves up at the camera box's top, and down at the bottom blast
      * zone, from the main floor. */
     float up_range = 1.0f;

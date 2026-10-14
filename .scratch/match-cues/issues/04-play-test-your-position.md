@@ -1,6 +1,6 @@
 # 04 Play test by ear: your position cue
 
-Status: ready-for-human
+Status: resolved (2026-10-14)
 Type: task
 Blocked by: 03
 
@@ -47,3 +47,12 @@ The review fixed what was plainly wrong (commit "A11y: match cues, review fixes"
 - **hooks.cpp now runs the cue system's whole lifetime**: the engine and its output, three settings objects built in order, the settings path, polling and the match-start repeat. Options: a `CueSystem` (open, scene entered, tick, master volume) with hooks.cpp forwarding, or leave it. Recommendation: extract it with issue 05, when the second cue joins.
 - **A netplay stall keeps the tick pulsing.** While the game waits for a stalled peer no tick runs, so your position cue keeps pulsing at its last place until the session times out. Options: the engine fades a voice whose targets are older than about a quarter second, or leave it. Recommendation: listen for it in the online play test.
 - **`tools/smoke_test.py` reaches the default cue settings file** unless the variable is set: its launcher cases leave speech, and so cues, on. The `verify` skill now says to set `MELEE_A11Y_CUE_SETTINGS` for it; making the script set it would be a new edit to a base port file. Recommendation: leave the script alone.
+
+### 2026-10-14: play-tested by ear
+
+The maintainer played matches with NVDA, mostly on Battlefield and Final Destination, and the basics work: the tick is audible beside the game and NVDA, with no clicks, crackle or other sound problems. No new issues.
+
+- **New defaults from the tuning file:** `your_position.boost` 2 (was 1.5) and `your_position.edge_pan` 0.6 (was 0.7), now in the code. A tuning file already written keeps its own values; deleting it brings the new defaults.
+- **Princess Peach's Castle:** a short try where the pan felt a bit odd, possibly the raised roof taken as the main floor (see the notes above). It needs more listening before it becomes an issue. The maintainer may later drop the stage-based frame altogether, depending on how the coming cues sound.
+- **How the cues sound together** is left to the later play tests (06, 08, 10).
+- **The points left by the review** were not raised. Their recommendations stand: rename the settings classes and extract a `CueSystem` when issue 05 adds the second cue, and listen for the netplay stall online. Online was not tested here; it joins issue 06's play test, which already plans one with a friend.

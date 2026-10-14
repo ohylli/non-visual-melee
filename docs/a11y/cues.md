@@ -56,9 +56,9 @@ The model knows nothing about any cue. A feature registers its own values and ke
 `cue_settings.hpp` registers the values for all cues (a switch and the cue volume, 0 to 100%) and gives every cue the same three of its own through `add_cue`: a switch, its volume and its boost (a factor of 1 to 8 under the volume, for a short click that reads quieter than a held tone). `add_cue` also hands out the cue's number in the engine. The cue then adds its mapping values to the group it got back:
 
 ```cpp
-a11y::CueGroup cue = cue_settings.add_cue("your_position", "Your position cue", 1.5f);
+a11y::CueGroup cue = cue_settings.add_cue("your_position", "Your position cue", 2.0f);
 a11y::Number edge_pan = cue.group.add_number({"edge_pan", "Edge pan",
-    "Pan at the main stage's edges.", "", 0.7f, 0.0f, 1.0f, 0.05f});
+    "Pan at the main stage's edges.", "", 0.6f, 0.0f, 1.0f, 0.05f});
 ```
 
 Every cue registers before the file is read, so a value the file lacks can be added to it. These values feed the volume chain: the all-cues switch and cue volume become the mix level, each cue's switch, volume and boost its cue level. A switch turned off is a level turned off: the engine glides that cue to silence while its voices keep running underneath, and turning it back on brings them back where they are.
