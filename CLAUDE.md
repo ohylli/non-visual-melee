@@ -59,6 +59,7 @@ Windows is the only supported target for fork work; keep code portable in princi
 - It sets `MELEE_A11Y_STEER=1`, which turns steering on with speech off; a run of the game started any other way needs it too for the D-pad to steer.
 - Every agent-started game run stays silent (`drive.py` and `drive_net.py` see to it) and leaves the window focus and the real memory card alone: `SDL_WINDOW_ACTIVATE_WHEN_SHOWN=0 SDL_AUDIO_DRIVER=dummy` and `--no-card`, plus `MELEE_A11Y=0` unless the run checks speech itself. Focus taken mid-sentence cuts off the maintainer's screen reader.
 - `tools/a11y/drive_net.py` does the same for two instances in one netplay session over loopback (primer `docs/a11y/netplay.md`).
+- Keep `build/drive` clear: the default transcripts (`last.log`, `net/`, `level/`) are overwritten by each run, and a transcript saved under its own name is removed once its check is done, unless there is a specific reason to keep it, such as a bug still being diagnosed. `build/drive/cache` holds the drivers' shader caches and stays.
 
 ## Verification
 

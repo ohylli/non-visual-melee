@@ -3,8 +3,8 @@
 # Item Switch: an item toggled and back, both columns, the frequency strip
 # from either column with its hint only on the first visit, and the
 # frequency changed and back. Random Stage: every stage turned off but
-# Rainbow Cruise, the refused toggle on it, and every stage back on. Run with
-# the default --scene title:
+# Rainbow Cruise and the refused toggle on it; --no-card keeps nothing, so
+# they stay off. Run with the default --scene title:
 #   python tools/a11y/drive.py tools/a11y/rules_switches.drive
 # With --no-card every item and stage starts on and every stage is unlocked,
 # so the cursor skips none.
@@ -12,7 +12,7 @@
 # Title screen to the main menu (tools/a11y/main_menu.drive).
 wait "state 0 scene 0$"
 press Start until "boot scene: game mode"
-press A until "boot scene: state 0 scene 1$"
+press A until "boot scene: state 0 scene 1$" 20 0.3
 wait '"Main Menu\. 1-P Mode\. '
 # The menu ignores input for its first 20 frames.
 sleep 1
@@ -203,123 +203,8 @@ wait '"Rainbow Cruise: on"'
 # The last stage on: the game refuses and keeps it on.
 press A
 wait '"At least one stage must stay on\."'
-# Back on, the right column down, then Left to the left column's
-# Dream Land N64 and up it, and Up from the top to its foot.
-press Down
-wait '"Jungle Japes: off"'
-press A
-wait '"On"'
-press Down
-wait '"Hyrule Temple: off"'
-press A
-wait '"On"'
-press Down
-wait '"Brinstar Depths: off"'
-press A
-wait '"On"'
-press Down
-wait '"Yoshi.s Island: off"'
-press A
-wait '"On"'
-press Down
-wait '"Green Greens: off"'
-press A
-wait '"On"'
-press Down
-wait '"Venom: off"'
-press A
-wait '"On"'
-press Down
-wait '"Pok. Floats: off"'
-press A
-wait '"On"'
-press Down
-wait '"Big Blue: off"'
-press A
-wait '"On"'
-press Down
-wait '"Fourside: off"'
-press A
-wait '"On"'
-press Down
-wait '"Mushroom Kingdom II: off"'
-press A
-wait '"On"'
-press Down
-wait '"Flat Zone: off"'
-press A
-wait '"On"'
-press Down
-wait '"Final Destination: off"'
-press A
-wait '"On"'
-press Down
-wait '"Yoshi.s Island N64: off"'
-press A
-wait '"On"'
-press Left
-wait '"Dream Land N64: off"'
-press A
-wait '"On"'
-press Up
-wait '"Battlefield: off"'
-press A
-wait '"On"'
-press Up
-wait '"Icicle Mountain: off"'
-press A
-wait '"On"'
-press Up
-wait '"Mushroom Kingdom: off"'
-press A
-wait '"On"'
-press Up
-wait '"Onett: off"'
-press A
-wait '"On"'
-press Up
-wait '"Mute City: off"'
-press A
-wait '"On"'
-press Up
-wait '"Pok.mon Stadium: off"'
-press A
-wait '"On"'
-press Up
-wait '"Corneria: off"'
-press A
-wait '"On"'
-press Up
-wait '"Fountain of Dreams: off"'
-press A
-wait '"On"'
-press Up
-wait '"Yoshi.s Story: off"'
-press A
-wait '"On"'
-press Up
-wait '"Brinstar: off"'
-press A
-wait '"On"'
-press Up
-wait '"Great Bay: off"'
-press A
-wait '"On"'
-press Up
-wait '"Kongo Jungle: off"'
-press A
-wait '"On"'
-press Up
-wait '"Princess Peach.s Castle: off"'
-press A
-wait '"On"'
-press Up
-wait '"Kongo Jungle N64: off"'
-press A
-wait '"On"'
 
-# B saves the stages and returns to Additional Rules, then Custom Rules and
-# VS. Mode.
+# B returns to Additional Rules, then Custom Rules and VS. Mode.
 press B
 wait '"Additional Rules\. Random Stage\. If stage selection is set at Random, '
 sleep 0.5

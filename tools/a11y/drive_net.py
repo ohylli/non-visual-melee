@@ -41,6 +41,8 @@ to a.rec and b.rec. After the script, the run fails unless both logs show a
 session (net: rollback with), neither logs net: DESYNC, and the two
 recordings hold the same data for the frames both recorded in the session.
 The summary lists the delay each side used and every glide's frames.
+a and b keep their shader caches in slots 1 and 2 (drive.py --cache-slot);
+--cache-slots names two others, for runs side by side.
 
 With --lan, the two start with no session: each walks the menus on its own
 presses into the LAN lobby, where they find each other by mDNS over the
@@ -158,7 +160,7 @@ def run(args, steps):
                 env["MELEE_NET_PLAYER"] = str(player)
                 env["MELEE_NET_RECORD"] = out[name] + ".rec"
             exe = os.path.join(args.base_b, "melee.exe") if name == "b" and args.base_b else None
-            games[name] = Game(args, out[name] + ".log", env, name, exe)
+            games[name] = Game(args, out[name] + ".log", env, name, exe, args.cache_slots[player])
         for words in steps:
             if words[0].lower() == "quit":
                 break
@@ -214,6 +216,8 @@ def main():
     ap.add_argument("--timeout", type=float, default=30, help="default wait timeout in seconds")
     ap.add_argument("--max-frames", type=int, default=60 * 60 * 10,
                     help="MELEE_EXIT_AFTER_FRAMES backstop (default 10 minutes)")
+    ap.add_argument("--cache-slots", default="1,2",
+                    help="a's and b's shader caches, build/drive/cache/SLOT (default 1,2)")
     args = ap.parse_args()
     # What Game reads from drive.py's options: both runs start at the title
     # screen, silent, in the background and without speech.
@@ -221,6 +225,9 @@ def main():
     sys.stdout.reconfigure(errors="replace")
     if sys.platform != "win32":
         ap.error("Windows only; on Linux use tools/net_test.py")
+    args.cache_slots = args.cache_slots.split(",")
+    if len(args.cache_slots) != 2 or len(set(args.cache_slots)) != 2:
+        ap.error("--cache-slots takes two different slots, a's and b's")
     with open(args.script, encoding="utf-8") as f:
         text = f.read()
     try:

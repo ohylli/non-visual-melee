@@ -15,8 +15,10 @@ Script steps, one per line (or ';'-separated with -c), '#' starts a comment:
 
   press BUTTON[+BUTTON...] [MS]  hold the buttons MS milliseconds (default 120)
                                  and wait until the game's pad shows them
-  press ... until RE [TIMES]     press again every 1.5 s until an output line
-                                 matches RE, at most TIMES (default 20)
+  press ... until RE [TIMES [SECONDS]]
+                                 press again every SECONDS (default 1.5)
+                                 until an output line matches RE, at most
+                                 TIMES (default 20)
   search RE BUTTON[*N] ...       press the buttons one at a time, BUTTON*N
                                  being N presses, until an output line
                                  matches RE; each press waits up to 1.5 s for
@@ -44,6 +46,10 @@ Cue settings come from a file of the run's own, --out's path plus
 .cues.ini, removed before the game starts so it is written afresh with the
 defaults; MELEE_A11Y_CUE_SETTINGS in the environment names another.
 
+The shader caches come from build/drive/cache/SLOT (--cache-slot, default
+1), first copied from the player's own: games running at once each need a
+slot of their own.
+
 The run ends with an implicit quit. A failed wait quits too and exits 1, and
 so does the game exiting before the script ends, as on a crash.
 """
@@ -54,6 +60,7 @@ import os
 import queue
 import re
 import shlex
+import shutil
 import struct
 import subprocess
 import sys
@@ -73,7 +80,7 @@ BUTTONS = {
 }
 
 DEFAULT_SHOW = ("[a11y]", "boot scene")
-UNTIL_SETTLE = 1.5  # seconds a "press ... until" waits for its text before pressing again
+UNTIL_SETTLE = 1.5  # seconds a "press ... until" waits for its text before pressing again, by default
 SPEECH = "] speak "  # in every announcement's log line
 PAD_RE = re.compile(r"pad: btn ([0-9a-f]+) stick (-?\d+),(-?\d+) sub (-?\d+),(-?\d+) trig (\d+),(\d+)")
 
@@ -133,6 +140,25 @@ WM_CLOSE = 0x0010
 
 class ScriptError(Exception):
     pass
+
+
+# The game's shader caches, SQLite files in its settings folder unless
+# MELEE_CACHE_DIR moves them. Two games running at once cannot share them:
+# the second logs "database is locked" and runs without its GPU cache.
+CACHE_FILES = ("pipeline_cache.db", "dawn_cache.db")
+
+
+def cache_dir(slot):
+    """build/drive/cache/SLOT, made on first use as a copy of the player's
+    own caches, so its first run need not build every shader afresh."""
+    path = os.path.join(REPO, "build", "drive", "cache", str(slot))
+    if not os.path.isdir(path):
+        os.makedirs(path)
+        player = os.path.join(os.environ.get("APPDATA", ""), "melee-pc")
+        for name in CACHE_FILES:
+            if os.path.isfile(os.path.join(player, name)):
+                shutil.copyfile(os.path.join(player, name), os.path.join(path, name))
+    return path
 
 
 class KeyPipe:
@@ -247,19 +273,21 @@ def keys_for(spec):
 
 
 def parse_press(rest, captured):
-    """press BUTTONS [MS] [until RE [TIMES]] -> (keys, hold, until, times)"""
+    """press BUTTONS [MS] [until RE [TIMES [SECONDS]]] -> (keys, hold, until,
+    times, every)"""
     keys = keys_for(rest[0])
     rest = rest[1:]
     hold = 120
     if rest and rest[0].lower() != "until":
         hold = int(rest.pop(0))
-    until, times = None, 1
-    if rest and rest[0].lower() == "until" and len(rest) in (2, 3):
+    until, times, every = None, 1, UNTIL_SETTLE
+    if rest and rest[0].lower() == "until" and len(rest) in (2, 3, 4):
         until = pattern(rest[1], captured)
-        times = int(rest[2]) if len(rest) == 3 else 20
+        times = int(rest[2]) if len(rest) >= 3 else 20
+        every = float(rest[3]) if len(rest) == 4 else UNTIL_SETTLE
     elif rest:
         raise ScriptError(f"bad press arguments: {' '.join(rest)}")
-    return keys, hold, until, times
+    return keys, hold, until, times, every
 
 
 def pattern(text, captured):
@@ -447,9 +475,10 @@ class Game:
     out and printed as it comes. step() runs one script step against it.
     A name tells two games apart in the printed output and in the pipe's
     name; env holds settings of this run over the ones every run gets; exe
-    is another build's melee.exe in place of build/melee.exe."""
+    is another build's melee.exe in place of build/melee.exe; cache_slot
+    names its shader caches (cache_dir)."""
 
-    def __init__(self, args, out, env=None, name=None, exe=None):
+    def __init__(self, args, out, env=None, name=None, exe=None, cache_slot="1"):
         self.args = args
         self.name = name
         self.cursor = 0
@@ -466,6 +495,7 @@ class Game:
             "MELEE_NO_ATTRACT": "1",
             "MELEE_EXIT_AFTER_FRAMES": str(args.max_frames),
             "MELEE_LOG_FILE": os.path.abspath(out) + ".game.log",
+            "MELEE_CACHE_DIR": cache_dir(cache_slot),
         })
         if not os.environ.get("MELEE_A11Y_CUE_SETTINGS"):
             # A cue settings file of the run's own, never the maintainer's;
@@ -516,13 +546,13 @@ class Game:
         cmd, rest = words[0].lower(), words[1:]
         self.note(" ".join(words))
         if cmd == "press" and rest:
-            keys, hold, until, times = parse_press(rest, captured)
+            keys, hold, until, times, every = parse_press(rest, captured)
             self.cursor = output.mark()
             for n in range(1, times + 1):
                 self.press(keys, hold)
                 if until is None:
                     break
-                i = output.wait_for(self.cursor, until.search, UNTIL_SETTLE)
+                i = output.wait_for(self.cursor, until.search, every)
                 if i is not None:
                     self.note(f"{until.pattern!r} after {n} press(es)")
                     self.cursor = self.matched(until, i)
@@ -572,7 +602,7 @@ class Game:
 
 
 def run(args, steps):
-    game = Game(args, args.out)
+    game = Game(args, args.out, cache_slot=args.cache_slot)
     failed = False
     try:
         if args.focus:
@@ -607,6 +637,8 @@ def main():
     ap.add_argument("--timeout", type=float, default=30, help="default wait timeout in seconds")
     ap.add_argument("--max-frames", type=int, default=60 * 60 * 10,
                     help="MELEE_EXIT_AFTER_FRAMES backstop (default 10 minutes)")
+    ap.add_argument("--cache-slot", default="1",
+                    help="shader caches in build/drive/cache/SLOT (default 1); one per game running at once")
     args = ap.parse_args()
     # Game text can hold Japanese, which a console's code page may lack;
     # --out keeps the exact line.

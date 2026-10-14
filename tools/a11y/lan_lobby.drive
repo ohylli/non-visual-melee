@@ -16,10 +16,10 @@
 a wait "state 0 scene 0$"
 b wait "state 0 scene 0$"
 a press Start until "boot scene: game mode"
-a press A until '"Main Menu\. 1-P Mode\. '
+a press A until '"Main Menu\. 1-P Mode\. ' 20 0.3
 b press Start until "boot scene: game mode"
-b-fork press A until '"Main Menu\. 1-P Mode\. '
-b-base press A until "boot scene: state 0 scene 1$"
+b-fork press A until '"Main Menu\. 1-P Mode\. ' 20 0.3
+b-base press A until "boot scene: state 0 scene 1$" 20 0.3
 b-base sleep 2
 sleep 1
 
@@ -84,7 +84,9 @@ sleep 2
 a press B 1500
 a wait '"Back to LAN play\. (Searching for players|Found [^."]+)\. .*B to go back\."'
 b-fork wait '"Back to LAN play\. (Searching for players|Found [^."]+)\. .*B to go back\."'
-b-base wait "lobby: LAN: searching"
+# The base port's lobby logs searching only while it has found no one, and
+# b can find a again before that.
+b-base wait "lobby: (LAN: searching|2 players found)"
 
 # Start again; a closes on character select, and b returns to its lobby.
 # The fresh lobbies may list each other by their first frame, so the
