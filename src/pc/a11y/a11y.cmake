@@ -327,4 +327,21 @@ if (TARGET unit_tests)
     add_test(NAME position_cue COMMAND position_cue_test)
     set_tests_properties(position_cue PROPERTIES LABELS melee)
     add_dependencies(unit_tests position_cue_test)
+
+    # The match cues against hand-written match snapshots, their voices
+    # rendered into buffers with no device; its own pc_log_line.
+    add_executable(match_cues_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_match_cues.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/match_cues.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/position_cue.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/cue_settings.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/value_model.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/cue_engine.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/cue_sounds.cpp)
+    target_include_directories(match_cues_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_link_libraries(match_cues_test PRIVATE a11y_miniaudio)
+    target_compile_options(match_cues_test PRIVATE -UNDEBUG)
+    add_test(NAME match_cues COMMAND match_cues_test)
+    set_tests_properties(match_cues PROPERTIES LABELS melee)
+    add_dependencies(unit_tests match_cues_test)
 endif ()

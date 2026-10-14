@@ -107,7 +107,9 @@ gm_RunSimTick --pc_a11y_match_tick--> a11y_game_match_state --> A11yMatchState
 
 ### Drivers
 
-A driver is a pure function from the snapshot and its cue's mapping values to its voice's targets, or to none when the cue is silent (`position_cue.hpp`). Tests feed it hand-written snapshots (`test_position_cue.cpp`). `MatchCues` (`match_cues.cpp`) owns the rest: it registers each cue's values and voices once, as the cue settings open, and each tick starts a voice that has targets (a start while playing only changes them), and stops one that has none.
+A driver is a pure function from the snapshot and its cue's mapping values to its voice's targets, or to none when the cue is silent (`position_cue.hpp`). Tests feed it hand-written snapshots (`test_position_cue.cpp`). `MatchCues` (`match_cues.cpp`) owns the rest: it registers each cue's values and voices once, as the cue settings open, and each tick starts a voice that has targets (a start while playing only changes them), and stops one that has none. Its own tests (`test_match_cues.cpp`) render the voices into a buffer.
+
+The two position cues share the stage mapping (`StageMapping`, `stage_targets`): pan and pitch from a fighter's place, the same code for both, each cue with its own copy of the values in its own group of the file.
 
 So pausing stops a cue and unpausing starts it again: a stop is the engine's 5 ms ramp, and a pulsed voice started from silence pulses at once, which marks the match going on. The log shows both. Each tick of a running match is also a trace tick, numbered on from the first match's first tick, menu ticks left out.
 
@@ -122,6 +124,18 @@ A tick whose pan says where you are across the stage, whose pitch says how high,
 - **The sound**: the Star Fox 64 fork's aim click, a short decaying sine after 12 ms of lead-in.
 - **Its limits go together.** The tick must end inside the fastest pulse even an octave down, where it plays twice as long: 32 ms there is 64 ms, so the fast interval goes no lower than 0.07 s and the down range no wider than 1 octave. A wider down range or a faster pulse needs a shorter tick first (`MatchCues::kFastestInterval`, `kWidestDownRange`).
 
+### The opponent's position cue
+
+A rounder, lower pulse on the same stage mapping, placed where the opponent is, at a steady pace.
+
+- **Pan and pitch** as your cue's, from the opponent's position, with `opponent_position.edge_pan`, `up_range` and `down_range` of its own, starting at your cue's defaults.
+- **Interval**: fixed, `opponent_position.interval` (default 0.4 s). How near the opponent is stays your cue's job.
+- **Which opponent** is the snapshot's: the nearest one in play, chosen afresh each tick. When another fighter becomes the nearest, the voice moves there without restarting, so the pulse keeps its rhythm.
+- **Silent** outside a match, while paused, before GO, with no opponent, and while the opponent is out; it sounds again on the respawn platform. While you are out it plays on.
+- **The sound**: 12 ms of lead-in, then a 400 Hz sine with a quarter of its octave, rising over 5 ms and dying away over 70 ms. It must end inside its fastest interval an octave down: 82 ms there is 164 ms, so the interval goes no lower than 0.2 s (`MatchCues::kOpponentFastestInterval`).
+- **Boost** starts at 1.5, under your tick's 2: a longer tone reads louder than a short click at the same level.
+- **The two rhythms.** Far apart, your cue's 0.8 s and the opponent's 0.4 s start together at GO and stay in step, every other opponent pulse landing on your tick. Whether that reads as one rhythm is the play test's question (`.scratch/match-cues/spec.md`, open questions).
+
 ## Checking a cue without hearing it
 
 The agent cannot hear a cue, so the engine keeps three records, the last two off unless asked for:
@@ -130,6 +144,8 @@ The agent cannot hear a cue, so the engine keeps three records, the last two off
 - **The trace** (`MELEE_A11Y_CUE_TRACE`): every voice's targets every tick, for checking a mapping by numbers against what the game did.
 - **The dump** (`MELEE_A11Y_CUE_DUMP`): the cue mix itself, from the audio thread. SDL's dummy driver, which every agent run uses, still pulls the mix in real time, so a silent run records a true dump.
 
-`tools/a11y/cue_dump.py` turns a dump into what an ear would notice, window by window: level, the left-right balance as a pan, pulse onsets with their intervals, and the dominant pitch. Its measures are simple ones (onsets by a level threshold, pitch by zero crossings), so two cues sounding at once blur pan and pitch: check one cue at a time, or windows where only one sounds.
+`tools/a11y/cue_dump.py` turns a dump into what an ear would notice, window by window: level, the left-right balance as a pan, pulse onsets with their intervals, and the dominant pitch. Its measures are simple ones (onsets by a level threshold, pitch by zero crossings), so two cues sounding at once blur pan and pitch, and a pulse that starts while another cue sounds is no onset at all.
+
+`--band LOW HIGH` keeps one cue's register before the analysis, a steep band-pass on both channels, so two cues at once can be checked one at a time: the opponent's pulse in 150 to 1000 Hz, your tick in 1100 to 12000 Hz, while both sit near the floor's pitch. A sharp attack such as the tick's still leaks into the other band as a short click; `--threshold 0.3` sets the onset level to 30% of the band's peak instead of 10% and leaves the leak out. A pitch far up or down moves a cue towards the other's band.
 
 The `verify` skill has the commands, the expected lines and the match drive scripts.

@@ -15,15 +15,21 @@ opens. For each window of the dump this reports:
   zero crossings while something sounds.
 
 Onsets are found where the level rises past a tenth of the dump's peak after
-at least 5 ms below a quarter of that; a held tone has one onset, at its
-start. Two cues sounding at once blur the pan and the pitch; check one cue at
-a time, or look at the windows where only one sounds.
+at least 5 ms below a quarter of that, however slowly; a held tone has one onset, at its
+start. Two cues sounding at once blur the pan and the pitch, and a pulse that
+starts while another cue sounds is no onset; check one cue at a time, look
+at the windows where only one sounds, or keep one cue's register with
+--band LOW HIGH: a steep band-pass (eight poles each side) applied to both
+channels before the analysis, its thresholds then taken from what passes.
+Another cue's sharp attack still leaks through as a short click, which
+--threshold 0.3 (of the peak, rather than a tenth) leaves out.
 
 Standard library only: the Python CMake finds has no numpy. About a second
-per ten seconds of dump; --start and --end narrow it.
+per ten seconds of dump, several with --band; --start and --end narrow it.
 
 Usage:
   python tools/a11y/cue_dump.py DUMP [--window 0.5] [--start S] [--end S] [--onsets]
+                                     [--band LOW HIGH] [--threshold 0.1]
 """
 
 import argparse
@@ -51,6 +57,37 @@ def read_dump(path, start=0.0, end=None):
     return data[0::2], data[1::2]
 
 
+def biquad(samples, b0, b1, b2, a1, a2):
+    """One second-order section, direct form I, coefficients over a0."""
+    out = array("f", bytes(4 * len(samples)))
+    x1 = x2 = y1 = y2 = 0.0
+    for i, x in enumerate(samples):
+        y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+        x2, x1, y2, y1 = x1, x, y1, y
+        out[i] = y
+    return out
+
+
+def band_pass(samples, low, high, sections=4):
+    """samples with what lies below low Hz and above high Hz taken out: each
+    edge a cascade of sections Butterworth-Q high-pass or low-pass sections
+    (the audio EQ cookbook's), 12 dB an octave each."""
+    q = 1 / math.sqrt(2)
+    for edge, high_pass in ((low, True), (high, False)):
+        w0 = 2 * math.pi * edge / RATE
+        alpha = math.sin(w0) / (2 * q)
+        cos = math.cos(w0)
+        a0 = 1 + alpha
+        if high_pass:
+            b = ((1 + cos) / 2, -(1 + cos), (1 + cos) / 2)
+        else:
+            b = ((1 - cos) / 2, 1 - cos, (1 - cos) / 2)
+        coefficients = (b[0] / a0, b[1] / a0, b[2] / a0, -2 * cos / a0, (1 - alpha) / a0)
+        for _ in range(sections):
+            samples = biquad(samples, *coefficients)
+    return samples
+
+
 def block_peaks(left, right):
     """The peak of both channels in each 1 ms block."""
     peaks = []
@@ -64,23 +101,29 @@ def block_peaks(left, right):
     return peaks
 
 
-def thresholds(peaks):
-    """The onset detector's high and low thresholds for this dump."""
-    high = max(0.1 * max(peaks, default=0.0), 1e-4)
+def thresholds(peaks, fraction=0.1):
+    """The onset detector's high and low thresholds for this dump: fraction
+    of its peak, and a quarter of that."""
+    high = max(fraction * max(peaks, default=0.0), 1e-4)
     return high, high / 4
 
 
-def find_onsets(left, right, peaks=None):
+def find_onsets(left, right, peaks=None, fraction=0.1):
     """Frames where a pulse (or a held sound) starts."""
     peaks = block_peaks(left, right) if peaks is None else peaks
-    high, low = thresholds(peaks)
+    high, low = thresholds(peaks, fraction)
     onsets = []
     quiet = QUIET_BLOCKS
+    # After the quiet, a soft attack may take a few blocks to pass from the
+    # low threshold to the high one: still the same onset.
+    armed = True
     for b, p in enumerate(peaks):
         if p < low:
             quiet += 1
+            armed = armed or quiet >= QUIET_BLOCKS
             continue
-        if p >= high and quiet >= QUIET_BLOCKS:
+        quiet = 0
+        if p >= high and armed:
             first = b * BLOCK
             frame = next(
                 i
@@ -88,7 +131,7 @@ def find_onsets(left, right, peaks=None):
                 if abs(left[i]) >= high or abs(right[i]) >= high
             )
             onsets.append(frame)
-        quiet = 0
+            armed = False
     return onsets
 
 
@@ -117,12 +160,12 @@ def dominant_pitch(left, right, first, last, peaks):
     return RATE / statistics.median(periods)
 
 
-def analyse(left, right, window=0.5, start=0.0):
+def analyse(left, right, window=0.5, start=0.0, threshold=0.1):
     """One dict per window: time, level_db, peak_db, pan, onsets (times),
     intervals (seconds), pitch_hz. Silent windows have None for level, pan
     and pitch."""
     peaks = block_peaks(left, right)
-    onsets = find_onsets(left, right, peaks)
+    onsets = find_onsets(left, right, peaks, threshold)
     size = max(int(window * RATE), 1)
     windows = []
     for first in range(0, len(left), size):
@@ -175,12 +218,22 @@ def main():
     parser.add_argument("--start", type=float, default=0.0, help="seconds into the dump")
     parser.add_argument("--end", type=float, default=None, help="seconds into the dump")
     parser.add_argument("--onsets", action="store_true", help="also list every onset's time")
+    parser.add_argument("--band", type=float, nargs=2, metavar=("LOW", "HIGH"),
+                        help="analyse only what lies between LOW and HIGH Hz, as one cue's register")
+    parser.add_argument("--threshold", type=float, default=0.1,
+                        help="an onset's level as a fraction of the peak (default 0.1); "
+                             "raise it past another cue's leak through --band")
     args = parser.parse_args()
 
     left, right = read_dump(args.dump, args.start, args.end)
     if not left:
         sys.exit(f"{args.dump}: no audio in that range")
-    windows = analyse(left, right, args.window, args.start)
+    if args.band:
+        low, high = args.band
+        if not 0 < low < high < RATE / 2:
+            sys.exit(f"--band needs 0 < LOW < HIGH < {RATE // 2}")
+        left, right = band_pass(left, low, high), band_pass(right, low, high)
+    windows = analyse(left, right, args.window, args.start, args.threshold)
     print(f"{args.dump}: {len(left) / RATE:.2f} s")
     print("   time   level    peak    pan  onsets  interval s (min-max)    pitch Hz")
     for w in windows:

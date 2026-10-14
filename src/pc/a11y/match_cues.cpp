@@ -3,12 +3,15 @@
 #include "cue_sounds.hpp"
 #include "miniaudio.h"
 #include <cmath>
+#include <numbers>
 
 namespace a11y {
 namespace {
 
 /* A short click lifted under its volume to sit level with held tones. */
 constexpr float kYourBoost = 2.0f;
+/* The opponent's longer pulse needs less. */
+constexpr float kOpponentBoost = 1.5f;
 
 /* The tick of your position cue, the Star Fox 64 fork's aim click: a
  * 1500 Hz sine decaying fast over 20 ms, its last 3 ms faded to silence,
@@ -37,16 +40,53 @@ Sound tick_sound() {
     return sound;
 }
 
-}  // namespace
-
-PositionMapping MatchCues::PositionValues::mapping() const {
-    return PositionMapping{edge_pan.value(), up_range.value(), down_range.value(),
-        slow_interval.value(), fast_interval.value(), far_distance.value(), near_distance.value()};
+/* The opponent's pulse, lower and rounder than your tick so the two never
+ * blend: a 400 Hz sine with a little of its octave, rising over 5 ms and
+ * dying away over 70 ms, its last 10 ms faded to silence, after the tick's
+ * 12 ms of lead-in. 82 ms in all, 164 ms an octave down. */
+Sound pulse_sound() {
+    constexpr double kHz = 400.0;
+    constexpr float kOctave = 0.25f; /* the octave's share of the fundamental */
+    constexpr float kSeconds = 0.07f;
+    constexpr float kAttackSeconds = 0.005f;
+    constexpr float kDecayPerSecond = 30.0f;
+    constexpr float kAmplitude = 0.95f;
+    constexpr float kTailSeconds = 0.01f;
+    constexpr float kLeadInSeconds = 0.012f;
+    Sound sound;
+    sound.samples.resize(static_cast<size_t>(kSeconds * kCueRate));
+    for (size_t i = 0; i < sound.samples.size(); i++) {
+        const double t = static_cast<double>(i) / kCueRate;
+        const double phase = 2.0 * std::numbers::pi * kHz * t;
+        const double tone = std::sin(phase) + kOctave * std::sin(2.0 * phase);
+        sound.samples[i] = static_cast<float>(tone) * kAmplitude / (1.0f + kOctave) *
+                           std::exp(-kDecayPerSecond * static_cast<float>(t));
+    }
+    fade_in(sound, kAttackSeconds);
+    fade_out(sound, kTailSeconds);
+    lead_in(sound, kLeadInSeconds);
+    return sound;
 }
 
-MatchCues::PositionValues MatchCues::add_position_values(ValueGroup group) {
-    const PositionMapping defaults;
-    return PositionValues{
+}  // namespace
+
+StageMapping MatchCues::StageValues::mapping() const {
+    return StageMapping{edge_pan.value(), up_range.value(), down_range.value()};
+}
+
+PositionMapping MatchCues::YourValues::mapping() const {
+    return PositionMapping{stage.mapping(), slow_interval.value(), fast_interval.value(),
+        far_distance.value(), near_distance.value()};
+}
+
+OpponentMapping MatchCues::OpponentValues::mapping() const {
+    return OpponentMapping{stage.mapping(), interval.value()};
+}
+
+/* Worded for either position cue, each registering its own copy. */
+MatchCues::StageValues MatchCues::add_stage_values(ValueGroup group) {
+    const StageMapping defaults;
+    return StageValues{
         group.add_number(NumberSpec{"edge_pan", "Edge pan",
             "How far to the side the main floor's ends sound; past them the pan goes on to fully "
             "left or right at the side blast zones.",
@@ -59,6 +99,14 @@ MatchCues::PositionValues MatchCues::add_position_values(ValueGroup group) {
             "How many octaves lower the pitch is at the bottom blast zone than on the main "
             "floor.",
             "", defaults.down_range, 0.0f, kWidestDownRange, 0.1f}),
+    };
+}
+
+MatchCues::YourValues MatchCues::add_your_values(ValueGroup group) {
+    const PositionMapping defaults;
+    StageValues stage = add_stage_values(group);
+    return YourValues{
+        stage,
         group.add_number(NumberSpec{"slow_interval", "Slow interval",
             "Time between ticks with the opponent at the far distance or beyond, or with no "
             "opponent.",
@@ -76,30 +124,56 @@ MatchCues::PositionValues MatchCues::add_position_values(ValueGroup group) {
     };
 }
 
-MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
-    : MatchCues(settings.add_cue("your_position", "Your position cue", kYourBoost), engine) {}
+MatchCues::OpponentValues MatchCues::add_opponent_values(ValueGroup group) {
+    const OpponentMapping defaults;
+    StageValues stage = add_stage_values(group);
+    return OpponentValues{
+        stage,
+        group.add_number(NumberSpec{"interval", "Interval",
+            "Time between the opponent's pulses, the same however near they are.", "s",
+            defaults.interval, kOpponentFastestInterval, 3.0f, 0.05f}),
+    };
+}
 
-MatchCues::MatchCues(const CueGroup& your, CueEngine& engine)
-    : m_engine(engine), m_your(add_position_values(your.group)) {
-    VoiceSpec spec;
-    spec.name = "your position";
-    spec.cue = your.values.cue;
-    spec.sound = tick_sound();
-    spec.mode = VoiceMode::pulsed;
-    spec.fastest_interval = kFastestInterval;
-    spec.lowest_pitch = std::exp2(-kWidestDownRange);
-    m_your_voice = m_engine.add_voice(std::move(spec));
+MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
+    : m_engine(engine),
+      m_your_cue(settings.add_cue("your_position", "Your position cue", kYourBoost)),
+      m_your(add_your_values(m_your_cue.group)),
+      m_opponent_cue(
+          settings.add_cue("opponent_position", "Opponent's position cue", kOpponentBoost)),
+      m_opponent(add_opponent_values(m_opponent_cue.group)) {
+    VoiceSpec your;
+    your.name = "your position";
+    your.cue = m_your_cue.values.cue;
+    your.sound = tick_sound();
+    your.mode = VoiceMode::pulsed;
+    your.fastest_interval = kFastestInterval;
+    your.lowest_pitch = std::exp2(-kWidestDownRange);
+    m_your_voice = m_engine.add_voice(std::move(your));
+    VoiceSpec opponent;
+    opponent.name = "opponent position";
+    opponent.cue = m_opponent_cue.values.cue;
+    opponent.sound = pulse_sound();
+    opponent.mode = VoiceMode::pulsed;
+    opponent.fastest_interval = kOpponentFastestInterval;
+    opponent.lowest_pitch = std::exp2(-kWidestDownRange);
+    m_opponent_voice = m_engine.add_voice(std::move(opponent));
+}
+
+void MatchCues::play(int voice, const std::optional<VoiceTargets>& targets) {
+    if (voice < 0) {
+        return;
+    }
+    if (targets.has_value()) {
+        m_engine.start(voice, *targets);
+    } else if (m_engine.playing(voice)) {
+        m_engine.stop(voice);
+    }
 }
 
 void MatchCues::tick(const A11yMatchState& match) {
-    if (m_your_voice >= 0) {
-        std::optional<VoiceTargets> targets = your_position(match, m_your.mapping());
-        if (targets.has_value()) {
-            m_engine.start(m_your_voice, *targets);
-        } else if (m_engine.playing(m_your_voice)) {
-            m_engine.stop(m_your_voice);
-        }
-    }
+    play(m_your_voice, your_position(match, m_your.mapping()));
+    play(m_opponent_voice, opponent_position(match, m_opponent.mapping()));
     if (match.running) {
         m_engine.trace_tick(m_tick++);
     }

@@ -53,6 +53,15 @@ float nearness_interval(std::optional<float> distance, const PositionMapping& ma
     return std::exp(slow + (fast - slow) * t);
 }
 
+VoiceTargets stage_targets(
+    const A11yStageFrame& stage, const A11yMatchFighter& fighter, const StageMapping& mapping) {
+    VoiceTargets targets;
+    targets.pan = stage_pan(stage, fighter.x, mapping.edge_pan);
+    targets.pitch = stage_pitch(stage, fighter.y, mapping.up_range, mapping.down_range);
+    targets.gain = 1.0f;
+    return targets;
+}
+
 std::optional<VoiceTargets> your_position(
     const A11yMatchState& match, const PositionMapping& mapping) {
     const A11yMatchFighter& you = match.you;
@@ -64,11 +73,23 @@ std::optional<VoiceTargets> your_position(
         const A11yMatchFighter& opponent = match.opponents[0];
         distance = std::hypot(opponent.x - you.x, opponent.y - you.y);
     }
-    VoiceTargets targets;
-    targets.pan = stage_pan(match.stage, you.x, mapping.edge_pan);
-    targets.pitch = stage_pitch(match.stage, you.y, mapping.up_range, mapping.down_range);
-    targets.gain = 1.0f;
+    VoiceTargets targets = stage_targets(match.stage, you, mapping.stage);
     targets.interval = nearness_interval(distance, mapping);
+    return targets;
+}
+
+std::optional<VoiceTargets> opponent_position(
+    const A11yMatchState& match, const OpponentMapping& mapping) {
+    /* Both position cues start at GO, when your input comes on. */
+    if (!match.running || match.paused || !match.you.can_move || match.opponent_count == 0) {
+        return std::nullopt;
+    }
+    const A11yMatchFighter& opponent = match.opponents[0];
+    if (opponent.out) {
+        return std::nullopt;
+    }
+    VoiceTargets targets = stage_targets(match.stage, opponent, mapping.stage);
+    targets.interval = mapping.interval;
     return targets;
 }
 

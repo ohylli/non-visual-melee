@@ -28,6 +28,12 @@ float edge_gain(int i, int edge) {
                                   static_cast<float>(edge));
 }
 
+void fade_in_frames(Sound& sound, int edge) {
+    for (int i = 0; i < edge; i++) {
+        sound.samples[static_cast<size_t>(i)] *= edge_gain(i, edge);
+    }
+}
+
 void fade_out_frames(Sound& sound, int edge) {
     const int size = static_cast<int>(sound.samples.size());
     for (int i = 0; i < edge; i++) {
@@ -40,10 +46,13 @@ void fade_out_frames(Sound& sound, int edge) {
 void shape_edges(Sound& sound, float seconds) {
     const int size = static_cast<int>(sound.samples.size());
     const int edge = std::min(static_cast<int>(seconds * kCueRate), size / 2);
-    for (int i = 0; i < edge; i++) {
-        sound.samples[static_cast<size_t>(i)] *= edge_gain(i, edge);
-    }
+    fade_in_frames(sound, edge);
     fade_out_frames(sound, edge);
+}
+
+void fade_in(Sound& sound, float seconds) {
+    const int size = static_cast<int>(sound.samples.size());
+    fade_in_frames(sound, std::min(static_cast<int>(seconds * kCueRate), size));
 }
 
 void fade_out(Sound& sound, float seconds) {

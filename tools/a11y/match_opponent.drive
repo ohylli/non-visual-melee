@@ -1,0 +1,34 @@
+# The opponent's position cue in the debug VS match on Final Destination:
+# Link (player 1) against Mario (player 2), a human slot with no input, so
+# Mario stands still and never recovers. Link dashes over and smashes Mario
+# right until he falls off the right edge and loses a stock; Mario's cue
+# stops as he is knocked out and starts again on the respawn platform. Your
+# cue plays throughout, quickening as Link closes in.
+# Run from Git Bash with the debug match switches (two stocks each, Final
+# Destination on a fresh save), cues on, and a trace and a dump to check
+# the pans and the two pulse trains:
+#   MELEE_DEBUG_VS=1 MELEE_DEBUG_VS_STOCKS=2 MELEE_A11Y_CUES=1 \
+#     MELEE_A11Y_CUE_TRACE=build/drive/opponent.trace \
+#     MELEE_A11Y_CUE_DUMP=build/drive/opponent.f32 \
+#     python tools/a11y/drive.py tools/a11y/match_opponent.drive
+# then python tools/a11y/cue_dump.py build/drive/opponent.f32 --band 150 700
+# for the opponent's pulse and --band 1100 12000 for your tick.
+
+# Start on the title screen goes straight into the debug match.
+wait "state 0 scene 0$"
+press Start until "boot scene: state \d+ scene 2$"
+
+# Both cues start at GO: Link on the left, Mario as far on the right.
+wait 'cue your position start pan -0\.\d+ pitch [\d.]+ gain 1\.00 interval 0\.800' 60
+wait 'cue opponent position start pan 0\.\d+ pitch [\d.]+ gain 1\.00 interval 0\.400'
+sleep 1
+
+# A dash to the middle, then short dashes and forward smashes until Mario
+# goes over the edge and falls past the bottom blast zone (pitch 0.50).
+press Right 900
+sleep 1
+search 'cue opponent position stop pan 0\.\d+ pitch 0\.50 ' Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right
+
+# Back on the respawn platform, high above the stage.
+wait 'cue opponent position start pan [-\d.]+ pitch 1\.\d+ ' 10
+sleep 2

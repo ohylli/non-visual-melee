@@ -1,0 +1,235 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* The cues of a match against hand-written snapshots, their voices rendered
+ * into a buffer with no device: both position cues register their values in
+ * the file's order and their voices fit, and the opponent's cue follows a
+ * change of opponent without restarting, goes quiet while the opponent is
+ * knocked out and comes back at respawn. This file supplies the
+ * pc_log_line that main.c normally provides. */
+#include "cue_engine.hpp"
+#include "cue_settings.hpp"
+#include "match_cues.hpp"
+#include "value_model.hpp"
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdarg>
+#include <cstdio>
+#include <iostream>
+#include <string>
+#include <vector>
+
+namespace {
+
+std::vector<std::string> s_lines;
+
+std::size_t count_logged_starting(const std::string& start) {
+    return static_cast<std::size_t>(std::count_if(s_lines.begin(), s_lines.end(),
+        [&](const std::string& line) { return line.rfind(start, 0) == 0; }));
+}
+
+/* Final Destination's frame as measured (docs/a11y/gameplay-state.md). */
+A11yStageFrame final_destination() {
+    A11yStageFrame stage{};
+    stage.floor_left = -85.6f;
+    stage.floor_right = 85.6f;
+    stage.floor_y = 0.0f;
+    stage.blast_left = -246.0f;
+    stage.blast_right = 246.0f;
+    stage.blast_top = 188.0f;
+    stage.blast_bottom = -140.0f;
+    stage.camera_left = -170.0f;
+    stage.camera_right = 170.0f;
+    stage.camera_top = 114.0f;
+    stage.camera_bottom = -80.0f;
+    return stage;
+}
+
+A11yMatchFighter fighter(int slot, float x, float y) {
+    A11yMatchFighter f{};
+    f.slot = slot;
+    f.x = x;
+    f.y = y;
+    f.can_move = true;
+    return f;
+}
+
+/* You at the centre, the opponent in slot `slot` at (x, 0). */
+A11yMatchState match_with(int slot, float x) {
+    A11yMatchState match{};
+    match.running = true;
+    match.you = fighter(0, 0.0f, 0.0f);
+    match.opponent_count = 1;
+    match.opponents[0] = fighter(slot, x, 0.0f);
+    match.stage = final_destination();
+    return match;
+}
+
+/* The engine with logging, the cue settings at their defaults and the
+ * match cues. Each test starts with an empty log. */
+struct Fixture {
+    a11y::CueEngine engine{a11y::CueEngineOptions{true, "", ""}};
+    a11y::ValueModel model;
+    a11y::CueSettings cues{model};
+    a11y::MatchCues match_cues{cues, engine};
+
+    Fixture() {
+        cues.apply(engine);
+        s_lines.clear();
+    }
+
+    /* Only the opponent's cue heard, yours turned off underneath. */
+    void opponent_alone() {
+        model.set(*model.find("your_position.on"), 0.0f);
+        cues.apply(engine);
+    }
+};
+
+/* Interleaved stereo, rendered in blocks the size of a WASAPI callback. */
+std::vector<float> render(a11y::CueEngine& engine, float seconds) {
+    const int frames = static_cast<int>(seconds * a11y::kCueRate);
+    std::vector<float> out(static_cast<std::size_t>(frames) * 2);
+    for (int done = 0; done < frames; done += 480) {
+        engine.render(
+            out.data() + static_cast<std::size_t>(done) * 2, std::min(480, frames - done));
+    }
+    return out;
+}
+
+/* Seconds into the buffer where sound starts after at least 30 ms of
+ * silence. */
+std::vector<double> onsets(const std::vector<float>& stereo) {
+    constexpr float kThreshold = 0.01f;
+    const std::size_t quiet_frames = a11y::kCueRate * 3 / 100;
+    std::vector<double> found;
+    std::size_t quiet = quiet_frames;
+    for (std::size_t frame = 0; frame < stereo.size() / 2; ++frame) {
+        float level = std::max(std::fabs(stereo[frame * 2]), std::fabs(stereo[frame * 2 + 1]));
+        if (level < kThreshold) {
+            ++quiet;
+            continue;
+        }
+        if (quiet >= quiet_frames) {
+            found.push_back(static_cast<double>(frame) / a11y::kCueRate);
+        }
+        quiet = 0;
+    }
+    return found;
+}
+
+/* Left and right energy from a second onwards. */
+void energy(const std::vector<float>& stereo, double from, double& left, double& right) {
+    left = 0.0;
+    right = 0.0;
+    for (std::size_t frame = static_cast<std::size_t>(from * a11y::kCueRate);
+        frame < stereo.size() / 2; ++frame)
+    {
+        left += static_cast<double>(stereo[frame * 2]) * stereo[frame * 2];
+        right += static_cast<double>(stereo[frame * 2 + 1]) * stereo[frame * 2 + 1];
+    }
+}
+
+void both_cues_register_and_fit() {
+    Fixture f;
+    assert(f.match_cues.your_voice() >= 0 && f.match_cues.opponent_voice() >= 0);
+    const auto& groups = f.model.groups();
+    assert(groups.size() == 3);
+    assert(groups[1].id == "your_position" && groups[2].id == "opponent_position");
+    assert(groups[2].title == "Opponent's position cue");
+    std::vector<std::string> keys;
+    for (const a11y::NamedValue* named : groups[2].values) {
+        keys.push_back(named->key);
+    }
+    assert((keys == std::vector<std::string>{"opponent_position.on", "opponent_position.volume",
+                        "opponent_position.boost", "opponent_position.edge_pan",
+                        "opponent_position.up_range", "opponent_position.down_range",
+                        "opponent_position.interval"}));
+    /* Your cue's mapping defaults, each a value of its own. */
+    for (const char* name : {"edge_pan", "up_range", "down_range"}) {
+        const a11y::NamedValue* yours = f.model.find(std::string("your_position.") + name);
+        const a11y::NamedValue* theirs = f.model.find(std::string("opponent_position.") + name);
+        assert(yours != nullptr && theirs != nullptr && yours != theirs);
+        assert(yours->default_value == theirs->default_value);
+        assert(yours->min == theirs->min && yours->max == theirs->max);
+    }
+    const a11y::NamedValue* interval = f.model.find("opponent_position.interval");
+    assert(interval->default_value == 0.4f && interval->unit == "s");
+    assert(interval->min == a11y::MatchCues::kOpponentFastestInterval);
+    assert(f.model.find("opponent_position.boost")->default_value == 1.5f);
+    assert(f.model.find("opponent_position.on")->description ==
+           "Turns the opponent's position cue on or off.");
+}
+
+void a_change_of_opponent_moves_the_voice_without_restarting_it() {
+    Fixture f;
+    f.opponent_alone();
+    f.match_cues.tick(match_with(1, -60.0f));
+    std::vector<float> first = render(f.engine, 0.15f);
+    /* Another fighter comes nearer, on the other side. */
+    f.match_cues.tick(match_with(2, 60.0f));
+    assert(f.engine.playing(f.match_cues.opponent_voice()));
+    std::vector<float> second = render(f.engine, 0.6f);
+    assert(count_logged_starting("[a11y] cue opponent position start") == 1);
+    assert(count_logged_starting("[a11y] cue opponent position stop") == 0);
+    std::vector<float> all = first;
+    all.insert(all.end(), second.begin(), second.end());
+    /* One pulse at the start and the next a steady interval later, none at
+     * the change. */
+    std::vector<double> at = onsets(all);
+    assert(at.size() == 2);
+    assert(at[0] < 0.02);
+    assert(std::fabs(at[1] - at[0] - 0.4) < 0.002);
+    double left = 0.0;
+    double right = 0.0;
+    energy(first, 0.0, left, right);
+    assert(left > right * 2.0);
+    energy(all, 0.4, left, right);
+    assert(right > left * 2.0);
+}
+
+void the_opponent_cue_stops_while_knocked_out_and_comes_back() {
+    Fixture f;
+    const int voice = f.match_cues.opponent_voice();
+    A11yMatchState match = match_with(1, 30.0f);
+    f.match_cues.tick(match);
+    assert(f.engine.playing(voice));
+    /* Knocked out: the snapshot keeps it, or drops it when nobody else is
+     * in play. */
+    A11yMatchState out = match;
+    out.opponents[0].out = true;
+    f.match_cues.tick(out);
+    assert(!f.engine.playing(voice));
+    A11yMatchState nobody = match;
+    nobody.opponent_count = 0;
+    f.match_cues.tick(nobody);
+    assert(!f.engine.playing(voice));
+    /* Your cue goes on meanwhile. */
+    assert(f.engine.playing(f.match_cues.your_voice()));
+    /* Back on the respawn platform, high above the middle. */
+    A11yMatchState respawned = match;
+    respawned.opponents[0].x = 0.0f;
+    respawned.opponents[0].y = 60.0f;
+    f.match_cues.tick(respawned);
+    assert(f.engine.playing(voice));
+    assert(count_logged_starting("[a11y] cue opponent position start") == 2);
+    assert(count_logged_starting("[a11y] cue opponent position stop") == 1);
+    assert(count_logged_starting("[a11y] cue your position start") == 1);
+}
+
+}  // namespace
+
+extern "C" void pc_log_line(const char* fmt, ...) {
+    char line[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    std::vsnprintf(line, sizeof(line), fmt, ap);
+    va_end(ap);
+    s_lines.emplace_back(line);
+}
+
+int main() {
+    both_cues_register_and_fit();
+    a_change_of_opponent_moves_the_voice_without_restarting_it();
+    the_opponent_cue_stops_while_knocked_out_and_comes_back();
+    std::cout << "match_cues: all tests passed\n";
+    return 0;
+}

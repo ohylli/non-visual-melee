@@ -8,29 +8,43 @@
 #include "cue_settings.hpp"
 #include "game_access.h"
 #include "position_cue.hpp"
+#include <optional>
 
 namespace a11y {
 
 class MatchCues {
 public:
     /* The shortest fast interval and the widest down range the settings
-     * allow, which the tick's voice is made to fit: the tick played an
-     * octave down must end inside the fastest pulse. */
+     * allow, which your cue's tick is made to fit: the tick played an octave
+     * down must end inside the fastest pulse. */
     static constexpr float kFastestInterval = 0.07f;
     static constexpr float kWidestDownRange = 1.0f;
+    /* The shortest interval the opponent's cue allows, which its longer
+     * pulse fits the same way. */
+    static constexpr float kOpponentFastestInterval = 0.2f;
 
-    /* Before the cue settings file is read, so the file gains these values. */
+    /* Before the cue settings file is read, so the file gains these
+     * values. */
     MatchCues(CueSettings& settings, CueEngine& engine);
 
     /* After every simulated tick, not while rollback re-runs ticks: starts,
      * updates or stops each voice. */
     void tick(const A11yMatchState& match);
 
+    /* The voices' numbers in the engine, -1 for one it refused. */
+    int your_voice() const { return m_your_voice; }
+    int opponent_voice() const { return m_opponent_voice; }
+
 private:
-    struct PositionValues {
+    struct StageValues {
         Number edge_pan;
         Number up_range;
         Number down_range;
+
+        StageMapping mapping() const;
+    };
+    struct YourValues {
+        StageValues stage;
         Number slow_interval;
         Number fast_interval;
         Number far_distance;
@@ -38,13 +52,29 @@ private:
 
         PositionMapping mapping() const;
     };
+    struct OpponentValues {
+        StageValues stage;
+        Number interval;
 
-    MatchCues(const CueGroup& your, CueEngine& engine);
-    static PositionValues add_position_values(ValueGroup group);
+        OpponentMapping mapping() const;
+    };
+
+    static StageValues add_stage_values(ValueGroup group);
+    static YourValues add_your_values(ValueGroup group);
+    static OpponentValues add_opponent_values(ValueGroup group);
+    /* A voice with targets starts, or only moves when it plays; one without
+     * stops. */
+    void play(int voice, const std::optional<VoiceTargets>& targets);
 
     CueEngine& m_engine;
-    PositionValues m_your;
+    /* In the order the cue settings file lists them: each cue registers its
+     * group, then its values. */
+    CueGroup m_your_cue;
+    YourValues m_your;
+    CueGroup m_opponent_cue;
+    OpponentValues m_opponent;
     int m_your_voice;
+    int m_opponent_voice;
     int m_tick = 0;
 };
 

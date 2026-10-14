@@ -55,7 +55,7 @@ The values that switch, set the loudness of and tune the cues, as one model of n
 _Avoid_: Cue config, cue options, tuning file (that is only the model's file), setting (that is the port's)
 
 **Position cue**:
-A pulsed cue whose pan and pitch say where a fighter is on the stage: pan across it, pitch how high. Two are planned: **your position cue**, whose pulse also quickens as the opponent comes near, and **the opponent's position cue**.
+A pulsed cue whose pan and pitch say where a fighter is on the stage: pan across it, pitch how high. There are two: **your position cue**, whose pulse also quickens as the opponent comes near, and **the opponent's position cue**, a lower pulse at a steady pace.
 _Avoid_: Locator, radar, beacon, player cue
 
 **Speech log**:
