@@ -45,6 +45,7 @@ The review of 1940185..4e2c76e fixed what was plainly the agent's in its own com
 
 The maintainer played matches with NVDA against a CPU, offline, and found nothing major. No new issues.
 
+- **New default from the tuning file:** `opponent_position.boost` 3 (was 1.5), too quiet before; now in the code. A tuning file already written keeps its own value; deleting it brings the new default.
 - **The two cues are easy to tell apart** when both play at once.
 - **The rhythm is not a problem:** the two pulse trains falling into step did not bother the ear, so the spec's open question is answered and the 0.4 s interval stays. The pitch overlap on a respawn, left by the review, was not raised either.
 - **Online was not tested.** It moves to issue 11, one online play test for all four cues after issue 10, when a second device or a friend is available. It takes this issue's online item and issue 04's: each side's cues following the right players, and a stalled session.

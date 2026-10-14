@@ -133,7 +133,7 @@ A rounder, lower pulse on the same stage mapping, placed where the opponent is, 
 - **Which opponent** is the snapshot's: the nearest one in play, chosen afresh each tick. When another fighter becomes the nearest, the voice moves there without restarting, so the pulse keeps its rhythm.
 - **Silent** outside a match, while paused, before GO, with no opponent, and while the opponent is out; it sounds again on the respawn platform. While you are out it plays on.
 - **The sound**: 12 ms of lead-in, then a 400 Hz sine with a quarter of its octave, rising over 5 ms and dying away over 70 ms. It must end inside its fastest interval an octave down: 82 ms there is 164 ms, so the interval goes no lower than 0.2 s (`MatchCues::kOpponentFastestInterval`).
-- **Boost** starts at 1.5, under your tick's 2: a longer tone reads louder than a short click at the same level.
+- **Boost** starts at 3, above your tick's 2: the play test by ear found the lower pulse too quiet at 1.5.
 - **The two rhythms.** Far apart, your cue's 0.8 s and the opponent's 0.4 s start together at GO and stay in step, every other opponent pulse landing on your tick. Whether that reads as one rhythm is the play test's question (`.scratch/match-cues/spec.md`, open questions).
 
 ## Checking a cue without hearing it

@@ -11,8 +11,8 @@ namespace {
 
 /* A short click lifted under its volume to sit level with held tones. */
 constexpr float kYourBoost = 2.0f;
-/* The opponent's longer pulse needs less. */
-constexpr float kOpponentBoost = 1.5f;
+/* The opponent's lower pulse more, as tuned by ear. */
+constexpr float kOpponentBoost = 3.0f;
 
 /* The tick of your position cue, the Star Fox 64 fork's aim click: a
  * 1500 Hz sine decaying fast over 20 ms, its last 3 ms faded to silence,

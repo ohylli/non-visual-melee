@@ -131,7 +131,7 @@ void both_cues_register_and_fit() {
     const a11y::NamedValue* interval = f.model.find("opponent_position.interval");
     assert(interval->default_value == 0.4f && interval->unit == "s");
     assert(interval->min == a11y::MatchCues::kOpponentFastestInterval);
-    assert(f.model.find("opponent_position.boost")->default_value == 1.5f);
+    assert(f.model.find("opponent_position.boost")->default_value == 3.0f);
     assert(f.model.find("opponent_position.on")->description ==
            "Turns the opponent's position cue on or off.");
 }
