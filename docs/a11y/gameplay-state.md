@@ -257,7 +257,7 @@ Whether the edge is deadly is the [gap question](#is-there-ground-below-over-a-g
 
 ### Can I drop through this platform?
 
-The fighter is on a platform when it is on the ground and its floor line has `LINE_FLAG_PLATFORM` (`mpColl_IsOnPlatform` asks this through `mpLineGetFlags`, without guarding against a missing floor). Tilting the stick down quickly drops through (`ftCo_80099F1C`, `ftCo_Pass.c`): the fighter enters `Pass` (244) and the game ignores that platform until it has fallen past. A quick flick down while already crouching drops through too, after a short delay; holding a crouch does not. From below, any platform can be jumped up through.
+The fighter is on a platform when it is on the ground and its floor line has `LINE_FLAG_PLATFORM` (`mpColl_IsOnPlatform` asks this through `mpLineGetFlags`, without guarding against a missing floor). Tilting the stick down quickly drops through (`ftCo_80099F1C`, `ftCo_Pass.c`): the fighter enters `Pass` (244) and the game ignores that platform until it has fallen past: it names the platform in `coll_data.floor_skip`, which its collision step passes to `mpCheckFloor` as the line to skip, and so does the fork's own cast. A quick flick down while already crouching drops through too, after a short delay; holding a crouch does not. From below, any platform can be jumped up through.
 
 Measured on Battlefield: a down press on the right platform put Link in `Pass`, and he landed on the main floor 20 ticks later.
 

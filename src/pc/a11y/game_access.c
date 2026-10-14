@@ -748,7 +748,8 @@ static void match_floor_below(const Fighter* fp, float bottom, A11yFloorBelow* o
      * the game lands it on: in the air the box rises above the feet, and
      * the feet sink up to about 6 units below a floor the box is still
      * above (measured on Link landing), so a cast from the feet would find
-     * a gap over the floor. */
+     * a gap over the floor. A platform the fighter is dropping through is
+     * skipped, as the game's own collision step skips it. */
     float x = fp->cur_pos.x;
     float top = fp->cur_pos.y + fp->coll_data.ecb.bottom.y + 1.0F;
     if (top <= bottom) {
@@ -758,8 +759,8 @@ static void match_floor_below(const Fighter* fp, float bottom, A11yFloorBelow* o
     int line = -1;
     u32 flags;
     Vec3 normal;
-    if (mpCheckFloor(
-            x, top, x, bottom, 0.0F, &hit, &line, &flags, &normal, -1, -1, -1, NULL, NULL) &&
+    if (mpCheckFloor(x, top, x, bottom, 0.0F, &hit, &line, &flags, &normal,
+            fp->coll_data.floor_skip, -1, -1, NULL, NULL) &&
         line >= 0 && line < line_count)
     {
         out->found = true;

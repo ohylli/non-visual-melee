@@ -529,7 +529,10 @@ typedef struct A11yFloorBelow {
     bool found;
     /* The floor line, a valid id whenever found; -1 otherwise. */
     int line;
-    /* The floor's height straight below the fighter's feet. */
+    /* The floor's height straight below the fighter. On the ground the
+     * feet's height; in the air the cast's hit, which can lie a few units
+     * above the feet (see A11yMatchState.below), so the drop to it can come
+     * out negative. */
     float y;
 } A11yFloorBelow;
 
@@ -557,9 +560,10 @@ typedef struct A11yMatchState {
      * under your feet (coll_data.floor.index). In the air, the first floor
      * the game's own cast (mpCheckFloor) meets straight down from just
      * above the bottom of your collision box, which sits at or above your
-     * feet, to the bottom blast zone; none means a gap, where falling
-     * straight down would cross the bottom blast zone. Not found while you
-     * are out. */
+     * feet, to the bottom blast zone, skipping a platform you are dropping
+     * through; none in the air means a gap, where falling straight down
+     * would cross the bottom blast zone (on the ground none means only an
+     * unreadable floor). Not found while you are out. */
     A11yFloorBelow below;
     /* The nearest other slot's main fighter in play, not on your team in a
      * team match, by straight-line distance; none when nobody is in play. */

@@ -8,7 +8,7 @@ A pulsed tone on the left or right while you are near a deadly end of the floor 
 
 ## Machinery
 
-- **The snapshot** gains the floor below you: on the ground `coll_data.floor.index`, read only while on the ground; in the air the line the gap warning's cast found. From it, the floor's left and right ends (`mpFloorGetLeft`, `mpFloorGetRight`), and for each end whether a downward cast a few units outward finds a floor. Casts in the tick hook only; line ids guarded.
+- **The snapshot** already holds the floor below you, `A11yMatchState.below`, filled by issue 07 (see its "For issue 09" comment): on the ground `coll_data.floor.index`, in the air the line the gap warning's cast found. From it, the floor's left and right ends (`mpFloorGetLeft`, `mpFloorGetRight`), and for each end whether a downward cast a few units outward finds a floor. Casts in the tick hook only; line ids guarded.
 - **The driver**: for each deadly end within the warning distance, a voice on that side: pan fully to that side at the warning distance moving toward the centre as you close in, stopping at the pan floor at the edge; loudness from the level floor at the warning distance to full at the edge. Two voices when both ends of a small floor are close. Silent with no floor below, which hands over to the gap warning, and while knocked out or between death and respawn.
 - **The sound**: a generated tone pulsed at a fixed rate of about 5 Hz, distinct from the other cues.
 - **Settings** registered: on or off, volume, boost, warning distance 30 units, pan floor 0.3, level floor 30%, the outward offset of the deadly test.

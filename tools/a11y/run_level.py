@@ -141,15 +141,22 @@ def execute(run, slots, lock):
     lines = proc.stdout.decode("utf-8", "replace").splitlines()
     run.failures = [line for line in lines if FAILURE.search(line)]
     absent = ABSENT.get(run.name)
+    counts = COUNT.get(run.name, [])
+    logged_lines = []
+    if absent or counts:
+        try:
+            with open(run.out, encoding="utf-8", errors="replace") as f:
+                logged_lines = [line.rstrip("\n") for line in f]
+        except OSError as e:
+            run.code = run.code or 1
+            run.failures.append(f">> FAILED: transcript unreadable: {e}")
     if absent:
-        with open(run.out, encoding="utf-8", errors="replace") as f:
-            found = [line.rstrip("\n") for line in f if absent.search(line)]
+        found = [line for line in logged_lines if absent.search(line)]
         if found:
             run.code = run.code or 1
             run.failures += [f">> FAILED: logged {absent.pattern!r}: {line}" for line in found]
-    for pattern, times in COUNT.get(run.name, []):
-        with open(run.out, encoding="utf-8", errors="replace") as f:
-            logged = sum(1 for line in f if pattern.search(line))
+    for pattern, times in counts:
+        logged = sum(1 for line in logged_lines if pattern.search(line))
         if logged != times:
             run.code = run.code or 1
             run.failures.append(f">> FAILED: logged {pattern.pattern!r} {logged} times, not {times}")
