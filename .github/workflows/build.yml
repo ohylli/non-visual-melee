@@ -204,7 +204,7 @@ jobs:
 
       - name: Build APK
         env:
-          MELEE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.3.0' }}
+          MELEE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.3.1' }}
           MELEE_KEYSTORE_BASE64: ${{ secrets.MELEE_KEYSTORE_BASE64 }}
           MELEE_KEYSTORE_PASSWORD: ${{ secrets.MELEE_KEYSTORE_PASSWORD }}
           MELEE_KEY_ALIAS: ${{ secrets.MELEE_KEY_ALIAS }}
@@ -246,14 +246,14 @@ jobs:
           # scalar_storage_order, so tools/gcc_launcher.py routes melee_game
           # through Homebrew's gcc. SDL3 is built from AURORA_SDL3_REF and
           # bundled into the .app with the other dylibs by package_macos.sh.
-          brew install gcc cmake ninja zstd libpng freetype
+          brew install gcc cmake ninja zstd libpng freetype libusb
 
       - name: Verify native rollback snapshot restore
         run: python3 tools/test_snapshot_platforms.py SnapshotPlatforms.test_native_mac_restore
 
       - name: Build and package
         env:
-          MELEE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.3.0' }}
+          MELEE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.3.1' }}
         run: tools/package_macos.sh
 
       - uses: actions/upload-artifact@v4
