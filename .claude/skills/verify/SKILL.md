@@ -73,8 +73,6 @@ A bounded run boots straight into a scene and exits after a fixed frame count:
 
 Flakes: a step that logs "no pad change seen for that press" lost its press to the input driver; rerun before suspecting speech. A press can also land a frame off with no such line (a cursor back where it was); a script that fails once and passes on an unchanged rerun lost a press too.
 
-Venom crashes the base port as its match starts, every time, cues on or off (found 2026-10-13; an access violation reading 0xFFFFFFFFFFFFFFFF in `lb_8000B1CC`, called from `grVenom_8020454C`; a bounded `vs` run with `MELEE_DEBUG_VS_STAGE=22` shows it). `css_training.drive` picks a random stage and `css_classic.drive` meets a random first one, so either fails whenever that stage is Venom (`game exited with code 3221225477` and a `[FATAL] crash` in the log; `speak interrupt (off): "Random: Venom."` before it in `css_training.drive`): rerun.
-
 ## Match drive scripts
 
 `tools/a11y/match_position.drive` checks your position cue (primer `docs/a11y/cues.md`, "The match cues") in a Training match on Final Destination: Pichu against a standing CPU, about 45 seconds. Run it with cues on and both records:
