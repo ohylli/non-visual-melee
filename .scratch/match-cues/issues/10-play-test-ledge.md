@@ -4,7 +4,7 @@ Status: ready-for-human
 Type: task
 Blocked by: 09
 
-The maintainer plays matches with NVDA on several stages, offline and online when a friend is available.
+The maintainer plays matches with NVDA on several stages, offline. Online is issue 11.
 
 Listen for:
 

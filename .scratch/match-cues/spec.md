@@ -200,5 +200,6 @@ Four slices, each ending with a play test by ear before the next starts. The fir
 8. `issues/08-play-test-gap.md`: by ear. Blocked by 07.
 9. `issues/09-ledge-warning.md`: the ledge warning. Blocked by 08.
 10. `issues/10-play-test-ledge.md`: by ear, the four cues together. Blocked by 09.
+11. `issues/11-play-test-online.md`: by ear, the four cues online, with a friend or a second device. Blocked by 10. Added after issue 06's play test: the play tests before it stay offline.
 
 Docs are part of the issue they belong to.

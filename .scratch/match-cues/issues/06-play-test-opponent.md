@@ -1,6 +1,6 @@
 # 06 Play test by ear: the opponent's position cue
 
-Status: ready-for-human
+Status: resolved (2026-10-14)
 Type: task
 Blocked by: 05
 
@@ -40,3 +40,12 @@ The review of 1940185..4e2c76e fixed what was plainly the agent's in its own com
 
 - **The two cues' registers overlap at the extremes.** The opponent's pulse is 400 Hz with a quarter of its octave: on the default mapping its note runs from 200 to 800 Hz and its overtone up to 1600 Hz, and with `opponent_position.up_range` at 2 the note itself reaches 1600 Hz. Your tick runs from 750 to 3000 Hz. On every respawn the opponent sits near 800 Hz (pitch 1.99 in the run's log), so against your tick on the floor at 1500 Hz only the timbre keeps them apart. Options: leave it, or lower the pulse to about 250 to 300 Hz so the ranges stay apart at the default mapping. Recommendation: listen for it on a respawn while you stand on the floor; lower the pulse only if the two blur there.
 - **With more than one opponent, a knockout can go unheard, and the cue may wander while you are out.** The snapshot follows the nearest opponent in play, so knocking out the one the cue follows gives no silence: the pulse jumps in pan and pitch to the next nearest, and nothing says it is someone else. While you are knocked out the nearest is measured from where you were last, so in a match of three or four it can switch between opponents until you respawn. Options: leave it; keep following the same opponent while you are out; or mark a change of opponent (a short gap, or a different first pulse). Recommendation: listen in a three- or four-player match first; the spec's "list of one" design may want a decision before the gap and ledge warnings arrive.
+
+### 2026-10-14: play-tested by ear
+
+The maintainer played matches with NVDA against a CPU, offline, and found nothing major. No new issues.
+
+- **The two cues are easy to tell apart** when both play at once.
+- **The rhythm is not a problem:** the two pulse trains falling into step did not bother the ear, so the spec's open question is answered and the 0.4 s interval stays. The pitch overlap on a respawn, left by the review, was not raised either.
+- **Online was not tested.** It moves to issue 11, one online play test for all four cues after issue 10, when a second device or a friend is available. It takes this issue's online item and issue 04's: each side's cues following the right players, and a stalled session.
+- **Not raised:** more than one opponent, and panning the opponent relative to you. The review's recommendation for several opponents stands: listen in a three- or four-player match when it suits.
