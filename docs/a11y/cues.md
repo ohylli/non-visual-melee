@@ -35,6 +35,7 @@ miniaudio 0.11.25 is downloaded at configure and compiled once into its own libr
 
 ## Lifecycle and switches
 
+- `CueSystem` (`cue_system.cpp`) holds the engine, its output, the cue settings with their file and the match cues, and opens and closes them together; the hooks in `hooks.cpp` only forward to it.
 - The engine opens in `pc_a11y_init`, as the game starts: opening the stream takes part of a frame, too much for first use mid-game. It closes first thing in `pc_a11y_shutdown`.
 - Opening early moves the process's heap layout. That once made a base port bug much likelier: the file cache took heap buffers below 0x01000000 for ARAM offsets and cached garbled archives (fixed in `file_cache.cpp`, see `store_host`). If a crash rate rises only with cues on, suspect another place where a low host address is taken for ARAM.
 - Every voice stops, with its ramp, when a scene is entered (`pc_a11y_scene_entered`): cues belong to the screen they play on.

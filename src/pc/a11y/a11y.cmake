@@ -53,6 +53,7 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/cue_output.cpp
         ${CMAKE_CURRENT_LIST_DIR}/cue_sounds.cpp
         ${CMAKE_CURRENT_LIST_DIR}/cue_settings.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/cue_system.cpp
         ${CMAKE_CURRENT_LIST_DIR}/value_model.cpp
         ${CMAKE_CURRENT_LIST_DIR}/value_file.cpp
         ${CMAKE_CURRENT_LIST_DIR}/position_cue.cpp
