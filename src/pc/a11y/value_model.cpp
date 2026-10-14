@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-#include "settings.hpp"
+#include "value_model.hpp"
 #include <algorithm>
 #include <cctype>
 #include <charconv>
@@ -35,31 +35,30 @@ std::string format_number(float value) {
     return std::string(buffer, result.ptr);
 }
 
-std::string format_amount(const Setting& setting, float value) {
-    if (setting.kind == SettingKind::toggle) {
+std::string format_amount(const NamedValue& named, float value) {
+    if (named.kind == ValueKind::toggle) {
         return value != 0.0f ? "on" : "off";
     }
     std::string number = format_number(value);
-    if (setting.unit.empty()) {
+    if (named.unit.empty()) {
         return number;
     }
-    return setting.unit == "%" ? number + "%" : number + " " + setting.unit;
+    return named.unit == "%" ? number + "%" : number + " " + named.unit;
 }
 
 /* The comment above a value: its description, then what it takes. */
-std::string describe(const Setting& setting) {
-    std::string range =
-        setting.kind == SettingKind::toggle ?
-            "On or off" :
-            format_number(setting.min) + " to " + format_amount(setting, setting.max);
-    return "# " + setting.description + " " + range + ", default " +
-           format_amount(setting, setting.default_value) + ".\n";
+std::string describe(const NamedValue& named) {
+    std::string range = named.kind == ValueKind::toggle ?
+                            "On or off" :
+                            format_number(named.min) + " to " + format_amount(named, named.max);
+    return "# " + named.description + " " + range + ", default " +
+           format_amount(named, named.default_value) + ".\n";
 }
 
-std::string format_line(const Setting& setting, float value) {
+std::string format_line(const NamedValue& named, float value) {
     std::string text =
-        setting.kind == SettingKind::toggle ? format_amount(setting, value) : format_number(value);
-    return setting.key + " = " + text + "\n";
+        named.kind == ValueKind::toggle ? format_amount(named, value) : format_number(value);
+    return named.key + " = " + text + "\n";
 }
 
 bool read_toggle(std::string_view text, float& out) {
@@ -77,9 +76,9 @@ bool read_toggle(std::string_view text, float& out) {
 
 /* A number, optionally followed by the value's unit ("80%", "0.5 s"). A
  * decimal comma is taken for a point. */
-bool read_number(const Setting& setting, std::string_view text, float& out) {
+bool read_number(const NamedValue& named, std::string_view text, float& out) {
     std::string number = lowered(text);
-    std::string unit = lowered(setting.unit);
+    std::string unit = lowered(named.unit);
     if (!unit.empty() && number.size() > unit.size() &&
         number.compare(number.size() - unit.size(), unit.size(), unit) == 0)
     {
@@ -100,87 +99,87 @@ bool read_number(const Setting& setting, std::string_view text, float& out) {
 
 }  // namespace
 
-std::string format_value(const Setting& setting) {
-    return setting.kind == SettingKind::toggle ? format_amount(setting, setting.value) :
-                                                 format_number(setting.value);
+std::string format_value(const NamedValue& named) {
+    return named.kind == ValueKind::toggle ? format_amount(named, named.value) :
+                                             format_number(named.value);
 }
 
-Switch SettingsGroup::add_switch(const SwitchSpec& spec) {
-    Setting setting;
-    setting.key = spec.name;
-    setting.label = spec.label;
-    setting.description = spec.description;
-    setting.kind = SettingKind::toggle;
-    setting.default_value = spec.default_on ? 1.0f : 0.0f;
-    setting.min = 0.0f;
-    setting.max = 1.0f;
-    setting.step = 1.0f;
-    return Switch(m_settings->add(m_index, std::move(setting)));
+Switch ValueGroup::add_switch(const SwitchSpec& spec) {
+    NamedValue named;
+    named.key = spec.name;
+    named.label = spec.label;
+    named.description = spec.description;
+    named.kind = ValueKind::toggle;
+    named.default_value = spec.default_on ? 1.0f : 0.0f;
+    named.min = 0.0f;
+    named.max = 1.0f;
+    named.step = 1.0f;
+    return Switch(m_model->add(m_index, std::move(named)));
 }
 
-Number SettingsGroup::add_number(const NumberSpec& spec) {
-    Setting setting;
-    setting.key = spec.name;
-    setting.label = spec.label;
-    setting.description = spec.description;
-    setting.unit = spec.unit;
-    setting.kind = SettingKind::number;
-    setting.min = spec.min;
-    setting.max = spec.max;
-    setting.default_value = std::clamp(spec.default_value, spec.min, spec.max);
-    setting.step = spec.step;
-    return Number(m_settings->add(m_index, std::move(setting)));
+Number ValueGroup::add_number(const NumberSpec& spec) {
+    NamedValue named;
+    named.key = spec.name;
+    named.label = spec.label;
+    named.description = spec.description;
+    named.unit = spec.unit;
+    named.kind = ValueKind::number;
+    named.min = spec.min;
+    named.max = spec.max;
+    named.default_value = std::clamp(spec.default_value, spec.min, spec.max);
+    named.step = spec.step;
+    return Number(m_model->add(m_index, std::move(named)));
 }
 
-SettingsGroup Settings::group(std::string_view id, std::string_view title) {
+ValueGroup ValueModel::group(std::string_view id, std::string_view title) {
     for (std::size_t i = 0; i < m_groups.size(); ++i) {
         if (m_groups[i].id == id) {
-            return SettingsGroup(*this, i);
+            return ValueGroup(*this, i);
         }
     }
     m_groups.push_back(Group{std::string(id), std::string(title), {}});
-    return SettingsGroup(*this, m_groups.size() - 1);
+    return ValueGroup(*this, m_groups.size() - 1);
 }
 
-Setting& Settings::add(std::size_t group, Setting setting) {
+NamedValue& ValueModel::add(std::size_t group, NamedValue named) {
     Group& owner = m_groups[group];
-    setting.key = owner.id + "." + setting.key;
-    setting.value = setting.default_value;
+    named.key = owner.id + "." + named.key;
+    named.value = named.default_value;
     /* A key registered twice is a programming error; the second gets the
      * first's value rather than a duplicate line in the file. */
-    if (Setting* existing = find_mutable(setting.key)) {
+    if (NamedValue* existing = find_mutable(named.key)) {
         return *existing;
     }
-    Setting& added = m_settings.emplace_back(std::move(setting));
-    owner.settings.push_back(&added);
+    NamedValue& added = m_values.emplace_back(std::move(named));
+    owner.values.push_back(&added);
     return added;
 }
 
-Setting* Settings::find_mutable(std::string_view key) {
-    for (Setting& setting : m_settings) {
-        if (setting.key == key) {
-            return &setting;
+NamedValue* ValueModel::find_mutable(std::string_view key) {
+    for (NamedValue& named : m_values) {
+        if (named.key == key) {
+            return &named;
         }
     }
     return nullptr;
 }
 
-const Setting* Settings::find(std::string_view key) const {
-    for (const Setting& setting : m_settings) {
-        if (setting.key == key) {
-            return &setting;
+const NamedValue* ValueModel::find(std::string_view key) const {
+    for (const NamedValue& named : m_values) {
+        if (named.key == key) {
+            return &named;
         }
     }
     return nullptr;
 }
 
-bool Settings::set(const Setting& setting, float value) {
-    Setting* target = find_mutable(setting.key);
+bool ValueModel::set(const NamedValue& named, float value) {
+    NamedValue* target = find_mutable(named.key);
     if (target == nullptr || !std::isfinite(value)) {
         return false;
     }
     value = std::clamp(value, target->min, target->max);
-    if (target->kind == SettingKind::toggle) {
+    if (target->kind == ValueKind::toggle) {
         value = value != 0.0f ? 1.0f : 0.0f;
     }
     if (value == target->value) {
@@ -190,10 +189,10 @@ bool Settings::set(const Setting& setting, float value) {
     return true;
 }
 
-std::string Settings::to_text(bool at_defaults) const {
-    std::vector<const Setting*> all;
-    for (const Setting& setting : m_settings) {
-        all.push_back(&setting);
+std::string ValueModel::to_text(bool at_defaults) const {
+    std::vector<const NamedValue*> all;
+    for (const NamedValue& named : m_values) {
+        all.push_back(&named);
     }
     std::string text = write(all, at_defaults);
     if (!m_unknown.empty()) {
@@ -205,34 +204,34 @@ std::string Settings::to_text(bool at_defaults) const {
     return text;
 }
 
-std::string Settings::to_text(const std::vector<const Setting*>& only) const {
+std::string ValueModel::to_text(const std::vector<const NamedValue*>& only) const {
     return write(only, false);
 }
 
-std::string Settings::write(const std::vector<const Setting*>& only, bool at_defaults) const {
+std::string ValueModel::write(const std::vector<const NamedValue*>& only, bool at_defaults) const {
     std::string text;
     for (const Group& group : m_groups) {
         bool heading = false;
-        for (const Setting* setting : group.settings) {
-            if (std::find(only.begin(), only.end(), setting) == only.end()) {
+        for (const NamedValue* named : group.values) {
+            if (std::find(only.begin(), only.end(), named) == only.end()) {
                 continue;
             }
             if (!heading) {
                 text += "\n# " + group.title + "\n";
                 heading = true;
             }
-            float value = at_defaults ? setting->default_value : setting->value;
-            text += "\n" + describe(*setting) + format_line(*setting, value);
+            float value = at_defaults ? named->default_value : named->value;
+            text += "\n" + describe(*named) + format_line(*named, value);
         }
     }
     return text;
 }
 
-SettingsRead Settings::read_text(std::string_view text) {
-    SettingsRead read;
-    /* The value each known key's line gives, or its last setting when the
+TextRead ValueModel::read_text(std::string_view text) {
+    TextRead read;
+    /* The value each known key's line gives, or the value it held when the
      * line cannot be read. */
-    std::map<Setting*, float> given;
+    std::map<NamedValue*, float> given;
     std::map<std::string, std::string> unknown;
     /* Notepad may save with a byte order mark. */
     if (text.substr(0, 3) == "\xEF\xBB\xBF") {
@@ -253,48 +252,48 @@ SettingsRead Settings::read_text(std::string_view text) {
             equals == std::string_view::npos ? line : trim(line.substr(0, equals));
         std::string_view value =
             equals == std::string_view::npos ? std::string_view() : trim(line.substr(equals + 1));
-        Setting* setting = equals == std::string_view::npos ? nullptr : find_mutable(key);
+        NamedValue* named = equals == std::string_view::npos ? nullptr : find_mutable(key);
         if (equals == std::string_view::npos || key.empty()) {
             read.bad_lines.push_back(number);
             read.notes.push_back(
                 "line " + std::to_string(number) + " not understood: " + std::string(trim(raw)));
             continue;
         }
-        if (setting == nullptr) {
+        if (named == nullptr) {
             unknown[std::string(key)] = std::string(value);
             read.unknown.emplace_back(key);
             continue;
         }
         float parsed = 0.0f;
-        bool ok = setting->kind == SettingKind::toggle ? read_toggle(value, parsed) :
-                                                         read_number(*setting, value, parsed);
+        bool ok = named->kind == ValueKind::toggle ? read_toggle(value, parsed) :
+                                                     read_number(*named, value, parsed);
         if (!ok) {
             read.bad_lines.push_back(number);
-            read.notes.push_back(
-                "line " + std::to_string(number) + " not understood: " + std::string(trim(raw)) +
-                "; " + setting->key + " stays " + format_amount(*setting, setting->value));
-            given.try_emplace(setting, setting->value);
+            read.notes.push_back("line " + std::to_string(number) +
+                                 " not understood: " + std::string(trim(raw)) + "; " + named->key +
+                                 " stays " + format_amount(*named, named->value));
+            given.try_emplace(named, named->value);
             continue;
         }
-        float clamped = std::clamp(parsed, setting->min, setting->max);
+        float clamped = std::clamp(parsed, named->min, named->max);
         if (clamped != parsed) {
-            read.notes.push_back("line " + std::to_string(number) + ": " + setting->key + " " +
+            read.notes.push_back("line " + std::to_string(number) + ": " + named->key + " " +
                                  format_number(parsed) + " is out of range, using " +
-                                 format_amount(*setting, clamped));
+                                 format_amount(*named, clamped));
         }
-        given[setting] = clamped;
+        given[named] = clamped;
     }
-    for (Setting& setting : m_settings) {
-        auto found = given.find(&setting);
-        float value = setting.default_value;
+    for (NamedValue& named : m_values) {
+        auto found = given.find(&named);
+        float value = named.default_value;
         if (found != given.end()) {
             value = found->second;
         } else {
-            read.missing.push_back(&setting);
+            read.missing.push_back(&named);
         }
-        if (value != setting.value) {
-            setting.value = value;
-            read.changed.push_back(&setting);
+        if (value != named.value) {
+            named.value = value;
+            read.changed.push_back(&named);
         }
     }
     m_unknown = std::move(unknown);

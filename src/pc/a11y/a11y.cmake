@@ -53,8 +53,8 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/cue_output.cpp
         ${CMAKE_CURRENT_LIST_DIR}/cue_sounds.cpp
         ${CMAKE_CURRENT_LIST_DIR}/cue_settings.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/settings_file.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/value_model.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/value_file.cpp
         ${CMAKE_CURRENT_LIST_DIR}/position_cue.cpp
         ${CMAKE_CURRENT_LIST_DIR}/match_cues.cpp)
 target_include_directories(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR})
@@ -301,21 +301,21 @@ if (TARGET unit_tests)
         set_tests_properties(cue_dump_analysis PROPERTIES LABELS melee FIXTURES_REQUIRED cue_dump)
     endif ()
 
-    # The settings model and its file against files in a scratch folder, and
+    # The value model and its file against files in a scratch folder, and
     # the cue settings feeding the cue engine rendered into a buffer; a fake
     # bridge and its own pc_log_line.
-    add_executable(settings_test EXCLUDE_FROM_ALL
-            ${CMAKE_CURRENT_LIST_DIR}/test_settings.cpp
-            ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
-            ${CMAKE_CURRENT_LIST_DIR}/settings_file.cpp
+    add_executable(cue_settings_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_cue_settings.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/value_model.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/value_file.cpp
             ${CMAKE_CURRENT_LIST_DIR}/cue_settings.cpp
             ${CMAKE_CURRENT_LIST_DIR}/cue_engine.cpp
             ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
-    target_include_directories(settings_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
-    target_compile_options(settings_test PRIVATE -UNDEBUG)
-    add_test(NAME settings COMMAND settings_test ${CMAKE_BINARY_DIR}/settings_test)
-    set_tests_properties(settings PROPERTIES LABELS melee)
-    add_dependencies(unit_tests settings_test)
+    target_include_directories(cue_settings_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(cue_settings_test PRIVATE -UNDEBUG)
+    add_test(NAME cue_settings COMMAND cue_settings_test ${CMAKE_BINARY_DIR}/cue_settings_test)
+    set_tests_properties(cue_settings PROPERTIES LABELS melee)
+    add_dependencies(unit_tests cue_settings_test)
 
     # The position cues' driver against hand-written match snapshots.
     add_executable(position_cue_test EXCLUDE_FROM_ALL

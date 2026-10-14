@@ -19,7 +19,7 @@ public:
     static constexpr float kFastestInterval = 0.07f;
     static constexpr float kWidestDownRange = 1.0f;
 
-    /* Before the settings file is read, so the file gains these values. */
+    /* Before the cue settings file is read, so the file gains these values. */
     MatchCues(CueSettings& settings, CueEngine& engine);
 
     /* After every simulated tick, not while rollback re-runs ticks: starts,
@@ -40,7 +40,7 @@ private:
     };
 
     MatchCues(const CueGroup& your, CueEngine& engine);
-    static PositionValues add_position_values(SettingsGroup group);
+    static PositionValues add_position_values(ValueGroup group);
 
     CueEngine& m_engine;
     PositionValues m_your;

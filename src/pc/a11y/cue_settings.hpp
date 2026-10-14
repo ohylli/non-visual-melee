@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* The cues' part of the settings model (primer docs/a11y/cues.md, "Cue
+/* The cues' part of the value model (primer docs/a11y/cues.md, "Cue
  * settings"): the values every cue shares, those each cue has (its switch,
  * volume and boost), and how they reach the cue engine's volume chain. A cue
  * registers its own group through add_cue, adds its mapping values to that
  * group, and reads them all through typed handles. Game thread only. */
 #pragma once
 #include "cue_engine.hpp"
-#include "settings.hpp"
+#include "value_model.hpp"
 #include <string>
 #include <vector>
 
@@ -25,14 +25,14 @@ struct CueValues {
 /* A registered cue: its own group, for its mapping values, and its shared
  * values. */
 struct CueGroup {
-    SettingsGroup group;
+    ValueGroup group;
     CueValues values;
 };
 
 class CueSettings {
 public:
     /* Registers the values for all cues: the switch and the cue volume. */
-    explicit CueSettings(Settings& settings);
+    explicit CueSettings(ValueModel& model);
 
     /* Registers a cue's group, titled as the file and the port menu head
      * it ("Your position cue"), with its switch, volume and the boost it
@@ -42,13 +42,13 @@ public:
     /* Every level into the engine: once the settings are first read. */
     void apply(CueEngine& engine) const;
     /* Only the levels that these changed values make up. */
-    void apply(CueEngine& engine, const std::vector<const Setting*>& changed) const;
+    void apply(CueEngine& engine, const std::vector<const NamedValue*>& changed) const;
 
     CueLevel mix_level() const;
     const std::vector<CueValues>& cues() const { return m_cues; }
 
 private:
-    Settings& m_settings;
+    ValueModel& m_model;
     Switch m_on;
     Number m_volume;
     std::vector<CueValues> m_cues;

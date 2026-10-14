@@ -47,7 +47,7 @@ miniaudio 0.11.25 is downloaded at configure and compiled once into its own libr
 
 ### The model
 
-Cue settings are one model of named values (`settings.hpp`), with a text file as its first front end and the port menu meant as the second. Each value has a key (`cues.volume`), a short label for a menu row, a one-line description, a unit, a default and a range; a switch is a value of 0 or 1. That is enough to draw a switch or a slider for every value, and for the file to explain itself. Values sit in groups, one for all cues and one per cue, and a group's title heads it in the file.
+Cue settings are one model of named values (`ValueModel` in `value_model.hpp`, each value a `NamedValue`), with a text file as its first front end and the port menu meant as the second. Each value has a key (`cues.volume`), a short label for a menu row, a one-line description, a unit, a default and a range; a switch is a value of 0 or 1. That is enough to draw a switch or a slider for every value, and for the file to explain itself. Values sit in groups, one for all cues and one per cue, and a group's title heads it in the file. The code says value rather than setting throughout, since `CONTEXT.md` keeps "setting" for the port's own options.
 
 The model knows nothing about any cue. A feature registers its own values and keeps the typed handles it gets back (`Switch`, `Number`), which read the current value without looking up a key, so reading them every tick costs nothing. The model is fork-wide in principle: steering's values could join it later.
 
@@ -74,7 +74,7 @@ Every cue registers before the file is read, so a value the file lacks can be ad
 
 The file is read once as the engine opens, then `poll` looks at it about twice a second from scene entry and, in a match, from the match tick. Only a file whose time or size changed is read, only a text that changed is parsed, and only values that changed are applied and logged. Deleting the file brings every value back to its default and writes the file afresh. A line removed from the file goes back to its default too.
 
-The spoken error is queued, and speech right at startup or at a scene change can cut it off: the launcher and the screens that speak their opening on their first frame interrupt. `SettingsFile::problem` keeps the last read's error so a later moment, such as a match starting, can say it again.
+The spoken error is queued, and speech right at startup or at a scene change can cut it off: the launcher and the screens that speak their opening on their first frame interrupt. `ValueFile::problem` keeps the last read's error so a later moment, such as a match starting, can say it again.
 
 ## The match cues
 

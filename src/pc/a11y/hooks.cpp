@@ -15,8 +15,8 @@
 #include "pc/pc.h"
 #include "pc/region.h"
 #include "scene_speech.hpp"
-#include "settings.hpp"
-#include "settings_file.hpp"
+#include "value_model.hpp"
+#include "value_file.hpp"
 #include "speech.hpp"
 #include "sss_reader.hpp"
 #include <SDL3/SDL.h>
@@ -44,14 +44,14 @@ std::unique_ptr<a11y::CueOutput> s_cue_output;
 /* Cue settings (docs/a11y/cues.md): the model, the cues' values in it and
  * the file behind it, made once the engine opens; the file is null when it
  * has no path. */
-std::unique_ptr<a11y::Settings> s_settings;
+std::unique_ptr<a11y::ValueModel> s_model;
 std::unique_ptr<a11y::CueSettings> s_cue_settings;
-std::unique_ptr<a11y::SettingsFile> s_settings_file;
+std::unique_ptr<a11y::ValueFile> s_value_file;
 /* The cues of a match, made with the cue settings. */
 std::unique_ptr<a11y::MatchCues> s_match_cues;
 /* The last tick read had a match running, since the scene was entered. */
 bool s_match_running = false;
-/* The settings file's count of spoken errors as the scene was entered: one
+/* The cue settings file's count of spoken errors as the scene was entered: one
  * spoken since then, in the scene's own quiet, is not repeated. */
 int s_problems_at_scene = 0;
 /* The launcher's master volume with mute applied, kept from before the
@@ -154,8 +154,8 @@ std::string cue_settings_path(const a11y::Config& config) {
 /* The cue settings, once every cue has registered its values: read from the
  * file and fed to the engine. */
 void open_cue_settings(const a11y::Config& config) {
-    s_settings = std::make_unique<a11y::Settings>();
-    s_cue_settings = std::make_unique<a11y::CueSettings>(*s_settings);
+    s_model = std::make_unique<a11y::ValueModel>();
+    s_cue_settings = std::make_unique<a11y::CueSettings>(*s_model);
     /* Each cue registers its values here, before the file is read, so a
      * value the file lacks is added to it. */
     s_match_cues = std::make_unique<a11y::MatchCues>(*s_cue_settings, *s_cues);
@@ -165,11 +165,11 @@ void open_cue_settings(const a11y::Config& config) {
          * throws on text that is not UTF-8 (getenv gives the ANSI code page
          * on Windows); nothing may escape into the game's C. */
         try {
-            s_settings_file = std::make_unique<a11y::SettingsFile>(
-                *s_settings, *s_speech, "Cue settings", path, config.log);
-            s_settings_file->load(a11y::Clock::now());
+            s_value_file = std::make_unique<a11y::ValueFile>(
+                *s_model, *s_speech, "Cue settings", path, config.log);
+            s_value_file->load(a11y::Clock::now());
         } catch (const std::exception& error) {
-            s_settings_file.reset();
+            s_value_file.reset();
             if (config.log) {
                 pc_log_line("[a11y] cue settings: cannot use %s (%s); using the defaults",
                     path.c_str(), error.what());
@@ -183,10 +183,10 @@ void open_cue_settings(const a11y::Config& config) {
  * changed and applies what did. Called from scene entry and, in a match,
  * each tick. */
 void poll_cue_settings() {
-    if (s_settings_file == nullptr) {
+    if (s_value_file == nullptr) {
         return;
     }
-    std::vector<const a11y::Setting*> changed = s_settings_file->poll(a11y::Clock::now());
+    std::vector<const a11y::NamedValue*> changed = s_value_file->poll(a11y::Clock::now());
     if (!changed.empty()) {
         s_cue_settings->apply(*s_cues, changed);
     }
@@ -264,9 +264,9 @@ extern "C" void pc_a11y_shutdown(void) {
     a11y::launcher_speech_stop();
     s_cue_output.reset();
     s_match_cues.reset();
-    s_settings_file.reset();
+    s_value_file.reset();
     s_cue_settings.reset();
-    s_settings.reset();
+    s_model.reset();
     s_cues.reset();
     s_lobby.reset();
     s_sss.reset();
@@ -295,8 +295,8 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
         s_cues->stop_all();
     }
     announce_scene(previous_scene, css_exit, scene_kind);
-    if (s_settings_file != nullptr) {
-        s_problems_at_scene = s_settings_file->problems_spoken();
+    if (s_value_file != nullptr) {
+        s_problems_at_scene = s_value_file->problems_spoken();
     }
     /* After the scene's announcement, which interrupts, so an error in the
      * file is queued behind it. A screen that speaks its opening on its
@@ -426,14 +426,14 @@ extern "C" void pc_a11y_match_tick(uint64_t held_mask) {
     A11yMatchState match;
     a11y_game_match_state(local_port, pc_net_active(), held_mask, &match);
     if (match.running) {
-        if (!s_match_running && s_settings_file != nullptr && !s_settings_file->problem().empty() &&
-            s_settings_file->problems_spoken() == s_problems_at_scene)
+        if (!s_match_running && s_value_file != nullptr && !s_value_file->problem().empty() &&
+            s_value_file->problems_spoken() == s_problems_at_scene)
         {
             /* Said once already, where an earlier scene's own speech may
              * have cut it off; a match is where the player tunes and
              * listens. Said in this scene, as the match scene was entered,
              * it was heard. */
-            s_speech->announce(s_settings_file->problem(), a11y::Mode::queue);
+            s_speech->announce(s_value_file->problem(), a11y::Mode::queue);
         }
         poll_cue_settings();
     }

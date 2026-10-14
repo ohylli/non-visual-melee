@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-#include "settings_file.hpp"
+#include "value_file.hpp"
 #include "pc/pc.h"
 #include "speech.hpp"
 #include <algorithm>
@@ -43,12 +43,12 @@ std::string lowered(std::string text) {
 
 }  // namespace
 
-SettingsFile::SettingsFile(
-    Settings& settings, Speech& speech, std::string name, std::string path, bool log)
-    : m_settings(settings), m_speech(speech), m_name(std::move(name)), m_path(utf8_path(path)),
+ValueFile::ValueFile(
+    ValueModel& model, Speech& speech, std::string name, std::string path, bool log)
+    : m_model(model), m_speech(speech), m_name(std::move(name)), m_path(utf8_path(path)),
       m_log(log) {}
 
-std::vector<const Setting*> SettingsFile::load(Clock::time_point now) {
+std::vector<const NamedValue*> ValueFile::load(Clock::time_point now) {
     m_next_check = now + kPollInterval;
     log("file " + utf8_string(m_path));
     if (!ensure_written()) {
@@ -57,7 +57,7 @@ std::vector<const Setting*> SettingsFile::load(Clock::time_point now) {
     return read(true);
 }
 
-std::vector<const Setting*> SettingsFile::poll(Clock::time_point now) {
+std::vector<const NamedValue*> ValueFile::poll(Clock::time_point now) {
     if (now < m_next_check) {
         return {};
     }
@@ -74,7 +74,7 @@ std::vector<const Setting*> SettingsFile::poll(Clock::time_point now) {
     return read(false);
 }
 
-bool SettingsFile::ensure_written() {
+bool ValueFile::ensure_written() {
     std::error_code error;
     if (std::filesystem::exists(m_path, error)) {
         return true;
@@ -86,7 +86,7 @@ bool SettingsFile::ensure_written() {
                        "# One value a line: key = value. Lines starting with # are comments.\n" +
                        "# The game reads this file again about half a second after it is saved.\n" +
                        "# Delete the file to get every value back at its default.\n";
-    text += m_settings.to_text(true);
+    text += m_model.to_text(true);
     std::ofstream out(m_path, std::ios::binary);
     out << text;
     out.close();
@@ -98,7 +98,7 @@ bool SettingsFile::ensure_written() {
     return true;
 }
 
-std::vector<const Setting*> SettingsFile::read(bool append_missing) {
+std::vector<const NamedValue*> ValueFile::read(bool append_missing) {
     std::ifstream in(m_path, std::ios::binary);
     if (!in) {
         log("could not read " + utf8_string(m_path));
@@ -111,12 +111,12 @@ std::vector<const Setting*> SettingsFile::read(bool append_missing) {
         return {};
     }
     m_text = text;
-    SettingsRead result = m_settings.read_text(text);
+    TextRead result = m_model.read_text(text);
     report(result);
     if (append_missing && !result.missing.empty()) {
         /* Values of a newer version: added at the end, so the player finds
          * them, and nothing they wrote is touched. */
-        std::string added = m_settings.to_text(result.missing);
+        std::string added = m_model.to_text(result.missing);
         std::ofstream out(m_path, std::ios::binary | std::ios::app);
         if (!text.empty() && text.back() != '\n') {
             out << "\n";
@@ -124,8 +124,8 @@ std::vector<const Setting*> SettingsFile::read(bool append_missing) {
         out << added;
         out.close();
         std::string keys;
-        for (const Setting* setting : result.missing) {
-            keys += (keys.empty() ? "" : ", ") + setting->key;
+        for (const NamedValue* named : result.missing) {
+            keys += (keys.empty() ? "" : ", ") + named->key;
         }
         if (out) {
             log("added what the file lacked, at the defaults: " + keys);
@@ -136,13 +136,13 @@ std::vector<const Setting*> SettingsFile::read(bool append_missing) {
             log("could not add what the file lacked: " + keys);
         }
     }
-    for (const Setting* setting : result.changed) {
-        log(setting->key + " = " + format_value(*setting));
+    for (const NamedValue* named : result.changed) {
+        log(named->key + " = " + format_value(*named));
     }
     return result.changed;
 }
 
-bool SettingsFile::stamp(Stamp& out) const {
+bool ValueFile::stamp(Stamp& out) const {
     std::error_code error;
     out.time = std::filesystem::last_write_time(m_path, error);
     if (error) {
@@ -152,7 +152,7 @@ bool SettingsFile::stamp(Stamp& out) const {
     return !error;
 }
 
-void SettingsFile::report(const SettingsRead& read) {
+void ValueFile::report(const TextRead& read) {
     for (const std::string& note : read.notes) {
         log(note);
     }
@@ -172,7 +172,7 @@ void SettingsFile::report(const SettingsRead& read) {
     }
 }
 
-void SettingsFile::log(const std::string& line) const {
+void ValueFile::log(const std::string& line) const {
     if (m_log) {
         pc_log_line("[a11y] %s: %s", lowered(m_name).c_str(), line.c_str());
     }

@@ -1,14 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* The fork's settings model (primer docs/a11y/cues.md, "Cue settings"):
- * named values in groups, each with a key, a default, a range, a unit and a
- * one-line description, enough for a front end to draw a switch or a slider
- * for it and for the settings file to explain itself. Features register
+/* The fork's model of named values, which holds the cue settings (primer
+ * docs/a11y/cues.md, "Cue settings"): named values in groups, each with a
+ * key, a default, a range, a unit and a one-line description, enough for a
+ * front end to draw a switch or a slider for it and for the model's file to
+ * explain itself. Features register
  * their own values and read them through typed handles; the model knows
  * nothing about any feature.
  *
  * The text format is part of the model, so every front end writing a file
  * writes the same one: `key = value` a line, grouped under `#` headings,
- * each value preceded by its description. settings_file.hpp reads and writes
+ * each value preceded by its description. value_file.hpp reads and writes
  * it on disc. Game thread only. */
 #pragma once
 #include <deque>
@@ -19,18 +20,18 @@
 
 namespace a11y {
 
-enum class SettingKind {
+enum class ValueKind {
     toggle, /* on or off: a switch */
     number, /* a value in a range: a slider */
 };
 
 /* One value. A toggle holds 0 or 1, with the range 0 to 1 and step 1. */
-struct Setting {
+struct NamedValue {
     std::string key;         /* "cues.volume": the group's id, a dot, the name */
     std::string label;       /* a menu row's name: "Cue volume" */
     std::string description; /* one line: the file's comment, a menu's help */
     std::string unit;        /* "%", "s", "octaves", "units", "times" or "" */
-    SettingKind kind = SettingKind::number;
+    ValueKind kind = ValueKind::number;
     float default_value = 0.0f;
     float min = 0.0f;
     float max = 1.0f;
@@ -60,48 +61,48 @@ struct NumberSpec {
  * model's life. */
 class Switch {
 public:
-    explicit Switch(const Setting& setting) : m_setting(&setting) {}
-    bool on() const { return m_setting->value != 0.0f; }
-    const Setting& setting() const { return *m_setting; }
+    explicit Switch(const NamedValue& named) : m_named(&named) {}
+    bool on() const { return m_named->value != 0.0f; }
+    const NamedValue& named() const { return *m_named; }
 
 private:
-    const Setting* m_setting;
+    const NamedValue* m_named;
 };
 
 class Number {
 public:
-    explicit Number(const Setting& setting) : m_setting(&setting) {}
-    float value() const { return m_setting->value; }
-    const Setting& setting() const { return *m_setting; }
+    explicit Number(const NamedValue& named) : m_named(&named) {}
+    float value() const { return m_named->value; }
+    const NamedValue& named() const { return *m_named; }
 
 private:
-    const Setting* m_setting;
+    const NamedValue* m_named;
 };
 
-class Settings;
+class ValueModel;
 
 /* Registers values under one group: its id prefixes their keys, its title
  * heads them in the file and, later, in the port menu. */
-class SettingsGroup {
+class ValueGroup {
 public:
-    SettingsGroup(Settings& settings, std::size_t index) : m_settings(&settings), m_index(index) {}
+    ValueGroup(ValueModel& model, std::size_t index) : m_model(&model), m_index(index) {}
     Switch add_switch(const SwitchSpec& spec);
     Number add_number(const NumberSpec& spec);
 
 private:
-    Settings* m_settings;
+    ValueModel* m_model;
     std::size_t m_index;
 };
 
 /* What reading a text did. */
-struct SettingsRead {
+struct TextRead {
     /* Values whose value the text changed, a value the text lacks going back
      * to its default included. */
-    std::vector<const Setting*> changed;
+    std::vector<const NamedValue*> changed;
     /* Known values the text lacks, now at their defaults. */
-    std::vector<const Setting*> missing;
-    /* Lines, counted from 1, that could not be read: each keeps its value's
-     * last setting. */
+    std::vector<const NamedValue*> missing;
+    /* Lines, counted from 1, that could not be read: the value on each keeps
+     * what it held. */
     std::vector<int> bad_lines;
     /* Keys the text has and the model does not. */
     std::vector<std::string> unknown;
@@ -110,51 +111,51 @@ struct SettingsRead {
 };
 
 /* A value as the file writes it: "on", "off" or a number. */
-std::string format_value(const Setting& setting);
+std::string format_value(const NamedValue& named);
 
-class Settings {
+class ValueModel {
 public:
     struct Group {
         std::string id;
         std::string title;
-        std::vector<Setting*> settings;
+        std::vector<NamedValue*> values;
     };
 
-    Settings() = default;
-    Settings(const Settings&) = delete;
-    Settings& operator=(const Settings&) = delete;
+    ValueModel() = default;
+    ValueModel(const ValueModel&) = delete;
+    ValueModel& operator=(const ValueModel&) = delete;
 
     /* A new group, or the one with this id. */
-    SettingsGroup group(std::string_view id, std::string_view title);
+    ValueGroup group(std::string_view id, std::string_view title);
     const std::vector<Group>& groups() const { return m_groups; }
-    const Setting* find(std::string_view key) const;
+    const NamedValue* find(std::string_view key) const;
 
     /* A front end's change: held to the range. True when the value
      * changed. */
-    bool set(const Setting& setting, float value);
+    bool set(const NamedValue& named, float value);
 
     /* The whole model as the file's text, every value at its current value
      * or its default, the keys kept from an earlier read last. */
     std::string to_text(bool at_defaults = false) const;
     /* Only these values, at their current values, under their groups'
      * headings: what to append to a file that lacks them. */
-    std::string to_text(const std::vector<const Setting*>& only) const;
+    std::string to_text(const std::vector<const NamedValue*>& only) const;
     /* Applies a text to the model: values it lacks go back to their
-     * defaults, a line that cannot be read keeps its value's last setting,
+     * defaults, a line that cannot be read leaves its value as it was,
      * a value out of range is clamped. */
-    SettingsRead read_text(std::string_view text);
+    TextRead read_text(std::string_view text);
 
     /* Keys a text had that the model does not, with their values as
      * written, kept so a front end that rewrites the file keeps them too. */
     const std::map<std::string, std::string>& unknown() const { return m_unknown; }
 
 private:
-    friend class SettingsGroup;
-    Setting& add(std::size_t group, Setting setting);
-    Setting* find_mutable(std::string_view key);
-    std::string write(const std::vector<const Setting*>& only, bool at_defaults) const;
+    friend class ValueGroup;
+    NamedValue& add(std::size_t group, NamedValue named);
+    NamedValue* find_mutable(std::string_view key);
+    std::string write(const std::vector<const NamedValue*>& only, bool at_defaults) const;
 
-    std::deque<Setting> m_settings; /* a deque, so handles stay valid */
+    std::deque<NamedValue> m_values; /* a deque, so handles stay valid */
     std::vector<Group> m_groups;
     std::map<std::string, std::string> m_unknown;
 };

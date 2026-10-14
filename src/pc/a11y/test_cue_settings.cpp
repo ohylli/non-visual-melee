@@ -1,13 +1,13 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* The settings model, its text, the settings file against real files in a
+/* The value model, its text, its file against real files in a
  * scratch folder, and the cue settings feeding the cue engine rendered into
  * a buffer. Speech goes to a fake screen reader bridge; this file supplies
  * the pc_log_line that main.c normally provides. Its one argument is the
  * scratch folder. */
 #include "cue_engine.hpp"
 #include "cue_settings.hpp"
-#include "settings.hpp"
-#include "settings_file.hpp"
+#include "value_model.hpp"
+#include "value_file.hpp"
 #include "speech.hpp"
 #include <algorithm>
 #include <cassert>
@@ -26,8 +26,8 @@ namespace {
 
 using a11y::Clock;
 using a11y::CueSettings;
-using a11y::Settings;
-using a11y::SettingsFile;
+using a11y::ValueFile;
+using a11y::ValueModel;
 
 namespace fs = std::filesystem;
 
@@ -76,15 +76,15 @@ void edit_file(const fs::path& path, const std::string& text) {
     fs::last_write_time(path, before + std::chrono::seconds(2));
 }
 
-/* The model with the cue values, a settings file in a fresh scratch file,
+/* The model with the cue values, its file in a fresh scratch file,
  * and speech over a fake bridge. Each test starts with an empty log. */
 struct Fixture {
     std::vector<std::string> spoken;
     a11y::Speech speech{a11y::Config{true, true}, std::make_unique<FakeBridge>(spoken)};
-    Settings settings;
-    CueSettings cues{settings};
+    ValueModel model;
+    CueSettings cues{model};
     fs::path path;
-    std::unique_ptr<SettingsFile> file;
+    std::unique_ptr<ValueFile> file;
     Clock::time_point now = Clock::now();
 
     explicit Fixture(const char* name) : path(s_dir / name) {
@@ -94,27 +94,26 @@ struct Fixture {
     }
 
     void open() {
-        file =
-            std::make_unique<SettingsFile>(settings, speech, "Cue settings", path.string(), true);
+        file = std::make_unique<ValueFile>(model, speech, "Cue settings", path.string(), true);
     }
 
-    std::vector<const a11y::Setting*> load() {
+    std::vector<const a11y::NamedValue*> load() {
         open();
         return file->load(now);
     }
 
-    std::vector<const a11y::Setting*> poll_later() {
-        now += SettingsFile::kPollInterval;
+    std::vector<const a11y::NamedValue*> poll_later() {
+        now += ValueFile::kPollInterval;
         return file->poll(now);
     }
 
-    float value(const char* key) const { return settings.find(key)->value; }
+    float value(const char* key) const { return model.find(key)->value; }
 };
 
 void a_missing_file_is_written_with_defaults_and_descriptions() {
     Fixture f("defaults.ini");
     a11y::CueGroup gap = f.cues.add_cue("gap", "Gap warning", 1.5f);
-    std::vector<const a11y::Setting*> changed = f.load();
+    std::vector<const a11y::NamedValue*> changed = f.load();
     assert(changed.empty());
     assert(fs::exists(f.path));
     assert(count_logged("[a11y] cue settings: written with defaults: " + f.path.string()) == 1);
@@ -132,7 +131,7 @@ void a_missing_file_is_written_with_defaults_and_descriptions() {
     {
         assert(text.find(expected) != std::string::npos);
     }
-    assert(!gap.values.boost.setting().description.empty());
+    assert(!gap.values.boost.named().description.empty());
     /* Every value line has its description right above it. */
     std::size_t at = 0;
     while ((at = text.find(" = ", at)) != std::string::npos) {
@@ -142,27 +141,27 @@ void a_missing_file_is_written_with_defaults_and_descriptions() {
         at += 3;
     }
     /* Read back, the file gives every default. */
-    Settings again;
+    ValueModel again;
     CueSettings again_cues(again);
     again_cues.add_cue("gap", "Gap warning", 1.5f);
-    a11y::SettingsRead read = again.read_text(text);
+    a11y::TextRead read = again.read_text(text);
     assert(read.changed.empty() && read.missing.empty() && read.bad_lines.empty());
 }
 
 void the_text_is_parsed_with_spaces_comments_units_and_commas() {
-    Settings settings;
-    CueSettings cues(settings);
+    ValueModel model;
+    CueSettings cues(model);
     a11y::CueGroup gap = cues.add_cue("gap", "Gap warning", 1.0f);
-    a11y::SettingsRead read = settings.read_text("\xEF\xBB\xBF# a comment\r\n"
-                                                 "\r\n"
-                                                 "  cues.on=OFF   \r\n"
-                                                 "cues.volume = 80% # quieter\r\n"
-                                                 "gap.volume=+40 %\r\n"
-                                                 "gap.boost = 2,5\r\n"
-                                                 "gap.on = no");
+    a11y::TextRead read = model.read_text("\xEF\xBB\xBF# a comment\r\n"
+                                          "\r\n"
+                                          "  cues.on=OFF   \r\n"
+                                          "cues.volume = 80% # quieter\r\n"
+                                          "gap.volume=+40 %\r\n"
+                                          "gap.boost = 2,5\r\n"
+                                          "gap.on = no");
     assert(read.bad_lines.empty() && read.notes.empty());
-    assert(!settings.find("cues.on")->value);
-    assert(settings.find("cues.volume")->value == 80.0f);
+    assert(!model.find("cues.on")->value);
+    assert(model.find("cues.volume")->value == 80.0f);
     assert(gap.values.volume.value() == 40.0f);
     assert(gap.values.boost.value() == 2.5f);
     assert(!gap.values.on.on());
@@ -170,14 +169,14 @@ void the_text_is_parsed_with_spaces_comments_units_and_commas() {
     a11y::CueLevel level = gap.values.level();
     assert(!level.on && std::fabs(level.volume - 0.4f) < 1e-6f && level.boost == 2.5f);
     assert(cues.mix_level().volume == 0.8f && !cues.mix_level().on);
-    assert(a11y::format_value(*settings.find("gap.boost")) == "2.5");
-    assert(a11y::format_value(*settings.find("gap.on")) == "off");
+    assert(a11y::format_value(*model.find("gap.boost")) == "2.5");
+    assert(a11y::format_value(*model.find("gap.on")) == "off");
 }
 
 void a_value_out_of_range_is_clamped_and_logged() {
     Fixture f("clamped.ini");
     write_file(f.path, "cues.volume = 150\ncues.on = on\n");
-    std::vector<const a11y::Setting*> changed = f.load();
+    std::vector<const a11y::NamedValue*> changed = f.load();
     assert(f.value("cues.volume") == 100.0f);
     assert(changed.empty());
     assert(count_logged(
@@ -194,7 +193,7 @@ void an_unreadable_line_keeps_its_last_value_and_is_reported_by_number() {
     f.load();
     assert(f.value("cues.volume") == 50.0f);
     edit_file(f.path, "# tuning\ncues.volume = loud\ncues.on = off\nnonsense\n");
-    std::vector<const a11y::Setting*> changed = f.poll_later();
+    std::vector<const a11y::NamedValue*> changed = f.poll_later();
     assert(f.value("cues.volume") == 50.0f);
     assert(f.value("cues.on") == 0.0f);
     assert(changed.size() == 1 && changed[0]->key == "cues.on");
@@ -227,8 +226,8 @@ void a_reload_applies_only_what_changed() {
     edit_file(f.path, edited);
     assert(f.file->poll(f.now + std::chrono::milliseconds(100)).empty());
     assert(gap.values.volume.value() == 100.0f);
-    std::vector<const a11y::Setting*> changed = f.poll_later();
-    assert(changed.size() == 1 && changed[0] == &gap.values.volume.setting());
+    std::vector<const a11y::NamedValue*> changed = f.poll_later();
+    assert(changed.size() == 1 && changed[0] == &gap.values.volume.named());
     assert(gap.values.volume.value() == 30.0f);
     assert((s_lines == std::vector<std::string>{"[a11y] cue settings: gap.volume = 30"}));
     /* Unchanged since: nothing read, nothing applied. */
@@ -245,7 +244,7 @@ void a_deleted_file_is_written_again_and_its_defaults_apply() {
     f.load();
     assert(f.value("cues.volume") == 20.0f);
     fs::remove(f.path);
-    std::vector<const a11y::Setting*> changed = f.poll_later();
+    std::vector<const a11y::NamedValue*> changed = f.poll_later();
     assert(fs::exists(f.path));
     assert(f.value("cues.volume") == 100.0f);
     assert(changed.size() == 1);
@@ -258,13 +257,13 @@ void an_unknown_key_is_logged_once_and_kept() {
     assert(count_logged(
                "[a11y] cue settings: old.thing is not a known setting; kept in the file") == 1);
     assert(f.spoken.empty());
-    assert(f.settings.unknown().at("old.thing") == "3 s");
+    assert(f.model.unknown().at("old.thing") == "3 s");
     edit_file(f.path, "cues.on = off\ncues.volume = 100\nold.thing = 3 s\n");
     f.poll_later();
     assert(count_logged_containing("old.thing") == 1);
     assert(read_file(f.path).find("old.thing = 3 s\n") != std::string::npos);
     /* A front end rewriting the whole file keeps it too. */
-    assert(f.settings.to_text().find("\nold.thing = 3 s\n") != std::string::npos);
+    assert(f.model.to_text().find("\nold.thing = 3 s\n") != std::string::npos);
 }
 
 void a_newly_registered_value_takes_its_default_and_joins_the_file() {
@@ -289,20 +288,20 @@ void a_newly_registered_value_takes_its_default_and_joins_the_file() {
 }
 
 void the_model_describes_each_value_for_a_menu() {
-    Settings settings;
-    CueSettings cues(settings);
+    ValueModel model;
+    CueSettings cues(model);
     a11y::CueGroup gap = cues.add_cue("gap", "Gap warning", 1.0f);
-    assert(settings.groups().size() == 2);
-    assert(settings.groups()[0].title == "All cues" && settings.groups()[0].settings.size() == 2);
-    assert(settings.groups()[1].title == "Gap warning");
-    const a11y::Setting& volume = gap.values.volume.setting();
-    assert(volume.kind == a11y::SettingKind::number && volume.label == "Gap warning volume");
+    assert(model.groups().size() == 2);
+    assert(model.groups()[0].title == "All cues" && model.groups()[0].values.size() == 2);
+    assert(model.groups()[1].title == "Gap warning");
+    const a11y::NamedValue& volume = gap.values.volume.named();
+    assert(volume.kind == a11y::ValueKind::number && volume.label == "Gap warning volume");
     assert(volume.min == 0.0f && volume.max == 100.0f && volume.step > 0.0f && volume.unit == "%");
-    assert(gap.values.on.setting().kind == a11y::SettingKind::toggle);
+    assert(gap.values.on.named().kind == a11y::ValueKind::toggle);
     /* A front end's change is held to the range. */
-    assert(settings.set(volume, 20.0f) && !settings.set(volume, 20.0f));
-    assert(settings.set(volume, 140.0f) && volume.value == 100.0f);
-    assert(!settings.set(volume, 120.0f));
+    assert(model.set(volume, 20.0f) && !model.set(volume, 20.0f));
+    assert(model.set(volume, 140.0f) && volume.value == 100.0f);
+    assert(!model.set(volume, 120.0f));
     assert(gap.values.cue == 0 && cues.add_cue("ledge", "Ledge warning", 1.0f).values.cue == 1);
 }
 
@@ -341,7 +340,7 @@ void cue_settings_feed_the_volume_chain() {
 
     /* Cue volume halves it; the ledge warning's values leave it alone. */
     edit_file(f.path, "cues.volume = 50\nledge.volume = 10\n");
-    std::vector<const a11y::Setting*> changed = f.poll_later();
+    std::vector<const a11y::NamedValue*> changed = f.poll_later();
     assert(changed.size() == 2);
     f.cues.apply(engine, changed);
     assert(std::fabs(rms(engine, a11y::kCueRate / 10) - full / 2) < full * 0.01f);
@@ -374,7 +373,7 @@ extern "C" void pc_log_line(const char* fmt, ...) {
 }
 
 int main(int argc, char** argv) {
-    s_dir = argc > 1 ? fs::path(argv[1]) : fs::path("settings_test");
+    s_dir = argc > 1 ? fs::path(argv[1]) : fs::path("cue_settings_test");
     fs::create_directories(s_dir);
     a_missing_file_is_written_with_defaults_and_descriptions();
     the_text_is_parsed_with_spaces_comments_units_and_commas();
@@ -386,6 +385,6 @@ int main(int argc, char** argv) {
     a_newly_registered_value_takes_its_default_and_joins_the_file();
     the_model_describes_each_value_for_a_menu();
     cue_settings_feed_the_volume_chain();
-    std::cout << "settings: all tests passed\n";
+    std::cout << "cue_settings: all tests passed\n";
     return 0;
 }

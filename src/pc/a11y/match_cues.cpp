@@ -44,7 +44,7 @@ PositionMapping MatchCues::PositionValues::mapping() const {
         slow_interval.value(), fast_interval.value(), far_distance.value(), near_distance.value()};
 }
 
-MatchCues::PositionValues MatchCues::add_position_values(SettingsGroup group) {
+MatchCues::PositionValues MatchCues::add_position_values(ValueGroup group) {
     const PositionMapping defaults;
     return PositionValues{
         group.add_number(NumberSpec{"edge_pan", "Edge pan",
