@@ -8,6 +8,7 @@
 #include "cue_engine.hpp"
 #include "cue_settings.hpp"
 #include "match_cues.hpp"
+#include "test_match_snapshot.hpp"
 #include "value_model.hpp"
 #include <algorithm>
 #include <cassert>
@@ -20,37 +21,13 @@
 
 namespace {
 
+using namespace match_test;
+
 std::vector<std::string> s_lines;
 
 std::size_t count_logged_starting(const std::string& start) {
     return static_cast<std::size_t>(std::count_if(s_lines.begin(), s_lines.end(),
         [&](const std::string& line) { return line.rfind(start, 0) == 0; }));
-}
-
-/* Final Destination's frame as measured (docs/a11y/gameplay-state.md). */
-A11yStageFrame final_destination() {
-    A11yStageFrame stage{};
-    stage.floor_left = -85.6f;
-    stage.floor_right = 85.6f;
-    stage.floor_y = 0.0f;
-    stage.blast_left = -246.0f;
-    stage.blast_right = 246.0f;
-    stage.blast_top = 188.0f;
-    stage.blast_bottom = -140.0f;
-    stage.camera_left = -170.0f;
-    stage.camera_right = 170.0f;
-    stage.camera_top = 114.0f;
-    stage.camera_bottom = -80.0f;
-    return stage;
-}
-
-A11yMatchFighter fighter(int slot, float x, float y) {
-    A11yMatchFighter f{};
-    f.slot = slot;
-    f.x = x;
-    f.y = y;
-    f.can_move = true;
-    return f;
 }
 
 /* You at the centre, the opponent in slot `slot` at (x, 0). */

@@ -4,15 +4,16 @@
 # right until he falls off the right edge and loses a stock; Mario's cue
 # stops as he is knocked out and starts again on the respawn platform. Your
 # cue plays throughout, quickening as Link closes in.
-# Run from Git Bash with the debug match switches (two stocks each, Final
-# Destination on a fresh save), cues on, and a trace and a dump to check
-# the pans and the two pulse trains:
+# Run from Git Bash with the debug match switches (two stocks each; the
+# debug match is on Final Destination), cues on, and a trace and a dump to
+# check the pans and the two pulse trains:
 #   MELEE_DEBUG_VS=1 MELEE_DEBUG_VS_STOCKS=2 MELEE_A11Y_CUES=1 \
 #     MELEE_A11Y_CUE_TRACE=build/drive/opponent.trace \
 #     MELEE_A11Y_CUE_DUMP=build/drive/opponent.f32 \
 #     python tools/a11y/drive.py tools/a11y/match_opponent.drive
-# then python tools/a11y/cue_dump.py build/drive/opponent.f32 --band 150 700
-# for the opponent's pulse and --band 1100 12000 for your tick.
+# then python tools/a11y/cue_dump.py build/drive/opponent.f32 --band 150 1000
+# --threshold 0.3 for the opponent's pulse and --band 1100 12000
+# --threshold 0.3 for your tick.
 
 # Start on the title screen goes straight into the debug match.
 wait "state 0 scene 0$"

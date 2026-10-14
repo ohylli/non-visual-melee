@@ -50,7 +50,7 @@ private:
         Number far_distance;
         Number near_distance;
 
-        PositionMapping mapping() const;
+        YourMapping mapping() const;
     };
     struct OpponentValues {
         StageValues stage;

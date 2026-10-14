@@ -38,7 +38,7 @@ float stage_pitch(const A11yStageFrame& stage, float y, float up_range, float do
     return std::exp2(octaves);
 }
 
-float nearness_interval(std::optional<float> distance, const PositionMapping& mapping) {
+float nearness_interval(std::optional<float> distance, const YourMapping& mapping) {
     if (!distance.has_value()) {
         return mapping.slow_interval;
     }
@@ -62,8 +62,7 @@ VoiceTargets stage_targets(
     return targets;
 }
 
-std::optional<VoiceTargets> your_position(
-    const A11yMatchState& match, const PositionMapping& mapping) {
+std::optional<VoiceTargets> your_position(const A11yMatchState& match, const YourMapping& mapping) {
     const A11yMatchFighter& you = match.you;
     if (!match.running || match.paused || !you.can_move || you.out) {
         return std::nullopt;

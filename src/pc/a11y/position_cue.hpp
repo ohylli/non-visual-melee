@@ -24,7 +24,7 @@ struct StageMapping {
 };
 
 /* Your position cue's mapping, as its settings hold it. */
-struct PositionMapping {
+struct YourMapping {
     StageMapping stage;
     /* Seconds between pulses with the opponent at or beyond the far
      * distance, or none, and at or within the near distance (world
@@ -61,13 +61,12 @@ VoiceTargets stage_targets(
  * interpolated in the log of the interval, so each unit of distance closed
  * speeds the pulse by the same ratio, from the slow interval at the far
  * distance to the fast one at the near distance. */
-float nearness_interval(std::optional<float> distance, const PositionMapping& mapping);
+float nearness_interval(std::optional<float> distance, const YourMapping& mapping);
 
 /* Your position cue's targets, or none while it is silent: outside a
  * match, paused, before GO and while you are knocked out or waiting to
  * respawn. */
-std::optional<VoiceTargets> your_position(
-    const A11yMatchState& match, const PositionMapping& mapping);
+std::optional<VoiceTargets> your_position(const A11yMatchState& match, const YourMapping& mapping);
 
 /* The opponent's position cue's targets, or none while it is silent:
  * outside a match, paused, before GO, with no opponent and while the

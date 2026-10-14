@@ -33,3 +33,10 @@ Findings become new issues here. When it passes, issue 07 starts.
   - A real CPU or player fighting back: the run's opponent stood still.
   - More than one opponent, and teams: the snapshot's choice of the nearest was tested with hand-written snapshots only.
   - Online with a friend, carried from issue 04: each side's cues followed the right players in the agent runs.
+
+### 2026-10-14, left from the review of issue 05 (agent)
+
+The review of 1940185..4e2c76e fixed what was plainly the agent's in its own commit. Two things need your ear first:
+
+- **The two cues' registers overlap at the extremes.** The opponent's pulse is 400 Hz with a quarter of its octave: on the default mapping its note runs from 200 to 800 Hz and its overtone up to 1600 Hz, and with `opponent_position.up_range` at 2 the note itself reaches 1600 Hz. Your tick runs from 750 to 3000 Hz. On every respawn the opponent sits near 800 Hz (pitch 1.99 in the run's log), so against your tick on the floor at 1500 Hz only the timbre keeps them apart. Options: leave it, or lower the pulse to about 250 to 300 Hz so the ranges stay apart at the default mapping. Recommendation: listen for it on a respawn while you stand on the floor; lower the pulse only if the two blur there.
+- **With more than one opponent, a knockout can go unheard, and the cue may wander while you are out.** The snapshot follows the nearest opponent in play, so knocking out the one the cue follows gives no silence: the pulse jumps in pan and pitch to the next nearest, and nothing says it is someone else. While you are knocked out the nearest is measured from where you were last, so in a match of three or four it can switch between opponents until you respawn. Options: leave it; keep following the same opponent while you are out; or mark a change of opponent (a short gap, or a different first pulse). Recommendation: listen in a three- or four-player match first; the spec's "list of one" design may want a decision before the gap and ledge warnings arrive.

@@ -4,6 +4,7 @@
 #include "miniaudio.h"
 #include <cmath>
 #include <numbers>
+#include <utility>
 
 namespace a11y {
 namespace {
@@ -68,14 +69,27 @@ Sound pulse_sound() {
     return sound;
 }
 
+/* A position cue's pulsed voice, its sound made to fit the fastest interval
+ * played at the lowest pitch the widest down range gives. */
+VoiceSpec position_voice(const char* name, int cue, Sound sound, float fastest_interval) {
+    VoiceSpec voice;
+    voice.name = name;
+    voice.cue = cue;
+    voice.sound = std::move(sound);
+    voice.mode = VoiceMode::pulsed;
+    voice.fastest_interval = fastest_interval;
+    voice.lowest_pitch = std::exp2(-MatchCues::kWidestDownRange);
+    return voice;
+}
+
 }  // namespace
 
 StageMapping MatchCues::StageValues::mapping() const {
     return StageMapping{edge_pan.value(), up_range.value(), down_range.value()};
 }
 
-PositionMapping MatchCues::YourValues::mapping() const {
-    return PositionMapping{stage.mapping(), slow_interval.value(), fast_interval.value(),
+YourMapping MatchCues::YourValues::mapping() const {
+    return YourMapping{stage.mapping(), slow_interval.value(), fast_interval.value(),
         far_distance.value(), near_distance.value()};
 }
 
@@ -103,7 +117,7 @@ MatchCues::StageValues MatchCues::add_stage_values(ValueGroup group) {
 }
 
 MatchCues::YourValues MatchCues::add_your_values(ValueGroup group) {
-    const PositionMapping defaults;
+    const YourMapping defaults;
     StageValues stage = add_stage_values(group);
     return YourValues{
         stage,
@@ -142,22 +156,10 @@ MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
       m_opponent_cue(
           settings.add_cue("opponent_position", "Opponent's position cue", kOpponentBoost)),
       m_opponent(add_opponent_values(m_opponent_cue.group)) {
-    VoiceSpec your;
-    your.name = "your position";
-    your.cue = m_your_cue.values.cue;
-    your.sound = tick_sound();
-    your.mode = VoiceMode::pulsed;
-    your.fastest_interval = kFastestInterval;
-    your.lowest_pitch = std::exp2(-kWidestDownRange);
-    m_your_voice = m_engine.add_voice(std::move(your));
-    VoiceSpec opponent;
-    opponent.name = "opponent position";
-    opponent.cue = m_opponent_cue.values.cue;
-    opponent.sound = pulse_sound();
-    opponent.mode = VoiceMode::pulsed;
-    opponent.fastest_interval = kOpponentFastestInterval;
-    opponent.lowest_pitch = std::exp2(-kWidestDownRange);
-    m_opponent_voice = m_engine.add_voice(std::move(opponent));
+    m_your_voice = m_engine.add_voice(
+        position_voice("your position", m_your_cue.values.cue, tick_sound(), kFastestInterval));
+    m_opponent_voice = m_engine.add_voice(position_voice(
+        "opponent position", m_opponent_cue.values.cue, pulse_sound(), kOpponentFastestInterval));
 }
 
 void MatchCues::play(int voice, const std::optional<VoiceTargets>& targets) {

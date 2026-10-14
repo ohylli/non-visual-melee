@@ -9,6 +9,7 @@
  * fixed interval, no opponent, the opponent knocked out and a change of
  * opponent. */
 #include "position_cue.hpp"
+#include "test_match_snapshot.hpp"
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -16,37 +17,13 @@
 
 namespace {
 
+using namespace match_test;
 using a11y::OpponentMapping;
-using a11y::PositionMapping;
 using a11y::VoiceTargets;
+using a11y::YourMapping;
 
 bool near(float a, float b, float tolerance = 1e-4f) {
     return std::fabs(a - b) <= tolerance;
-}
-
-A11yStageFrame final_destination() {
-    A11yStageFrame stage{};
-    stage.floor_left = -85.6f;
-    stage.floor_right = 85.6f;
-    stage.floor_y = 0.0f;
-    stage.blast_left = -246.0f;
-    stage.blast_right = 246.0f;
-    stage.blast_top = 188.0f;
-    stage.blast_bottom = -140.0f;
-    stage.camera_left = -170.0f;
-    stage.camera_right = 170.0f;
-    stage.camera_top = 114.0f;
-    stage.camera_bottom = -80.0f;
-    return stage;
-}
-
-A11yMatchFighter fighter(int slot, float x, float y) {
-    A11yMatchFighter f{};
-    f.slot = slot;
-    f.x = x;
-    f.y = y;
-    f.can_move = true;
-    return f;
 }
 
 /* You at (x, y) on Final Destination, the opponent standing at the
@@ -111,7 +88,7 @@ void pitch_follows_y() {
 }
 
 void interval_follows_the_distance() {
-    const PositionMapping mapping;
+    const YourMapping mapping;
     /* At and beyond the far distance, and with no opponent: slow. */
     assert(near(a11y::nearness_interval(120.0f, mapping), 0.8f));
     assert(near(a11y::nearness_interval(500.0f, mapping), 0.8f));
@@ -128,14 +105,14 @@ void interval_follows_the_distance() {
     assert(near(a / b, b / c));
     assert(a > b && b > c);
     /* A near distance past the far one: fast within it, slow beyond. */
-    PositionMapping crossed = mapping;
+    YourMapping crossed = mapping;
     crossed.near_distance = 150.0f;
     assert(near(a11y::nearness_interval(140.0f, crossed), 0.08f));
     assert(near(a11y::nearness_interval(160.0f, crossed), 0.8f));
 }
 
 void your_position_from_the_snapshot() {
-    const PositionMapping mapping;
+    const YourMapping mapping;
     std::optional<VoiceTargets> targets = a11y::your_position(match_at(85.6f, 114.0f), mapping);
     assert(targets.has_value());
     assert(near(targets->pan, 0.6f));
@@ -159,7 +136,7 @@ void your_position_from_the_snapshot() {
 }
 
 void silent_when_it_should_be() {
-    const PositionMapping mapping;
+    const YourMapping mapping;
     A11yMatchState match = match_at(0.0f, 0.0f);
     assert(a11y::your_position(match, mapping).has_value());
 
@@ -205,8 +182,7 @@ void the_opponent_cue_maps_the_opponents_position() {
     A11yMatchState moved = opponent_at(42.8f, 57.0f);
     moved.you = fighter(0, -70.0f, 30.0f);
     targets = a11y::opponent_position(moved, mapping);
-    std::optional<VoiceTargets> yours =
-        a11y::your_position(match_at(42.8f, 57.0f), PositionMapping{});
+    std::optional<VoiceTargets> yours = a11y::your_position(match_at(42.8f, 57.0f), YourMapping{});
     assert(targets.has_value() && yours.has_value());
     assert(near(targets->pan, yours->pan) && near(targets->pitch, yours->pitch));
     /* Its own copy of the values. */
