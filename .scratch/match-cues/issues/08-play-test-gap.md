@@ -1,6 +1,6 @@
 # 08 Play test by ear: the gap warning
 
-Status: ready-for-human
+Status: resolved (2026-10-14)
 Type: task
 Blocked by: 07
 
@@ -41,3 +41,16 @@ The review fixed what was plainly the agent's (the cast skips a platform being d
 - **One "you are in play" test, before issue 09.** `GapWarning::tick` repeats `your_position`'s silence guard (`!running || paused || !can_move || out`), and the ledge warning would be a third copy. Recommendation: a shared `you_in_play(match)` beside the drivers when issue 09 starts; it crosses the position cue's module, so it was left.
 - **Adding a cue to `MatchCues` takes about seven edits** (group, values struct, `add_*_values`, `mapping()`, voice id, getter, `play` line). Issue 09 adds two voices. Recommendation: low priority; consider a per-cue bundle only if issue 09 makes it painful.
 - **A hum through a scene load.** A match that ends with no tick reporting it over (an online disconnect while over a gap) keeps the hum until the next scene has loaded; GAME!, a pause quit and a knockout silence it in time, and the position cues already behave this way. Recommendation: leave it unless heard; the fix would stop the cues when a scene starts loading.
+
+### 2026-10-14: play-tested by ear
+
+The maintainer played matches with NVDA offline on Final Destination, Battlefield, Jungle Japes (its two small side platforms) and Brinstar, and the warning worked on all four. No new issues.
+
+- **The sound is good and distinct** from both position cues.
+- **It gives time to react**, though a recovery still has to be quick.
+- **No flicker** was noticed at a platform's edge or jumping past an edge and back, so the hold stays at 10 ticks.
+- **The hum through a ledge hang stays**: you are still in danger while hanging, so the tone is right there.
+- **The overtones against the opponent's pulse** were not raised; the two stay apart by ear, so the sound stays as it is.
+- **The ADR is accepted**: ADR-0006, "Floor tests call the game's own cast from the tick hook", with a pointer in CLAUDE.md's "Online compatibility".
+- **The refactoring notes** (a shared "you are in play" test, a per-cue bundle in `MatchCues`) move to issue 09's Comments for its implementer to weigh.
+- **Not tested:** online (issue 11), and the hum through a scene load after an online disconnect, left as low priority.

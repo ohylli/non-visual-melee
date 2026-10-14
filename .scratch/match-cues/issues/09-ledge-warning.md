@@ -18,3 +18,19 @@ A pulsed tone on the left or right while you are near a deadly end of the floor 
 - Unit tests for the driver: a deadly end on each side, both ends, a safe end over the main stage, ground and air, the pan and loudness at the warning distance and at the edge, no floor below, knocked out.
 - A drive script on Final Destination walks to each edge and jumps along the stage; on Battlefield it stands at a side platform's end: the log shows the ledge warning on each edge's own side as the fighter nears it, rising to the edge, fading as the gap warning starts past it, and silent at the platform's end.
 - `python tools/check_style.py` passes; the `verify` skill and `docs/a11y/cues.md` are updated; `CONTEXT.md` gains "Ledge warning".
+
+## Comments
+
+### 2026-10-14, carried from the review of issue 07 (agent)
+
+The maintainer passed issue 08 and asked that the review's refactoring notes reach this issue's implementer. Weigh them when you start; neither is required.
+
+- **One "you are in play" test.** `GapWarning::tick` (`gap_warning.cpp`) repeats your position cue's silence guard (`!running || paused || !can_move || out`, `position_cue.cpp`), and `over_gap` then checks `running` and `out` again. The ledge warning would be a third copy. Suggestion: a shared `you_in_play(const A11yMatchState&)` beside the drivers, with `over_gap` reduced to `airborne && !below.found`.
+- **Adding a cue to `MatchCues` takes about seven edits** (`match_cues.hpp`, `match_cues.cpp`): the `CueGroup`, a values struct, `add_*_values`, `mapping()`, a voice id, a getter and a `play` line, plus the group-count assert in `test_match_cues.cpp`. This issue adds two voices. Suggestion: a small per-cue bundle if the ledge warning makes the repetition painful; low priority.
+
+Facts from the same review that bind this issue:
+
+- **Casts only from the tick hook** (ADR-0006). The outward casts past each floor end are the same call as the gap warning's; a helper beside `match_floor_below` in `game_access.c` is the natural home, and every line id it is given or returns needs the -1 guard.
+- **`below.y` can sit a few units above your feet in the air** (the cast starts at the collision box's bottom), so a drop computed from it can be negative.
+- **"Nothing found" means a gap only in the air.** On the ground with an invalid floor index, `below.found` is false but there is no gap: check `airborne` too, or use `over_gap`.
+- **The gap warning keeps sounding through a ledge hang**, by the maintainer's choice in issue 08: you are still in danger there. The handover from the ledge warning to the gap warning past a deadly edge should keep that.
