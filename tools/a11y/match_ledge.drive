@@ -21,21 +21,21 @@ press Start until "boot scene: state \d+ scene 2$"
 
 # At GO the left warning starts with your position cue, 25.6 units from
 # the end: well out to the left, quiet.
-wait 'cue ledge left start pan -0\.90 pitch 1\.00 gain 0\.40 interval 0\.200$' 60
+wait 'cue ledge left start pan -0\.75 pitch 1\.00 gain 0\.68 interval 0\.200$' 60
 sleep 1
 
-# A dash right: the left warning stops 30 units from the end, at its
+# A dash right: the left warning stops 40 units from the end, at its
 # widest and quietest.
 press Right 300
-wait 'cue ledge left stop pan -(0\.9\d|1\.00) pitch 1\.00 gain 0\.3\d '
+wait 'cue ledge left stop pan -(0\.9\d|1\.00) pitch 1\.00 gain 0\.5\d '
 sleep 1
 
 # Two jumps right along the stage, over Mario: the right warning starts in
-# the air, 30 units from the right end.
+# the air, 40 units from the right end.
 press X+Right 300
 sleep 1.2
 press X+Right 300
-wait 'cue ledge right start pan (0\.9\d|1\.00) pitch 1\.00 gain 0\.3\d '
+wait 'cue ledge right start pan (0\.9\d|1\.00) pitch 1\.00 gain 0\.5\d '
 sleep 1.2
 
 # A dash off the right edge: the gap warning starts a unit past it, and the

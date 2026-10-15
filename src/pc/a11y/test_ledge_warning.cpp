@@ -57,9 +57,9 @@ void silent_in_the_middle() {
     LedgeTargets t = warn(standing(0.0f));
     assert(!t.left.has_value() && !t.right.has_value());
     /* Just beyond the warning distance from either end. */
-    t = warn(standing(-85.6f + 30.1f));
+    t = warn(standing(-85.6f + 40.1f));
     assert(!t.left.has_value() && !t.right.has_value());
-    t = warn(standing(85.6f - 30.1f));
+    t = warn(standing(85.6f - 40.1f));
     assert(!t.left.has_value() && !t.right.has_value());
 }
 
@@ -78,20 +78,20 @@ void a_deadly_end_on_each_side() {
 
 void pan_and_loudness_from_the_warning_distance_to_the_edge() {
     /* At the warning distance: fully to the side, at the level floor. */
-    LedgeTargets far = warn(standing(-85.6f + 30.0f));
+    LedgeTargets far = warn(standing(-85.6f + 40.0f));
     assert(far.left.has_value());
-    assert(near(far.left->pan, -1.0f) && near(far.left->gain, 0.3f));
+    assert(near(far.left->pan, -1.0f) && near(far.left->gain, 0.5f));
     /* Halfway: halfway in both. */
-    LedgeTargets half = warn(standing(85.6f - 15.0f));
+    LedgeTargets half = warn(standing(85.6f - 20.0f));
     assert(half.right.has_value());
-    assert(near(half.right->pan, 0.65f) && near(half.right->gain, 0.65f));
+    assert(near(half.right->pan, 0.65f) && near(half.right->gain, 0.75f));
     /* At the edge, teetering: the pan floor, full. */
     LedgeTargets edge = warn(standing(-85.6f));
     assert(near(edge.left->pan, -0.3f) && near(edge.left->gain, 1.0f));
     /* Nearer is louder and more central all the way. */
     float last_gain = 0.0f;
     float last_pan = 1.1f;
-    for (float d = 30.0f; d >= 0.0f; d -= 1.0f) {
+    for (float d = 40.0f; d >= 0.0f; d -= 1.0f) {
         auto t = warn(standing(85.6f - d)).right;
         assert(t.has_value());
         assert(t->gain > last_gain && t->pan < last_pan);

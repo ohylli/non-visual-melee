@@ -45,3 +45,7 @@ The review fixed comments, one named constant and docs; nothing a player hears c
 - **Switched-off floor lines.** The walk to a floor's end follows the game's own `mpFloorGetLeft` and `mpFloorGetRight`, which do not check whether the next floor line is switched on. Where a stage switches lines off (Pokémon Stadium's transformations), an end could be placed past the real floor, and the deadly test casts from there. Option: stop the walk at a line the game reports switched off. Recommendation: listen on Pokémon Stadium through a transformation first.
 - **The handover is a cut, not a fade.** Walking off, the ledge warning stops at full loudness with the engine's short stop ramp on the tick the gap hum starts. A clean switch may mark leaving the floor better than a fade; say which you prefer.
 - **The snapshot's inputs** (code only). `CueSystem::tick` now passes the local port, the online flag and the held mask through to the snapshot and asks `MatchCues` for the edge offset. One struct of snapshot inputs, with `MatchCues` filling its own part, would keep the next such input to one place. Recommendation: wait for a second input before adding it.
+
+### 2026-10-15, defaults tuned by ear (maintainer)
+
+From the maintainer's listening, the defaults in code become warning distance 40 units, level floor 50% and boost 2 (were 30, 30% and 3). In a recording with the position cues off, the warning is now about -30 dB where it starts and about -24 dB at the edge, against the gap hum's -23. The play test itself stays open.

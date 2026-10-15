@@ -224,10 +224,10 @@ void the_ledge_warning_registers_last() {
                         "ledge_warning.boost", "ledge_warning.distance", "ledge_warning.pan_floor",
                         "ledge_warning.level_floor", "ledge_warning.edge_offset"}));
     const a11y::NamedValue* distance = f.model.find("ledge_warning.distance");
-    assert(distance->default_value == 30.0f && distance->unit == "units");
+    assert(distance->default_value == 40.0f && distance->unit == "units");
     assert(f.model.find("ledge_warning.pan_floor")->default_value == 0.3f);
     const a11y::NamedValue* level = f.model.find("ledge_warning.level_floor");
-    assert(level->default_value == 30.0f && level->unit == "%");
+    assert(level->default_value == 50.0f && level->unit == "%");
     /* The snapshot's deadly test reads the offset from the settings. */
     const a11y::NamedValue* offset = f.model.find("ledge_warning.edge_offset");
     assert(offset->default_value == 5.0f && offset->unit == "units");
@@ -250,11 +250,11 @@ void the_ledge_warning_starts_on_each_side_and_stops() {
     Fixture f;
     const int left = f.match_cues.ledge_left_voice();
     const int right = f.match_cues.ledge_right_voice();
-    /* 15.6 units from the left end: about halfway in. */
-    f.match_cues.tick(near_the_edges(-70.0f, false));
+    /* 20 units from the left end: halfway in. */
+    f.match_cues.tick(near_the_edges(-65.6f, false));
     assert(f.engine.playing(left) && !f.engine.playing(right));
     assert(count_logged_starting(
-               "[a11y] cue ledge left start pan -0.66 pitch 1.00 gain 0.64 interval 0.200") == 1);
+               "[a11y] cue ledge left start pan -0.65 pitch 1.00 gain 0.75 interval 0.200") == 1);
     /* At the edge: only its targets change. */
     f.match_cues.tick(near_the_edges(-85.6f, false));
     assert(count_logged_starting("[a11y] cue ledge left start") == 1);
@@ -268,7 +268,7 @@ void the_ledge_warning_starts_on_each_side_and_stops() {
     f.match_cues.tick(near_the_edges(80.0f, true));
     assert(f.engine.playing(right) && !f.engine.playing(left));
     assert(count_logged_starting(
-               "[a11y] cue ledge right start pan 0.43 pitch 1.00 gain 0.87 interval 0.200") == 1);
+               "[a11y] cue ledge right start pan 0.40 pitch 1.00 gain 0.93 interval 0.200") == 1);
     /* Back in the middle: silent. */
     f.match_cues.tick(near_the_edges(0.0f, false));
     assert(!f.engine.playing(right));

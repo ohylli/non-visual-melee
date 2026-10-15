@@ -29,12 +29,12 @@ constexpr float kEdgeOffset = 5.0f;
 /* The ledge warning's mapping, as its settings hold it. */
 struct LedgeMapping {
     /* World units from a deadly end at which its voice starts. */
-    float distance = 30.0f;
+    float distance = 40.0f;
     /* Pan at the edge itself, so the side stays clear. */
     float pan_floor = 0.3f;
     /* Gain at the warning distance, so the start is heard rather than a
      * fade from silence: 0 to 1. */
-    float level_floor = 0.3f;
+    float level_floor = 0.5f;
 };
 
 /* The ledge warning's two voices this tick, each none while silent. */
