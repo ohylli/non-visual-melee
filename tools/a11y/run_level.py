@@ -57,9 +57,9 @@ ENV = {"results": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE
 ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           # The Training menu's hidden row, or a value the reader cannot name.
           "training_menu": re.compile(r"\[a11y\] training menu row ")}
-# Lines a passing run logs exactly so many times, for the same reason: the
-# gap warning starts and stops once, at the edge, and never on the floor or
-# the platforms.
+# Lines a passing run logs exactly so many times, or a number of times in a
+# range, for the same reason: the gap warning starts and stops once, at the
+# edge, and never on the floor or the platforms.
 GAP_ONCE = [(re.compile(r"\[a11y\] cue gap start "), 1), (re.compile(r"\[a11y\] cue gap stop "), 1)]
 # The ledge warning on Final Destination: the left end's once, the right
 # end's twice (on the way out and back), the gap warning once between; on
@@ -68,11 +68,12 @@ LEDGE = [(re.compile(r"\[a11y\] cue ledge left start "), 1), (re.compile(r"\[a11
          (re.compile(r"\[a11y\] cue ledge right start "), 2), (re.compile(r"\[a11y\] cue ledge right stop "), 2)]
 LEDGE_BATTLEFIELD = [(re.compile(r"\[a11y\] cue ledge left start "), 1),
                      (re.compile(r"\[a11y\] cue ledge right start "), 0)]
-# The Training menu says seven numbers: No. of CPs and CP Damage changed
-# and put back, then Right held on CP Damage, which says its first value,
-# the game's first repeat and the value it settles on, none of the repeats
-# between.
-TRAINING_NUMBERS = [(re.compile(r'\[a11y\] speak \w+( \(off\))?: "\d+"$'), 7)]
+# The Training menu says seven to nine numbers: No. of CPs and CP Damage
+# changed and put back, then Right held on CP Damage, which says its first
+# value, the game's first repeat and the value it settles on. The game's next
+# two repeats come about 0.15 s apart, on the settle, so either may be said
+# too; the quicker ones after them never.
+TRAINING_NUMBERS = [(re.compile(r'\[a11y\] speak \w+( \(off\))?: "\d+"$'), range(7, 10))]
 COUNT = {"match_gap": GAP_ONCE, "match_gap_battlefield": GAP_ONCE, "match_ledge": GAP_ONCE + LEDGE,
          "match_ledge_battlefield": LEDGE_BATTLEFIELD, "training_menu": TRAINING_NUMBERS}
 NET = [("css_net-delay0", ["--delay", "0"]), ("css_net-delay10", ["--delay", "10"]),
@@ -175,9 +176,10 @@ def execute(run, slots, lock):
             run.failures += [f">> FAILED: logged {absent.pattern!r}: {line}" for line in found]
     for pattern, times in counts:
         logged = sum(1 for line in logged_lines if pattern.search(line))
-        if logged != times:
+        if logged not in (times if isinstance(times, range) else (times,)):
             run.code = run.code or 1
-            run.failures.append(f">> FAILED: logged {pattern.pattern!r} {logged} times, not {times}")
+            expected = f"{times.start} to {times.stop - 1}" if isinstance(times, range) else times
+            run.failures.append(f">> FAILED: logged {pattern.pattern!r} {logged} times, not {expected}")
     with lock:
         print(f"{'pass' if run.code == 0 else 'FAIL'}  {run.name:22} {run.seconds:5.1f} s  {run.out}", flush=True)
 

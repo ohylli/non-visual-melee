@@ -10,11 +10,11 @@
  * game state itself.
  *
  * Changes that come close together, as a held direction's auto-repeat makes
- * them, are thinned so the speech never falls behind: a change at least a
- * quarter second after the one before is said at once; a sooner one is held
- * back, and the newest held is said once a quarter second passes with no
- * other. The quarter second is real time, so slow motion, which slows the
- * menu and its repeats with the match, does not stretch it. */
+ * them, are thinned so the speech never falls behind: a change at least
+ * kSettle after the one before is said at once; a sooner one is held back,
+ * and the newest held is said once kSettle passes with no other. kSettle is
+ * real time, so slow motion, which slows the menu and its repeats with the
+ * match, does not stretch it. */
 #pragma once
 #include "game_access.h"
 #include <chrono>
@@ -32,7 +32,7 @@ class TrainingSpeech {
 public:
     /* How long after a change the next is said at once rather than held, and
      * how long a held change waits for quiet; to tune by ear. */
-    static constexpr Clock::duration kSettle = std::chrono::milliseconds(250);
+    static constexpr Clock::duration kSettle = std::chrono::milliseconds(150);
 
     /* speech must outlive this. */
     explicit TrainingSpeech(Speech& speech) : m_speech(speech) {}

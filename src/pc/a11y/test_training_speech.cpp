@@ -69,6 +69,12 @@ struct Fixture {
     a11y::TrainingSpeech training{speech};
     Menu menu;
     /* The fake clock: a tick is a sixtieth of a second. */
+    static constexpr std::chrono::microseconds kTick{16667};
+    /* The ticks after a change at which the settle has passed. */
+    static constexpr int kSettleTicks = static_cast<int>(
+        (std::chrono::duration_cast<std::chrono::microseconds>(a11y::TrainingSpeech::kSettle) +
+            kTick - std::chrono::microseconds(1)) /
+        kTick);
     a11y::Clock::time_point now = a11y::Clock::time_point{} + std::chrono::hours(1);
 
     Fixture() {
@@ -80,7 +86,7 @@ struct Fixture {
      * clearing it. */
     Outputs ticks(int n = 1) {
         for (int i = 0; i < n; i++) {
-            now += std::chrono::microseconds(16667);
+            now += kTick;
             training.tick(menu.snapshot(), now);
         }
         Outputs said = std::move(outputs);
@@ -331,8 +337,8 @@ void burst_says_the_first_then_where_it_settles() {
         during.insert(during.end(), said.begin(), said.end());
     }
     assert(during.empty());
-    /* Less than a quarter second of quiet holds it still. */
-    assert(f.ticks(14).empty());
+    /* Quiet shorter than the settle holds it still. */
+    assert(f.ticks(Fixture::kSettleTicks - 1).empty());
     assert((f.ticks() == interrupt("40")));
     assert(f.settle().empty());
 }
@@ -374,7 +380,7 @@ void value_after_a_held_row_move_names_the_row() {
     assert((g.down() == interrupt("Item: Food")));
     g.ticks(3);
     assert(g.down().empty());
-    assert(g.ticks(14).empty());
+    assert(g.ticks(Fixture::kSettleTicks - 1).empty());
     assert((g.set(1) == interrupt("No. of CPs, 2")));
     assert(g.settle().empty());
 }

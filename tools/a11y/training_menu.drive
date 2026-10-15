@@ -55,7 +55,7 @@ wait 'boot scene: state \d+ scene 4$'
 # Start opens the menu once the match lets it pause; the first opening of a
 # session has the keys. The menu speaks nothing more until a press changes
 # what it shows, so the waits below each name the press's own line, and
-# the sleeps keep each press a quarter second clear of the line before,
+# the sleeps keep each press past the 0.15 s settle after the line before,
 # where it is said at once.
 press Start until '"Training menu\. Speed: x1\. Up and down for rows, left and right to adjust, A on Item, Reset and Finish, Start to close\."$' 20 1
 sleep 1
@@ -152,15 +152,17 @@ wait ': "CP Damage: 0"$'
 sleep 0.3
 
 # Right held two seconds. The press says "1" at once; the game's first
-# repeat comes 20 ticks later, past the quarter second, so "2" is said too;
-# the repeats after it come every 8 ticks and quicker, each held back, and
-# the value they settle on is said a quarter second after the last. How
-# many repeats a hold gets depends on the input driver's timing, so the
+# repeat comes 20 ticks later, past the 0.15 s settle, so "2" is said too.
+# The next two repeats come about 0.15 s apart, right on the settle, so either
+# may be said; the quicker ones after them are held back, and the value
+# they settle on is said 0.15 s after the last, once the stick is let go.
+# How many repeats a hold gets depends on the input driver's timing, so the
 # settled value is kept, not pinned.
 press Right 2000
 wait ': "1"$'
 wait ': "2"$'
-wait ': "(?P<damage>[3-9]|[1-9]\d+)"$'
+wait 'pad: btn 0000 stick 0,0 '
+wait ': "(?P<damage>[1-9]\d+)"$'
 sleep 0.5
 
 # Start closes the menu, saying nothing; the next Start opens it on the row
