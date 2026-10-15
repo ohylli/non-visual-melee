@@ -657,7 +657,7 @@ bool a11y_game_lan_play(void) {
     return gmOnline_GetKind() == ONLINE_KIND_LAN;
 }
 
-_Static_assert(A11Y_TRAINING_VALUE_ROWS == ARRAY_SIZE(gm_80473814.menu_values),
+_Static_assert(A11Y_TRAINING_VALUE_SLOTS == ARRAY_SIZE(gm_80473814.menu_values),
     "the Training menu keeps another number of values");
 
 void a11y_game_training_menu(A11yTrainingMenu* out) {
@@ -665,7 +665,7 @@ void a11y_game_training_menu(A11yTrainingMenu* out) {
     const CssSubStruct* menu = &gm_80473814;
     out->open = menu->x01 != 0;
     out->row = menu->x00;
-    if (out->row < A11Y_TRAINING_VALUE_ROWS) {
+    if (out->row < A11Y_TRAINING_VALUE_SLOTS) {
         out->value = menu->menu_values[out->row];
     }
 }

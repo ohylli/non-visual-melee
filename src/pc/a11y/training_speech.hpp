@@ -60,6 +60,9 @@ private:
     bool m_open = false;
     int m_row = -1;
     int m_value = 0;
+    /* The row the last thing said named or was about: a value is said alone
+     * only on this row. */
+    int m_spoken_row = -1;
     /* When the opening or the last change came. */
     Clock::time_point m_last_change{};
     /* The newest change held back, waiting for quiet. */

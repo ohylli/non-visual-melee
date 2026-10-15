@@ -18,3 +18,15 @@ The maintainer plays the Training menu with NVDA and judges the wording of `.scr
 ## Done when
 
 The maintainer's findings are recorded below, each either fixed or filed as its own issue, and CLAUDE.md's status line says the Training menu was play-tested.
+
+## Comments
+
+### 2026-10-15, code review (agent)
+
+Fixed in the review: a value changed on a row whose name was never heard now says the row with it. Down then Down then Right quickly used to say "Item: Food" then "2", the held "No. of CPs, 1" replaced by the bare value, so the 2 sounded like Item's; now it says "No. of CPs, 2". Worth listening for in the held-direction tries above.
+
+Left for the play test:
+
+- **A hold is heard as three lines.** The held-direction rule waits a quarter second (`TrainingSpeech::kSettle`), but the game's first auto-repeat comes 20 ticks (a third of a second) after the press, so a hold says the press, the first repeat, then the settled value, where the spec planned two. Options: keep it, or raise the settle above a third of a second so the first repeat is held too. Judge by ear on CP Damage and Item.
+- **A press during the first opening waits behind the hint.** A press in the opening's first quarter second is queued after the opening rather than cutting it off, so on a session's first opening, whose hint runs about five seconds, the row reached is heard only after the whole hint; the same press a moment later interrupts. Options: keep it; or queue only after an opening without the hint and interrupt when it carried the hint. Recommendation: the second, if the wait is noticed.
+- **Small shared helpers (code, low).** `TrainingSpeech::log_once` and its set repeat `MenuSpeech::log_once`, and `a11y::Clock` is declared in three headers (`launcher_speech.hpp`, `value_file.hpp`, `training_speech.hpp`). A shared log-once helper and one clock header would serve the next reader; recommendation: do it when a third reader would copy them again.

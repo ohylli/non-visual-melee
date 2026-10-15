@@ -11,6 +11,7 @@ void TrainingSpeech::session_started() {
     m_open = false;
     m_row = -1;
     m_value = 0;
+    m_spoken_row = -1;
     m_held.reset();
     m_after_opening = false;
 }
@@ -27,13 +28,17 @@ void TrainingSpeech::tick(const A11yTrainingMenu& menu, Clock::time_point now) {
         return;
     }
 
+    /* A value change on a row the player has not yet heard named, its row
+     * move held back and now replaced, says the row too, or the value would
+     * sound like one of the last row named. */
     std::optional<std::string> change;
     if (menu.row != m_row) {
         change = row_text(menu.row, menu.value);
     } else if (menu.value != m_value) {
         const TrainingRow* row = training_row(menu.row);
         if (row != nullptr && row->value != TrainingValue::none) {
-            change = value_text(menu.row, menu.value);
+            change = menu.row == m_spoken_row ? value_text(menu.row, menu.value) :
+                                                row_text(menu.row, menu.value);
         }
     }
     m_row = menu.row;
@@ -43,6 +48,7 @@ void TrainingSpeech::tick(const A11yTrainingMenu& menu, Clock::time_point now) {
         if (now - m_last_change >= kSettle) {
             m_held.reset();
             m_after_opening = false;
+            m_spoken_row = menu.row;
             m_speech.announce(*change, Mode::interrupt);
         } else {
             m_held = std::move(change);
@@ -53,6 +59,7 @@ void TrainingSpeech::tick(const A11yTrainingMenu& menu, Clock::time_point now) {
          * landed while the panel was still sliding in. */
         Mode mode = m_after_opening ? Mode::queue : Mode::interrupt;
         m_after_opening = false;
+        m_spoken_row = m_row;
         m_speech.announce(*m_held, mode);
         m_held.reset();
     }
@@ -62,6 +69,7 @@ void TrainingSpeech::opening(const A11yTrainingMenu& menu, Clock::time_point now
     m_open = true;
     m_row = menu.row;
     m_value = menu.value;
+    m_spoken_row = menu.row;
     m_held.reset();
     m_last_change = now;
     m_after_opening = true;

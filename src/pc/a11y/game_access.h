@@ -480,7 +480,7 @@ void a11y_game_lobby_state(const struct OnlineLobbyView* view, A11yLobbyState* o
 /* True when the online mode was entered for LAN play. */
 bool a11y_game_lan_play(void);
 
-/* The Training menu's rows, by the cursor's numbers: the first seven hold a
+/* The Training menu's rows, by the cursor's numbers: Speed to Camera hold a
  * value, Reset and Finish none, and the hidden row is never reached (the
  * cursor skips it) nor drawn. */
 enum {
@@ -493,8 +493,11 @@ enum {
     A11Y_TRAINING_CAMERA = 6,
     A11Y_TRAINING_RESET = 7,
     A11Y_TRAINING_FINISH = 8,
-    A11Y_TRAINING_VALUE_ROWS = 7,
 };
+
+/* The slots in the menu's value array (menu_values), one per row from Speed
+ * to Camera, the hidden row's included: a count, not a row. */
+enum { A11Y_TRAINING_VALUE_SLOTS = 7 };
 
 /* The Training menu, read once a tick in the Training scene by its reader
  * (.scratch/training-menu/spec.md), from gm_80473814 (gm_1884.c). The scene's

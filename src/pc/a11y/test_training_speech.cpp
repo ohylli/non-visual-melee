@@ -52,13 +52,13 @@ constexpr const char* kHint =
 struct Menu {
     bool open = false;
     int row = A11Y_TRAINING_SPEED;
-    int values[A11Y_TRAINING_VALUE_ROWS] = {2, 0, 0, 0, 0, 0, 0};
+    int values[A11Y_TRAINING_VALUE_SLOTS] = {2, 0, 0, 0, 0, 0, 0};
 
     A11yTrainingMenu snapshot() const {
         A11yTrainingMenu menu{};
         menu.open = open;
         menu.row = row;
-        menu.value = row >= 0 && row < A11Y_TRAINING_VALUE_ROWS ? values[row] : 0;
+        menu.value = row >= 0 && row < A11Y_TRAINING_VALUE_SLOTS ? values[row] : 0;
         return menu;
     }
 };
@@ -351,6 +351,34 @@ void burst_of_rows_settles_on_a_row() {
     assert((f.settle() == interrupt("CP Damage: 0")));
 }
 
+void value_after_a_held_row_move_names_the_row() {
+    /* Down then Right quickly: the row the value belongs to is said with it,
+     * as the held row move it replaces was never heard. */
+    Fixture f;
+    f.open();
+    f.ticks(30);
+    assert((f.down() == interrupt("Item: Food")));
+    f.ticks(3);
+    assert(f.down().empty());
+    f.ticks(3);
+    assert(f.set(1).empty());
+    assert((f.settle() == interrupt("No. of CPs, 2")));
+    /* Once the row is named, its values are said alone again. */
+    assert((f.set(2) == interrupt("3")));
+
+    /* The same when the value change comes just as the held row move would
+     * have been said. */
+    Fixture g;
+    g.open();
+    g.ticks(30);
+    assert((g.down() == interrupt("Item: Food")));
+    g.ticks(3);
+    assert(g.down().empty());
+    assert(g.ticks(14).empty());
+    assert((g.set(1) == interrupt("No. of CPs, 2")));
+    assert(g.settle().empty());
+}
+
 void burst_then_pause_then_more() {
     Fixture f;
     f.open();
@@ -473,6 +501,7 @@ int main() {
     slow_series_is_said_in_full();
     burst_says_the_first_then_where_it_settles();
     burst_of_rows_settles_on_a_row();
+    value_after_a_held_row_move_names_the_row();
     burst_then_pause_then_more();
     burst_then_closing_drops_it();
     press_during_the_opening_follows_it();

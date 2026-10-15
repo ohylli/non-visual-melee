@@ -328,7 +328,7 @@ The list holds far more than the item switch's items: projectiles (Fox's laser, 
 
 The sections are marked with `@name` comments in `forward.h`. Kind 0xA0 is also reused for the invisible hit areas of stage hazards such as cars and lava.
 
-`Item_IsGrabbable(gobj)` says whether the item is in a state anyone could pick up: lying loose, not held. Reach and weight are checked separately ([Within reach](#pickup-throw-use)). It also covers pickable character items such as Peach's turnips. There is no item name text in a match, so the fork will need a string table keyed by `ItemKind`. (Training's item menu has names for 30 common items in `SdTrain.dat`, loaded only in Training.)
+`Item_IsGrabbable(gobj)` says whether the item is in a state anyone could pick up: lying loose, not held. Reach and weight are checked separately ([Within reach](#pickup-throw-use)). It also covers pickable character items such as Peach's turnips. There is no item name text in a match, so the fork names items itself: `item_names.cpp` holds the fork's item names keyed by `ItemKind` (`item_kinds.h`), so far the items the menus name (Item Switch and the Training menu), and match items would extend that table. (Training's item menu has names for 30 common items in `SdTrain.dat`, loaded only in Training.)
 
 ### Spawning
 
