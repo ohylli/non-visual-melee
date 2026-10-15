@@ -1,6 +1,6 @@
 # 03 Play test by ear
 
-Status: ready-for-human
+Status: resolved (2026-10-15)
 Type: task
 Blocked by: 02
 
@@ -34,3 +34,11 @@ Left for the play test:
 ### 2026-10-15, hold time tuned by ear (maintainer)
 
 The quarter second felt a bit slow. The maintainer tried 0.15 s and 0.2 s and chose 0.15 s (`TrainingSpeech::kSettle`). At 0.15 s the game's two repeats after the first come about 0.15 s apart, right on the rule, so a hold says the press, the first repeat, then none, one or both of those two, and the value it settles on; the quicker repeats after them are always held back. The drive script now takes the settled value after the stick is let go, and `run_level.py` accepts seven to nine numbers. The other items above still wait for the play test.
+
+### 2026-10-15, play test by ear (maintainer)
+
+Played with NVDA. The hold time was the one change (above); everything else felt good, so the remaining items are settled as they stand:
+
+- **The wording**, "No. of CPs" and the speeds included, stays as specified. The game draws the slow speeds as bare fractions ("1 / 4", no ×), as the spec has them.
+- **A press during the first opening** still waits behind the hint; it was not noticed in play.
+- **The small shared helpers** stay as recommended: shared when a third reader would copy them again.
