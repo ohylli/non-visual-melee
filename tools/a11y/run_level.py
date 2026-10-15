@@ -14,7 +14,7 @@ the failure lines of each run that failed. Exits 1 if any run failed.
 Arguments are groups or script names, run in that order, a group's runs
 side by side:
 
-  menus   the sixteen menu drive scripts
+  menus   the seventeen menu drive scripts
   online  css_net.drive at delay 0, delay 10 and over a 100 ms slow link,
           and lan_lobby.drive (--lan)
   NAME    an online run by its name (css_net-delay0, css_net-delay10,
@@ -43,7 +43,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 
 MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens", "sss_steps",
          "sss_skipped", "sss_glide_pick", "leaf_screens", "sss_hover", "css_classic", "css_training",
-         "css_slots", "css_portraits", "css_steps", "results"]
+         "css_slots", "css_portraits", "css_steps", "results", "training_menu"]
 # Settings a script needs from the environment.
 ENV = {"results": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE_DEBUG_VS_STAGE": "31"},
        "match_opponent": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
@@ -54,7 +54,9 @@ ENV = {"results": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE
        "match_ledge_battlefield": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2",
                                    "MELEE_DEBUG_VS_STAGE": "31"}}
 # Lines a passing run must not log; drive.py cannot fail on an absent line.
-ABSENT = {"sss_skipped": re.compile(r'"Stage select\.')}
+ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
+          # The Training menu's hidden row, or a value the reader cannot name.
+          "training_menu": re.compile(r"\[a11y\] training menu row ")}
 # Lines a passing run logs exactly so many times, for the same reason: the
 # gap warning starts and stops once, at the edge, and never on the floor or
 # the platforms.
@@ -66,8 +68,13 @@ LEDGE = [(re.compile(r"\[a11y\] cue ledge left start "), 1), (re.compile(r"\[a11
          (re.compile(r"\[a11y\] cue ledge right start "), 2), (re.compile(r"\[a11y\] cue ledge right stop "), 2)]
 LEDGE_BATTLEFIELD = [(re.compile(r"\[a11y\] cue ledge left start "), 1),
                      (re.compile(r"\[a11y\] cue ledge right start "), 0)]
+# The Training menu says seven numbers: No. of CPs and CP Damage changed
+# and put back, then Right held on CP Damage, which says its first value,
+# the game's first repeat and the value it settles on, none of the repeats
+# between.
+TRAINING_NUMBERS = [(re.compile(r'\[a11y\] speak \w+( \(off\))?: "\d+"$'), 7)]
 COUNT = {"match_gap": GAP_ONCE, "match_gap_battlefield": GAP_ONCE, "match_ledge": GAP_ONCE + LEDGE,
-         "match_ledge_battlefield": LEDGE_BATTLEFIELD}
+         "match_ledge_battlefield": LEDGE_BATTLEFIELD, "training_menu": TRAINING_NUMBERS}
 NET = [("css_net-delay0", ["--delay", "0"]), ("css_net-delay10", ["--delay", "10"]),
        ("css_net-slow", ["--sim-delay-ms", "100"])]
 ONLINE = [name for name, _ in NET] + ["lan_lobby"]

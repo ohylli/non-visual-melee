@@ -1,0 +1,186 @@
+# The Training menu's speech in a Training match: Pichu against the CPU on
+# a random stage. Start opens the menu with the keys, the cursor walks every
+# row down to Finish and on round to Speed, Speed goes through its six
+# words, each value row changes once each way, Up goes round to CP Damage,
+# skipping the hidden row, and a held Right there says its first value, the
+# game's first repeat and the value it settles on. Start closes the menu
+# on CP Damage and opens it again without the keys, and Finish leaves for
+# Training character select.
+# Run with the default --scene title:
+#   python tools/a11y/drive.py tools/a11y/training_menu.drive
+# drive.py turns steering on (MELEE_A11Y_STEER=1). The menu takes the main
+# stick and the D-pad alike; the steps use the stick, as a held D-pad would
+# not differ.
+# A line that should be absent cannot fail a script: run_level.py fails a
+# run that names the hidden row or speaks a number more often than the
+# steps below do (the held Right's repeats between its first two lines and
+# the settled one).
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$" 20 0.3
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# 1-P Mode, Training.
+press A
+wait '"1-P Mode\. Regular Match\. '
+sleep 0.3
+press Down
+wait '"Event Match\. '
+press Down
+wait '"Stadium\. '
+press Down
+wait '"Training\. '
+sleep 0.3
+press A
+wait '"Training character select\. Player 1, no character\. CPU, (?P<cpu>.+)\."$'
+sleep 1
+
+# Pichu, which makes the match ready (tools/a11y/css_training.drive), and
+# Start on stage select for a random stage.
+press DUp
+wait ': "Pichu(, the CPU.s coin)?"$'
+wait 'glide to "Pichu[^"]*" ended after \d+ frames: arrived'
+press A
+wait 'Ready to fight\. Press Start\.'
+sleep 0.5
+press Start
+wait '"Stage select\. '
+sleep 1
+press Start
+wait 'boot scene: state \d+ scene 4$'
+
+# Start opens the menu once the match lets it pause; the first opening of a
+# session has the keys. The menu speaks nothing more until a press changes
+# what it shows, so the waits below each name the press's own line, and
+# the sleeps keep each press a quarter second clear of the line before,
+# where it is said at once.
+press Start until '"Training menu\. Speed: x1\. Up and down for rows, left and right to adjust, A on Item, Reset and Finish, Start to close\."$' 20 1
+sleep 1
+
+# Speed's six words, Right going slower and wrapping from 1/4 to x2.
+press Right
+wait ': "2/3"$'
+sleep 0.3
+press Right
+wait ': "1/2"$'
+sleep 0.3
+press Right
+wait ': "1/4"$'
+sleep 0.3
+press Right
+wait ': "x2"$'
+sleep 0.3
+press Right
+wait ': "x1\.5"$'
+sleep 0.3
+press Right
+wait ': "x1"$'
+sleep 0.3
+
+# Every row down, each value once each way.
+press Down
+wait ': "Item: Food"$'
+sleep 0.3
+press Right
+wait ': "Maxim Tomato"$'
+sleep 0.3
+press Left
+wait ': "Food"$'
+sleep 0.3
+press Down
+wait ': "No\. of CPs, 1"$'
+sleep 0.3
+press Right
+wait ': "2"$'
+sleep 0.3
+press Left
+wait ': "1"$'
+sleep 0.3
+press Down
+wait ': "CP, Stand"$'
+sleep 0.3
+press Right
+wait ': "Walk"$'
+sleep 0.3
+press Left
+wait ': "Stand"$'
+sleep 0.3
+press Down
+wait ': "CP Damage: 0"$'
+sleep 0.3
+press Right
+wait ': "1"$'
+sleep 0.3
+press Left
+wait ': "0"$'
+sleep 0.3
+# The hidden row between is skipped.
+press Down
+wait ': "Camera: Normal"$'
+sleep 0.3
+press Right
+wait ': "Zoom"$'
+sleep 0.3
+press Left
+wait ': "Normal"$'
+sleep 0.3
+press Down
+wait ': "Reset"$'
+sleep 0.3
+press Down
+wait ': "Finish"$'
+sleep 0.3
+press Down
+wait ': "Speed: x1"$'
+sleep 0.3
+
+# Up round from Speed to CP Damage, skipping the hidden row the other way.
+press Up
+wait ': "Finish"$'
+sleep 0.3
+press Up
+wait ': "Reset"$'
+sleep 0.3
+press Up
+wait ': "Camera: Normal"$'
+sleep 0.3
+press Up
+wait ': "CP Damage: 0"$'
+sleep 0.3
+
+# Right held two seconds. The press says "1" at once; the game's first
+# repeat comes 20 ticks later, past the quarter second, so "2" is said too;
+# the repeats after it come every 8 ticks and quicker, each held back, and
+# the value they settle on is said a quarter second after the last. How
+# many repeats a hold gets depends on the input driver's timing, so the
+# settled value is kept, not pinned.
+press Right 2000
+wait ': "1"$'
+wait ': "2"$'
+wait ': "(?P<damage>[3-9]|[1-9]\d+)"$'
+sleep 0.5
+
+# Start closes the menu, saying nothing; the next Start opens it on the row
+# it was left on, without the keys.
+press Start
+sleep 1
+press Start
+wait '"Training menu\. CP Damage: %damage%\."$'
+sleep 1
+
+# Down to Finish, and A leaves Training for its character select.
+press Down
+wait ': "Camera: Normal"$'
+sleep 0.3
+press Down
+wait ': "Reset"$'
+sleep 0.3
+press Down
+wait ': "Finish"$'
+sleep 0.3
+press A
+wait '"Training character select\. '
+sleep 1
