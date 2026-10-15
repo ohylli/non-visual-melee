@@ -6,9 +6,11 @@
  * .scratch/rules-screens/spec.md for the rules screens). The game draws most
  * of them as pictures, so there is no game text to read; Item Switch and
  * Random Stage draw theirs as game text, named here all the same so the
- * words do not depend on the table a scene loaded, Random Stage's from stage
- * select's table (sss_names.hpp). */
+ * words do not depend on the table a scene loaded, Item Switch's from the
+ * items' table (item_names.hpp), Random Stage's from stage select's
+ * (sss_names.hpp). */
 #pragma once
+#include "item_kinds.h"
 #include "stage_kinds.h"
 #include <optional>
 #include <span>
@@ -72,8 +74,11 @@ struct ReaderRow {
     /* A Random Stage row's stage, named by stage select's table; name is
      * empty then. */
     A11yStage stage = A11Y_NO_STAGE;
+    /* An Item Switch row's item, named by the items' table (item_names.hpp);
+     * name is empty then. */
+    A11yItem item = A11Y_NO_ITEM;
 
-    /* The row's name as spoken: its stage's or its own. */
+    /* The row's name as spoken: its stage's, its item's or its own. */
     std::string_view spoken_name() const;
 };
 

@@ -3,6 +3,7 @@
 #include "pc/compat.h"
 #include "character_kinds.h"
 #include "game_access.h"
+#include "item_kinds.h"
 #include "menu_kinds.h"
 #include "pc/pc.h"
 #include "pc/region.h"
@@ -13,6 +14,7 @@
 #include <melee/ft/kinds/ftCommon/forward.h>
 #include <melee/ft/types.h>
 #include <melee/gm/forward.h>
+#include <melee/gm/gm_1884.h>
 #include <melee/gm/gmmain_lib.h>
 #include <melee/gm/gmonlinemode.h>
 #include <melee/gm/gmscene.h>
@@ -20,6 +22,7 @@
 #include <melee/gm/types.h>
 #include <melee/gr/forward.h>
 #include <melee/gr/stage.h>
+#include <melee/it/forward.h>
 #include <melee/lb/lb_00B0.h>
 #include <melee/lb/lbspdisplay.h>
 #include <melee/mn/forward.h>
@@ -36,7 +39,7 @@
 #include <sysdolphin/baselib/synth.h>
 
 /* The fork's copies of the decomp's numbers (scene_kinds.h, menu_kinds.h,
- * character_kinds.h, stage_kinds.h) against the decomp's own. */
+ * character_kinds.h, stage_kinds.h, item_kinds.h) against the decomp's own. */
 #define A11Y_CHECK_NUMBER(name, number)                                                            \
     _Static_assert(name == (number), #name " no longer has the number the fork's copy gives it");
 A11Y_SCENE_KINDS(A11Y_CHECK_NUMBER)
@@ -47,6 +50,7 @@ A11Y_STAGE_SELECT_MODES(A11Y_CHECK_NUMBER)
 A11Y_CHARACTER_KINDS(A11Y_CHECK_NUMBER)
 A11Y_CSS_MATCH_TYPES(A11Y_CHECK_NUMBER)
 A11Y_STAGE_KINDS(A11Y_CHECK_NUMBER)
+A11Y_ITEM_KINDS(A11Y_CHECK_NUMBER)
 #undef A11Y_CHECK_NUMBER
 _Static_assert(A11Y_CSS_VS_CAMERA == VS_CAMERA, "VS_CAMERA no longer has the fork's number");
 
@@ -651,6 +655,19 @@ void a11y_game_lobby_state(const OnlineLobbyView* view, A11yLobbyState* out) {
 
 bool a11y_game_lan_play(void) {
     return gmOnline_GetKind() == ONLINE_KIND_LAN;
+}
+
+_Static_assert(A11Y_TRAINING_VALUE_ROWS == ARRAY_SIZE(gm_80473814.menu_values),
+    "the Training menu keeps another number of values");
+
+void a11y_game_training_menu(A11yTrainingMenu* out) {
+    memset(out, 0, sizeof(*out));
+    const CssSubStruct* menu = &gm_80473814;
+    out->open = menu->x01 != 0;
+    out->row = menu->x00;
+    if (out->row < A11Y_TRAINING_VALUE_ROWS) {
+        out->value = menu->menu_values[out->row];
+    }
 }
 
 /* The slot's main fighter, or NULL. The player slots are static and

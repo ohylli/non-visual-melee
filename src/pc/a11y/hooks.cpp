@@ -14,6 +14,7 @@
 #include "scene_speech.hpp"
 #include "speech.hpp"
 #include "sss_reader.hpp"
+#include "training_speech.hpp"
 #include <cstdlib>
 #include <dolphin/pad.h>
 #include <memory>
@@ -28,6 +29,7 @@ std::unique_ptr<a11y::MenuSpeech> s_menu_speech;
 std::unique_ptr<a11y::CssReader> s_css;
 std::unique_ptr<a11y::SssReader> s_sss;
 std::unique_ptr<a11y::LobbySpeech> s_lobby;
+std::unique_ptr<a11y::TrainingSpeech> s_training;
 /* The cue engine, the cue settings and the cues of a match; null while
  * cues are off or their output could not open. */
 std::unique_ptr<a11y::CueSystem> s_cue_system;
@@ -140,6 +142,7 @@ extern "C" void pc_a11y_init(void) {
     s_css = std::make_unique<a11y::CssReader>(*s_speech, config.steer);
     s_sss = std::make_unique<a11y::SssReader>(*s_speech, config.steer);
     s_lobby = std::make_unique<a11y::LobbySpeech>(*s_speech);
+    s_training = std::make_unique<a11y::TrainingSpeech>(*s_speech);
     s_cue_system = a11y::CueSystem::open(config, *s_speech, s_master_volume);
     a11y::launcher_speech_start(*s_speech);
 }
@@ -150,6 +153,7 @@ extern "C" void pc_a11y_shutdown(void) {
     }
     a11y::launcher_speech_stop();
     s_cue_system.reset();
+    s_training.reset();
     s_lobby.reset();
     s_sss.reset();
     s_css.reset();
@@ -171,6 +175,11 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
     s_css_exit = A11Y_CSS_STAYING;
     s_css_to_rules = false;
     s_css_menu_fed = false;
+    if (s_training != nullptr && scene_kind == static_cast<int>(a11y::SceneKind::GS_TRAINING)) {
+        /* The scene's start has just reset the Training menu: a new
+         * session, whose first opening says the keys. */
+        s_training->session_started();
+    }
     announce_scene(previous_scene, css_exit, scene_kind);
     if (s_cue_system != nullptr) {
         /* After the scene's announcement, which interrupts. */
@@ -293,11 +302,21 @@ extern "C" void pc_a11y_lobby_frame(const OnlineLobbyView* view) {
 }
 
 extern "C" void pc_a11y_match_tick(uint64_t held_mask) {
-    if (!game_hook_may_speak() || s_cue_system == nullptr) {
+    if (!game_hook_may_speak()) {
         return;
     }
-    int local_port = pc_net_active() ? pc_net_local_player() : 0;
-    s_cue_system->tick(local_port, pc_net_active(), held_mask);
+    if (s_scene == static_cast<int>(a11y::SceneKind::GS_TRAINING)) {
+        /* After the tick's procs, the Training menu's own update included,
+         * so the snapshot is the tick's finished state. It runs on paused
+         * ticks too: the menu is only open while the match is paused. */
+        A11yTrainingMenu menu;
+        a11y_game_training_menu(&menu);
+        s_training->tick(menu, a11y::Clock::now());
+    }
+    if (s_cue_system != nullptr) {
+        int local_port = pc_net_active() ? pc_net_local_player() : 0;
+        s_cue_system->tick(local_port, pc_net_active(), held_mask);
+    }
 }
 
 extern "C" bool pc_a11y_pad(PADStatus* pad) {

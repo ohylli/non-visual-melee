@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "menu_names.hpp"
+#include "item_names.hpp"
 #include "menu_kinds.h"
 #include "sss_names.hpp"
 #include <iterator>
@@ -206,44 +207,49 @@ constexpr ReaderRow kAdditionalRulesRows[] = {
     {5, "Random Stage", RowValue::none, false, kind(MenuKind::MENU_KIND_RULES_STAGE)},
 };
 
+constexpr ReaderRow item_switch(int row, A11yItem item) {
+    return {.key = row, .value = RowValue::switched, .item = item};
+}
+
 /* Item Switch's rows: the left column (0 to 15) and the right (16 to 30), each
  * top to bottom, then the frequency strip above them, a row of its own for
  * each column it is entered from. The names are drawn as two game texts, one
  * per column (SdMenu strings 2 and 3); mnItemSw_803ED438 maps each row to its
- * item. */
+ * item's place in the item switch. Each row is named by its item, so the
+ * Training menu names an item the same. */
 constexpr std::string_view kFrequencyHint = "Left and right to adjust.";
 constexpr ReaderRow kItemSwitchRows[] = {
-    {0, "Food", RowValue::switched},
-    {1, "Maxim Tomato", RowValue::switched},
-    {2, "Heart Container", RowValue::switched},
-    {3, "Warp Star", RowValue::switched},
-    {4, "Ray Gun", RowValue::switched},
-    {5, "Super Scope", RowValue::switched},
-    {6, "Fire Flower", RowValue::switched},
-    {7, "Lip's Stick", RowValue::switched},
-    {8, "Star Rod", RowValue::switched},
-    {9, "Beam Sword", RowValue::switched},
-    {10, "Home-Run Bat", RowValue::switched},
-    {11, "Fan", RowValue::switched},
-    {12, "Hammer", RowValue::switched},
-    {13, "Green Shell", RowValue::switched},
-    {14, "Red Shell", RowValue::switched},
-    {15, "Flipper", RowValue::switched},
-    {16, "Freezie", RowValue::switched},
-    {17, "Mr. Saturn", RowValue::switched},
-    {18, "Poké Ball", RowValue::switched},
-    {19, "Bob-omb", RowValue::switched},
-    {20, "Motion-Sensor Bomb", RowValue::switched},
-    {21, "Super Mushroom", RowValue::switched},
-    {22, "Poison Mushroom", RowValue::switched},
-    {23, "Starman", RowValue::switched},
-    {24, "Parasol", RowValue::switched},
-    {25, "Screw Attack", RowValue::switched},
-    {26, "Metal Box", RowValue::switched},
-    {27, "Bunny Hood", RowValue::switched},
-    {28, "Cloaking Device", RowValue::switched},
-    {29, "Barrel Cannon", RowValue::switched},
-    {30, "Party Ball", RowValue::switched},
+    item_switch(0, A11Y_It_Kind_Foods),
+    item_switch(1, A11Y_It_Kind_Tomato),
+    item_switch(2, A11Y_It_Kind_Heart),
+    item_switch(3, A11Y_It_Kind_WStar),
+    item_switch(4, A11Y_It_Kind_L_Gun),
+    item_switch(5, A11Y_It_Kind_S_Scope),
+    item_switch(6, A11Y_It_Kind_F_Flower),
+    item_switch(7, A11Y_It_Kind_LipStick),
+    item_switch(8, A11Y_It_Kind_StarRod),
+    item_switch(9, A11Y_It_Kind_Sword),
+    item_switch(10, A11Y_It_Kind_Bat),
+    item_switch(11, A11Y_It_Kind_Harisen),
+    item_switch(12, A11Y_It_Kind_Hammer),
+    item_switch(13, A11Y_It_Kind_G_Shell),
+    item_switch(14, A11Y_It_Kind_R_Shell),
+    item_switch(15, A11Y_It_Kind_Flipper),
+    item_switch(16, A11Y_It_Kind_Freeze),
+    item_switch(17, A11Y_It_Kind_Dosei),
+    item_switch(18, A11Y_It_Kind_M_Ball),
+    item_switch(19, A11Y_It_Kind_BombHei),
+    item_switch(20, A11Y_It_Kind_MSBomb),
+    item_switch(21, A11Y_It_Kind_Kinoko),
+    item_switch(22, A11Y_It_Kind_DKinoko),
+    item_switch(23, A11Y_It_Kind_Star),
+    item_switch(24, A11Y_It_Kind_Parasol),
+    item_switch(25, A11Y_It_Kind_ScBall),
+    item_switch(26, A11Y_It_Kind_MetalB),
+    item_switch(27, A11Y_It_Kind_RabbitC),
+    item_switch(28, A11Y_It_Kind_Spycloak),
+    item_switch(29, A11Y_It_Kind_TaruCann),
+    item_switch(30, A11Y_It_Kind_Kusudama),
     {.key = 31,
         .name = "Item frequency",
         .value = RowValue::item_frequency,
@@ -397,6 +403,9 @@ std::optional<std::string_view> menu_entry_name(int menu, int entry) {
 std::string_view ReaderRow::spoken_name() const {
     if (stage != A11Y_NO_STAGE) {
         return stage_name(stage).value_or(kUnknownStage);
+    }
+    if (item != A11Y_NO_ITEM) {
+        return item_name(item).value_or(kUnknownItem);
     }
     return name;
 }

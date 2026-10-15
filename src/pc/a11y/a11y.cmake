@@ -37,7 +37,10 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/game_access.c
         ${CMAKE_CURRENT_LIST_DIR}/menu_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/menu_names.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/item_names.cpp
         ${CMAKE_CURRENT_LIST_DIR}/menu_text.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/training_speech.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/training_names.cpp
         ${CMAKE_CURRENT_LIST_DIR}/css_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/css_names.cpp
         ${CMAKE_CURRENT_LIST_DIR}/css_targets.cpp
@@ -187,6 +190,7 @@ if (TARGET unit_tests)
             ${CMAKE_CURRENT_LIST_DIR}/test_menu_speech.cpp
             ${CMAKE_CURRENT_LIST_DIR}/menu_speech.cpp
             ${CMAKE_CURRENT_LIST_DIR}/menu_names.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/item_names.cpp
             ${CMAKE_CURRENT_LIST_DIR}/sss_names.cpp
             ${CMAKE_CURRENT_LIST_DIR}/game_text.cpp
             ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
@@ -195,6 +199,20 @@ if (TARGET unit_tests)
     add_test(NAME menu_speech COMMAND menu_speech_test)
     set_tests_properties(menu_speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests menu_speech_test)
+
+    # Training menu speech against hand-written snapshots of the menu and a
+    # fake clock; a fake bridge and its own pc_log_line.
+    add_executable(training_speech_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_training_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/training_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/training_names.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/item_names.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
+    target_include_directories(training_speech_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(training_speech_test PRIVATE -UNDEBUG)
+    add_test(NAME training_speech COMMAND training_speech_test)
+    set_tests_properties(training_speech PROPERTIES LABELS melee)
+    add_dependencies(unit_tests training_speech_test)
 
     # Character select speech against hand-written snapshots of the screen;
     # a fake bridge and its own pc_log_line.

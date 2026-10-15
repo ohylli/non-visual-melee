@@ -190,7 +190,7 @@ Every mode's character and stage select is the same screen: the mode is a `CSSMa
 ### During a match
 
 - **Pause** (`src/melee/gm/gmvs.c`, overlay in `gmpause.c`): no menu. Start pauses and gives the pausing player a free camera; L+R+A+Start quits the match as a no-contest.
-- **Training menu** (`src/melee/gm/gm_1884.c`): shown while training is paused. Setting rows (speed, item, number of CPUs, CPU behaviour, damage, camera, reset, exit, and one hidden row the cursor skips; A on the item row spawns the item); the row is `gm_80473814.x00`, the values `gm_80473814.menu_values`. Values are pictures; only the chosen item's name and a pause notice are game text.
+- **Training menu** (`src/melee/gm/gm_1884.c`): Training's pause, opened with Start during a Training match. A column of rows holding a value (Speed, Item, the CPUs, Camera) or an action (A on Item, Reset, Finish), and one hidden row the cursor skips. Labels and values are pictures; only the chosen item's name is game text. See [The Training menu in detail](#the-training-menu-in-detail).
 - **Camera mode** (`src/melee/gm/gmcameramode.c`): the Special Melee match for taking snapshots. Before character select, a notice screen (`GS_CAMERA_VS`, `gmcamera.c`) explains the controls in game text (`SdVsCam`); the match itself is an ordinary `GS_VS` scene.
 
 ### After a match and between matches
@@ -240,6 +240,37 @@ The most complex native menu, and the one no player can avoid. The layout (see `
 
 Everything a sighted player reads here is a picture except numbers (rules header, CPU level, handicap, KO counts), timers, name tags and the character's name in the name tag window.
 
+## The Training menu in detail
+
+Training has no pause screen of its own: Start during a Training match opens the Training menu, a column of rows on the left over the frozen match, the hovered row drawn gold with arrows. The fork reads it in `training_speech.cpp`.
+
+- **State.** All of it is in the global `gm_80473814` (a `CssSubStruct`, `gm/types.h`): `x00` the row the cursor is on, `x01` whether the menu is open, `menu_values[]` one value per row. The struct also keeps the players' starting data, whose bitfields need the game's layout, so it is read from a file built like the game's (`game_access.c`).
+- **Open and closed.** `x01` is the menu's own record and the one to read. Its update, `fn_801891F4`, sets it on the first tick it runs with the pause word's Training bit set (bit 2, `gameplay-state.md`, "Pause, freezes and slow motion") and clears it on the tick that bit clears, applying the values; so it changes exactly once per Start. The panel's slide (`anim_frames`) is drawing only. Only the player who paused can unpause, and each of the two is locked out for 10 ticks after the other.
+- **Input from the first tick.** The update reads the controller on every tick the menu is open, the first included, so a press while the panel is still sliding in already moves the cursor or changes a value. The fork's reader says such a press after its opening rather than in its place.
+- **Persistence.** The scene's start (`fn_80189B88`, from `gm_Scene_Training_OnEnter`) puts the cursor on Speed and every value at its default. The cursor and the values then persist between openings for the rest of the scene. Finish ends the match at once and lands on Training character select; the next match enters the scene again, back at the defaults. The fork's scene hook runs right after that start, so `pc_a11y_scene_entered` with `GS_TRAINING` marks a new session.
+- **One controller**: the human player's (the Training state's port, read through `gm_801A36C0`). The D-pad and the stick do the same. Up and Down move the cursor and wrap, Finish to Speed and back, skipping the hidden row. Left and Right change the value and wrap on every row; Reset and Finish ignore them. A on Item spawns the chosen item above the player, with the same sound whether or not the item limit let it spawn, and holding A spawns one after another. A on Reset puts every value back to its default and the player at the spawn point, leaving the cursor on Reset. A on Finish ends the match without confirmation. B and the other buttons do nothing; Start closes the menu.
+- **Auto-repeat.** Every held button repeats (`gm_1A36.c`): the press at once, then after 20 ticks one every 8, from 40 ticks every 4, from 100 ticks every 2. So a held direction's first repeat comes a third of a second after the press. CP Damage pauses the repeat 25 ticks at 0 and at 999 before it wraps, on controller 1 only.
+- **When a change applies.** Camera applies at once. Speed, the number of CPUs, the CPU's behaviour and its damage apply on the tick the menu closes, every time it closes, so each pause sets the CPUs' percent back to the menu's value.
+- **Slow motion slows the menu.** The chosen speed stays in force while the menu is open, and a tick the frame timer skips runs no proc, so at 1/4 the menu runs 15 times a second and its repeats come four times slower. The match's tick hook still runs on every tick, skipped or not.
+- **Game text.** The chosen item's name is the menu's one text object, an SdTrain string chosen through the menu's own item table; on a US English game the Motion-Sensor Bomb gets another string. There is no pause notice, though the code looks as if there were one: `fn_80188EE8` binds SdTrain string 30 to that same text object while paused, then rebinds it to the item's name later in the same function, every tick.
+- **Where the fork reads it.** The match's tick hook (`pc_a11y_match_tick`) runs after the tick's procs, paused ticks included, so it sees each tick's finished state, the menu's own update included; in the Training scene it hands the menu to the reader whether or not the cues are on. The menu needs no hook of its own.
+
+The rows, by `x00`, with the values `menu_values[row]` keeps, in the order Right steps through them:
+
+| Row | Drawn | Values | Default |
+|---|---|---|---|
+| 0 | Speed | an index into the speeds, fastest first: ×2, ×1.5, ×1, 2/3, 1/2, 1/4 (Right goes slower) | ×1 (2) |
+| 1 | Item | 0 to 29, an index into `gmTraining_ItemTable` (static in `gm_1884.c`), whose entries pair an `ItemKind` with its SdTrain string; not an `ItemKind` itself | Food |
+| 2 | No. of CPs | 0 to 2, drawn and applied as 1 to 3 | 1 |
+| 3 | CP: | 0 to 5: Stand, Walk, Evade, Jump, Attack, Human | Stand |
+| 4 | CP Damage | 0 to 999, drawn as the number | 0 |
+| 5 | none | hidden: the cursor skips it, nothing draws or reads it | |
+| 6 | Camera | 0 to 2: Normal, Zoom, Free | Normal |
+| 7 | Reset | none; A only | |
+| 8 | Finish | none; A only | |
+
+The item table holds Item Switch's items but the Party Ball, in another order, and a 31st entry, no item, out of the cursor's reach. Since the table is static, the fork keeps a copy of its kinds (`training_names.cpp`) and names the items by `ItemKind` from one table shared with Item Switch (`item_names.cpp`), so an item is named the same on both screens.
+
 ## Candidate hook points
 
 Speculative: places the code offers, not decisions.
@@ -254,7 +285,7 @@ Speculative: places the code offers, not decisions.
   - Sound, Screen display, Language and Multi-Man keep their cursor in the generic `Menu` struct, private to their file. All four set the text in the middle of the screen through one shared helper, `Menu_InitCenterText` (`src/melee/mn/inlines.h`), each time the row or choice changes and once as the screen opens. The number of that text names the row or choice, so a hook in the helper (`pc_a11y_menu_center_text`) stands in for reading the private cursor; Screen display and Language have one row and set theirs once. The opening function sets `cur_menu` and the centre text in the same frame, so the poll sees both together; the fork keeps the last number across scenes, since after a Multi-Man match the menu scene opens straight on that screen before the scene hook runs. The values need no hook: each press saves them at once, Sound's channel as the synth's sound mode (`HSD_SynthGetSoundMode`, 1 for stereo; `lbAudioAx_80024BD0` reads the same but also writes a copy) and its balance and Screen display's deflicker in the game preferences (`gmMainLib_8015ED74`, -100 to +100 in steps of 5; `gmMainLib_8015F4E8`). The balance runs the opposite way to how its bar looks: Right moves the divider toward the MUSIC label, but it grows the SOUNDS part of the bar, and +100 silences the music. Screen display ignores A until its slide-in animation ends;
   - every other screen keeps its own state (Rumble in `MnVibrationData`; event match, the other records pages, the sound test, the snapshot album, the movie gallery, Erase data).
 - **Something happened**: `lbAudioAx_80024030`, the menu sound function. One hook there tells the fork the player moved, confirmed, cancelled or was refused, on almost every native menu, including screens outside `mn/`. It carries no context, but it tells a poller when to look, and the refused sound explains a press that changed nothing.
-- **Training menu**: `gm_80473814.x00` (row) and `menu_values`, read when a move sound plays.
+- **Training menu**: polled from the match's tick hook, which needs nothing new (see [The Training menu in detail](#the-training-menu-in-detail)).
 - **Character select**: the fork polls once a frame, as for the main menu tree, through the frame hook, with each hand's and each coin's numbers caught as they update. A carried coin entering or leaving a portrait shows in `doors[i].sel_icon_prev` together with the hand's state (`sel_icon` alone misses leaving and re-entering the same one, and holds the placeholder after a pickup); a pickup, a choice, B and the coin carried down show in the hand's state and the door's `sel_icon` and character. Changes of `p_kind` (human, CPU or closed) and `mnCharSel_804D6CF7` going from zero to nonzero (Ready to Fight shown; while shown it counts animation frames) are read the same way. The confirm path that calls the announcer is no hook point: hook the character select call sites, not `gm_80168C5C` itself, which other screens call too.
 - **Stage select**: the fork polls once a frame through a hook at the top of `mnStageSel_Scene_OnFrame`, which hands over the screen's private state: the table of tiles, `mnStageSel_804D6CAE`, the pick state and the buttons the screen read. The pick runs in an object's update after the frame function, before the cursor's own update, so the buttons a poll sees acted on the tile the previous poll saw hovered. The tile table's row type is private to `mnstagesel.c`, so the fork keeps a copy of its layout and the hook passes the row's size to check it against. Steering's glide advances in a second hook, in the cursor's update after its clamp, which passes the cursor's position and the stick that moved it; that update returns early once a pick is made, so the hook falls silent there. Online, the frame function resolves the two players' picks once both are known and leaves on that same frame, after the frame hook has run, so a third hook at the resolution passes the stage's tile and both picks.
 - **Game text**: the three functions in [Game text](#game-text) see most text as it is set. Whether a generic text reader built on them is useful, or too noisy without knowing which screen a text belongs to, is open.
@@ -279,7 +310,6 @@ Code gives the logic but not the layout. `docs/screenshots/` already covers the 
 - how far apart character select and stage select targets are in cursor movement, and how the cursor feels to steer;
 - the item switch and random stage switch grids;
 - the name entry keyboard layout;
-- the training menu rows and their values;
 - the snapshot album and the trophy gallery in detail.
 
 ### Candidate vocabulary

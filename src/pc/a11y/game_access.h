@@ -480,6 +480,47 @@ void a11y_game_lobby_state(const struct OnlineLobbyView* view, A11yLobbyState* o
 /* True when the online mode was entered for LAN play. */
 bool a11y_game_lan_play(void);
 
+/* The Training menu's rows, by the cursor's numbers: the first seven hold a
+ * value, Reset and Finish none, and the hidden row is never reached (the
+ * cursor skips it) nor drawn. */
+enum {
+    A11Y_TRAINING_SPEED = 0,
+    A11Y_TRAINING_ITEM = 1,
+    A11Y_TRAINING_CPU_COUNT = 2,
+    A11Y_TRAINING_CPU_BEHAVIOUR = 3,
+    A11Y_TRAINING_CPU_DAMAGE = 4,
+    A11Y_TRAINING_HIDDEN = 5,
+    A11Y_TRAINING_CAMERA = 6,
+    A11Y_TRAINING_RESET = 7,
+    A11Y_TRAINING_FINISH = 8,
+    A11Y_TRAINING_VALUE_ROWS = 7,
+};
+
+/* The Training menu, read once a tick in the Training scene by its reader
+ * (.scratch/training-menu/spec.md), from gm_80473814 (gm_1884.c). The scene's
+ * start puts the cursor on Speed and every value at its default; both then
+ * persist between openings until the scene is left. Meaningless outside the
+ * Training scene: the struct keeps whatever the last session left. */
+typedef struct A11yTrainingMenu {
+    /* The menu is open (x01). The menu's own update sets it on the first
+     * tick it runs with the Training pause on, the same tick it starts
+     * reading the controller, and clears it on the tick the pause ends,
+     * applying the values; so it changes once per Start. */
+    bool open;
+    /* The row the cursor is on (x00), A11Y_TRAINING_SPEED to
+     * A11Y_TRAINING_FINISH. */
+    int row;
+    /* The row's value (menu_values[row]) on a row with one, else 0. Speed is
+     * an index into the speeds, fastest first; Item an index into the
+     * Training menu's own item table (gmTraining_ItemTable); the number of
+     * CPUs one less than drawn; the CPU's behaviour and the camera an index
+     * into their words; the CPU's damage the percent itself. */
+    int value;
+} A11yTrainingMenu;
+
+/* Fills the snapshot from game memory. Reads only. */
+void a11y_game_training_menu(A11yTrainingMenu* out);
+
 /* A match, read once a tick by the match cues (docs/a11y/cues.md, "The
  * match snapshot"), in world units: x grows to the right, y upwards. */
 
