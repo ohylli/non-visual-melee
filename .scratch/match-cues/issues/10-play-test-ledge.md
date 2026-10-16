@@ -1,6 +1,6 @@
 # 10 Play test by ear: the ledge warning and the four cues together
 
-Status: ready-for-human
+Status: resolved (2026-10-16)
 Type: task
 Blocked by: 09
 
@@ -57,3 +57,13 @@ On Jungle Japes' small starting platform the two sides blended into one sound, a
 ### 2026-10-16, pan floor tuned by ear (maintainer)
 
 The alternation stays. The pan floor's default in code becomes 0.15 (was 0.3), so the warning at the edge itself sits nearer the centre.
+
+### 2026-10-16: play-tested by ear
+
+The maintainer played matches with NVDA offline, Jungle Japes' small starting platform among them, and judged the ledge warning good enough overall. No new issues.
+
+- **Tuned by ear**: warning distance, level floor and boost (2026-10-15), and the pan floor (above).
+- **Both sides at once** now alternate (above), kept by ear.
+- **Not raised, left as they are** (the 2026-10-14 review notes): a margin at the warning distance against flicker, the walk past switched-off floor lines on Pokémon Stadium, and the cut rather than a fade at the handover to the gap warning. The snapshot's inputs stay as they are until a second input comes.
+- **From the code review of the alternation**, left as they are unless heard in play: a side starting while the other pulses waits up to one interval for the midpoint between the other's pulses, and on a same-tick start the left side leads even when the right edge is nearer.
+- **Not tested:** online (issue 11), and the position cues' pan on stages other than Battlefield and Final Destination. The recovery cue (the spec's out-of-scope list) can now get its own spec.
