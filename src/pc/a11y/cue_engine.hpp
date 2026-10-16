@@ -54,6 +54,12 @@ struct VoiceSpec {
      * every pulse would be cut by the next: such a voice is refused. */
     float fastest_interval = 0.05f;
     float lowest_pitch = 0.5f;
+    /* Pulsed: a pulsed voice added earlier whose rhythm this one shares. A
+     * voice of the two starting from silence while the other sounds pulses
+     * halfway between the other's pulses, so the two alternate rather than
+     * land together; started on the same tick, the later added one waits
+     * half an interval. -1 for none. */
+    int alternates_with = -1;
 };
 
 /* One input of the volume chain: the cue mix as a whole (cue volume and the
@@ -129,6 +135,9 @@ private:
         std::atomic<float> pitch{1.0f};
         std::atomic<float> gain{1.0f};
         std::atomic<float> interval{0.5f};
+        /* The voice it alternates with, both ways, or -1: set as voices are
+         * added. */
+        std::atomic<int> partner{-1};
         /* Game thread only: for its log and trace lines. */
         bool started = false;
         VoiceTargets targets;
@@ -146,6 +155,7 @@ private:
     void write_targets(Voice& v, const VoiceTargets& targets);
     void log_voice(const Voice& v, const char* event) const;
     void render_voice(Voice& v, float chain, float* out, int frames);
+    void fall_between(Voice& v, double interval, int frames) const;
 
     CueEngineOptions m_options;
     std::array<Voice, kMaxVoices> m_voices;

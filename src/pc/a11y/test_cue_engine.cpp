@@ -126,6 +126,20 @@ std::vector<int> onsets(const std::vector<float>& out) {
     return found;
 }
 
+/* Frames where one channel's sound begins after silence. */
+std::vector<int> channel_onsets(const std::vector<float>& out, int channel) {
+    std::vector<int> found;
+    bool silent = true;
+    for (size_t f = 0; f < out.size() / 2; f++) {
+        bool sounding = std::fabs(out[2 * f + static_cast<size_t>(channel)]) > 1e-7f;
+        if (sounding && silent) {
+            found.push_back(static_cast<int>(f));
+        }
+        silent = !sounding;
+    }
+    return found;
+}
+
 bool near(double value, double expected, double tolerance) {
     return std::fabs(value - expected) <= tolerance;
 }
@@ -198,6 +212,16 @@ void starts_and_stops_do_not_jump() {
     assert(near(back[back.size() - 2], kCentredFull, 1e-4));
 }
 
+void check_onsets(const std::vector<int>& found, const std::vector<int>& expected) {
+    if (found != expected) {
+        for (int f : found) {
+            std::cerr << f << " ";
+        }
+        std::cerr << "\n";
+    }
+    assert(found == expected);
+}
+
 void pulses_follow_their_interval() {
     CueEngine engine;
     int voice = engine.add_voice(pulsed("tick", constant(0.5f, 480), 0.02f));
@@ -218,14 +242,55 @@ void pulses_follow_their_interval() {
     out.insert(out.end(), more.begin(), more.end());
 
     const std::vector<int> expected = {0, 4800, 9600, 14400, 16800, 26400, 32100, 33060};
-    std::vector<int> found = onsets(out);
-    if (found != expected) {
-        for (int f : found) {
-            std::cerr << f << " ";
-        }
-        std::cerr << "\n";
+    check_onsets(onsets(out), expected);
+}
+
+void alternating_voices_pulse_between_each_other() {
+    /* Started together, the later added voice waits half an interval. */
+    {
+        CueEngine engine;
+        int left = engine.add_voice(pulsed("left", constant(0.5f, 480), 0.02f));
+        VoiceSpec spec = pulsed("right", constant(0.5f, 480), 0.02f);
+        spec.alternates_with = left;
+        int right = engine.add_voice(std::move(spec));
+        assert(right == 1);
+        engine.start(left, at(-1.0f, 0.1f));
+        engine.start(right, at(1.0f, 0.1f));
+        std::vector<float> out = render(engine, 12000);
+        check_onsets(channel_onsets(out, 0), {0, 4800, 9600});
+        check_onsets(channel_onsets(out, 1), {2400, 7200});
     }
-    assert(found == expected);
+    /* Started later, either one falls between the other's pulses, wherever
+     * a block starts. */
+    {
+        CueEngine engine;
+        int left = engine.add_voice(pulsed("left", constant(0.5f, 480), 0.02f));
+        VoiceSpec spec = pulsed("right", constant(0.5f, 480), 0.02f);
+        spec.alternates_with = left;
+        int right = engine.add_voice(std::move(spec));
+        engine.start(right, at(1.0f, 0.1f));
+        std::vector<float> out = render(engine, 1000);
+        engine.start(left, at(-1.0f, 0.1f));
+        std::vector<float> more = render(engine, 9000);
+        out.insert(out.end(), more.begin(), more.end());
+        check_onsets(channel_onsets(out, 1), {0, 4800, 9600});
+        check_onsets(channel_onsets(out, 0), {2400, 7200});
+        engine.stop(right);
+        more = render(engine, 7000);
+        out.insert(out.end(), more.begin(), more.end());
+        engine.start(right, at(1.0f, 0.1f));
+        more = render(engine, 7000);
+        out.insert(out.end(), more.begin(), more.end());
+        check_onsets(channel_onsets(out, 1), {0, 4800, 9600, 19200});
+    }
+    /* Only a pulsed voice added earlier can be alternated with. */
+    {
+        CueEngine engine;
+        VoiceSpec spec = pulsed("alone", constant(0.5f, 480), 0.02f);
+        spec.alternates_with = 0;
+        assert(engine.add_voice(std::move(spec)) == -1);
+        assert(logged("[a11y] cue alone refused: no pulsed voice to alternate with"));
+    }
 }
 
 void the_volume_chain_multiplies() {
@@ -360,6 +425,7 @@ int main(int argc, char** argv) {
     constant_power_pan_keeps_loudness();
     starts_and_stops_do_not_jump();
     pulses_follow_their_interval();
+    alternating_voices_pulse_between_each_other();
     the_volume_chain_multiplies();
     five_voices_stay_under_full_scale();
     a_pulse_that_does_not_fit_is_refused();

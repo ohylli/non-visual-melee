@@ -126,6 +126,12 @@ int CueEngine::add_voice(VoiceSpec spec) {
     }
     spec.lowest_pitch = clamped(spec.lowest_pitch, 0.01f, kHighestPitch, 1.0f);
     spec.fastest_interval = clamped(spec.fastest_interval, 0.0f, kLongestInterval, 0.0f);
+    const int partner = spec.alternates_with;
+    if (partner != -1 && (spec.mode != VoiceMode::pulsed || partner < 0 || partner >= count ||
+                             m_voices[static_cast<size_t>(partner)].spec.mode != VoiceMode::pulsed))
+    {
+        return refuse("no pulsed voice to alternate with");
+    }
     if (spec.mode == VoiceMode::pulsed) {
         const double longest = spec.sound.seconds() / spec.lowest_pitch;
         if (longest > spec.fastest_interval) {
@@ -141,8 +147,14 @@ int CueEngine::add_voice(VoiceSpec spec) {
     Voice& v = m_voices[static_cast<size_t>(count)];
     v.spec = std::move(spec);
     write_targets(v, VoiceTargets{});
+    v.partner.store(partner, std::memory_order_relaxed);
     /* Publishes the voice whole: the audio thread reads the count first. */
     m_voice_count.store(count + 1, std::memory_order_release);
+    if (partner != -1) {
+        /* After the count, so the audio thread never finds a partner it
+         * cannot see yet. */
+        m_voices[static_cast<size_t>(partner)].partner.store(count, std::memory_order_release);
+    }
     return count;
 }
 
@@ -307,6 +319,9 @@ void CueEngine::render_voice(Voice& v, float chain, float* out, int frames) {
         v.pan_now = pan;
         v.pitch_now = pitch;
         v.gain_now = gain;
+        if (v.spec.mode == VoiceMode::pulsed && on) {
+            fall_between(v, interval, frames);
+        }
     }
     const std::vector<float>& samples = v.spec.sound.samples;
     const double length = static_cast<double>(samples.size());
@@ -346,6 +361,32 @@ void CueEngine::render_voice(Voice& v, float chain, float* out, int frames) {
     if (!on && v.ramp <= 0.0f) {
         v.sounding = false;
     }
+}
+
+/* A pulsed voice starting from silence while its partner sounds: its first
+ * pulse half an interval, its own, after the partner's last, and silence
+ * until then. */
+void CueEngine::fall_between(Voice& v, double interval, int frames) const {
+    const int p = v.partner.load(std::memory_order_acquire);
+    if (p < 0) {
+        return;
+    }
+    const Voice& partner = m_voices[static_cast<size_t>(p)];
+    if (!partner.sounding || !partner.on.load(std::memory_order_relaxed)) {
+        return;
+    }
+    /* Frames since the partner's last pulse at the start of this block: a
+     * partner rendered before this voice has counted the block already. */
+    double since = partner.since_pulse - (&partner < &v ? frames : 0);
+    since = std::fmod(since, interval);
+    if (since < 0.0) {
+        since += interval;
+    }
+    const double wait = std::fmod(1.5 * interval - since, interval);
+    /* The count reaches the interval, and the pulse starts, after the
+     * wait. */
+    v.since_pulse = interval - wait;
+    v.position = static_cast<double>(v.spec.sound.samples.size()) + 3.0;
 }
 
 }  // namespace a11y

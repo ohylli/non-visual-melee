@@ -131,8 +131,11 @@ Sound chord_sound() {
     return sound;
 }
 
-/* A ledge warning voice, one a side. */
-VoiceSpec ledge_voice(const char* name, int cue) {
+/* A ledge warning voice, one a side. On a small floor both sides sound at
+ * once with the same chord at the same rate; the right one alternates with
+ * the left, so the two are heard as two places rather than one sound in
+ * the middle. */
+VoiceSpec ledge_voice(const char* name, int cue, int alternates_with = -1) {
     VoiceSpec voice;
     voice.name = name;
     voice.cue = cue;
@@ -140,6 +143,7 @@ VoiceSpec ledge_voice(const char* name, int cue) {
     voice.mode = VoiceMode::pulsed;
     voice.fastest_interval = kLedgeInterval;
     voice.lowest_pitch = 1.0f;
+    voice.alternates_with = alternates_with;
     return voice;
 }
 
@@ -285,7 +289,8 @@ MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
     gap.mode = VoiceMode::looped;
     m_gap_voice = m_engine.add_voice(std::move(gap));
     m_ledge_left_voice = m_engine.add_voice(ledge_voice("ledge left", m_ledge_cue.values.cue));
-    m_ledge_right_voice = m_engine.add_voice(ledge_voice("ledge right", m_ledge_cue.values.cue));
+    m_ledge_right_voice =
+        m_engine.add_voice(ledge_voice("ledge right", m_ledge_cue.values.cue, m_ledge_left_voice));
 }
 
 void MatchCues::play(int voice, const std::optional<VoiceTargets>& targets) {

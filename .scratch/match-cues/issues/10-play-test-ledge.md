@@ -49,3 +49,7 @@ The review fixed comments, one named constant and docs; nothing a player hears c
 ### 2026-10-15, defaults tuned by ear (maintainer)
 
 From the maintainer's listening, the defaults in code become warning distance 40 units, level floor 50% and boost 2 (were 30, 30% and 3). In a recording with the position cues off, the warning is now about -30 dB where it starts and about -24 dB at the edge, against the gap hum's -23. The play test itself stays open.
+
+### 2026-10-16, both sides alternate (maintainer, then agent)
+
+On Jungle Japes' small starting platform the two sides blended into one sound, as the review of issue 09 feared. Trying its first option: the right voice now alternates with the left. On the same tick the right one waits half an interval; whichever side starts while the other already sounds lands halfway between the other's pulses, so the pair stays apart however they start. The pairing is a cue engine feature (`VoiceSpec::alternates_with`), so taking it back out is one line in `match_cues.cpp`. Listen for whether the two sides now read as two places, and whether the doubled rate on a small floor feels busier than it helps.
