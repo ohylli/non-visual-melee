@@ -82,7 +82,7 @@ The code is the source of truth for what the fork does. A doc records what stays
 - Native menu work starts from `docs/a11y/native-menus.md`: how the game's menus run, where their words come from, a screen inventory and candidate hook points.
 - Match work starts from `docs/a11y/gameplay-state.md`: what the game knows during a match (damage, stocks, positions, the stage's lines, blast zones, items), how to read it safely, and candidate hook points.
 - A reason or procedure tied to one spot in the code is a comment at that spot.
-- Tunable values (settings' defaults, timings and levels set by ear) live only in the code. Docs, the `verify` skill and the status lines below name a setting and what it does, not its value, so tuning one changes code, tests and drive scripts alone.
+- Tunable values (settings' defaults, timings and levels set by ear) live only in the code. Docs, the `verify` skill and the status lines below name a setting and what it does, not its value or a count that follows from it, so tuning one changes code, tests and drive scripts alone.
 - A decision with its rejected alternatives is an ADR in `docs/adr/`.
 - Specs and issues under `.scratch/` are snapshots of the plan when written. Later work supersedes them, and the code wins where they disagree.
 - The maintainer navigates docs by heading with a screen reader, so a clear heading structure matters more than length.

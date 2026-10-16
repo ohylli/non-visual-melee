@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: "Review a change from four viewpoints in parallel (intent and player experience, correctness, robustness and online safety, design), fix what is plainly the agent's to fix in a separate commit, and report the rest for the maintainer to decide. Use to review uncommitted work, a commit, a range or a branch, and after implementing a feature."
+description: "Review a change from four viewpoints in parallel (intent and player experience, correctness, robustness and online safety, design), and docs when it touches a doc, fix what is plainly the agent's to fix in a separate commit, and report the rest for the maintainer to decide. Use to review uncommitted work, a commit, a range or a branch, and after implementing a feature."
 ---
 
 A review here judges a change against its intent, not the letter of its spec. A spec is the starting shape of a feature; play-testing decides how well the idea worked, so a departure from the spec matters only when it works against what the spec was for. The review ends with the agent's own fix pass: what is plainly fixable gets fixed, and the maintainer decides only what needs their judgement.
@@ -23,9 +23,9 @@ The intent is what the change is meant to achieve, in a few sentences. Take it f
 
 Write it down for the intent reviewer. Subagents do not see this conversation, so an intent taken from the session must be spelled out in their prompt.
 
-## 3. Run the four reviewers in parallel
+## 3. Run the reviewers in parallel
 
-Spawn four `general-purpose` subagents in one message, one per viewpoint below. Each prompt carries the diff command, the changed files (the reviewer reads them itself), its viewpoint pasted in full, the focus instructions, and this brief: "Report findings only; edit nothing. For each finding give file:line, what goes wrong and when, a suggested fix, and your confidence. Under 400 words." The intent reviewer also gets the intent from step 2; the design reviewer also gets the paths of `CODING_STYLE.md`, `CLAUDE.md` and `CONTEXT.md`.
+Spawn `general-purpose` subagents in one message, one per viewpoint below: the first four always, the fifth, docs, when the changed files include `CLAUDE.md`, `CONTEXT.md`, a file under `docs/a11y/` or `docs/adr/`, or a skill under `.claude/skills/`. Each prompt carries the diff command, the changed files (the reviewer reads them itself), its viewpoint pasted in full, the focus instructions, and this brief: "Report findings only; edit nothing. For each finding give file:line, what goes wrong and when, a suggested fix, and your confidence. Under 400 words." The intent reviewer also gets the intent from step 2; the design reviewer also gets the paths of `CODING_STYLE.md`, `CLAUDE.md` and `CONTEXT.md`; the docs reviewer gets the paths of `CLAUDE.md` and `.claude/skills/writing-for-agents/SKILL.md`.
 
 ## 4. Check every finding
 
@@ -47,7 +47,7 @@ The maintainer reads with a screen reader and navigates by heading, so report un
 - **Your call**: most severe first, each with the problem, the options, and the agent's recommendation.
 - **Dropped**: the count, with a few words on any drop the maintainer might question.
 
-## The four viewpoints
+## The viewpoints
 
 ### 1. Intent and player experience
 
@@ -71,8 +71,19 @@ Bugs, logic errors, off-by-one errors, wrong conditions, states and transitions 
 
 - `CODING_STYLE.md`, minus what `tools/check_style.py` already enforces.
 - The isolation rule in CLAUDE.md: fork code in `src/pc/a11y/`, its footprint in base port files limited to one-line hooks declared in `a11y_hooks.h` and the marked screen-reader-only fixes.
-- The docs rules in CLAUDE.md: a change to verification updates the `verify` skill; a landed feature updates its "Accessibility status" line; a primer or ADR the change makes stale is updated; the vocabulary of `CONTEXT.md` is used.
+- Docs the change leaves behind, by CLAUDE.md's "Docs" section and the rules closing "Verification" and opening "Accessibility status": a change to verification updates the `verify` skill; a landed feature adds its status line; a primer or ADR the change makes stale is updated. What the touched docs say is the docs reviewer's.
+- The vocabulary of `CONTEXT.md`, in names and comments.
 - Code smells, each a judgement call that a documented repo standard overrides: _Mysterious Name_ (the name hides what it does or holds; the decomp's address-style names are exempt), _Duplicated Code_ (one logic shape in several places; extract it), _Feature Envy_ (a function working mostly on another module's data; move it there), _Data Clumps_ (fields or parameters that always travel together; make them one type), _Primitive Obsession_ (a bare int or string standing in for a domain concept), _Repeated Switches_ (the same switch on the same value in several places; one table both share), _Shotgun Surgery_ (one logical change scattered over many files), _Divergent Change_ (one file changed for unrelated reasons), _Speculative Generality_ (parameters, hooks or abstraction no current need uses; inline them), _Middle Man_ (a function that only forwards; call the target).
+
+### 5. Docs
+
+Judge every doc section the change adds or edits whole, as it stands after the change: sprawl and sediment arrive a sentence at a time, each addition fine in its own diff. The review is done when every check below has been applied to every touched section.
+
+- Every rule in CLAUDE.md's "Docs" section and in the rule opening "Accessibility status". A tunable value counts when a doc implies it through its effect ("at most two more repeats") as much as when it states it.
+- Single source of truth: search the other docs, the skills and CLAUDE.md for each fact the change writes; a fact stated twice gets one home and a pointer.
+- Cache: a doc restating what one lookup in the code, a `--help` or a config file answers, such as the words spoken, hooks' call sites, or a list of files or tests.
+- Relevance: every touched line still true of the code after the change, and any line elsewhere that the change makes false.
+- In a skill or CLAUDE.md, the levers of `writing-for-agents`: pointer wording, no-ops, negation, completion criteria, sprawl.
 
 ## What the fix pass decides
 
@@ -81,6 +92,7 @@ Bugs, logic errors, off-by-one errors, wrong conditions, states and transitions 
 - Bugs and robustness or online-safety slips whose fix is clear.
 - Duplicated code, unclear names, dead code, small restructuring inside one module.
 - Style, missing or wrong comments, stale docs the change should have updated.
+- Docs that break a docs rule: trimmed, moved to their one home behind a pointer, or a value replaced by its setting's name.
 - Plain errors in spoken text: a misspelling, a wrong name, a wrong value.
 
 **Your call**: findings that need the maintainer's judgement:
