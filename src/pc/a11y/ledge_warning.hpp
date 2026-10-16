@@ -31,7 +31,7 @@ struct LedgeMapping {
     /* World units from a deadly end at which its voice starts. */
     float distance = 40.0f;
     /* Pan at the edge itself, so the side stays clear. */
-    float pan_floor = 0.3f;
+    float pan_floor = 0.15f;
     /* Gain at the warning distance, so the start is heard rather than a
      * fade from silence: 0 to 1. */
     float level_floor = 0.5f;

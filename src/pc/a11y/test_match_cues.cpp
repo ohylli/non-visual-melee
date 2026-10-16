@@ -20,6 +20,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <iostream>
+#include <numbers>
 #include <string>
 #include <vector>
 
@@ -225,7 +226,7 @@ void the_ledge_warning_registers_last() {
                         "ledge_warning.level_floor", "ledge_warning.edge_offset"}));
     const a11y::NamedValue* distance = f.model.find("ledge_warning.distance");
     assert(distance->default_value == 40.0f && distance->unit == "units");
-    assert(f.model.find("ledge_warning.pan_floor")->default_value == 0.3f);
+    assert(f.model.find("ledge_warning.pan_floor")->default_value == 0.15f);
     const a11y::NamedValue* level = f.model.find("ledge_warning.level_floor");
     assert(level->default_value == 50.0f && level->unit == "%");
     /* The snapshot's deadly test reads the offset from the settings. */
@@ -254,7 +255,7 @@ void the_ledge_warning_starts_on_each_side_and_stops() {
     f.match_cues.tick(near_the_edges(-65.6f, false));
     assert(f.engine.playing(left) && !f.engine.playing(right));
     assert(count_logged_starting(
-               "[a11y] cue ledge left start pan -0.65 pitch 1.00 gain 0.75 interval 0.200") == 1);
+               "[a11y] cue ledge left start pan -0.58 pitch 1.00 gain 0.75 interval 0.200") == 1);
     /* At the edge: only its targets change. */
     f.match_cues.tick(near_the_edges(-85.6f, false));
     assert(count_logged_starting("[a11y] cue ledge left start") == 1);
@@ -263,12 +264,12 @@ void the_ledge_warning_starts_on_each_side_and_stops() {
     f.match_cues.tick(over_the_gap());
     assert(!f.engine.playing(left) && f.engine.playing(f.match_cues.gap_voice()));
     assert(count_logged_starting(
-               "[a11y] cue ledge left stop pan -0.30 pitch 1.00 gain 1.00 interval 0.200") == 1);
+               "[a11y] cue ledge left stop pan -0.15 pitch 1.00 gain 1.00 interval 0.200") == 1);
     /* Near the right end, in the air. */
     f.match_cues.tick(near_the_edges(80.0f, true));
     assert(f.engine.playing(right) && !f.engine.playing(left));
     assert(count_logged_starting(
-               "[a11y] cue ledge right start pan 0.40 pitch 1.00 gain 0.93 interval 0.200") == 1);
+               "[a11y] cue ledge right start pan 0.27 pitch 1.00 gain 0.93 interval 0.200") == 1);
     /* Back in the middle: silent. */
     f.match_cues.tick(near_the_edges(0.0f, false));
     assert(!f.engine.playing(right));
@@ -293,10 +294,14 @@ void the_ledge_pulse_sounds_on_its_side_five_times_a_second() {
     for (std::size_t i = 1; i < at.size(); ++i) {
         assert(std::fabs(at[i] - at[i - 1] - a11y::kLedgeInterval) < 0.002);
     }
+    /* On its side by the constant-power pan at the pan floor. */
     double left = 0.0;
     double right = 0.0;
     energy(out, 0.0, left, right);
-    assert(left > right * 2.0);
+    const double pan = -f.model.find("ledge_warning.pan_floor")->default_value;
+    const double angle = (pan + 1.0) * std::numbers::pi / 4.0;
+    const double expected = std::pow(std::cos(angle) / std::sin(angle), 2.0);
+    assert(left > right && std::fabs(left / right / expected - 1.0) < 0.01);
 }
 
 void a_change_of_opponent_moves_the_voice_without_restarting_it() {

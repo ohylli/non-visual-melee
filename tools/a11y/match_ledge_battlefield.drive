@@ -38,5 +38,5 @@ sleep 1
 # Down drops through: over the main floor near its left end, the warning
 # starts as he falls, about 12 units from the end.
 press Down 100
-wait 'cue ledge left start pan -0\.[45]\d pitch 1\.00 gain 0\.8\d interval 0\.200$' 5
+wait 'cue ledge left start pan -0\.4\d pitch 1\.00 gain 0\.8\d interval 0\.200$' 5
 sleep 1

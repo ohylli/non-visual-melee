@@ -84,10 +84,10 @@ void pan_and_loudness_from_the_warning_distance_to_the_edge() {
     /* Halfway: halfway in both. */
     LedgeTargets half = warn(standing(85.6f - 20.0f));
     assert(half.right.has_value());
-    assert(near(half.right->pan, 0.65f) && near(half.right->gain, 0.75f));
+    assert(near(half.right->pan, 0.575f) && near(half.right->gain, 0.75f));
     /* At the edge, teetering: the pan floor, full. */
     LedgeTargets edge = warn(standing(-85.6f));
-    assert(near(edge.left->pan, -0.3f) && near(edge.left->gain, 1.0f));
+    assert(near(edge.left->pan, -0.15f) && near(edge.left->gain, 1.0f));
     /* Nearer is louder and more central all the way. */
     float last_gain = 0.0f;
     float last_pan = 1.1f;
@@ -115,7 +115,7 @@ void in_the_air_as_on_the_ground() {
     /* A unit past the end, where the cast still meets the floor: as at the
      * edge. */
     LedgeTargets past = warn(match_at(-86.4f, -2.0f, true));
-    assert(near(past.left->pan, -0.3f) && near(past.left->gain, 1.0f));
+    assert(near(past.left->pan, -0.15f) && near(past.left->gain, 1.0f));
 }
 
 void both_ends_of_a_small_floor() {

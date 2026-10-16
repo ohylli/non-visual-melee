@@ -53,3 +53,7 @@ From the maintainer's listening, the defaults in code become warning distance 40
 ### 2026-10-16, both sides alternate (maintainer, then agent)
 
 On Jungle Japes' small starting platform the two sides blended into one sound, as the review of issue 09 feared. Trying its first option: the right voice now alternates with the left. On the same tick the right one waits half an interval; whichever side starts while the other already sounds lands halfway between the other's pulses, so the pair stays apart however they start. The pairing is a cue engine feature (`VoiceSpec::alternates_with`), so taking it back out is one line in `match_cues.cpp`. Listen for whether the two sides now read as two places, and whether the doubled rate on a small floor feels busier than it helps.
+
+### 2026-10-16, pan floor tuned by ear (maintainer)
+
+The alternation stays. The pan floor's default in code becomes 0.15 (was 0.3), so the warning at the edge itself sits nearer the centre.
