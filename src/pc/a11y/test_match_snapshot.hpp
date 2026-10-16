@@ -9,9 +9,6 @@ namespace match_test {
 
 inline A11yStageFrame final_destination() {
     A11yStageFrame stage{};
-    stage.floor_left = -85.6f;
-    stage.floor_right = 85.6f;
-    stage.floor_y = 0.0f;
     stage.blast_left = -246.0f;
     stage.blast_right = 246.0f;
     stage.blast_top = 188.0f;

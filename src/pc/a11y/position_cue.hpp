@@ -14,13 +14,9 @@ namespace a11y {
 /* Where on the stage, as pan and pitch: the mapping both position cues
  * use, each with its own copy of the values. */
 struct StageMapping {
-    /* Pan at the main stage's edges; the side blast zones are fully left
-     * and right. */
-    float edge_pan = 0.6f;
-    /* Octaves up at the camera box's top, and down at the bottom blast
-     * zone, from the main floor. */
-    float up_range = 1.0f;
-    float down_range = 1.0f;
+    /* Octaves from the bottom blast zone to the camera box's top, half of
+     * them down and half up from the playback rate 1 midway. */
+    float pitch_range = 2.0f;
 };
 
 /* Your position cue's mapping, as its settings hold it. */
@@ -43,14 +39,16 @@ struct OpponentMapping {
     float interval = 0.4f;
 };
 
-/* Pan for an x, piecewise linear: the main floor's centre 0, its ends
- * ±edge_pan, the side blast zones ±1 and beyond. */
-float stage_pan(const A11yStageFrame& stage, float x, float edge_pan);
+/* Pan for an x, linear from the left blast zone, -1 and beyond, to the
+ * right one, 1 and beyond. No stage's floor is a reference, so every stage
+ * maps the same way and a fall past the floor's end keeps moving the pan. */
+float stage_pan(const A11yStageFrame& stage, float x);
 
-/* Pitch as playback rate for a y, piecewise linear in octaves: the main
- * floor 1, the camera box's top up_range octaves up and above, the bottom
- * blast zone down_range octaves down and below. */
-float stage_pitch(const A11yStageFrame& stage, float y, float up_range, float down_range);
+/* Pitch as playback rate for a y, linear in octaves from the bottom blast
+ * zone, range/2 octaves down and below, to the camera box's top, range/2
+ * up and above. The bottom is the blast zone rather than the camera box's,
+ * so a fall goes on sounding lower until the knockout. */
+float stage_pitch(const A11yStageFrame& stage, float y, float range);
 
 /* A fighter's place on the stage as a voice's pan and pitch, at full gain;
  * the interval is the caller's. */

@@ -16,9 +16,10 @@ namespace a11y {
 
 class MatchCues {
 public:
-    /* The shortest fast interval and the widest down range the settings
-     * allow, which your cue's tick is made to fit: the tick played an octave
-     * down must end inside the fastest pulse. */
+    /* The shortest fast interval and the most octaves down the settings
+     * allow (half the widest pitch range), which your cue's tick is made to
+     * fit: the tick played an octave down must end inside the fastest
+     * pulse. */
     static constexpr float kFastestInterval = 0.07f;
     static constexpr float kWidestDownRange = 1.0f;
     /* The shortest interval the opponent's cue allows, which its longer
@@ -46,9 +47,7 @@ public:
 
 private:
     struct StageValues {
-        Number edge_pan;
-        Number up_range;
-        Number down_range;
+        Number pitch_range;
 
         StageMapping mapping() const;
     };

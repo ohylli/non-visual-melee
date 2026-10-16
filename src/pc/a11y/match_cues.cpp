@@ -148,7 +148,7 @@ VoiceSpec ledge_voice(const char* name, int cue, int alternates_with = -1) {
 }
 
 /* A position cue's pulsed voice, its sound made to fit the fastest interval
- * played at the lowest pitch the widest down range gives. */
+ * played at the lowest pitch the widest pitch range gives. */
 VoiceSpec position_voice(const char* name, int cue, Sound sound, float fastest_interval) {
     VoiceSpec voice;
     voice.name = name;
@@ -163,7 +163,7 @@ VoiceSpec position_voice(const char* name, int cue, Sound sound, float fastest_i
 }  // namespace
 
 StageMapping MatchCues::StageValues::mapping() const {
-    return StageMapping{edge_pan.value(), up_range.value(), down_range.value()};
+    return StageMapping{pitch_range.value()};
 }
 
 YourMapping MatchCues::YourValues::mapping() const {
@@ -187,18 +187,10 @@ LedgeMapping MatchCues::LedgeValues::mapping() const {
 MatchCues::StageValues MatchCues::add_stage_values(ValueGroup group) {
     const StageMapping defaults;
     return StageValues{
-        group.add_number(NumberSpec{"edge_pan", "Edge pan",
-            "How far to the side the main floor's ends sound; past them the pan goes on to fully "
-            "left or right at the side blast zones.",
-            "", defaults.edge_pan, 0.0f, 1.0f, 0.05f}),
-        group.add_number(NumberSpec{"up_range", "Up range",
-            "How many octaves higher the pitch is at the top of the camera's view than on the "
-            "main floor.",
-            "", defaults.up_range, 0.0f, 2.0f, 0.1f}),
-        group.add_number(NumberSpec{"down_range", "Down range",
-            "How many octaves lower the pitch is at the bottom blast zone than on the main "
-            "floor.",
-            "", defaults.down_range, 0.0f, kWidestDownRange, 0.1f}),
+        group.add_number(NumberSpec{"pitch_range", "Pitch range",
+            "How many octaves the pitch rises from the bottom blast zone to the top of the "
+            "camera's view; midway it is the cue's own pitch.",
+            "", defaults.pitch_range, 0.0f, 2.0f * kWidestDownRange, 0.1f}),
     };
 }
 

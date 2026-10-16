@@ -18,25 +18,12 @@ float progress(float v, float from, float to) {
 
 }  // namespace
 
-float stage_pan(const A11yStageFrame& stage, float x, float edge_pan) {
-    const float centre = (stage.floor_left + stage.floor_right) / 2.0f;
-    if (x >= centre) {
-        if (x <= stage.floor_right) {
-            return edge_pan * progress(x, centre, stage.floor_right);
-        }
-        return edge_pan + (1.0f - edge_pan) * progress(x, stage.floor_right, stage.blast_right);
-    }
-    if (x >= stage.floor_left) {
-        return -edge_pan * progress(x, centre, stage.floor_left);
-    }
-    return -edge_pan - (1.0f - edge_pan) * progress(x, stage.floor_left, stage.blast_left);
+float stage_pan(const A11yStageFrame& stage, float x) {
+    return 2.0f * progress(x, stage.blast_left, stage.blast_right) - 1.0f;
 }
 
-float stage_pitch(const A11yStageFrame& stage, float y, float up_range, float down_range) {
-    const float floor = stage.floor_y;
-    const float octaves = y >= floor ? up_range * progress(y, floor, stage.camera_top) :
-                                       -down_range * progress(y, floor, stage.blast_bottom);
-    return std::exp2(octaves);
+float stage_pitch(const A11yStageFrame& stage, float y, float range) {
+    return std::exp2(range * (progress(y, stage.blast_bottom, stage.camera_top) - 0.5f));
 }
 
 float nearness_interval(std::optional<float> distance, const YourMapping& mapping) {
@@ -57,8 +44,8 @@ float nearness_interval(std::optional<float> distance, const YourMapping& mappin
 VoiceTargets stage_targets(
     const A11yStageFrame& stage, const A11yMatchFighter& fighter, const StageMapping& mapping) {
     VoiceTargets targets;
-    targets.pan = stage_pan(stage, fighter.x, mapping.edge_pan);
-    targets.pitch = stage_pitch(stage, fighter.y, mapping.up_range, mapping.down_range);
+    targets.pan = stage_pan(stage, fighter.x);
+    targets.pitch = stage_pitch(stage, fighter.y, mapping.pitch_range);
     targets.gain = 1.0f;
     return targets;
 }

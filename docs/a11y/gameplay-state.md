@@ -224,7 +224,7 @@ Every tick `Ground_UpdateMapColl` (`src/melee/gr/ground.c`) moves each joint's p
 - **Blast zones**: `Stage_GetBlastZoneLeftOffset()`, `…Right…`, `…Top…` and `…Bottom…` (`src/melee/gr/stage.c`), in world units. Mute City moves them mid-match, and the scrolling Adventure stages move the camera offset the getters add in, so read them each tick rather than once.
 - **The camera's box**: `Stage_GetCamBoundsLeftOffset()` and its siblings: the area the camera may show, well inside the blast zones. Between the camera box and the blast zone, a sighted player sees a fighter only in the magnifying glass.
 - **The floors' extent**: `mpLib_80458868[1]` (`mplib.c`) is the bounding box of all enabled floors, platforms included, updated whenever geometry moves: a ready answer to "how big is the stage". The main stage has no marker of its own; it would come from the islands.
-- **The main floor**: the snapshot finds it as the lowest enabled floor line across the middle of the blast zones, a solid floor before a platform, and follows it to its surface's outer ends with `mpFloorGetLeft` and `mpFloorGetRight`. Its height there is the height reference for pitch. Where no floor crosses the middle, the floors' extent stands in. See [The tournament stages' frames](#the-tournament-stages-frames).
+- **The main floor**: no marker says which floor is the main one. The lowest enabled floor line across the middle of the blast zones, a solid floor before a platform, followed to its surface's outer ends with `mpFloorGetLeft` and `mpFloorGetRight`, finds it on the tournament stages; the floors' extent alone does not on Yoshi's Story. See [The tournament stages' frames](#the-tournament-stages-frames).
 - **Named points**: the stage file holds points read by `Ground_801C2D24(index, &pos)` (`ground.c`): the players' start points (0 to 3), respawn points (4 to 7), item spawn points (0x7F to 0x93), the camera's centre (0x94), and the corners of the camera box (0x95, 0x96) and blast zones (0x97, 0x98). Point 0x7F always reports found, falling back to a stand-in when the stage lacks it, and points 8 and 9 are computed midpoints, not stored ones.
 
 ## Questions the stage can answer
@@ -375,7 +375,7 @@ From the probe, in world units.
 
 ### The tournament stages' frames
 
-Measured on 2026-10-13 with temporary logging in the tick hook, a debug match of about 40 seconds on each (Final Destination about 15), in world units. "Main floor" is the main floor as the snapshot finds it.
+Measured on 2026-10-13 with temporary logging in the tick hook, a debug match of about 40 seconds on each (Final Destination about 15), in world units. "Main floor" is the main floor found as above, by a search the snapshot once made for the position cues.
 
 | Stage | Main floor x, at y | Floors' extent, x and y | Camera box top | Blast zones, x and bottom |
 |---|---|---|---|---|

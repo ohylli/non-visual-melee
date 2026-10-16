@@ -546,15 +546,6 @@ typedef struct A11yMatchFighter {
 
 /* Where on the stage, read fresh each tick because some stages move it. */
 typedef struct A11yStageFrame {
-    /* The main floor: the lowest enabled floor line across the middle of
-     * the blast zones, a platform only where no solid floor crosses it,
-     * followed through the floor lines joined to it to its surface's outer
-     * ends. Where no floor crosses the middle, the box around every enabled
-     * floor stands in (mpLib_80458868[1]). */
-    float floor_left;
-    float floor_right;
-    /* Its height across the middle: the height reference. */
-    float floor_y;
     /* Outside these a fighter is knocked out (the top one only in some
      * states). */
     float blast_left;

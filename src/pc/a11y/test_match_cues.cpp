@@ -122,11 +122,10 @@ void both_cues_register_and_fit() {
         keys.push_back(named->key);
     }
     assert((keys == std::vector<std::string>{"opponent_position.on", "opponent_position.volume",
-                        "opponent_position.boost", "opponent_position.edge_pan",
-                        "opponent_position.up_range", "opponent_position.down_range",
+                        "opponent_position.boost", "opponent_position.pitch_range",
                         "opponent_position.interval"}));
     /* Your cue's mapping defaults, each a value of its own. */
-    for (const char* name : {"edge_pan", "up_range", "down_range"}) {
+    for (const char* name : {"pitch_range"}) {
         const a11y::NamedValue* yours = f.model.find(std::string("your_position.") + name);
         const a11y::NamedValue* theirs = f.model.find(std::string("opponent_position.") + name);
         assert(yours != nullptr && theirs != nullptr && yours != theirs);

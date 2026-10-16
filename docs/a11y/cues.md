@@ -59,8 +59,8 @@ The model knows nothing about any cue. A feature registers its own values and ke
 
 ```cpp
 a11y::CueGroup cue = cue_settings.add_cue("your_position", "Your position cue", 2.0f);
-a11y::Number edge_pan = cue.group.add_number({"edge_pan", "Edge pan",
-    "Pan at the main stage's edges.", "", 0.6f, 0.0f, 1.0f, 0.05f});
+a11y::Number pitch_range = cue.group.add_number({"pitch_range", "Pitch range",
+    "Octaves from the bottom blast zone to the camera's top.", "", 2.0f, 0.0f, 2.0f, 0.1f});
 ```
 
 Every cue registers before the file is read, so a value the file lacks can be added to it. These values feed the volume chain: the all-cues switch and cue volume become the mix level, each cue's switch, volume and boost its cue level. A switch turned off is a level turned off: the engine glides that cue to silence while its voices keep running underneath, and turning it back on brings them back where they are.
@@ -106,7 +106,7 @@ gm_RunSimTick --pc_a11y_match_tick--> a11y_game_match_state --> A11yMatchState
 - **Paused**: the game holds the match still on purpose: a pause, the GAME! freeze, a score tally. It comes from the game's pause word, not from the held mask, which a Training pause leaves clear and slow motion sets on its skipped ticks (`gameplay-state.md`, "Pause, freezes and slow motion"). The held mask is kept as `fighters_held`.
 - **The floor below you**: on the ground the floor line under your feet; in the air the first floor the game's own downward cast (`mpCheckFloor`) meets from just above the bottom of your collision box down to the bottom blast zone, platforms included, with its line and height. None in the air is a gap. Every line id is checked against the line count before it goes into the snapshot. The cast is safe between ticks and starts at the collision box rather than the feet, which in the air sink below a floor just before landing (`gameplay-state.md`, "Is there ground below?").
 - **Its ends**: the floor's surface followed to its left and right ends (`mpFloorGetLeft`, `mpFloorGetRight`), each deadly or not. An end is deadly when no wall rises from it and the same downward cast, from just above the end's height and the edge offset (`ledge_warning.edge_offset`) outwards, meets no floor. The offset clears the unit a floor reaches past its end where another line joins it, and stays under the 10.8 units from a Battlefield side platform's end to the main floor's, so the platforms' ends stay safe. The wall test is for a floor that ends at a step up, as against Princess Peach's Castle's tower, where no walk leaves the floor and a cast past the end would start inside the stage (`gameplay-state.md`, "How far to the edge?").
-- **The stage frame**: the main floor's ends and height, the blast zones and the camera box, read each tick since some stages move them. The main floor is the lowest floor line across the middle of the blast zones, a solid one before a platform, followed to its surface's ends; the box around every floor would do on most tournament stages but not on Yoshi's Story (`gameplay-state.md`, "The tournament stages' frames").
+- **The stage frame**: the blast zones and the camera box, read each tick since some stages move them.
 
 ### Drivers
 
@@ -114,24 +114,26 @@ A driver is a pure function from the snapshot and its cue's mapping values to it
 
 The two position cues share the stage mapping (`StageMapping`, `stage_targets`): pan and pitch from a fighter's place, the same code for both, each cue with its own copy of the values in its own group of the file.
 
+The mapping is framed by the stage's own boxes alone, with no floor as a reference. An earlier mapping put the main floor's centre at the centre of the pan, its ends at a pan of their own and its height at the base pitch; that needed a search for the main floor, uncertain on stages without one clear floor, and the ledge warning now says where the floor's ends are. Framed by the blast zones, the main floor's ends land at about a third of the way to each side on every tournament stage (`gameplay-state.md`, "The tournament stages' frames"), and two thirds of the pan are left for the space off the stage, where recoveries happen.
+
 So pausing stops a cue and unpausing starts it again: a stop is the engine's 5 ms ramp, and a pulsed voice started from silence pulses at once (one alternating with a voice still sounding at the midpoint, above), which marks the match going on. The log shows both. Each tick of a running match is also a trace tick, numbered on from the first match's first tick, menu ticks left out.
 
 ### Your position cue
 
 A tick whose pan says where you are across the stage, whose pitch says how high, and whose speed says how near the opponent is.
 
-- **Pan**, piecewise linear in x: the main floor's centre 0, its ends ±`edge_pan`, the side blast zones ±1, held there beyond.
-- **Pitch**, piecewise linear in octaves of y: the main floor 1, the camera box's top `up_range` octaves up, the bottom blast zone `down_range` octaves down, held beyond both.
+- **Pan**, linear in x: the side blast zones ±1, their middle 0, held at ±1 beyond.
+- **Pitch**, linear in octaves of y: from the bottom blast zone, `pitch_range`/2 octaves down, to the camera box's top, as many up, held beyond both. The bottom is the blast zone, not the camera box's bottom, so a fall keeps sounding lower until the knockout. Standing on the main floor is not one fixed pitch: it sits near the middle, a little above it on Final Destination and below it on Battlefield.
 - **Interval**: from `slow_interval` at `far_distance` and beyond to `fast_interval` at `near_distance` and closer, interpolated in the log of the interval, so each unit of distance closed speeds the tick by the same ratio. With no opponent, the slow interval.
 - **Silent** outside a match, while paused, before GO and while you are out.
 - **The sound**: the Star Fox 64 fork's aim click, a short decaying sine after 12 ms of lead-in.
-- **Its limits go together.** The tick must end inside the fastest pulse even an octave down, where it plays twice as long: 32 ms there is 64 ms, so the fast interval goes no lower than 0.07 s and the down range no wider than 1 octave. A wider down range or a faster pulse needs a shorter tick first (`MatchCues::kFastestInterval`, `kWidestDownRange`).
+- **Its limits go together.** The tick must end inside the fastest pulse even an octave down, where it plays twice as long: 32 ms there is 64 ms, so the fast interval goes no lower than 0.07 s and the pitch no more than 1 octave down, half the widest pitch range. A wider range or a faster pulse needs a shorter tick first (`MatchCues::kFastestInterval`, `kWidestDownRange`).
 
 ### The opponent's position cue
 
 A rounder, lower pulse on the same stage mapping, placed where the opponent is, at a steady pace.
 
-- **Pan and pitch** as your cue's, from the opponent's position, with `opponent_position.edge_pan`, `up_range` and `down_range` of its own, starting at your cue's defaults.
+- **Pan and pitch** as your cue's, from the opponent's position, with `opponent_position.pitch_range` of its own, starting at your cue's default.
 - **Interval**: fixed, `opponent_position.interval`. How near the opponent is stays your cue's job.
 - **Which opponent** is the snapshot's: the nearest one in play, chosen afresh each tick. When another fighter becomes the nearest, the voice moves there without restarting, so the pulse keeps its rhythm.
 - **Silent** outside a match, while paused, before GO, with no opponent, and while the opponent is out; it sounds again on the respawn platform. While you are out it plays on.

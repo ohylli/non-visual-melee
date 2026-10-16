@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The position cues' driver against hand-written match snapshots on
  * Final Destination's frame as measured (docs/a11y/gameplay-state.md,
- * "Sizes measured"): pan at the centre, the edges, past them and at the
- * blast zones; pitch at the floor, the camera box's top and the bottom
+ * "Sizes measured"): pan at the centre, between it and the blast zones, at
+ * them and beyond; pitch midway, at the camera box's top and the bottom
  * blast zone; the interval at, between and beyond the near and far
  * distances; no opponent; and when the cue is silent. The opponent's cue:
  * the same mapping on the opponent's position with its own values, its
@@ -40,51 +40,48 @@ A11yMatchState match_at(float x, float y) {
 
 void pan_follows_x() {
     const A11yStageFrame stage = final_destination();
-    assert(near(a11y::stage_pan(stage, 0.0f, 0.7f), 0.0f));
-    assert(near(a11y::stage_pan(stage, 85.6f, 0.7f), 0.7f));
-    assert(near(a11y::stage_pan(stage, -85.6f, 0.7f), -0.7f));
-    /* Halfway to an edge, halfway to the edge pan. */
-    assert(near(a11y::stage_pan(stage, 42.8f, 0.7f), 0.35f));
-    /* Past an edge the pan keeps moving, halfway to the blast zone. */
-    float halfway_out = (85.6f + 246.0f) / 2.0f;
-    assert(near(a11y::stage_pan(stage, halfway_out, 0.7f), 0.85f));
-    assert(near(a11y::stage_pan(stage, -halfway_out, 0.7f), -0.85f));
-    assert(near(a11y::stage_pan(stage, 246.0f, 0.7f), 1.0f));
-    assert(near(a11y::stage_pan(stage, -246.0f, 0.7f), -1.0f));
-    assert(near(a11y::stage_pan(stage, 400.0f, 0.7f), 1.0f));
-    assert(near(a11y::stage_pan(stage, -400.0f, 0.7f), -1.0f));
-    /* The centre is the main floor's middle, not x = 0. */
+    assert(near(a11y::stage_pan(stage, 0.0f), 0.0f));
+    assert(near(a11y::stage_pan(stage, 246.0f), 1.0f));
+    assert(near(a11y::stage_pan(stage, -246.0f), -1.0f));
+    /* Linear: halfway to a blast zone is halfway to the side, and the main
+     * floor's ends are no mark. */
+    assert(near(a11y::stage_pan(stage, 123.0f), 0.5f));
+    assert(near(a11y::stage_pan(stage, -123.0f), -0.5f));
+    assert(near(a11y::stage_pan(stage, 85.6f), 85.6f / 246.0f));
+    /* Held beyond the blast zones. */
+    assert(near(a11y::stage_pan(stage, 400.0f), 1.0f));
+    assert(near(a11y::stage_pan(stage, -400.0f), -1.0f));
+    /* The centre is the blast zones' middle, not x = 0. */
     A11yStageFrame shifted = stage;
-    shifted.floor_left = -60.0f;
-    shifted.floor_right = 100.0f;
-    assert(near(a11y::stage_pan(shifted, 20.0f, 0.7f), 0.0f));
-    assert(near(a11y::stage_pan(shifted, 100.0f, 0.7f), 0.7f));
-    assert(near(a11y::stage_pan(shifted, -60.0f, 0.7f), -0.7f));
-    /* An edge pan of 1 puts the edges fully to the sides. */
-    assert(near(a11y::stage_pan(stage, 85.6f, 1.0f), 1.0f));
-    assert(near(a11y::stage_pan(stage, 150.0f, 1.0f), 1.0f));
+    shifted.blast_left = -200.0f;
+    shifted.blast_right = 240.0f;
+    assert(near(a11y::stage_pan(shifted, 20.0f), 0.0f));
+    assert(near(a11y::stage_pan(shifted, 130.0f), 0.5f));
+    assert(near(a11y::stage_pan(shifted, -200.0f), -1.0f));
 }
 
 void pitch_follows_y() {
     const A11yStageFrame stage = final_destination();
-    assert(near(a11y::stage_pitch(stage, 0.0f, 1.0f, 1.0f), 1.0f));
-    assert(near(a11y::stage_pitch(stage, 114.0f, 1.0f, 1.0f), 2.0f));
-    assert(near(a11y::stage_pitch(stage, -140.0f, 1.0f, 1.0f), 0.5f));
-    /* Linear in octaves: halfway up is half an octave. */
-    assert(near(a11y::stage_pitch(stage, 57.0f, 1.0f, 1.0f), std::sqrt(2.0f)));
-    assert(near(a11y::stage_pitch(stage, -70.0f, 1.0f, 1.0f), 1.0f / std::sqrt(2.0f)));
+    /* Midway between the bottom blast zone and the camera box's top. */
+    const float middle = (-140.0f + 114.0f) / 2.0f;
+    assert(near(a11y::stage_pitch(stage, middle, 2.0f), 1.0f));
+    assert(near(a11y::stage_pitch(stage, 114.0f, 2.0f), 2.0f));
+    assert(near(a11y::stage_pitch(stage, -140.0f, 2.0f), 0.5f));
+    /* Linear in octaves: halfway up from the middle is half an octave. */
+    assert(near(a11y::stage_pitch(stage, (middle + 114.0f) / 2.0f, 2.0f), std::sqrt(2.0f)));
+    assert(near(a11y::stage_pitch(stage, (middle - 140.0f) / 2.0f, 2.0f), 1.0f / std::sqrt(2.0f)));
+    /* The main floor is no mark: on Final Destination it sits a little
+     * above the middle. */
+    assert(near(a11y::stage_pitch(stage, 0.0f, 2.0f), std::exp2(2.0f * (140.0f / 254.0f - 0.5f))));
     /* Held beyond the camera's top and the bottom blast zone. */
-    assert(near(a11y::stage_pitch(stage, 180.0f, 1.0f, 1.0f), 2.0f));
-    assert(near(a11y::stage_pitch(stage, -200.0f, 1.0f, 1.0f), 0.5f));
-    /* The ranges set the octaves. */
-    assert(near(a11y::stage_pitch(stage, 114.0f, 2.0f, 0.5f), 4.0f));
-    assert(near(a11y::stage_pitch(stage, -140.0f, 2.0f, 0.5f), 1.0f / std::sqrt(2.0f)));
-    assert(near(a11y::stage_pitch(stage, 114.0f, 0.0f, 0.0f), 1.0f));
-    /* The height reference is the main floor's, not y = 0. */
-    A11yStageFrame raised = stage;
-    raised.floor_y = 14.0f;
-    assert(near(a11y::stage_pitch(raised, 14.0f, 1.0f, 1.0f), 1.0f));
-    assert(near(a11y::stage_pitch(raised, 64.0f, 1.0f, 1.0f), std::sqrt(2.0f)));
+    assert(near(a11y::stage_pitch(stage, 180.0f, 2.0f), 2.0f));
+    assert(near(a11y::stage_pitch(stage, -200.0f, 2.0f), 0.5f));
+    /* The range sets the octaves, half down and half up. */
+    assert(near(a11y::stage_pitch(stage, 114.0f, 1.0f), std::sqrt(2.0f)));
+    assert(near(a11y::stage_pitch(stage, -140.0f, 1.0f), 1.0f / std::sqrt(2.0f)));
+    assert(near(a11y::stage_pitch(stage, 114.0f, 0.0f), 1.0f));
+    /* The bottom is the blast zone's, below the camera box's. */
+    assert(a11y::stage_pitch(stage, -110.0f, 2.0f) > a11y::stage_pitch(stage, -130.0f, 2.0f));
 }
 
 void interval_follows_the_distance() {
@@ -113,12 +110,12 @@ void interval_follows_the_distance() {
 
 void your_position_from_the_snapshot() {
     const YourMapping mapping;
-    std::optional<VoiceTargets> targets = a11y::your_position(match_at(85.6f, 114.0f), mapping);
+    std::optional<VoiceTargets> targets = a11y::your_position(match_at(123.0f, 114.0f), mapping);
     assert(targets.has_value());
-    assert(near(targets->pan, 0.6f));
+    assert(near(targets->pan, 0.5f));
     assert(near(targets->pitch, 2.0f));
     assert(near(targets->gain, 1.0f));
-    /* The opponent at the centre, about 142 units away: slow. */
+    /* The opponent at the centre, about 168 units away: slow. */
     assert(near(targets->interval, 0.8f));
 
     /* Near the opponent: fast. */
@@ -171,9 +168,9 @@ A11yMatchState opponent_at(float x, float y) {
 void the_opponent_cue_maps_the_opponents_position() {
     const OpponentMapping mapping;
     std::optional<VoiceTargets> targets =
-        a11y::opponent_position(opponent_at(85.6f, 114.0f), mapping);
+        a11y::opponent_position(opponent_at(123.0f, 114.0f), mapping);
     assert(targets.has_value());
-    assert(near(targets->pan, 0.6f));
+    assert(near(targets->pan, 0.5f));
     assert(near(targets->pitch, 2.0f));
     assert(near(targets->gain, 1.0f));
     targets = a11y::opponent_position(opponent_at(-246.0f, -140.0f), mapping);
@@ -186,11 +183,10 @@ void the_opponent_cue_maps_the_opponents_position() {
     assert(targets.has_value() && yours.has_value());
     assert(near(targets->pan, yours->pan) && near(targets->pitch, yours->pitch));
     /* Its own copy of the values. */
-    OpponentMapping wide = mapping;
-    wide.stage.edge_pan = 1.0f;
-    wide.stage.up_range = 2.0f;
-    targets = a11y::opponent_position(opponent_at(85.6f, 114.0f), wide);
-    assert(targets.has_value() && near(targets->pan, 1.0f) && near(targets->pitch, 4.0f));
+    OpponentMapping narrow = mapping;
+    narrow.stage.pitch_range = 1.0f;
+    targets = a11y::opponent_position(opponent_at(123.0f, 114.0f), narrow);
+    assert(targets.has_value() && near(targets->pitch, std::sqrt(2.0f)));
 }
 
 void the_opponent_cue_keeps_its_interval() {
@@ -247,7 +243,7 @@ void the_opponent_cue_follows_a_change_of_opponent() {
     match.opponents[0] = fighter(2, 60.0f, 50.0f);
     std::optional<VoiceTargets> after = a11y::opponent_position(match, mapping);
     assert(before.has_value() && after.has_value());
-    assert(before->pan < 0.0f && after->pan > 0.0f && after->pitch > 1.0f);
+    assert(before->pan < 0.0f && after->pan > 0.0f && after->pitch > before->pitch);
     assert(near(after->interval, before->interval));
 }
 

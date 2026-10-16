@@ -17,7 +17,7 @@ wait "state 0 scene 0$"
 press Start until "boot scene: state \d+ scene 2$"
 
 # Both position cues start at GO, Link standing at x = -60.
-wait 'cue your position start pan -0\.42 pitch 1\.00 ' 60
+wait 'cue your position start pan -0\.24 pitch 1\.07 ' 60
 sleep 1
 
 # A full jump in place, over the main floor: no gap.

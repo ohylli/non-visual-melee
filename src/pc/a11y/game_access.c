@@ -701,46 +701,6 @@ static void match_fighter_state(int slot, const Fighter* fp, A11yMatchFighter* o
     out->team = Player_GetTeam(slot);
 }
 
-/* The main floor (A11yStageFrame): false when no enabled floor line
- * crosses x. A solid floor wins over a platform, which can be jumped and
- * dropped through: Yoshi's Story's cloud passes under the stage's middle.
- * Reads the lines between ticks, which changes nothing. */
-static bool match_main_floor(float x, A11yStageFrame* out) {
-    int line_count = mpLib_8004D164()->line_count;
-    int best = -1;
-    bool best_solid = false;
-    float best_y = 0.0F;
-    for (int id = 0; id < line_count; id++) {
-        if (mpLineGetKind(id) != CollLine_Floor || !mpLib_80054ED8(id)) {
-            continue;
-        }
-        Vec3 a;
-        Vec3 b;
-        mpLineGetV0Pos(id, &a);
-        mpLineGetV1Pos(id, &b);
-        if (x < a.x || x > b.x || a.x >= b.x) {
-            continue;
-        }
-        float y = a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x);
-        bool solid = !(mpLineGetFlags(id) & LINE_FLAG_PLATFORM);
-        if (best < 0 || (solid && !best_solid) || (solid == best_solid && y < best_y)) {
-            best = id;
-            best_solid = solid;
-            best_y = y;
-        }
-    }
-    if (best < 0) {
-        return false;
-    }
-    Vec3 end;
-    mpFloorGetLeft(best, &end);
-    out->floor_left = end.x;
-    mpFloorGetRight(best, &end);
-    out->floor_right = end.x;
-    out->floor_y = best_y;
-    return true;
-}
-
 /* How far above a point a downward cast starts, so that a floor at the
  * point's own height is still met. */
 static const float A11Y_CAST_LIFT = 1.0F;
@@ -929,14 +889,6 @@ void a11y_game_match_state(
     stage->camera_right = Stage_GetCamBoundsRightOffset();
     stage->camera_top = Stage_GetCamBoundsTopOffset();
     stage->camera_bottom = Stage_GetCamBoundsBottomOffset();
-    /* The floors' box alone would do on most tournament stages, but on
-     * Yoshi's Story the cloud circling the stage drags its bottom down to
-     * -33 and its sides out past the main floor's. */
-    if (!match_main_floor((stage->blast_left + stage->blast_right) / 2.0F, stage)) {
-        stage->floor_left = floors->left;
-        stage->floor_right = floors->right;
-        stage->floor_y = floors->bottom;
-    }
     if (!out->you.out) {
         match_floor_below(you, edge_offset, stage->blast_bottom, &out->below);
     }

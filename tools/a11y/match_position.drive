@@ -94,7 +94,7 @@ sleep 1.7
 # Start closes the menu. Pichu stands on the right half (a fall would have
 # stopped the cue below the floor).
 press Start
-wait 'cue your position stop pan 0\.\d+ pitch 1\.00 '
+wait 'cue your position stop pan 0\.\d+ pitch 1\.07 '
 sleep 1
 press Start
 wait 'cue your position start '
