@@ -3,10 +3,10 @@
  * Final Destination's frame as measured (docs/a11y/gameplay-state.md,
  * "Sizes measured"): pan at the centre, between it and the blast zones, at
  * them and beyond, and framed by the camera box instead; pitch midway, at the camera box's top and
- * the bottom blast zone; the interval at, between and beyond the near and far distances; no
- * opponent; and when the cue is silent. The opponent's cue: the same mapping on the opponent's
- * position with its own values, its fixed interval, no opponent, the opponent knocked out and a
- * change of opponent. */
+ * the bottom blast zone; a frame with no width; the interval at, between and beyond the near and
+ * far distances; no opponent; and when the cue is silent. The opponent's cue: the same mapping on
+ * the opponent's position with its own values, its fixed interval, no opponent, the opponent
+ * knocked out and a change of opponent. */
 #include "position_cue.hpp"
 #include "test_match_snapshot.hpp"
 #include <cassert>
@@ -99,6 +99,16 @@ void pitch_follows_y() {
     assert(near(a11y::stage_pitch(stage, 114.0f, 0.0f), 1.0f));
     /* The bottom is the blast zone's, below the camera box's. */
     assert(a11y::stage_pitch(stage, -110.0f, 2.0f) > a11y::stage_pitch(stage, -130.0f, 2.0f));
+}
+
+void a_frame_with_no_width_is_the_centre() {
+    A11yStageFrame flat = final_destination();
+    flat.camera_left = 0.0f;
+    flat.camera_right = 0.0f;
+    flat.blast_bottom = 50.0f;
+    flat.camera_top = 50.0f;
+    assert(near(a11y::stage_pan(flat, 30.0f, true), 0.0f));
+    assert(near(a11y::stage_pitch(flat, -20.0f, 2.0f), 1.0f));
 }
 
 void interval_follows_the_distance() {
@@ -280,6 +290,7 @@ int main() {
     pan_follows_x();
     pan_to_the_camera_follows_x();
     pitch_follows_y();
+    a_frame_with_no_width_is_the_centre();
     interval_follows_the_distance();
     your_position_from_the_snapshot();
     silent_when_it_should_be();

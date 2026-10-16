@@ -1,14 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The cues of a match against hand-written snapshots, their voices rendered
  * into a buffer with no device: both position cues register their values in
- * the file's order and their voices fit, and the opponent's cue follows a
+ * the file's order and their voices fit, the opponent's cue follows a
  * change of opponent without restarting, goes quiet while the opponent is
- * knocked out and comes back at respawn; the gap warning registers after
- * them, starts over a gap, holds and stops, and its tone loops without a
- * seam; the ledge warning registers last, with the snapshot's edge offset,
- * starts on each side near a deadly end and stops away from it or over a
- * gap, and pulses 5 times a second on its side. This file supplies the
- * pc_log_line that main.c normally provides. */
+ * knocked out and comes back at respawn, and one switch frames both pans;
+ * the gap warning registers after them, starts over a gap, holds and
+ * stops, and its tone loops without a seam; the ledge warning registers
+ * last, with the snapshot's edge offset, starts on each side near a deadly
+ * end and stops away from it or over a gap, and pulses 5 times a second on
+ * its side. This file supplies the pc_log_line that main.c normally
+ * provides. */
 #include "cue_engine.hpp"
 #include "cue_settings.hpp"
 #include "match_cues.hpp"
@@ -334,6 +335,25 @@ void a_change_of_opponent_moves_the_voice_without_restarting_it() {
     assert(right > left * 2.0);
 }
 
+void one_switch_frames_both_pans() {
+    for (const bool to_camera : {true, false}) {
+        Fixture f;
+        f.model.set(*f.model.find("position_cues.pan_to_camera"), to_camera ? 1.0f : 0.0f);
+        A11yMatchState match = match_with(1, 85.0f);
+        match.you.x = -85.0f;
+        f.match_cues.tick(match);
+        /* Final Destination's camera box sides are at ±170, its blast
+         * zones at ±246. */
+        if (to_camera) {
+            assert(count_logged_starting("[a11y] cue your position start pan -0.50") == 1);
+            assert(count_logged_starting("[a11y] cue opponent position start pan 0.50") == 1);
+        } else {
+            assert(count_logged_starting("[a11y] cue your position start pan -0.35") == 1);
+            assert(count_logged_starting("[a11y] cue opponent position start pan 0.35") == 1);
+        }
+    }
+}
+
 void the_opponent_cue_stops_while_knocked_out_and_comes_back() {
     Fixture f;
     const int voice = f.match_cues.opponent_voice();
@@ -384,6 +404,7 @@ int main() {
     the_ledge_pulse_sounds_on_its_side_five_times_a_second();
     a_change_of_opponent_moves_the_voice_without_restarting_it();
     the_opponent_cue_stops_while_knocked_out_and_comes_back();
+    one_switch_frames_both_pans();
     std::cout << "match_cues: all tests passed\n";
     return 0;
 }

@@ -8,10 +8,11 @@ namespace a11y {
 namespace {
 
 /* How far v has gone from `from` towards `to`, 0 to 1, either way round.
- * Where the two meet, the callers ask only from beyond them: all the way. */
+ * Where the two meet, a frame with no width: midway, so a fighter sounds at
+ * the centre and the base pitch. */
 float progress(float v, float from, float to) {
     if (from == to) {
-        return 1.0f;
+        return 0.5f;
     }
     return std::clamp((v - from) / (to - from), 0.0f, 1.0f);
 }

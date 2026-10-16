@@ -156,7 +156,7 @@ VoiceSpec position_voice(const char* name, int cue, Sound sound, float fastest_i
     voice.sound = std::move(sound);
     voice.mode = VoiceMode::pulsed;
     voice.fastest_interval = fastest_interval;
-    voice.lowest_pitch = std::exp2(-MatchCues::kWidestDownRange);
+    voice.lowest_pitch = std::exp2(-MatchCues::kWidestPitchRange / 2.0f);
     return voice;
 }
 
@@ -190,7 +190,7 @@ MatchCues::StageValues MatchCues::add_stage_values(ValueGroup group) {
         group.add_number(NumberSpec{"pitch_range", "Pitch range",
             "How many octaves the pitch rises from the bottom blast zone to the top of the "
             "camera's view; midway it is the cue's own pitch.",
-            "", defaults.pitch_range, 0.0f, 2.0f * kWidestDownRange, 0.1f}),
+            "", defaults.pitch_range, 0.0f, kWidestPitchRange, 0.1f}),
     };
 }
 

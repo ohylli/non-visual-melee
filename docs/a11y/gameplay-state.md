@@ -375,7 +375,7 @@ From the probe, in world units.
 
 ### The tournament stages' frames
 
-Measured on 2026-10-13 with temporary logging in the tick hook, a debug match of about 40 seconds on each (Final Destination about 15), in world units. "Main floor" is the main floor found as above, by a search the snapshot once made for the position cues.
+Measured on 2026-10-13 with temporary logging in the tick hook, a debug match of about 40 seconds on each (Final Destination about 15), in world units. "Main floor" is the main floor found as above.
 
 | Stage | Main floor x, at y | Floors' extent, x and y | Camera box top | Blast zones, x and bottom |
 |---|---|---|---|---|
