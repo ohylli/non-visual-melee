@@ -54,11 +54,12 @@ struct VoiceSpec {
      * every pulse would be cut by the next: such a voice is refused. */
     float fastest_interval = 0.05f;
     float lowest_pitch = 0.5f;
-    /* Pulsed: a pulsed voice added earlier whose rhythm this one shares. A
-     * voice of the two starting from silence while the other sounds pulses
-     * halfway between the other's pulses, so the two alternate rather than
-     * land together; started on the same tick, the later added one waits
-     * half an interval. -1 for none. */
+    /* Pulsed: a pulsed voice added earlier, not yet paired, whose interval
+     * this one shares. A voice of the two starting from silence while the
+     * other sounds pulses halfway between the other's pulses, so the two
+     * alternate rather than land together; started on the same tick, the
+     * later added one waits half an interval, unless an audio block falls
+     * between the two starts. -1 for none. */
     int alternates_with = -1;
 };
 

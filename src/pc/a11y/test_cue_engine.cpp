@@ -283,13 +283,22 @@ void alternating_voices_pulse_between_each_other() {
         out.insert(out.end(), more.begin(), more.end());
         check_onsets(channel_onsets(out, 1), {0, 4800, 9600, 19200});
     }
-    /* Only a pulsed voice added earlier can be alternated with. */
+    /* Only a pulsed voice added earlier and not yet paired can be
+     * alternated with. */
     {
         CueEngine engine;
         VoiceSpec spec = pulsed("alone", constant(0.5f, 480), 0.02f);
         spec.alternates_with = 0;
         assert(engine.add_voice(std::move(spec)) == -1);
         assert(logged("[a11y] cue alone refused: no pulsed voice to alternate with"));
+        int first = engine.add_voice(pulsed("first", constant(0.5f, 480), 0.02f));
+        spec = pulsed("second", constant(0.5f, 480), 0.02f);
+        spec.alternates_with = first;
+        assert(engine.add_voice(std::move(spec)) != -1);
+        spec = pulsed("third", constant(0.5f, 480), 0.02f);
+        spec.alternates_with = first;
+        assert(engine.add_voice(std::move(spec)) == -1);
+        assert(logged("[a11y] cue third refused: no pulsed voice to alternate with"));
     }
 }
 

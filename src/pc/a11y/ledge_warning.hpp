@@ -30,7 +30,7 @@ constexpr float kEdgeOffset = 5.0f;
 struct LedgeMapping {
     /* World units from a deadly end at which its voice starts. */
     float distance = 40.0f;
-    /* Pan at the edge itself, so the side stays clear. */
+    /* Pan at the edge itself, short of the centre. */
     float pan_floor = 0.15f;
     /* Gain at the warning distance, so the start is heard rather than a
      * fade from silence: 0 to 1. */
