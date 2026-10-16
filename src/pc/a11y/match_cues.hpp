@@ -47,10 +47,9 @@ public:
 
 private:
     struct StageValues {
-        Switch pan_to_camera;
         Number pitch_range;
 
-        StageMapping mapping() const;
+        StageMapping mapping(bool pan_to_camera) const;
     };
     struct YourValues {
         StageValues stage;
@@ -59,13 +58,13 @@ private:
         Number far_distance;
         Number near_distance;
 
-        YourMapping mapping() const;
+        YourMapping mapping(bool pan_to_camera) const;
     };
     struct OpponentValues {
         StageValues stage;
         Number interval;
 
-        OpponentMapping mapping() const;
+        OpponentMapping mapping(bool pan_to_camera) const;
     };
     struct GapValues {
         Number hold;
@@ -91,8 +90,10 @@ private:
     void play(int voice, const std::optional<VoiceTargets>& targets);
 
     CueEngine& m_engine;
-    /* In the order the cue settings file lists them: each cue registers its
-     * group, then its values. */
+    /* In the order the cue settings file lists them: the values both
+     * position cues share, then each cue registers its group and its
+     * values. */
+    Switch m_pan_to_camera;
     CueGroup m_your_cue;
     YourValues m_your;
     CueGroup m_opponent_cue;

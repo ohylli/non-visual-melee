@@ -114,25 +114,28 @@ void both_cues_register_and_fit() {
     Fixture f;
     assert(f.match_cues.your_voice() >= 0 && f.match_cues.opponent_voice() >= 0);
     const auto& groups = f.model.groups();
-    assert(groups.size() == 5);
-    assert(groups[1].id == "your_position" && groups[2].id == "opponent_position");
-    assert(groups[2].title == "Opponent's position cue");
+    assert(groups.size() == 6);
+    /* First the value both share, one switch for both pans. */
+    assert(groups[1].id == "position_cues" && groups[1].title == "Position cues");
+    assert(groups[1].values.size() == 1);
+    const a11y::NamedValue* pan_to_camera = f.model.find("position_cues.pan_to_camera");
+    assert(pan_to_camera != nullptr && pan_to_camera->kind == a11y::ValueKind::toggle);
+    assert(pan_to_camera->default_value == 1.0f);
+    assert(groups[2].id == "your_position" && groups[3].id == "opponent_position");
+    assert(groups[3].title == "Opponent's position cue");
     std::vector<std::string> keys;
-    for (const a11y::NamedValue* named : groups[2].values) {
+    for (const a11y::NamedValue* named : groups[3].values) {
         keys.push_back(named->key);
     }
     assert((keys == std::vector<std::string>{"opponent_position.on", "opponent_position.volume",
-                        "opponent_position.boost", "opponent_position.pan_to_camera",
-                        "opponent_position.pitch_range", "opponent_position.interval"}));
-    /* Your cue's mapping defaults, each a value of its own. */
-    for (const char* name : {"pan_to_camera", "pitch_range"}) {
-        const a11y::NamedValue* yours = f.model.find(std::string("your_position.") + name);
-        const a11y::NamedValue* theirs = f.model.find(std::string("opponent_position.") + name);
-        assert(yours != nullptr && theirs != nullptr && yours != theirs);
-        assert(yours->default_value == theirs->default_value);
-        assert(yours->min == theirs->min && yours->max == theirs->max);
-    }
-    assert(f.model.find("your_position.pan_to_camera")->default_value == 0.0f);
+                        "opponent_position.boost", "opponent_position.pitch_range",
+                        "opponent_position.interval"}));
+    /* Your cue's pitch range default, a value of its own. */
+    const a11y::NamedValue* yours = f.model.find("your_position.pitch_range");
+    const a11y::NamedValue* theirs = f.model.find("opponent_position.pitch_range");
+    assert(yours != nullptr && theirs != nullptr && yours != theirs);
+    assert(yours->default_value == theirs->default_value);
+    assert(yours->min == theirs->min && yours->max == theirs->max);
     const a11y::NamedValue* interval = f.model.find("opponent_position.interval");
     assert(interval->default_value == 0.4f && interval->unit == "s");
     assert(interval->min == a11y::MatchCues::kOpponentFastestInterval);
@@ -145,9 +148,9 @@ void the_gap_warning_registers_after_the_position_cues() {
     Fixture f;
     assert(f.match_cues.gap_voice() >= 0);
     const auto& groups = f.model.groups();
-    assert(groups[3].id == "gap_warning" && groups[3].title == "Gap warning");
+    assert(groups[4].id == "gap_warning" && groups[4].title == "Gap warning");
     std::vector<std::string> keys;
-    for (const a11y::NamedValue* named : groups[3].values) {
+    for (const a11y::NamedValue* named : groups[4].values) {
         keys.push_back(named->key);
     }
     assert((keys == std::vector<std::string>{"gap_warning.on", "gap_warning.volume",
@@ -216,9 +219,9 @@ void the_ledge_warning_registers_last() {
     Fixture f;
     assert(f.match_cues.ledge_left_voice() >= 0 && f.match_cues.ledge_right_voice() >= 0);
     const auto& groups = f.model.groups();
-    assert(groups[4].id == "ledge_warning" && groups[4].title == "Ledge warning");
+    assert(groups[5].id == "ledge_warning" && groups[5].title == "Ledge warning");
     std::vector<std::string> keys;
-    for (const a11y::NamedValue* named : groups[4].values) {
+    for (const a11y::NamedValue* named : groups[5].values) {
         keys.push_back(named->key);
     }
     assert((keys == std::vector<std::string>{"ledge_warning.on", "ledge_warning.volume",

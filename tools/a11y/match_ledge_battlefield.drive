@@ -23,13 +23,13 @@ wait 'cue your position start pan 0\.00 pitch 0\.93 ' 60
 sleep 1
 
 # A jump left onto the left platform (y = 27.2, pitch 1.08), then a short
-# dash left, which stops near the platform's end: x = -55.9 is pan -0.25.
+# dash left, which stops near the platform's end: x = -55.9 is pan -0.35.
 press X+Left 300
 sleep 1.2
 press Left 150
 sleep 1.2
 press Start
-wait 'cue your position stop pan -0\.2[3-5] pitch 1\.08 '
+wait 'cue your position stop pan -0\.3[3-6] pitch 1\.08 '
 sleep 0.5
 press Start
 wait 'cue your position start '

@@ -49,7 +49,7 @@ miniaudio 0.11.25 is downloaded at configure and compiled once into its own libr
 
 ### The model
 
-Cue settings are one model of named values (`ValueModel` in `value_model.hpp`, each value a `NamedValue`), with a text file as its first front end and the port menu meant as the second. Each value has a key (`cues.volume`), a short label for a menu row, a one-line description, a unit, a default and a range; a switch is a value of 0 or 1. That is enough to draw a switch or a slider for every value, and for the file to explain itself. Values sit in groups, one for all cues and one per cue, and a group's title heads it in the file. The code says value rather than setting throughout, since `CONTEXT.md` keeps "setting" for the port's own options.
+Cue settings are one model of named values (`ValueModel` in `value_model.hpp`, each value a `NamedValue`), with a text file as its first front end and the port menu meant as the second. Each value has a key (`cues.volume`), a short label for a menu row, a one-line description, a unit, a default and a range; a switch is a value of 0 or 1. That is enough to draw a switch or a slider for every value, and for the file to explain itself. Values sit in groups, one for all cues, one per cue, and one for values several cues share (`CueSettings::add_shared`), and a group's title heads it in the file. The code says value rather than setting throughout, since `CONTEXT.md` keeps "setting" for the port's own options.
 
 The model knows nothing about any cue. A feature registers its own values and keeps the typed handles it gets back (`Switch`, `Number`), which read the current value without looking up a key, so reading them every tick costs nothing. The model is fork-wide in principle: steering's values could join it later.
 
@@ -114,7 +114,7 @@ A driver is a pure function from the snapshot and its cue's mapping values to it
 
 The two position cues share the stage mapping (`StageMapping`, `stage_targets`): pan and pitch from a fighter's place, the same code for both, each cue with its own copy of the values in its own group of the file.
 
-The mapping is framed by the stage's own boxes alone, with no floor as a reference. An earlier mapping put the main floor's centre at the centre of the pan, its ends at a pan of their own and its height at the base pitch; that needed a search for the main floor, uncertain on stages without one clear floor, and the ledge warning now says where the floor's ends are. Framed by the blast zones, the main floor's ends land at about a third of the way to each side on every tournament stage (`gameplay-state.md`, "The tournament stages' frames"), and two thirds of the pan are left for the space off the stage, where recoveries happen. `pan_to_camera` trades that for the stage: framed by the camera box's sides, the floor's ends land about halfway out, but the pan is full for the last stretch before the side blast zones, well outside the camera's view. Which matters more is the player's call, so it is a switch, meant for the port menu too.
+The mapping is framed by the stage's own boxes alone, with no floor as a reference. An earlier mapping put the main floor's centre at the centre of the pan, its ends at a pan of their own and its height at the base pitch; that needed a search for the main floor, uncertain on stages without one clear floor, and the ledge warning now says where the floor's ends are. The pan's frame is a choice between two, one switch for both cues (`position_cues.pan_to_camera`) so that their pans stay comparable. Framed by the camera box's sides, the default, the main floor's ends land about halfway out on the tournament stages, but the pan is full for the stretch between the camera's view and the side blast zones, as wide as half of Final Destination. Framed by the blast zones, the floor's ends land about a third of the way out (`gameplay-state.md`, "The tournament stages' frames") and the pan goes on moving until a knockout, two thirds of it left for the space off the stage, where recoveries happen. Which matters more is the player's call, so the switch is meant for the port menu too.
 
 So pausing stops a cue and unpausing starts it again: a stop is the engine's 5 ms ramp, and a pulsed voice started from silence pulses at once (one alternating with a voice still sounding at the midpoint, above), which marks the match going on. The log shows both. Each tick of a running match is also a trace tick, numbered on from the first match's first tick, menu ticks left out.
 
@@ -122,7 +122,7 @@ So pausing stops a cue and unpausing starts it again: a stop is the engine's 5 m
 
 A tick whose pan says where you are across the stage, whose pitch says how high, and whose speed says how near the opponent is.
 
-- **Pan**, linear in x: the side blast zones ±1, their middle 0, held at ±1 beyond. With `pan_to_camera` on, the camera box's sides instead.
+- **Pan**, linear in x: the camera box's sides ±1, its middle 0, held at ±1 beyond. With `position_cues.pan_to_camera` off, the side blast zones instead.
 - **Pitch**, linear in octaves of y: from the bottom blast zone, `pitch_range`/2 octaves down, to the camera box's top, as many up, held beyond both. The bottom is the blast zone, not the camera box's bottom, so a fall keeps sounding lower until the knockout. Standing on the main floor is not one fixed pitch: it sits near the middle, a little above it on Final Destination and below it on Battlefield.
 - **Interval**: from `slow_interval` at `far_distance` and beyond to `fast_interval` at `near_distance` and closer, interpolated in the log of the interval, so each unit of distance closed speeds the tick by the same ratio. With no opponent, the slow interval.
 - **Silent** outside a match, while paused, before GO and while you are out.
@@ -133,7 +133,7 @@ A tick whose pan says where you are across the stage, whose pitch says how high,
 
 A rounder, lower pulse on the same stage mapping, placed where the opponent is, at a steady pace.
 
-- **Pan and pitch** as your cue's, from the opponent's position, with `opponent_position.pan_to_camera` and `pitch_range` of its own, starting at your cue's defaults.
+- **Pan and pitch** as your cue's, from the opponent's position, in the same pan frame, with `opponent_position.pitch_range` of its own, starting at your cue's default.
 - **Interval**: fixed, `opponent_position.interval`. How near the opponent is stays your cue's job.
 - **Which opponent** is the snapshot's: the nearest one in play, chosen afresh each tick. When another fighter becomes the nearest, the voice moves there without restarting, so the pulse keeps its rhythm.
 - **Silent** outside a match, while paused, before GO, with no opponent, and while the opponent is out; it sounds again on the respawn platform. While you are out it plays on.

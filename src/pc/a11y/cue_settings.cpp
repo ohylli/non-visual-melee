@@ -37,6 +37,10 @@ CueSettings::CueSettings(ValueModel& model)
                   "sound effect and music volumes leave cues alone.",
                   "%", 100.0f, 0.0f, 100.0f, 5.0f})) {}
 
+ValueGroup CueSettings::add_shared(const std::string& id, const std::string& title) {
+    return m_model.group(id, title);
+}
+
 CueGroup CueSettings::add_cue(
     const std::string& id, const std::string& title, float default_boost) {
     ValueGroup group = m_model.group(id, title);

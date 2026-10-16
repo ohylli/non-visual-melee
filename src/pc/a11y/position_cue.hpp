@@ -12,12 +12,13 @@
 namespace a11y {
 
 /* Where on the stage, as pan and pitch: the mapping both position cues
- * use, each with its own copy of the values. */
+ * use, each with its own copy of the pitch range. */
 struct StageMapping {
     /* Pan framed by the camera box's sides rather than the side blast
      * zones: more of the pan for the stage itself, none for the last
-     * stretch before a knockout. */
-    bool pan_to_camera = false;
+     * stretch before a knockout. One switch sets it for both cues, so their
+     * pans stay comparable. */
+    bool pan_to_camera = true;
     /* Octaves from the bottom blast zone to the camera box's top, half of
      * them down and half up from the playback rate 1 midway. */
     float pitch_range = 2.0f;

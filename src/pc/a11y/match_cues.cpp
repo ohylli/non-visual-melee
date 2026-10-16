@@ -162,17 +162,17 @@ VoiceSpec position_voice(const char* name, int cue, Sound sound, float fastest_i
 
 }  // namespace
 
-StageMapping MatchCues::StageValues::mapping() const {
-    return StageMapping{pan_to_camera.on(), pitch_range.value()};
+StageMapping MatchCues::StageValues::mapping(bool pan_to_camera) const {
+    return StageMapping{pan_to_camera, pitch_range.value()};
 }
 
-YourMapping MatchCues::YourValues::mapping() const {
-    return YourMapping{stage.mapping(), slow_interval.value(), fast_interval.value(),
+YourMapping MatchCues::YourValues::mapping(bool pan_to_camera) const {
+    return YourMapping{stage.mapping(pan_to_camera), slow_interval.value(), fast_interval.value(),
         far_distance.value(), near_distance.value()};
 }
 
-OpponentMapping MatchCues::OpponentValues::mapping() const {
-    return OpponentMapping{stage.mapping(), interval.value()};
+OpponentMapping MatchCues::OpponentValues::mapping(bool pan_to_camera) const {
+    return OpponentMapping{stage.mapping(pan_to_camera), interval.value()};
 }
 
 GapMapping MatchCues::GapValues::mapping() const {
@@ -187,11 +187,6 @@ LedgeMapping MatchCues::LedgeValues::mapping() const {
 MatchCues::StageValues MatchCues::add_stage_values(ValueGroup group) {
     const StageMapping defaults;
     return StageValues{
-        group.add_switch(SwitchSpec{"pan_to_camera", "Pan to the camera's view",
-            "On, the pan is fully left or right at the sides of the camera's view, giving the "
-            "stage more of it; off, at the side blast zones, so it goes on moving until a "
-            "knockout.",
-            defaults.pan_to_camera}),
         group.add_number(NumberSpec{"pitch_range", "Pitch range",
             "How many octaves the pitch rises from the bottom blast zone to the top of the "
             "camera's view; midway it is the cue's own pitch.",
@@ -266,6 +261,12 @@ MatchCues::LedgeValues MatchCues::add_ledge_values(ValueGroup group) {
 
 MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
     : m_engine(engine),
+      m_pan_to_camera(settings.add_shared("position_cues", "Position cues")
+              .add_switch(SwitchSpec{"pan_to_camera", "Pan to the camera's view",
+                  "On, both position cues are fully left or right at the sides of the camera's "
+                  "view, giving the stage more of the pan; off, at the side blast zones, so the "
+                  "pan goes on moving until a knockout.",
+                  StageMapping{}.pan_to_camera})),
       m_your_cue(settings.add_cue("your_position", "Your position cue", kYourBoost)),
       m_your(add_your_values(m_your_cue.group)),
       m_opponent_cue(
@@ -302,8 +303,9 @@ void MatchCues::play(int voice, const std::optional<VoiceTargets>& targets) {
 }
 
 void MatchCues::tick(const A11yMatchState& match) {
-    play(m_your_voice, your_position(match, m_your.mapping()));
-    play(m_opponent_voice, opponent_position(match, m_opponent.mapping()));
+    const bool pan_to_camera = m_pan_to_camera.on();
+    play(m_your_voice, your_position(match, m_your.mapping(pan_to_camera)));
+    play(m_opponent_voice, opponent_position(match, m_opponent.mapping(pan_to_camera)));
     play(m_gap_voice, m_gap_warning.tick(match, m_gap.mapping()));
     const LedgeTargets ledge = ledge_warning(match, m_ledge.mapping());
     play(m_ledge_left_voice, ledge.left);

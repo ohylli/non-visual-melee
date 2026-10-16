@@ -28,7 +28,7 @@ sleep 1
 # goes over the edge and falls past the bottom blast zone (pitch 0.50).
 press Right 900
 sleep 1
-search 'cue opponent position stop pan 0\.\d+ pitch 0\.50 ' Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right
+search 'cue opponent position stop pan (0\.\d+|1\.00) pitch 0\.50 ' Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right
 
 # Back on the respawn platform, high above the stage.
 wait 'cue opponent position start pan [-\d.]+ pitch 1\.\d+ ' 10

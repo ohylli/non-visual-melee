@@ -38,6 +38,9 @@ public:
      * it ("Your position cue"), with its switch, volume and the boost it
      * starts with, and gives it the next cue number. */
     CueGroup add_cue(const std::string& id, const std::string& title, float default_boost);
+    /* Registers a group for values several cues share, with no cue of its
+     * own: no switch, volume or cue number. */
+    ValueGroup add_shared(const std::string& id, const std::string& title);
 
     /* Every level into the engine: once the settings are first read. */
     void apply(CueEngine& engine) const;

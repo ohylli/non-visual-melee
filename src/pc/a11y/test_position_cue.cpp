@@ -127,12 +127,12 @@ void interval_follows_the_distance() {
 
 void your_position_from_the_snapshot() {
     const YourMapping mapping;
-    std::optional<VoiceTargets> targets = a11y::your_position(match_at(123.0f, 114.0f), mapping);
+    std::optional<VoiceTargets> targets = a11y::your_position(match_at(85.0f, 114.0f), mapping);
     assert(targets.has_value());
     assert(near(targets->pan, 0.5f));
     assert(near(targets->pitch, 2.0f));
     assert(near(targets->gain, 1.0f));
-    /* The opponent at the centre, about 168 units away: slow. */
+    /* The opponent at the centre, about 142 units away: slow. */
     assert(near(targets->interval, 0.8f));
 
     /* Near the opponent: fast. */
@@ -185,7 +185,7 @@ A11yMatchState opponent_at(float x, float y) {
 void the_opponent_cue_maps_the_opponents_position() {
     const OpponentMapping mapping;
     std::optional<VoiceTargets> targets =
-        a11y::opponent_position(opponent_at(123.0f, 114.0f), mapping);
+        a11y::opponent_position(opponent_at(85.0f, 114.0f), mapping);
     assert(targets.has_value());
     assert(near(targets->pan, 0.5f));
     assert(near(targets->pitch, 2.0f));
@@ -204,12 +204,15 @@ void the_opponent_cue_maps_the_opponents_position() {
     narrow.stage.pitch_range = 1.0f;
     targets = a11y::opponent_position(opponent_at(123.0f, 114.0f), narrow);
     assert(targets.has_value() && near(targets->pitch, std::sqrt(2.0f)));
-    /* And its own pan frame. */
-    OpponentMapping camera = mapping;
-    camera.stage.pan_to_camera = true;
-    targets = a11y::opponent_position(opponent_at(85.0f, 0.0f), camera);
-    assert(targets.has_value() && near(targets->pan, 0.5f));
-    yours = a11y::your_position(match_at(85.0f, 0.0f), YourMapping{});
+    /* The pan frame is the mapping's: the camera box's by default, else
+     * the blast zones'. */
+    OpponentMapping blast = mapping;
+    blast.stage.pan_to_camera = false;
+    targets = a11y::opponent_position(opponent_at(85.0f, 0.0f), blast);
+    assert(targets.has_value() && near(targets->pan, 85.0f / 246.0f));
+    YourMapping your_blast;
+    your_blast.stage.pan_to_camera = false;
+    yours = a11y::your_position(match_at(85.0f, 0.0f), your_blast);
     assert(yours.has_value() && near(yours->pan, 85.0f / 246.0f));
 }
 
