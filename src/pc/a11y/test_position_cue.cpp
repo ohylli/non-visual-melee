@@ -2,12 +2,11 @@
 /* The position cues' driver against hand-written match snapshots on
  * Final Destination's frame as measured (docs/a11y/gameplay-state.md,
  * "Sizes measured"): pan at the centre, between it and the blast zones, at
- * them and beyond; pitch midway, at the camera box's top and the bottom
- * blast zone; the interval at, between and beyond the near and far
- * distances; no opponent; and when the cue is silent. The opponent's cue:
- * the same mapping on the opponent's position with its own values, its
- * fixed interval, no opponent, the opponent knocked out and a change of
- * opponent. */
+ * them and beyond, and framed by the camera box instead; pitch midway, at the camera box's top and
+ * the bottom blast zone; the interval at, between and beyond the near and far distances; no
+ * opponent; and when the cue is silent. The opponent's cue: the same mapping on the opponent's
+ * position with its own values, its fixed interval, no opponent, the opponent knocked out and a
+ * change of opponent. */
 #include "position_cue.hpp"
 #include "test_match_snapshot.hpp"
 #include <cassert>
@@ -40,24 +39,42 @@ A11yMatchState match_at(float x, float y) {
 
 void pan_follows_x() {
     const A11yStageFrame stage = final_destination();
-    assert(near(a11y::stage_pan(stage, 0.0f), 0.0f));
-    assert(near(a11y::stage_pan(stage, 246.0f), 1.0f));
-    assert(near(a11y::stage_pan(stage, -246.0f), -1.0f));
+    assert(near(a11y::stage_pan(stage, 0.0f, false), 0.0f));
+    assert(near(a11y::stage_pan(stage, 246.0f, false), 1.0f));
+    assert(near(a11y::stage_pan(stage, -246.0f, false), -1.0f));
     /* Linear: halfway to a blast zone is halfway to the side, and the main
      * floor's ends are no mark. */
-    assert(near(a11y::stage_pan(stage, 123.0f), 0.5f));
-    assert(near(a11y::stage_pan(stage, -123.0f), -0.5f));
-    assert(near(a11y::stage_pan(stage, 85.6f), 85.6f / 246.0f));
+    assert(near(a11y::stage_pan(stage, 123.0f, false), 0.5f));
+    assert(near(a11y::stage_pan(stage, -123.0f, false), -0.5f));
+    assert(near(a11y::stage_pan(stage, 85.6f, false), 85.6f / 246.0f));
     /* Held beyond the blast zones. */
-    assert(near(a11y::stage_pan(stage, 400.0f), 1.0f));
-    assert(near(a11y::stage_pan(stage, -400.0f), -1.0f));
+    assert(near(a11y::stage_pan(stage, 400.0f, false), 1.0f));
+    assert(near(a11y::stage_pan(stage, -400.0f, false), -1.0f));
     /* The centre is the blast zones' middle, not x = 0. */
     A11yStageFrame shifted = stage;
     shifted.blast_left = -200.0f;
     shifted.blast_right = 240.0f;
-    assert(near(a11y::stage_pan(shifted, 20.0f), 0.0f));
-    assert(near(a11y::stage_pan(shifted, 130.0f), 0.5f));
-    assert(near(a11y::stage_pan(shifted, -200.0f), -1.0f));
+    assert(near(a11y::stage_pan(shifted, 20.0f, false), 0.0f));
+    assert(near(a11y::stage_pan(shifted, 130.0f, false), 0.5f));
+    assert(near(a11y::stage_pan(shifted, -200.0f, false), -1.0f));
+}
+
+void pan_to_the_camera_follows_x() {
+    const A11yStageFrame stage = final_destination();
+    assert(near(a11y::stage_pan(stage, 0.0f, true), 0.0f));
+    assert(near(a11y::stage_pan(stage, 170.0f, true), 1.0f));
+    assert(near(a11y::stage_pan(stage, -170.0f, true), -1.0f));
+    assert(near(a11y::stage_pan(stage, 85.0f, true), 0.5f));
+    /* Held from the camera box's sides out to the blast zones and
+     * beyond. */
+    assert(near(a11y::stage_pan(stage, 210.0f, true), 1.0f));
+    assert(near(a11y::stage_pan(stage, -246.0f, true), -1.0f));
+    /* The centre is the camera box's middle. */
+    A11yStageFrame shifted = stage;
+    shifted.camera_left = -150.0f;
+    shifted.camera_right = 190.0f;
+    assert(near(a11y::stage_pan(shifted, 20.0f, true), 0.0f));
+    assert(near(a11y::stage_pan(shifted, 105.0f, true), 0.5f));
 }
 
 void pitch_follows_y() {
@@ -187,6 +204,13 @@ void the_opponent_cue_maps_the_opponents_position() {
     narrow.stage.pitch_range = 1.0f;
     targets = a11y::opponent_position(opponent_at(123.0f, 114.0f), narrow);
     assert(targets.has_value() && near(targets->pitch, std::sqrt(2.0f)));
+    /* And its own pan frame. */
+    OpponentMapping camera = mapping;
+    camera.stage.pan_to_camera = true;
+    targets = a11y::opponent_position(opponent_at(85.0f, 0.0f), camera);
+    assert(targets.has_value() && near(targets->pan, 0.5f));
+    yours = a11y::your_position(match_at(85.0f, 0.0f), YourMapping{});
+    assert(yours.has_value() && near(yours->pan, 85.0f / 246.0f));
 }
 
 void the_opponent_cue_keeps_its_interval() {
@@ -251,6 +275,7 @@ void the_opponent_cue_follows_a_change_of_opponent() {
 
 int main() {
     pan_follows_x();
+    pan_to_the_camera_follows_x();
     pitch_follows_y();
     interval_follows_the_distance();
     your_position_from_the_snapshot();

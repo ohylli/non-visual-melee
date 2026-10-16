@@ -163,7 +163,7 @@ VoiceSpec position_voice(const char* name, int cue, Sound sound, float fastest_i
 }  // namespace
 
 StageMapping MatchCues::StageValues::mapping() const {
-    return StageMapping{pitch_range.value()};
+    return StageMapping{pan_to_camera.on(), pitch_range.value()};
 }
 
 YourMapping MatchCues::YourValues::mapping() const {
@@ -187,6 +187,11 @@ LedgeMapping MatchCues::LedgeValues::mapping() const {
 MatchCues::StageValues MatchCues::add_stage_values(ValueGroup group) {
     const StageMapping defaults;
     return StageValues{
+        group.add_switch(SwitchSpec{"pan_to_camera", "Pan to the camera's view",
+            "On, the pan is fully left or right at the sides of the camera's view, giving the "
+            "stage more of it; off, at the side blast zones, so it goes on moving until a "
+            "knockout.",
+            defaults.pan_to_camera}),
         group.add_number(NumberSpec{"pitch_range", "Pitch range",
             "How many octaves the pitch rises from the bottom blast zone to the top of the "
             "camera's view; midway it is the cue's own pitch.",

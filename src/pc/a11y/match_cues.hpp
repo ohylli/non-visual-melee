@@ -47,6 +47,7 @@ public:
 
 private:
     struct StageValues {
+        Switch pan_to_camera;
         Number pitch_range;
 
         StageMapping mapping() const;

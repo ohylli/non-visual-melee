@@ -18,8 +18,10 @@ float progress(float v, float from, float to) {
 
 }  // namespace
 
-float stage_pan(const A11yStageFrame& stage, float x) {
-    return 2.0f * progress(x, stage.blast_left, stage.blast_right) - 1.0f;
+float stage_pan(const A11yStageFrame& stage, float x, bool to_camera) {
+    const float left = to_camera ? stage.camera_left : stage.blast_left;
+    const float right = to_camera ? stage.camera_right : stage.blast_right;
+    return 2.0f * progress(x, left, right) - 1.0f;
 }
 
 float stage_pitch(const A11yStageFrame& stage, float y, float range) {
@@ -44,7 +46,7 @@ float nearness_interval(std::optional<float> distance, const YourMapping& mappin
 VoiceTargets stage_targets(
     const A11yStageFrame& stage, const A11yMatchFighter& fighter, const StageMapping& mapping) {
     VoiceTargets targets;
-    targets.pan = stage_pan(stage, fighter.x);
+    targets.pan = stage_pan(stage, fighter.x, mapping.pan_to_camera);
     targets.pitch = stage_pitch(stage, fighter.y, mapping.pitch_range);
     targets.gain = 1.0f;
     return targets;

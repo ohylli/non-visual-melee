@@ -14,6 +14,10 @@ namespace a11y {
 /* Where on the stage, as pan and pitch: the mapping both position cues
  * use, each with its own copy of the values. */
 struct StageMapping {
+    /* Pan framed by the camera box's sides rather than the side blast
+     * zones: more of the pan for the stage itself, none for the last
+     * stretch before a knockout. */
+    bool pan_to_camera = false;
     /* Octaves from the bottom blast zone to the camera box's top, half of
      * them down and half up from the playback rate 1 midway. */
     float pitch_range = 2.0f;
@@ -40,9 +44,11 @@ struct OpponentMapping {
 };
 
 /* Pan for an x, linear from the left blast zone, -1 and beyond, to the
- * right one, 1 and beyond. No stage's floor is a reference, so every stage
- * maps the same way and a fall past the floor's end keeps moving the pan. */
-float stage_pan(const A11yStageFrame& stage, float x);
+ * right one, 1 and beyond, or with to_camera from the camera box's left
+ * side to its right. No stage's floor is a reference, so every stage maps
+ * the same way and a fall past the floor's end keeps moving the pan, up to
+ * the frame's side. */
+float stage_pan(const A11yStageFrame& stage, float x, bool to_camera);
 
 /* Pitch as playback rate for a y, linear in octaves from the bottom blast
  * zone, range/2 octaves down and below, to the camera box's top, range/2
