@@ -11,6 +11,13 @@
 namespace a11y {
 namespace {
 
+/* What an empty field, or the end of its text, reads as. */
+constexpr const char* kBlank = "blank";
+
+std::string spoken_value(const std::string& value) {
+    return value.empty() ? kBlank : value;
+}
+
 void collect_text(const Rml::Element& element, std::string& out) {
     if (const auto* text = dynamic_cast<const Rml::ElementText*>(&element)) {
         out += text->GetText();
@@ -222,7 +229,7 @@ void make_action(Control& control) {
 }
 
 std::string field_value(const Control& control) {
-    return control.value.empty() ? "blank" : control.value;
+    return spoken_value(control.value);
 }
 
 std::string focus_announcement(const Control& control) {
@@ -298,14 +305,28 @@ FieldState field_state(const Rml::Element& field) {
     return FieldState{input->GetValue(), start == end ? start : -1};
 }
 
-/* The character after the cursor, or "blank" at the end. */
+/* A character as spoken: a screen reader says nothing for a lone space. */
+std::string spoken_character(std::string character) {
+    return character == " " ? "space" : character;
+}
+
+/* The character after the cursor, or blank at the end. */
 std::string character_at(const std::string& value, int cursor) {
     const int begin = Rml::StringUtilities::ConvertCharacterOffsetToByteOffset(value, cursor);
     const int end = Rml::StringUtilities::ConvertCharacterOffsetToByteOffset(value, cursor + 1);
-    return begin < end ? value.substr(begin, end - begin) : "blank";
+    return begin < end ? spoken_character(value.substr(begin, end - begin)) : kBlank;
 }
 
 }  // namespace
+
+void FieldEcho::typed(std::string_view text) {
+    m_typed.clear();
+    for (const char c : text) {
+        if (static_cast<unsigned char>(c) >= 0x20 && c != 0x7f) {
+            m_typed += c;
+        }
+    }
+}
 
 void FieldEcho::start(const Rml::Element& field) {
     FieldState state = field_state(field);
@@ -324,10 +345,15 @@ std::optional<std::string> FieldEcho::frame(const Rml::Element& field) {
     if (state.value != m_value) {
         m_value = std::move(state.value);
         m_cursor = state.cursor;
-        return m_value.empty() ? "blank" : m_value;
+        return spoken_value(m_value);
     }
     if (state.cursor != m_cursor) {
+        /* Typing over a selection with the same text is still an edit. */
+        const bool retyped = m_cursor < 0 && !typed.empty();
         m_cursor = state.cursor;
+        if (retyped) {
+            return spoken_value(m_value);
+        }
         if (m_cursor >= 0) {
             return character_at(m_value, m_cursor);
         }
@@ -340,7 +366,7 @@ std::optional<std::string> FieldEcho::frame(const Rml::Element& field) {
     if (limit >= 0 && Rml::StringUtilities::LengthUTF8(m_value) >= static_cast<size_t>(limit)) {
         return "Full, " + std::to_string(limit) + " characters at most";
     }
-    return typed + " not allowed";
+    return spoken_character(typed) + " not allowed";
 }
 
 bool FieldEcho::changed_on_leaving(const Rml::Element& field) const {

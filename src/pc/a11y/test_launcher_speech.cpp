@@ -295,6 +295,15 @@ public:
         frame();
     }
 
+    /* Enter as aurora passes it on: the key, then a line break as typed
+     * text, then one turn of the loop. */
+    void enter() {
+        m_context.ProcessKeyDown(Rml::Input::KI_RETURN, 0);
+        m_context.ProcessTextInput('\n');
+        m_context.ProcessKeyUp(Rml::Input::KI_RETURN, 0);
+        frame();
+    }
+
     /* Up (-1) or Down (1) as the player presses it: the focused element's
      * own handling, then the launcher's step, then one turn of the loop. */
     void arrow(int direction) {
@@ -711,10 +720,16 @@ void text_field_typing(Rml::Context& context) {
     /* Letters go in as capitals. */
     assert(page.type("t") == (std::vector<Output>{interrupt("OTT")}));
     assert(page.type("#") == (std::vector<Output>{interrupt("# not allowed")}));
+    assert(page.type(" ") == (std::vector<Output>{interrupt("space not allowed")}));
+    /* Enter types a line break, which no field takes: nothing to say. */
+    page.enter();
+    assert(page.take().empty());
     assert(page.type("o1234") ==
            (std::vector<Output>{interrupt("OTTO"), interrupt("OTTO1"), interrupt("OTTO12"),
                interrupt("OTTO123"), interrupt("OTTO1234")}));
     assert(page.type("5") == (std::vector<Output>{interrupt("Full, 8 characters at most")}));
+    page.enter();
+    assert(page.take().empty());
     /* The connect code takes #. */
     page.focus("net-target");
     page.frame();
@@ -748,6 +763,9 @@ void text_field_cursor(Rml::Context& context) {
     /* Selecting is not read. */
     page.key(Rml::Input::KI_LEFT, Rml::Input::KM_SHIFT);
     assert(page.take().empty());
+    /* Typing over the selection with the character it holds is an edit,
+     * though the value stays the same. */
+    assert(page.type("o") == (std::vector<Output>{interrupt("TTO")}));
 }
 
 /* Up and Down move a field's cursor to an end before the launcher's step, and

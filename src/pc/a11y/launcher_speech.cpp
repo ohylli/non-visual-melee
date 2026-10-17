@@ -359,7 +359,7 @@ private:
     bool m_opened = false;
     Rml::ObserverPtr<Rml::Element> m_focus;
     std::string m_focus_value;
-    FieldEcho m_field; /* the focused text field, if focus is on one */
+    FieldEcho m_field; /* follows the focused control as a text field */
     PageLines m_lines;
     bool m_update_shown = false;
     bool m_settings_shown = false;

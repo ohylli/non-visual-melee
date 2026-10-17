@@ -111,15 +111,18 @@ private:
 /* What a focused text field says while it is edited, found by comparing it
  * with the last frame. A new value is spoken whole ("O", "OT", "OTT"); a
  * cursor move says the character after the cursor, the one Delete removes, or
- * "blank" at the end; typing that leaves the field as it was is "Full, 8
- * characters at most" in a full field and "# not allowed" otherwise, as the
- * page refused the character. Moves while text is selected are not read. */
+ * "blank" at the end; typing that leaves the field as it was is "Full, <n>
+ * characters at most" in a field at its maxlength and "# not allowed"
+ * otherwise, as the page refused the character. Moves while text is selected
+ * are not read. Any element that is not a text field reads as an empty one. */
 class FieldEcho {
 public:
     /* Starts following a field that just got focus. */
     void start(const Rml::Element& field);
-    /* Text typed while the field has focus, noted before the field takes it. */
-    void typed(std::string_view text) { m_typed = text; }
+    /* Text typed while the field has focus, noted before the field takes it.
+     * Control characters are left out: Enter types a line break, which a
+     * one-line field never takes. */
+    void typed(std::string_view text);
     /* Takes the field's cursor without speaking it, for a move the page
      * made itself rather than the player: Up and Down in a field move its
      * cursor to an end, though they are read as leaving it. */
