@@ -1,6 +1,9 @@
 #include "itlinkarrow.h"
 
 #include <math.h>
+#include <melee/ft/kinds/ftLink/types.h>
+#include <melee/ft/types.h>
+#include <pc/pc.h>
 
 #include "inlines.h"
 #include <melee/db/db.h>
@@ -348,6 +351,24 @@ void itLinkArrow_Logic98_Destroyed(Item_GObj* gobj)
                     default:
                         break;
                     }
+                }
+            }
+            /* A play test crashed as Link fired an arrow already destroyed
+             * (itLinkArrow_802A850C read the freed gobj's NULL user data).
+             * The path that leaves Link's pointer stale is not found yet:
+             * the held arrow destroying itself clears xE0 first and so skips
+             * the unset above. Clear it here and log it, so the next
+             * occurrence names Link's motion instead of crashing. */
+            if (item->owner != NULL && ftLib_IsFighter(item->owner)) {
+                Fighter* holder = item->owner->user_data;
+                if ((holder->kind == Ft_Kind_Link ||
+                     holder->kind == Ft_Kind_CLink) &&
+                    holder->u.lk.arrow_gobj == gobj)
+                {
+                    pc_log_line("[arrow guard] destroyed arrow %p was still "
+                                "Link's, Link motion %d; cleared",
+                                (void*) gobj, (int) holder->motion_id);
+                    holder->u.lk.arrow_gobj = NULL;
                 }
             }
             it_802A8330(gobj);

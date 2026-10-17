@@ -6,6 +6,8 @@
 #include <melee/it/forward.h>
 
 #include <math.h>
+#include <melee/it/types.h>
+#include <pc/pc.h>
 #include <placeholder.h>
 
 #include "forward.h"
@@ -64,6 +66,29 @@ ftLk_SpecialNIndex ftLk_SpecialN_GetIndex(Fighter_GObj* gobj)
     return result;
 }
 
+/* Drops Link's arrow pointer when it no longer names a live Link arrow, with
+ * a log line, so a stale pointer is never used: a play test crashed firing
+ * one (see itLinkArrow_Logic98_Destroyed). */
+static void dropStaleArrow(Fighter_GObj* gobj, const char* where)
+{
+    Fighter* fp = GET_FIGHTER(gobj);
+    HSD_GObj* arrow = fp->u.lk.arrow_gobj;
+    Item* ip;
+    if (arrow == NULL) {
+        return;
+    }
+    ip = arrow->user_data;
+    if (arrow->classifier == HSD_GOBJ_CLASS_ITEM && ip != NULL &&
+        (ip->kind == It_Kind_Link_Arrow || ip->kind == It_Kind_CLink_Arrow))
+    {
+        return;
+    }
+    pc_log_line("[arrow guard] at %s: Link's arrow %p is gone (user data %p), "
+                "Link motion %d; cleared",
+                where, (void*) arrow, (void*) ip, (int) fp->motion_id);
+    fp->u.lk.arrow_gobj = NULL;
+}
+
 void ftLk_SpecialN_UnsetArrow(Fighter_GObj* gobj)
 {
     if (gobj != NULL) {
@@ -116,6 +141,7 @@ void ftLk_SpecialN_ProcessFv10(Fighter_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
     FORCE_PAD_STACK_8;
+    dropStaleArrow(gobj, "remove");
     if (fp->u.lk.arrow_gobj != NULL) {
         it_802A8A7C(fp->u.lk.arrow_gobj);
         fp->u.lk.arrow_gobj = NULL;
@@ -169,6 +195,7 @@ static inline bool isDrawn(Fighter_GObj* gobj)
     Item_GObj* fv_x10;
 
     if (fp->cmd_vars[cmd_unk0_bool] == 1) {
+        dropStaleArrow(gobj, "draw");
         if (fp->u.lk.arrow_gobj == NULL) {
             Vec3 pos;
 
@@ -214,6 +241,7 @@ static inline void animate(Fighter_GObj* gobj)
         fp->mv.lk.specialn.x8.z = rpos.y - root.y;
         fp->mv.lk.specialn.x14 = 0.0f;
         fp->mv.lk.specialn.x8.x = atan2f(rpos.y - lpos.y, rpos.x - lpos.x);
+        dropStaleArrow(gobj, "aim");
         if (fp->u.lk.arrow_gobj != NULL) {
             it_802A8398(fp->u.lk.arrow_gobj, &rpos, &lpos);
         }
@@ -236,6 +264,7 @@ static inline void animate_nopad(Fighter_GObj* gobj)
     fp->mv.lk.specialn.x8.z = rpos.y - root.y;
     fp->mv.lk.specialn.x14 = 0.0f;
     fp->mv.lk.specialn.x8.x = atan2f(rpos.y - lpos.y, rpos.x - lpos.x);
+    dropStaleArrow(gobj, "aim");
     if (fp->u.lk.arrow_gobj != NULL) {
         it_802A8398(fp->u.lk.arrow_gobj, &rpos, &lpos);
     }
@@ -504,6 +533,9 @@ static inline void doEndColl(Fighter_GObj* gobj)
     FORCE_PAD_STACK_8;
     FORCE_PAD_STACK_4;
 
+    if (fp->cmd_vars[cmd_unk1_bool] == true) {
+        dropStaleArrow(gobj, "fire");
+    }
     if (fp->cmd_vars[cmd_unk1_bool] == true && fp->u.lk.arrow_gobj != NULL) {
         Vec3 rpos, lpos;
 
