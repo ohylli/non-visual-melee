@@ -109,7 +109,8 @@ gzip -dc "${ROOT_DIR}/tools/initial_pipeline_cache.db.gz" \
     > "${STAGE_DIR}/initial_pipeline_cache.db"
 
 # Dawn, SDL3, zlib/png DLLs land in the build root via AuroraCopyRuntimeDLLs.
-for dll in dxcompiler.dll dxil.dll webgpu_dawn.dll SDL3.dll libpng16.dll libzlib1.dll; do
+# a11y: prism.dll, the fork's screen reader library (src/pc/a11y/a11y.cmake).
+for dll in dxcompiler.dll dxil.dll webgpu_dawn.dll SDL3.dll libpng16.dll libzlib1.dll prism.dll; do
     if [[ -f "${BUILD_DIR}/${dll}" ]]; then
         cp "${BUILD_DIR}/${dll}" "${STAGE_DIR}/"
     fi

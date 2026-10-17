@@ -28,6 +28,8 @@ List the environment variables the drop adds, including new values of existing o
 git diff master...upstream/master -- src tools | grep -E '^\+.*(getenv|MELEE_[A-Z0-9_]+=)'
 ```
 
+Check the drop against the fork's CI (`.github/workflows/a11y-windows.yml`). A new file under `.github/workflows/` would run on the fork's next push: after the merge, disable it with `gh workflow disable <name>` before pushing, and say so in the merge notes. A change to `tools/package_windows.sh` or to the base port's Windows job in `build.yml` may need the same change in the fork's workflow, and the fork's `prism.dll` entry in the script's DLL list must survive the merge.
+
 Check every rule in "Online compatibility" in `CLAUDE.md` against the drop: the version string and protocol version, what the LAN lobby and handshake compare between peers, `pc_net_resim()`, and the per-frame journal of sound starts. A change to any of them is a digest item in section 1, with what it means for playing fork builds against base port builds.
 
 Also diff the fork's own side, so the merge notes can say whether a fork fix in a base port file is still needed or has been superseded:
