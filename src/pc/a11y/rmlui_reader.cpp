@@ -4,6 +4,9 @@
 #include <RmlUi/Core/ElementDocument.h>
 #include <RmlUi/Core/ElementText.h>
 #include <RmlUi/Core/Elements/ElementFormControl.h>
+#include <RmlUi/Core/Elements/ElementFormControlInput.h>
+#include <RmlUi/Core/StringUtilities.h>
+#include <utility>
 
 namespace a11y {
 namespace {
@@ -273,6 +276,75 @@ std::string focus_announcement(const Control& control) {
     }
     append_sentence(text, control.help);
     return text;
+}
+
+namespace {
+
+/* A text field's value and its cursor in characters, -1 while text is
+ * selected. Not a text field: empty, cursor at 0. */
+struct FieldState {
+    std::string value;
+    int cursor = 0;
+};
+
+FieldState field_state(const Rml::Element& field) {
+    const auto* input = dynamic_cast<const Rml::ElementFormControlInput*>(&field);
+    if (input == nullptr) {
+        return {};
+    }
+    int start = 0;
+    int end = 0;
+    input->GetSelection(&start, &end, nullptr);
+    return FieldState{input->GetValue(), start == end ? start : -1};
+}
+
+/* The character after the cursor, or "blank" at the end. */
+std::string character_at(const std::string& value, int cursor) {
+    const int begin = Rml::StringUtilities::ConvertCharacterOffsetToByteOffset(value, cursor);
+    const int end = Rml::StringUtilities::ConvertCharacterOffsetToByteOffset(value, cursor + 1);
+    return begin < end ? value.substr(begin, end - begin) : "blank";
+}
+
+}  // namespace
+
+void FieldEcho::start(const Rml::Element& field) {
+    FieldState state = field_state(field);
+    m_value = std::move(state.value);
+    m_cursor = state.cursor;
+    m_typed.clear();
+}
+
+void FieldEcho::skip_cursor(const Rml::Element& field) {
+    m_cursor = field_state(field).cursor;
+}
+
+std::optional<std::string> FieldEcho::frame(const Rml::Element& field) {
+    FieldState state = field_state(field);
+    const std::string typed = std::exchange(m_typed, {});
+    if (state.value != m_value) {
+        m_value = std::move(state.value);
+        m_cursor = state.cursor;
+        return m_value.empty() ? "blank" : m_value;
+    }
+    if (state.cursor != m_cursor) {
+        m_cursor = state.cursor;
+        if (m_cursor >= 0) {
+            return character_at(m_value, m_cursor);
+        }
+        return std::nullopt;
+    }
+    if (typed.empty()) {
+        return std::nullopt;
+    }
+    const int limit = field.GetAttribute<int>("maxlength", -1);
+    if (limit >= 0 && Rml::StringUtilities::LengthUTF8(m_value) >= static_cast<size_t>(limit)) {
+        return "Full, " + std::to_string(limit) + " characters at most";
+    }
+    return typed + " not allowed";
+}
+
+bool FieldEcho::changed_on_leaving(const Rml::Element& field) const {
+    return field_state(field).value != m_value;
 }
 
 const Rml::Element* selected_tab(const Rml::ElementDocument& document) {

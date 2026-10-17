@@ -4,6 +4,7 @@
  * any one page; the launcher's specifics live in launcher_speech.cpp, and the
  * port menu is meant to reuse this. docs/a11y/rmlui-screens.md explains it. */
 #pragma once
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -105,6 +106,34 @@ public:
 private:
     int m_index = -1; /* the stop of the line being read, -1 when on focus */
     std::string m_line;
+};
+
+/* What a focused text field says while it is edited, found by comparing it
+ * with the last frame. A new value is spoken whole ("O", "OT", "OTT"); a
+ * cursor move says the character after the cursor, the one Delete removes, or
+ * "blank" at the end; typing that leaves the field as it was is "Full, 8
+ * characters at most" in a full field and "# not allowed" otherwise, as the
+ * page refused the character. Moves while text is selected are not read. */
+class FieldEcho {
+public:
+    /* Starts following a field that just got focus. */
+    void start(const Rml::Element& field);
+    /* Text typed while the field has focus, noted before the field takes it. */
+    void typed(std::string_view text) { m_typed = text; }
+    /* Takes the field's cursor without speaking it, for a move the page
+     * made itself rather than the player: Up and Down in a field move its
+     * cursor to an end, though they are read as leaving it. */
+    void skip_cursor(const Rml::Element& field);
+    /* Once a frame while the field has focus: what to say, if anything. */
+    std::optional<std::string> frame(const Rml::Element& field);
+    /* Whether the field, just left, now holds something other than it did
+     * on the last frame: the page wrote its stored value back. */
+    bool changed_on_leaving(const Rml::Element& field) const;
+
+private:
+    std::string m_value;
+    int m_cursor = 0; /* in characters, -1 while text is selected */
+    std::string m_typed;
 };
 
 /* Turns the page's visual separators into commas: "Ready to play / Disc not

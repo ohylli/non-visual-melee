@@ -72,6 +72,38 @@ Output queue(std::string text) {
 
 constexpr std::chrono::milliseconds kFrame{16};
 
+/* A copy of the launcher's type_online: typed text in an Online field loses
+ * a character the field cannot store and goes in as capitals. */
+class OnlineFilter final : public Rml::EventListener {
+public:
+    void ProcessEvent(Rml::Event& event) override {
+        Rml::Element* target = event.GetTargetElement();
+        const Rml::String id = target != nullptr ? target->GetId() : "";
+        if (id != "net-name" && id != "net-target") {
+            return;
+        }
+        const Rml::String text = event.GetParameter<Rml::String>("text", "");
+        Rml::String typed = text;
+        for (char& c : typed) {
+            if (c >= 'a' && c <= 'z') {
+                c -= 'a' - 'A';
+            }
+            if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                    (id == "net-target" && c == '#')))
+            {
+                event.StopPropagation();
+                return;
+            }
+        }
+        if (typed != text) {
+            event.StopPropagation();
+            Rml::Dictionary parameters = event.GetParameters();
+            parameters["text"] = typed;
+            target->DispatchEvent(Rml::EventId::Textinput, parameters);
+        }
+    }
+};
+
 /* One launcher page with launcher speech attached, changed through the same
  * calls launcher.cpp makes. */
 class Page {
@@ -83,6 +115,7 @@ public:
         a11y::launcher_speech_start(m_speech);
         m_document = m_context.LoadDocument(s_resources + "/" + file);
         assert(m_document != nullptr);
+        m_document->AddEventListener(Rml::EventId::Textinput, &m_filter, true);
         m_document->Show();
     }
 
@@ -255,7 +288,35 @@ public:
         return taken;
     }
 
+    /* A key pressed on the focused element, then one turn of the loop. */
+    void key(Rml::Input::KeyIdentifier key, int modifiers = 0) {
+        m_context.ProcessKeyDown(key, modifiers);
+        m_context.ProcessKeyUp(key, modifiers);
+        frame();
+    }
+
+    /* Up (-1) or Down (1) as the player presses it: the focused element's
+     * own handling, then the launcher's step, then one turn of the loop. */
+    void arrow(int direction) {
+        const auto arrow = direction > 0 ? Rml::Input::KI_DOWN : Rml::Input::KI_UP;
+        m_context.ProcessKeyDown(arrow, 0);
+        step(direction);
+        m_context.ProcessKeyUp(arrow, 0);
+        frame();
+    }
+
+    /* Text typed into the focused element a character a frame, as a player
+     * types; what each frame said. */
+    std::vector<Output> type(const std::string& text) {
+        for (const char c : text) {
+            m_context.ProcessTextInput(Rml::String(1, c));
+            frame();
+        }
+        return take();
+    }
+
     void close() {
+        m_document->RemoveEventListener(Rml::EventId::Textinput, &m_filter, true);
         m_document->Close();
         m_context.Update();
         m_document = nullptr;
@@ -266,6 +327,7 @@ private:
         "tab-graphics", "tab-audio", "tab-cheats", "tab-controls", "tab-online"};
 
     Rml::Context& m_context;
+    OnlineFilter m_filter;
     int m_tab = 0;
     std::vector<Output> m_outputs;
     a11y::Speech m_speech;
@@ -624,10 +686,8 @@ void slider_step(Rml::Context& context) {
     assert(page.take() == (std::vector<Output>{interrupt("95%")}));
 }
 
-/* Typing is not echoed; leaving the field after typing speaks what it holds
- * once the launcher's blur handler has put back the stored value. */
-void text_field_leaving_focus(Rml::Context& context) {
-    Page page(context);
+/* Focuses the Player name field, holding OTTO, with the cursor at its end. */
+void focus_player_name(Page& page) {
     page.open_settings();
     page.show_tab(4);
     page.focus("net-name");
@@ -635,22 +695,108 @@ void text_field_leaving_focus(Rml::Context& context) {
     assert(page.take() ==
            (std::vector<Output>{interrupt("Player name, edit, OTTO. 1–8 letters or digits. "
                                           "Changes apply to the next search.")}));
-    page.field("net-name", "OTTO$");
+    page.key(Rml::Input::KI_END);
+    page.take();
+}
+
+/* Each change speaks the whole value; a refused character and a full field
+ * say why nothing changed. */
+void text_field_typing(Rml::Context& context) {
+    Page page(context);
+    focus_player_name(page);
+    page.key(Rml::Input::KI_BACK);
+    assert(page.take() == (std::vector<Output>{interrupt("OTT")}));
+    page.key(Rml::Input::KI_BACK);
+    assert(page.take() == (std::vector<Output>{interrupt("OT")}));
+    /* Letters go in as capitals. */
+    assert(page.type("t") == (std::vector<Output>{interrupt("OTT")}));
+    assert(page.type("#") == (std::vector<Output>{interrupt("# not allowed")}));
+    assert(page.type("o1234") ==
+           (std::vector<Output>{interrupt("OTTO"), interrupt("OTTO1"), interrupt("OTTO12"),
+               interrupt("OTTO123"), interrupt("OTTO1234")}));
+    assert(page.type("5") == (std::vector<Output>{interrupt("Full, 8 characters at most")}));
+    /* The connect code takes #. */
+    page.focus("net-target");
     page.frame();
+    page.take();
+    assert(page.type("ab#") ==
+           (std::vector<Output>{interrupt("A"), interrupt("AB"), interrupt("AB#")}));
+    for (int i = 0; i < 3; ++i) {
+        page.key(Rml::Input::KI_BACK);
+    }
+    assert(
+        page.take() == (std::vector<Output>{interrupt("AB"), interrupt("A"), interrupt("blank")}));
+}
+
+/* A cursor move says the character Delete would remove, or blank at the end. */
+void text_field_cursor(Rml::Context& context) {
+    Page page(context);
+    focus_player_name(page);
+    page.key(Rml::Input::KI_LEFT);
+    assert(page.take() == (std::vector<Output>{interrupt("O")}));
+    page.key(Rml::Input::KI_LEFT);
+    assert(page.take() == (std::vector<Output>{interrupt("T")}));
+    page.key(Rml::Input::KI_HOME);
+    assert(page.take() == (std::vector<Output>{interrupt("O")}));
+    page.key(Rml::Input::KI_DELETE);
+    assert(page.take() == (std::vector<Output>{interrupt("TTO")}));
+    page.key(Rml::Input::KI_END);
+    assert(page.take() == (std::vector<Output>{interrupt("blank")}));
+    /* At the end already: nothing moved. */
+    page.key(Rml::Input::KI_RIGHT);
     assert(page.take().empty());
-    page.field("net-name", "OTTO");
+    /* Selecting is not read. */
+    page.key(Rml::Input::KI_LEFT, Rml::Input::KM_SHIFT);
+    assert(page.take().empty());
+}
+
+/* Up and Down move a field's cursor to an end before the launcher's step, and
+ * reading the lines keeps focus on the field: the move is not read. */
+void text_field_lines_keep_quiet(Rml::Context& context) {
+    Page page(context);
+    focus_player_name(page);
+    page.key(Rml::Input::KI_HOME);
+    assert(page.take() == (std::vector<Output>{interrupt("O")}));
+    page.arrow(1);
+    assert(page.take() == (std::vector<Output>{interrupt("Your connect code")}));
+    page.arrow(-1);
+    assert(page.take() ==
+           (std::vector<Output>{interrupt("Player name, edit, OTTO. 1–8 letters or digits. "
+                                          "Changes apply to the next search.")}));
+    /* The cursor is where Up left it, at the start. */
+    page.key(Rml::Input::KI_RIGHT);
+    assert(page.take() == (std::vector<Output>{interrupt("T")}));
+}
+
+/* Leaving a field says nothing more, unless the launcher rewrites it as it
+ * leaves: an emptied name gets the stored one back. */
+void text_field_leaving_focus(Rml::Context& context) {
+    Page page(context);
+    focus_player_name(page);
+    page.key(Rml::Input::KI_BACK);
+    page.take();
+    page.focus("net-target");
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(
+                              "Friend's connect code, edit, blank. Leave blank to host your code. "
+                              "Open Online, Direct Connect in-game.")}));
+    page.focus("net-name");
+    page.frame();
+    page.take();
+    page.key(Rml::Input::KI_END);
+    for (int i = 0; i < 3; ++i) {
+        page.key(Rml::Input::KI_BACK);
+    }
+    assert(
+        page.take() == (std::vector<Output>{interrupt("OT"), interrupt("O"), interrupt("blank")}));
+    /* The launcher's blur handler, refresh_online: the name stored last. */
+    page.field("net-name", "O");
     page.focus("net-target");
     page.frame();
     assert(page.take() ==
-           (std::vector<Output>{interrupt("Player name, OTTO. Friend's connect code, edit, blank. "
+           (std::vector<Output>{interrupt("Player name, O. Friend's connect code, edit, blank. "
                                           "Leave blank to host your code. Open Online, Direct "
                                           "Connect in-game.")}));
-    /* Passing through without typing says nothing about the field left. */
-    page.focus("net-delay");
-    page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt(
-                              "Input delay, Auto, Enter to change. Automatic adapts to your "
-                              "connection. Changes apply next match.")}));
 }
 
 void settings_status_messages(Rml::Context& context) {
@@ -778,6 +924,9 @@ int main(int argc, char** argv) {
     speech_off_leaves_the_keys_alone(*context);
     cycling_setting_and_its_value(*context);
     slider_step(*context);
+    text_field_typing(*context);
+    text_field_cursor(*context);
+    text_field_lines_keep_quiet(*context);
     text_field_leaving_focus(*context);
     settings_status_messages(*context);
     update_check_is_spoken_once(*context);

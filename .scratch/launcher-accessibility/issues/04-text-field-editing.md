@@ -1,6 +1,6 @@
 # 04 Editing the Online text fields
 
-Status: needs-triage
+Status: resolved (2026-10-17)
 Type: grilling
 
 Raised by the play-test of issue 02. Needs further thought before it can be built.
@@ -31,3 +31,16 @@ The spec listed character echo, reading the cursor and announcing rejected input
 - The port menu has the same fields. Whatever is chosen should be reusable there.
 
 ## Comments
+
+### 2026-10-17: agreed, built and play-tested
+
+Settled in a design conversation with the maintainer, built, and play-tested with NVDA (primer `docs/a11y/rmlui-screens.md`, "A focused text field"):
+
+- NVDA's own character echo is left aside: few players have it on, and it does not confirm that the field took the character.
+- Every edit speaks the whole value ("O", "OT", "OTT"), "blank" when empty. Left, Right, Home and End speak the character after the cursor, the one Delete would remove, or "blank" at the end. Selection is not read.
+- A typed character that changes nothing says "Full, 8 characters at most" in a full field, otherwise "# not allowed" with the character as typed. The fork does not copy the launcher's rules: whatever is refused under the length limit was not allowed.
+- A base port fix makes the refusal visible: the launcher's `type_online` drops a character the Online fields cannot store before the field takes it, and puts letters in as capitals. Before it, a refused character stayed in the field and every later keystroke went unsaved too. Pasted text is still checked only as the whole value.
+- The name and value on leaving a field are gone, except when leaving rewrites the field (an emptied name gets the stored one back).
+- Uppercase is not spoken as a change; Enter says nothing, as every keystroke already saves.
+- Play-test finding, fixed: Up and Down move a field's cursor to an end, which was read while focus stayed on the field for the lines between the controls, cutting the line off.
+- Reusable by the port menu: `FieldEcho` in `rmlui_reader.cpp` knows nothing about the launcher.

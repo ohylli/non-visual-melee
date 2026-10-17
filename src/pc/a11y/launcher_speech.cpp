@@ -202,7 +202,13 @@ public:
          * controls, then Back. */
         std::vector<PageStop> stops = tab_page_stops(*tab);
         stops.push_back(PageStop{back, {}});
-        switch (m_lines.step(stops, *focus, direction)) {
+        const PageLines::Move move = m_lines.step(stops, *focus, direction);
+        /* Focus stays put: a text field has already moved its cursor to an
+         * end for the press. */
+        if (move != PageLines::Move::page) {
+            m_field.skip_cursor(*focus);
+        }
+        switch (move) {
         case PageLines::Move::page:
             return false;
         case PageLines::Move::line:
@@ -213,6 +219,13 @@ public:
             return true;
         }
         return false;
+    }
+
+    /* Text typed into the page, before the field or the launcher acts on it. */
+    void typed(const Rml::Event& event) {
+        if (event.GetTargetElement() == m_focus.get()) {
+            m_field.typed(event.GetParameter<Rml::String>("text", ""));
+        }
     }
 
 private:
@@ -252,26 +265,32 @@ private:
             say(text, Mode::interrupt);
             return;
         }
-        follow_value(describe_with_overrides(*focus));
+        follow_value(*focus, describe_with_overrides(*focus));
     }
 
-    /* A text field just left after typing: its name and what it holds now,
-     * which the launcher has put back to the stored value, so a rejected entry
-     * is heard as the old value. Empty after any other control. */
+    /* A text field the launcher rewrote on being left, as it puts back the
+     * stored name when the field was left empty: its name and what it holds
+     * now. Empty after any other control. */
     std::string left_field_text() const {
         const Rml::Element* left = m_focus.get();
-        if (left == nullptr || !m_edited) {
+        if (left == nullptr) {
             return "";
         }
         const Control field = describe_with_overrides(*left);
-        return field.role == Role::edit ? field.name + ", " + field_value(field) : "";
+        if (field.role != Role::edit || !m_field.changed_on_leaving(*left)) {
+            return "";
+        }
+        return field.name + ", " + field_value(field);
     }
 
-    /* The focused control's value, spoken when it changes. Typed characters
-     * are not echoed yet; typing is only noted for left_field_text. */
-    void follow_value(const Control& control) {
+    /* The focused control's value, spoken when it changes; a text field says
+     * what its editing does. */
+    void follow_value(const Rml::Element& focus, const Control& control) {
         if (control.role == Role::edit) {
-            m_edited = m_edited || control.value != m_focus_value;
+            if (std::optional<std::string> text = m_field.frame(focus)) {
+                m_lines.clear();
+                say(*text, Mode::interrupt);
+            }
             return;
         }
         if (control.value != m_focus_value) {
@@ -285,7 +304,7 @@ private:
     std::string remember_focus(Rml::Element& focus) {
         m_focus = focus.GetObserverPtr();
         m_focus_value = describe_with_overrides(focus).value;
-        m_edited = false;
+        m_field.start(focus);
         return focus_text(focus);
     }
 
@@ -340,7 +359,7 @@ private:
     bool m_opened = false;
     Rml::ObserverPtr<Rml::Element> m_focus;
     std::string m_focus_value;
-    bool m_edited = false; /* the focused text field's value has changed */
+    FieldEcho m_field; /* the focused text field, if focus is on one */
     PageLines m_lines;
     bool m_update_shown = false;
     bool m_settings_shown = false;
@@ -376,6 +395,23 @@ public:
     }
 };
 
+/* Hands text typed into the page to the reader. Listens in the capture
+ * phase, ahead of the launcher's own filter and the field, either of which
+ * may take the text without changing the field. */
+class TypedText final : public Rml::EventListener {
+public:
+    explicit TypedText(const std::unique_ptr<LauncherReader>& reader) : m_reader(reader) {}
+
+    void ProcessEvent(Rml::Event& event) override {
+        if (m_reader != nullptr) {
+            m_reader->typed(event);
+        }
+    }
+
+private:
+    const std::unique_ptr<LauncherReader>& m_reader;
+};
+
 /* EVT_BASIC is there for RmlUi's shutdown, which unregisters only the plugins
  * in that class. Static, because RmlUi keeps the pointer until it shuts down. */
 class LauncherPlugin final : public Rml::Plugin {
@@ -387,6 +423,7 @@ public:
             return;
         }
         document->AddEventListener(Rml::EventId::Keydown, &m_tab_keys, true);
+        document->AddEventListener(Rml::EventId::Textinput, &m_typed_text, true);
         m_reader = std::make_unique<LauncherReader>(*document, *m_speech);
     }
 
@@ -430,6 +467,7 @@ private:
             return;
         }
         m_reader->document().RemoveEventListener(Rml::EventId::Keydown, &m_tab_keys, true);
+        m_reader->document().RemoveEventListener(Rml::EventId::Textinput, &m_typed_text, true);
         m_reader.reset();
     }
 
@@ -437,6 +475,7 @@ private:
     bool m_registered = false;
     std::unique_ptr<LauncherReader> m_reader;
     TabKeys m_tab_keys;
+    TypedText m_typed_text{m_reader};
 };
 
 LauncherPlugin s_plugin;
