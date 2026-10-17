@@ -66,9 +66,11 @@ ftLk_SpecialNIndex ftLk_SpecialN_GetIndex(Fighter_GObj* gobj)
     return result;
 }
 
-/* Drops Link's arrow pointer when it no longer names a live Link arrow, with
- * a log line, so a stale pointer is never used: a play test crashed firing
- * one (see itLinkArrow_Logic98_Destroyed). */
+/* PORT: drops Link's arrow pointer when it no longer names a live Link arrow
+ * this Link owns, with a log line, so a stale pointer is never used: a play
+ * test crashed firing one (see itLinkArrow_Logic98_Destroyed). The owner test
+ * matters because the gobj pool hands a freed slot straight back out, in a
+ * ditto possibly as the other Link's arrow. */
 static void dropStaleArrow(Fighter_GObj* gobj, const char* where)
 {
     Fighter* fp = GET_FIGHTER(gobj);
@@ -79,7 +81,8 @@ static void dropStaleArrow(Fighter_GObj* gobj, const char* where)
     }
     ip = arrow->user_data;
     if (arrow->classifier == HSD_GOBJ_CLASS_ITEM && ip != NULL &&
-        (ip->kind == It_Kind_Link_Arrow || ip->kind == It_Kind_CLink_Arrow))
+        (ip->kind == It_Kind_Link_Arrow || ip->kind == It_Kind_CLink_Arrow) &&
+        ip->owner == gobj)
     {
         return;
     }

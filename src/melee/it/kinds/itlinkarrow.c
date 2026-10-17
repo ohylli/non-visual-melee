@@ -353,12 +353,13 @@ void itLinkArrow_Logic98_Destroyed(Item_GObj* gobj)
                     }
                 }
             }
-            /* A play test crashed as Link fired an arrow already destroyed
-             * (itLinkArrow_802A850C read the freed gobj's NULL user data).
-             * The path that leaves Link's pointer stale is not found yet:
-             * the held arrow destroying itself clears xE0 first and so skips
-             * the unset above. Clear it here and log it, so the next
-             * occurrence names Link's motion instead of crashing. */
+            /* PORT: a play test crashed as Link fired an arrow already
+             * destroyed (itLinkArrow_802A850C read the freed gobj's NULL user
+             * data). The path that leaves Link's pointer stale is not found
+             * yet; one candidate is itLinkarrow_UnkMotion0_Anim clearing xE0
+             * before the held arrow is destroyed, which skips the unset
+             * above. Clear it here and log it, so the next occurrence names
+             * Link's motion instead of crashing. */
             if (item->owner != NULL && ftLib_IsFighter(item->owner)) {
                 Fighter* holder = item->owner->user_data;
                 if ((holder->kind == Ft_Kind_Link ||
