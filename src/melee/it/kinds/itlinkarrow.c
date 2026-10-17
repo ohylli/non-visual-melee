@@ -1,6 +1,7 @@
 #include "itlinkarrow.h"
 
 #include <math.h>
+#include <melee/ft/kinds/ftKirby/types.h>
 #include <melee/ft/kinds/ftLink/types.h>
 #include <melee/ft/types.h>
 #include <pc/pc.h>
@@ -358,18 +359,25 @@ void itLinkArrow_Logic98_Destroyed(Item_GObj* gobj)
              * data). The path that leaves Link's pointer stale is not found
              * yet; one candidate is itLinkarrow_UnkMotion0_Anim clearing xE0
              * before the held arrow is destroyed, which skips the unset
-             * above. Clear it here and log it, so the next occurrence names
-             * Link's motion instead of crashing. */
+             * above. Kirby's copied bow takes the same path. Clear the
+             * holder's pointer here and log it, so the next occurrence names
+             * the holder's motion instead of crashing. */
             if (item->owner != NULL && ftLib_IsFighter(item->owner)) {
                 Fighter* holder = item->owner->user_data;
-                if ((holder->kind == Ft_Kind_Link ||
-                     holder->kind == Ft_Kind_CLink) &&
-                    holder->u.lk.arrow_gobj == gobj)
+                Item_GObj** held = NULL;
+                if (holder->kind == Ft_Kind_Link ||
+                    holder->kind == Ft_Kind_CLink)
                 {
+                    held = &holder->u.lk.arrow_gobj;
+                } else if (holder->kind == Ft_Kind_Kirby) {
+                    held = &holder->u.kb.x74;
+                }
+                if (held != NULL && *held == gobj) {
                     pc_log_line("[arrow guard] destroyed arrow %p was still "
-                                "Link's, Link motion %d; cleared",
-                                (void*) gobj, (int) holder->motion_id);
-                    holder->u.lk.arrow_gobj = NULL;
+                                "held by fighter kind %d, motion %d; cleared",
+                                (void*) gobj, (int) holder->kind,
+                                (int) holder->motion_id);
+                    *held = NULL;
                 }
             }
             it_802A8330(gobj);
