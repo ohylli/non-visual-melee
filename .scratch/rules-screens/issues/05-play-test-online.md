@@ -1,6 +1,6 @@
 # 05 Play test online by ear
 
-Status: ready-for-human
+Status: resolved (2026-10-17)
 Type: task
 Blocked by: none
 
@@ -13,3 +13,9 @@ The maintainer opens the rules screens from character select's rules header in a
 - Returning to character select: its opening, then steering and speech as before.
 
 Findings become new issues here.
+
+## Comments
+
+### 2026-10-17: play-tested online by ear
+
+The maintainer played a session against a second device of their own. It behaved as expected: each side heard the rule changes the other player was making. No new issues.
