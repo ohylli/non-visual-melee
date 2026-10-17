@@ -253,6 +253,9 @@ OS_DLLS = {
     # hid.dll: SDL 3.5's Windows HID API backend links it directly. Present on
     # a clean Windows install, so it does not need shipping.
     'hid.dll',
+    # a11y: prism.dll's screen reader backends (UI Automation and its XML
+    # reader). Both ship with Windows since Vista.
+    'uiautomationcore.dll', 'xmllite.dll',
 }
 
 def is_os(name):
