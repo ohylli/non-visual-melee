@@ -73,6 +73,38 @@ void refresh_online(Rml::ElementDocument* doc) {
     if (auto* e = doc->GetElementById("net-code"))
         e->SetInnerRML(pc_net_match_local_code());
 }
+// An Online field's character, already in upper case.
+bool online_char(const Rml::String& id, char c) {
+    return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || (id == "net-target" && c == '#');
+}
+// Typed text in an Online field, before the field takes it: a character the
+// field cannot store never enters it, and letters go in as capitals, so the
+// field shows what is stored. Pasted text is checked only by change_online.
+bool type_online(Rml::Event& event) {
+    auto* target = event.GetTargetElement();
+    if (!target)
+        return false;
+    auto id = target->GetId();
+    if (id != "net-name" && id != "net-target")
+        return false;
+    const auto text = event.GetParameter<Rml::String>("text", "");
+    auto typed = text;
+    for (char& c : typed) {
+        if (c >= 'a' && c <= 'z')
+            c -= 'a' - 'A';
+        if (!online_char(id, c)) {
+            event.StopPropagation();
+            return true;
+        }
+    }
+    if (typed != text) {
+        event.StopPropagation();
+        auto parameters = event.GetParameters();
+        parameters["text"] = typed;
+        target->DispatchEvent(Rml::EventId::Textinput, parameters);
+    }
+    return true;
+}
 bool change_online(Rml::Event& event) {
     auto* target = event.GetTargetElement();
     if (!target)
@@ -87,7 +119,7 @@ bool change_online(Rml::Event& event) {
     for (char& c : value) {
         if (c >= 'a' && c <= 'z')
             c -= 'a' - 'A';
-        if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || (id == "net-target" && c == '#')))
+        if (!online_char(id, c))
             return true;
     }
     if (id == "net-name") {
@@ -728,6 +760,8 @@ public:
         document->AddEventListener(Rml::EventId::Keydown, this);
         document->AddEventListener(Rml::EventId::Change, this);
         document->AddEventListener(Rml::EventId::Blur, this, true);
+        // Capture phase: the field's own listener stops the event.
+        document->AddEventListener(Rml::EventId::Textinput, this, true);
         document->Show();
         text("app-version", pc::get_app_version());
         text("check-status", "Current version: " + pc::get_app_version());
@@ -748,12 +782,15 @@ public:
         document->RemoveEventListener(Rml::EventId::Keydown, this);
         document->RemoveEventListener(Rml::EventId::Change, this);
         document->RemoveEventListener(Rml::EventId::Blur, this, true);
+        document->RemoveEventListener(Rml::EventId::Textinput, this, true);
         auto* context = document->GetContext();
         document->Close();
         context->Update();
     }
     void ProcessEvent(Rml::Event& event) override {
-        if (event.GetId() == Rml::EventId::Click) {
+        if (event.GetId() == Rml::EventId::Textinput) {
+            type_online(event);
+        } else if (event.GetId() == Rml::EventId::Click) {
             auto* target = event.GetTargetElement();
             while (target && target != document) {
                 if (target->GetTagName() == "button") {
@@ -799,8 +836,8 @@ public:
                 return;
             save();
         } else if (event.GetId() == Rml::EventId::Blur) {
-            // Leaving a text field shows what was stored: letters in upper
-            // case, and the old value back if the entry was rejected.
+            // Leaving a text field shows what was stored: the old value back
+            // if a pasted entry was rejected or the name was left empty.
             auto* target = event.GetTargetElement();
             if (target && (target->GetId() == "net-name" || target->GetId() == "net-target")) {
                 quiet = true;
@@ -1817,6 +1854,10 @@ public:
          * the menu could do is wanted. */
         if (!open)
             return;
+        if (event.GetId() == Rml::EventId::Textinput) {
+            type_online(event);
+            return;
+        }
         if (event.GetId() == Rml::EventId::Focus) {
             if (!quiet)
                 lbAudioAx_80024030(SFX_MOVE);
@@ -1903,6 +1944,8 @@ extern "C" void pc_menu_init(SDL_Window* window) {
     port_menu.document->AddEventListener(Rml::EventId::Change, &port_menu);
     // Focus does not bubble; the capture pass still reaches the document.
     port_menu.document->AddEventListener(Rml::EventId::Focus, &port_menu, true);
+    // Capture phase: the field's own listener stops the event.
+    port_menu.document->AddEventListener(Rml::EventId::Textinput, &port_menu, true);
     aurora_set_resampler(static_cast<AuroraSampler>(prefs.filter_mode));
 }
 extern "C" void pc_menu_toggle(void) {
