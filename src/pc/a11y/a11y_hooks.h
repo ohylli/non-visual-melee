@@ -29,6 +29,12 @@ void pc_a11y_master_volume(float volume);
  * has been drawn. Launcher speech compares the page with the last turn here. */
 void pc_a11y_launcher_frame(void);
 
+/* The launcher is about to move focus up (-1) or down (1) (focus_step in
+ * src/pc/launcher.cpp), whether by arrow key, Tab, D-pad or stick. Returns
+ * true when launcher speech used the press to read a line of text on a
+ * Settings page, which focus never reaches; focus must then stay put. */
+bool pc_a11y_launcher_step(int direction);
+
 /* A scene has loaded (gm_801A4014 in src/melee/gm/gm_1A3F.c, after the
  * scene's enter function returns) and its first frame is next. mode_kind is
  * the GameModeKind of the mode being run, which during a memory card

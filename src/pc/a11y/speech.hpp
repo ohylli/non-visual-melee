@@ -63,6 +63,9 @@ public:
     /* The most recent announcement, spoken or not. For a later "repeat last"
      * key. */
     const Announcement& last() const { return m_last; }
+    /* The accessibility switch: off, nothing is spoken, and features that
+     * take keys for speech leave them alone. */
+    bool enabled() const { return m_config.enabled; }
     bool initialized_on_this_thread() const;
 
 private:

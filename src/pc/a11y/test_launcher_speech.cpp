@@ -76,9 +76,9 @@ constexpr std::chrono::milliseconds kFrame{16};
  * calls launcher.cpp makes. */
 class Page {
 public:
-    explicit Page(Rml::Context& context, const char* file = "launcher.rml")
+    explicit Page(Rml::Context& context, const char* file = "launcher.rml", bool speech = true)
         : m_context(context),
-          m_speech(a11y::Config{true, false}, std::make_unique<FakeBridge>(m_outputs)) {
+          m_speech(a11y::Config{speech, false}, std::make_unique<FakeBridge>(m_outputs)) {
         m_speech.init();
         a11y::launcher_speech_start(m_speech);
         m_document = m_context.LoadDocument(s_resources + "/" + file);
@@ -133,15 +133,36 @@ public:
 
     /* Launcher::show_tab */
     void show_tab(int tab) {
-        static constexpr const char* tabs[] = {
-            "tab-graphics", "tab-audio", "tab-cheats", "tab-controls", "tab-online"};
         static constexpr const char* pages[] = {
             "page-graphics", "page-audio", "page-cheats", "page-controls", "page-online"};
         for (int i = 0; i < 5; ++i) {
-            element(tabs[i])->SetClass("selected", i == tab);
+            element(kTabs[i])->SetClass("selected", i == tab);
             element(pages[i])->SetClass("selected", i == tab);
         }
-        focus(tabs[tab]);
+        m_tab = tab;
+        focus(kTabs[tab]);
+    }
+
+    /* Launcher::focus_step on the Controls or Online tab, with its hook: Up
+     * (-1) or Down (1) through the tab, the page's controls
+     * (Launcher::page_focus) and Back. */
+    void step(int direction) {
+        if (a11y::launcher_speech_step(direction)) {
+            return;
+        }
+        std::vector<const char*> ids{kTabs[m_tab]};
+        if (m_tab == 4) {
+            ids.insert(ids.end(), {"net-name", "net-target", "net-delay"});
+        }
+        ids.push_back("back");
+        const int count = static_cast<int>(ids.size());
+        int index = direction > 0 ? -1 : 0;
+        for (int i = 0; i < count; ++i) {
+            if (element(ids[i]) == m_context.GetFocusElement()) {
+                index = i;
+            }
+        }
+        focus(ids[(index + direction + count) % count]);
     }
 
     /* Launcher::show_settings, with the parts of refresh_settings the tests
@@ -241,7 +262,11 @@ public:
     }
 
 private:
+    static constexpr const char* kTabs[] = {
+        "tab-graphics", "tab-audio", "tab-cheats", "tab-controls", "tab-online"};
+
     Rml::Context& m_context;
+    int m_tab = 0;
     std::vector<Output> m_outputs;
     a11y::Speech m_speech;
     Rml::ElementDocument* m_document = nullptr;
@@ -406,26 +431,149 @@ void entering_and_leaving_settings(Rml::Context& context) {
     assert(page.take() == (std::vector<Output>{interrupt("Settings, button")}));
 }
 
-/* A tab is read with the rows on its page that focus never reaches. */
-void tab_change_reads_rows_without_controls(Rml::Context& context) {
+/* A tab whose page opens with rows without a control says so; Up and Down
+ * read them. A page that opens with a control does not. */
+void tab_with_text_gives_a_hint(Rml::Context& context) {
     Page page(context);
     page.open_settings();
     page.show_tab(4);
     page.frame();
-    assert(page.take() ==
-           (std::vector<Output>{interrupt(
-               "Online, tab, selected, 5 of 5. Left and right to switch tabs. Your connect code. "
-               "ABCD#123. Internet discovery can take a few minutes. Some home networks cannot "
-               "connect without a relay.")}));
+    assert(page.take() == (std::vector<Output>{interrupt(
+                              "Online, tab, selected, 5 of 5. Left and right to switch tabs")}));
     page.show_tab(3);
     page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(
+                              "Controls, tab, selected, 4 of 5. Left and right to switch tabs. "
+                              "Text below, Down to read")}));
+}
+
+/* Headings, line breaks and " · " separators each end a line. */
+void controls_page_line_by_line(Rml::Context& context) {
+    Page page(context);
+    page.open_settings();
+    page.show_tab(3);
+    page.frame();
+    page.take();
+    const std::vector<std::string> lines{"Keyboard", "WASD, arrows Move", "X Attack", "Z Special",
+        "C, V Jump", "Q, E Shield", "Tab Grab", "Enter Start", "IJKL C-stick", "Controller",
+        "Remap a gamepad from the in-game menu: press BACK on the pad, or F1, then open "
+        "Controls. Controllers are only detected once the game is running."};
+    for (const std::string& line : lines) {
+        page.step(1);
+        page.frame();
+        assert(page.take() == (std::vector<Output>{interrupt(line)}));
+    }
+    assert(page.document().GetContext()->GetFocusElement() == page.element("tab-controls"));
+    page.step(-1);
+    assert(page.take() == (std::vector<Output>{interrupt("Controller")}));
+    page.step(1);
+    assert(page.take() == (std::vector<Output>{interrupt(lines.back())}));
+
+    /* Off the last line onto Back, and from Back up onto the last line. */
+    page.step(1);
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt("Back to launcher, button")}));
+    page.step(-1);
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(lines.back())}));
+    assert(page.document().GetContext()->GetFocusElement() == page.element("back"));
+    /* Back down to Back, where focus stayed. */
+    page.step(1);
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt("Back to launcher, button")}));
+
+    /* Down from Back wraps to the tab; up from the first line returns to it. */
+    page.step(1);
+    page.frame();
+    page.take();
+    page.step(1);
+    assert(page.take() == (std::vector<Output>{interrupt("Keyboard")}));
+    page.step(-1);
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(
+                              "Controls, tab, selected, 4 of 5. Left and right to switch tabs. "
+                              "Text below, Down to read")}));
+}
+
+/* The lines sit between the controls, in the page's order. */
+void online_page_lines_between_controls(Rml::Context& context) {
+    Page page(context);
+    page.open_settings();
+    page.show_tab(4);
+    page.frame();
+    page.step(1);
+    page.frame();
+    page.take();
+    page.step(1);
+    assert(page.take() == (std::vector<Output>{interrupt("Your connect code")}));
+    page.step(1);
+    assert(page.take() == (std::vector<Output>{interrupt("ABCD#123")}));
+    page.step(1);
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(
+                              "Friend's connect code, edit, blank. Leave blank to host your code. "
+                              "Open Online, Direct Connect in-game.")}));
+    page.step(-1);
+    assert(page.take() == (std::vector<Output>{interrupt("ABCD#123")}));
+    page.step(-1);
+    page.step(-1);
+    page.frame();
     assert(page.take() ==
-           (std::vector<Output>{interrupt(
-               "Controls, tab, selected, 4 of 5. Left and right to switch tabs. Keyboard. WASD, "
-               "arrows Move, X Attack, Z Special, C, V Jump, Q, E Shield, Tab Grab, Enter Start, "
-               "IJKL C-stick. Controller. Remap a gamepad from the in-game menu: press BACK on the "
-               "pad, or F1, then open Controls. Controllers are only detected once the game is "
-               "running.")}));
+           (std::vector<Output>{interrupt("Your connect code"),
+               interrupt("Player name, edit, OTTO. 1–8 letters or digits. Changes apply to the "
+                         "next search.")}));
+
+    page.focus("net-delay");
+    page.frame();
+    page.take();
+    page.step(1);
+    assert(page.take() ==
+           (std::vector<Output>{interrupt("Internet discovery can take a few minutes. Some home "
+                                          "networks cannot connect without a relay.")}));
+    /* A value change on the control focus is on ends the reading; the next
+     * press starts from that control again. */
+    page.text("net-delay", "1 frame");
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt("1 frame")}));
+    page.step(1);
+    assert(page.take() ==
+           (std::vector<Output>{interrupt("Internet discovery can take a few minutes. Some home "
+                                          "networks cannot connect without a relay.")}));
+}
+
+/* Switching tabs while on a line: the new tab starts from its top. */
+void tab_switch_ends_reading(Rml::Context& context) {
+    Page page(context);
+    page.open_settings();
+    page.show_tab(3);
+    page.frame();
+    page.step(1);
+    page.step(1);
+    page.take();
+    page.show_tab(4);
+    page.frame();
+    page.take();
+    page.step(1);
+    page.frame();
+    assert(page.document().GetContext()->GetFocusElement() == page.element("net-name"));
+    assert(page.take() ==
+           (std::vector<Output>{interrupt("Player name, edit, OTTO. 1–8 letters or digits. "
+                                          "Changes apply to the next search.")}));
+}
+
+/* With the accessibility switch off, Up and Down move focus as in the base
+ * port. */
+void speech_off_leaves_the_keys_alone(Rml::Context& context) {
+    Page page(context, "launcher.rml", false);
+    page.enabled("play", false);
+    page.enabled("verify", false);
+    page.focus("choose");
+    page.run(a11y::kSettleTime * 2);
+    page.show_settings(true);
+    page.show_tab(3);
+    page.frame();
+    page.step(1);
+    assert(page.document().GetContext()->GetFocusElement() == page.element("back"));
 }
 
 void cycling_setting_and_its_value(Rml::Context& context) {
@@ -610,7 +758,11 @@ int main(int argc, char** argv) {
     update_banner_is_announced(*context);
     tab_becomes_down(*context);
     entering_and_leaving_settings(*context);
-    tab_change_reads_rows_without_controls(*context);
+    tab_with_text_gives_a_hint(*context);
+    controls_page_line_by_line(*context);
+    online_page_lines_between_controls(*context);
+    tab_switch_ends_reading(*context);
+    speech_off_leaves_the_keys_alone(*context);
     cycling_setting_and_its_value(*context);
     slider_step(*context);
     text_field_leaving_focus(*context);

@@ -167,6 +167,10 @@ extern "C" void pc_a11y_launcher_frame(void) {
     a11y::launcher_speech_frame(a11y::Clock::now());
 }
 
+extern "C" bool pc_a11y_launcher_step(int direction) {
+    return a11y::launcher_speech_step(direction);
+}
+
 extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
     (void)mode_kind; /* for mode-specific scene names, later */
     int previous_scene = s_scene;

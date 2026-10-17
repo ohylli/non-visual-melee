@@ -1,6 +1,6 @@
 # 03 Reading page text line by line
 
-Status: needs-triage
+Status: resolved (2026-10-17)
 Type: grilling
 
 Raised by the play-test of issue 02. Needs further thought before it can be built.
@@ -27,3 +27,14 @@ The Online tab has the same shape on a smaller scale: the connect code and the d
 - The port menu has the same pages. Whatever is chosen should be reusable there.
 
 ## Comments
+
+### 2026-10-17: agreed and built
+
+Settled in a design conversation with the maintainer, then built (primer `docs/a11y/rmlui-screens.md`, "Reading the lines of a page"):
+
+- One line is a heading, or a piece of a paragraph between line breaks and " · " separators, so the keyboard layout is one key and action per line.
+- Up and Down move over the lines where they sit between the controls, in the launcher's own order, whichever input moves (arrows, Tab, D-pad, stick). A fork-kept reading position, not a base port focus change: the one hook `pc_a11y_launcher_step` is the first line of the launcher's `focus_step`, where every input ends.
+- The tab announcement no longer reads the text; a page that opens with text ends with "Text below, Down to read". After the play-test, the hint was dropped from pages that open with a control (Online): there it did not fit, as the lines come between the controls.
+- The Online tab works the same way: the connect code and the discovery note are lines between its controls.
+- The keyboard text is not reworded; the split into pairs may be enough. To revisit after the play-test.
+- The port menu has its own `focus_step`, which takes the same hook once it has a reader; `PageLines` and `tab_page_stops` are generic.

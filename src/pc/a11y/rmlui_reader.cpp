@@ -72,27 +72,71 @@ std::string first_text(const Rml::Element& element, const char* tag) {
     return found.empty() ? std::string() : element_text(*found.front());
 }
 
-bool has_control(const Rml::Element& element) {
+/* The first control inside the element, in document order. */
+const Rml::Element* first_control(const Rml::Element& element) {
     if (is_control(element)) {
-        return true;
+        return &element;
     }
     for (int i = 0; i < element.GetNumChildren(); ++i) {
-        if (has_control(*element.GetChild(i))) {
-            return true;
+        if (const Rml::Element* found = first_control(*element.GetChild(i))) {
+            return found;
         }
     }
-    return false;
+    return nullptr;
 }
 
-/* Headings and paragraphs, each as its own sentence: "Keyboard. WASD...". */
-void collect_sentences(const Rml::Element& element, std::string& out) {
-    const Rml::String& tag = element.GetTagName();
-    if (tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" || tag == "p") {
-        append_sentence(out, element_text(element));
+/* Ends the line gathered so far, split at " · " into its pieces. */
+void end_line(std::string& piece, std::vector<std::string>& lines) {
+    static constexpr std::string_view kDot = " \xC2\xB7 "; /* " · " */
+    const std::string text = collapse_whitespace(piece);
+    piece.clear();
+    size_t start = 0;
+    while (start <= text.size()) {
+        size_t end = text.find(kDot, start);
+        if (end == std::string::npos) {
+            end = text.size();
+        }
+        if (end > start) {
+            lines.push_back(text.substr(start, end - start));
+        }
+        start = end + kDot.size();
+    }
+}
+
+/* A text block's text, a line ended at each line break. */
+void collect_block(
+    const Rml::Element& element, std::string& piece, std::vector<std::string>& lines) {
+    if (const auto* text = dynamic_cast<const Rml::ElementText*>(&element)) {
+        piece += text->GetText();
+        piece += ' ';
+        return;
+    }
+    if (element.GetTagName() == "br") {
+        end_line(piece, lines);
         return;
     }
     for (int i = 0; i < element.GetNumChildren(); ++i) {
-        collect_sentences(*element.GetChild(i), out);
+        const Rml::Element* child = element.GetChild(i);
+        if (child->IsVisible()) {
+            collect_block(*child, piece, lines);
+        }
+    }
+}
+
+/* The lines of the headings and paragraphs inside the element. */
+void collect_lines(const Rml::Element& element, std::vector<std::string>& lines) {
+    if (!element.IsVisible()) {
+        return;
+    }
+    const Rml::String& tag = element.GetTagName();
+    if (tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" || tag == "p") {
+        std::string piece;
+        collect_block(element, piece, lines);
+        end_line(piece, lines);
+        return;
+    }
+    for (int i = 0; i < element.GetNumChildren(); ++i) {
+        collect_lines(*element.GetChild(i), lines);
     }
 }
 
@@ -231,20 +275,66 @@ std::string focus_announcement(const Control& control) {
     return text;
 }
 
-std::string tab_page_text(const Rml::Element& tab) {
-    const Rml::String& id = tab.GetId();
-    if (id.rfind("tab-", 0) != 0) {
-        return "";
-    }
-    const Rml::Element* page = find_in_document(tab, "page-" + id.substr(4));
-    std::string text;
-    for (int i = 0; page != nullptr && i < page->GetNumChildren(); ++i) {
-        const Rml::Element* row = page->GetChild(i);
-        if (!has_control(*row)) {
-            collect_sentences(*row, text);
+const Rml::Element* selected_tab(const Rml::ElementDocument& document) {
+    Rml::ElementList tabs;
+    const_cast<Rml::ElementDocument&>(document).GetElementsByClassName(tabs, "tab");
+    for (const Rml::Element* tab : tabs) {
+        if (tab->IsClassSet("selected")) {
+            return tab;
         }
     }
-    return text;
+    return nullptr;
+}
+
+std::vector<PageStop> tab_page_stops(const Rml::Element& tab) {
+    std::vector<PageStop> stops{PageStop{&tab, {}}};
+    const Rml::String& id = tab.GetId();
+    if (id.rfind("tab-", 0) != 0) {
+        return stops;
+    }
+    const Rml::Element* page = find_in_document(tab, "page-" + id.substr(4));
+    for (int i = 0; page != nullptr && i < page->GetNumChildren(); ++i) {
+        const Rml::Element* row = page->GetChild(i);
+        if (const Rml::Element* control = first_control(*row)) {
+            stops.push_back(PageStop{control, {}});
+            continue;
+        }
+        std::vector<std::string> lines;
+        collect_lines(*row, lines);
+        for (std::string& line : lines) {
+            stops.push_back(PageStop{nullptr, std::move(line)});
+        }
+    }
+    return stops;
+}
+
+PageLines::Move PageLines::step(
+    const std::vector<PageStop>& stops, const Rml::Element& focus, int direction) {
+    const auto is_line = [&stops](int index) {
+        return index >= 0 && index < static_cast<int>(stops.size()) &&
+               stops[index].control == nullptr;
+    };
+    int at = -1;
+    for (int i = 0; i < static_cast<int>(stops.size()); ++i) {
+        if (stops[i].control == &focus) {
+            at = i;
+        }
+    }
+    if (at < 0) {
+        clear();
+        return Move::page;
+    }
+    const int next = (reading() ? m_index : at) + direction;
+    if (is_line(next)) {
+        m_index = next;
+        m_line = stops[next].line;
+        return Move::line;
+    }
+    const bool was_reading = reading();
+    clear();
+    /* Off the lines: onto the control focus is still on, or past the lines,
+     * where the page's own step from that control lands. */
+    return was_reading && next == at ? Move::focus : Move::page;
 }
 
 std::string clean_text(std::string_view text) {

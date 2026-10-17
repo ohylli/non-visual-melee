@@ -185,6 +185,36 @@ public:
         }
     }
 
+    /* Up or Down, before the launcher moves focus: on a Settings tab, moves
+     * over the lines of its page between the controls. Returns true when the
+     * press was used for that, and focus must stay put. */
+    bool step(int direction) {
+        Rml::Element* focus = focused_control();
+        const Rml::Element* tab = selected_tab(m_document);
+        const Rml::Element* back = m_document.GetElementById("back");
+        if (!m_speech.enabled() || !m_opened || focus == nullptr || focus != m_focus.get() ||
+            !displayed("preferences") || tab == nullptr || back == nullptr)
+        {
+            m_lines.clear();
+            return false;
+        }
+        /* The launcher's own order on a Settings tab: the tab, the page's
+         * controls, then Back. */
+        std::vector<PageStop> stops = tab_page_stops(*tab);
+        stops.push_back(PageStop{back, {}});
+        switch (m_lines.step(stops, *focus, direction)) {
+        case PageLines::Move::page:
+            return false;
+        case PageLines::Move::line:
+            say(m_lines.line(), Mode::interrupt);
+            return true;
+        case PageLines::Move::focus:
+            say(focus_text(*focus), Mode::interrupt);
+            return true;
+        }
+        return false;
+    }
+
 private:
     /* "Melee launcher. <status>. <focus announcement>", held until the status
      * line settles and focus reaches a control, so the start-up disc check is
@@ -208,12 +238,14 @@ private:
 
     /* A new control gets its focus announcement; a new value on the same one
      * gets the value alone. Focus parked off any control, as while a button
-     * is disabled, keeps the last control, so returning to it is silent. */
+     * is disabled, keeps the last control, so returning to it is silent.
+     * Either change ends reading the page's lines. */
     void follow_focus(Rml::Element* focus, bool entering_settings) {
         if (focus == nullptr) {
             return;
         }
         if (focus != m_focus.get()) {
+            m_lines.clear();
             std::string text = entering_settings ? "Settings" : "";
             append_sentence(text, left_field_text());
             append_sentence(text, remember_focus(*focus));
@@ -243,6 +275,7 @@ private:
             return;
         }
         if (control.value != m_focus_value) {
+            m_lines.clear();
             m_focus_value = control.value;
             say(control.value, Mode::interrupt);
         }
@@ -250,15 +283,24 @@ private:
 
     /* Makes `focus` the known control and returns its focus announcement. */
     std::string remember_focus(Rml::Element& focus) {
-        const Control control = describe_with_overrides(focus);
         m_focus = focus.GetObserverPtr();
-        m_focus_value = control.value;
+        m_focus_value = describe_with_overrides(focus).value;
         m_edited = false;
+        return focus_text(focus);
+    }
+
+    std::string focus_text(Rml::Element& focus) const {
+        const Control control = describe_with_overrides(focus);
         std::string text = focus_announcement(control);
-        /* Rows with no control, which focus never reaches, are read with
-         * their tab: the connect code, the Controls page. */
+        /* Rows with no control, which focus never reaches, are read line by
+         * line with Up and Down. A page that opens with them, the Controls
+         * page, says so; on one that opens with a control, the lines come in
+         * their turn between the controls. */
         if (control.role == Role::tab) {
-            append_sentence(text, tab_page_text(focus));
+            const std::vector<PageStop> stops = tab_page_stops(focus);
+            if (stops.size() > 1 && stops[1].control == nullptr) {
+                append_sentence(text, "Text below, Down to read");
+            }
         }
         /* Play is the only way to hear the disc card, which focus never reaches. */
         if (focus.GetId() == "play") {
@@ -299,6 +341,7 @@ private:
     Rml::ObserverPtr<Rml::Element> m_focus;
     std::string m_focus_value;
     bool m_edited = false; /* the focused text field's value has changed */
+    PageLines m_lines;
     bool m_update_shown = false;
     bool m_settings_shown = false;
     WatchedText m_status{"status"};
@@ -379,6 +422,8 @@ public:
         }
     }
 
+    bool step(int direction) { return m_reader != nullptr && m_reader->step(direction); }
+
 private:
     void detach() {
         if (m_reader == nullptr) {
@@ -408,6 +453,10 @@ void launcher_speech_stop() {
 
 void launcher_speech_frame(Clock::time_point now) {
     s_plugin.frame(now);
+}
+
+bool launcher_speech_step(int direction) {
+    return s_plugin.step(direction);
 }
 
 }  // namespace a11y

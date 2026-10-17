@@ -324,6 +324,8 @@ class Launcher final : public Rml::EventListener {
         }
     }
     void focus_step(int direction) {
+        if (pc_a11y_launcher_step(direction))
+            return;
         auto* focus = document->GetContext()->GetFocusElement();
         int index = direction > 0 ? -1 : 0;
         for (size_t i = 0; i < focus_ids.size(); ++i)

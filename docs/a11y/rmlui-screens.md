@@ -6,10 +6,11 @@ The launcher, the port menu and the frame-rate display are pages in RmlUi, a UI 
 
 ```
 launcher loop --pc_a11y_launcher_frame()--> fork reader --compare with last frame--> announcements --> speech
+launcher Up/Down --pc_a11y_launcher_step()--> fork reader --read a line?--------------^
 RmlUi --document loaded / key pressed--> fork plugin -----^
 ```
 
-The launcher code itself never tells the fork anything except "another frame went by". [ADR-0002](../adr/0002-launcher-speech-reads-the-page.md) records why.
+The launcher code tells the fork only two things: "another frame went by" and "the player asked to move up or down". [ADR-0002](../adr/0002-launcher-speech-reads-the-page.md) records why the reader compares the page instead of being told more.
 
 ## One context for every page
 
@@ -19,6 +20,7 @@ Aurora (the port's graphics and UI library) creates a single RmlUi context, name
 
 - **A plugin.** RmlUi lets a program register an `Rml::Plugin`, an object that is told when contexts are created and documents load or unload. The fork registers one from `pc_a11y_init`, which runs before Aurora starts RmlUi; registering early is allowed and the plugin still receives every later notification. On the launcher document's load the plugin attaches the fork's key listener and starts the reader; on unload it stops them. The code is in `launcher_speech.cpp`; the generic page reading it uses is in `rmlui_reader.cpp`.
 - **One frame hook.** `pc_a11y_launcher_frame()` is called once per turn of the launcher's own loop, just after the page is drawn. That is where the reader compares the page with what it saw last frame. It runs after drawing because RmlUi works out styles, and so which elements are visible, only while it updates the page for drawing. The loop runs before the game starts, so the netplay silence rule does not apply to it; the port menu, which runs inside the game loop, will need it.
+- **One step hook.** `pc_a11y_launcher_step(direction)` is the first thing the launcher's `focus_step` does, before it moves focus up or down. Every way of moving ends there: the arrow keys, Tab (which the fork's key listener turns into Down), the D-pad and the stick, whose gamepad events the launcher reads from SDL and never pass through RmlUi. It returns true when the reader used the press to read a line of text, and focus then stays put (see "Reading the lines of a page").
 - **Shutdown order.** The fork's shutdown hook runs before Aurora shuts RmlUi down. It unregisters the plugin before speech shuts down, so RmlUi's own shutdown never reaches it. The reverse order is safe too: RmlUi unloads every document first, which stops the reader.
 - **Plugin lifetime.** RmlUi keeps a pointer to the plugin until it shuts down, so the plugin is a static object. Its event classes include `EVT_BASIC` even though it needs only document events, because RmlUi's shutdown unregisters only the plugins in that class.
 
@@ -30,11 +32,22 @@ The launcher's labels are real text, so the reader takes them from the page, not
 - A setting is a row (class `setting`): a heading with the setting's name, a help sentence under it, and a control beside them. Most on/off and multiple-choice settings are buttons whose text is only the current value ("On", "Windowed"); pressing Enter moves to the next value. So a button inside a row is read as a setting: name from the row's heading, the button's text as the value, then "Enter to change" and the help sentence. A badge such as "RESTART" sits inside the heading and is read with the name.
 - A slider's value is shown in a text span next to it, whose id is the slider's plus `-val`, and that text is what gets spoken ("80%", "Auto"). The slider's own value is a bare number.
 - The settings tabs are buttons with the class `tab` in a strip; the selected one also carries `selected`, and the position ("1 of 5") is counted among the strip's tabs. A tab's page is found by id, `tab-online` to `page-online`, a convention the port menu shares.
-- A row with no control (the connect code, the Controls page's text) is never focused, so the reader speaks it as part of the tab announcement, each heading and paragraph as its own sentence.
+- A row with no control (the connect code, the Controls page's text) is never focused. The reader reads it line by line with Up and Down instead (next section). The tab announcement of a page that opens with such rows, as Controls does, ends with a hint that there is text below; on a page that opens with a control, such as Online, the lines come in their turn between the controls.
 
 The page cannot tell a button that cycles a value from one that acts, since both sit in a row with only a label. The fork override table in `launcher_speech.cpp` lists the ones that act, by id; they are read as buttons named by row and label: "Performance preset: Apply, button". A base merge that adds an action row needs a line there, or the row is read as a setting with the value "Apply".
 
 The page also uses visual separators (" / ", " · ", " → ") that the reader turns into commas, and a line break reads as a comma too.
+
+## Reading the lines of a page
+
+Focus reaches only controls, so the lines of text between them are a reading position the reader keeps itself, beside focus, which stays on the control next to the lines. The generic part is `PageLines` and `tab_page_stops` in `rmlui_reader.cpp`; the launcher's part, which adds Back after the page and speaks what the step lands on, is `LauncherReader::step`.
+
+- **What a line is.** The page's rows in document order are its stops: a row with a control is that control, and a row without one gives a stop for each of its lines. A line is a heading, or a piece of a paragraph between line breaks and " · " separators, so the keyboard layout reads one key and its action at a time ("X Attack"). The launcher's order on a Settings tab is the tab, the page's controls and Back, which matches the stops as long as `page_focus` in `src/pc/launcher.cpp` lists a page's controls in document order.
+- **Moving.** Up or Down from a control onto a line speaks the line and keeps focus where it is. Off the end of a run of lines, the press either returns to the control focus is still on, which is announced again, or is handed back to the launcher, whose own step from that control lands on the control past the lines. So focus never has to be moved by the fork, and the launcher's order stays the base port's.
+- **What ends it.** Any focus change, as when Left and Right switch tabs, and a value change on the focused control, since Enter still acts on that control while a line is read. The next press starts from the control again.
+- **Accessibility off.** The step hook leaves every press to the launcher.
+
+A sighted helper sees the focus highlight stay on the control while lines are read; the fork leaves the page's look alone.
 
 ## Why the reader compares frames instead of listening to events
 
