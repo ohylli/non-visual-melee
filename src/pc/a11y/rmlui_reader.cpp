@@ -324,6 +324,11 @@ PageLines::Move PageLines::step(
         clear();
         return Move::page;
     }
+    /* A line that changed or went while it was held, as when the page's text
+     * is rewritten, starts the press from focus again. */
+    if (reading() && !(is_line(m_index) && stops[m_index].line == m_line)) {
+        clear();
+    }
     const int next = (reading() ? m_index : at) + direction;
     if (is_line(next)) {
         m_index = next;

@@ -31,8 +31,9 @@ void pc_a11y_launcher_frame(void);
 
 /* The launcher is about to move focus up (-1) or down (1) (focus_step in
  * src/pc/launcher.cpp), whether by arrow key, Tab, D-pad or stick. Returns
- * true when launcher speech used the press to read a line of text on a
- * Settings page, which focus never reaches; focus must then stay put. */
+ * true when launcher speech used the press for the lines of text on a
+ * Settings page, which focus never reaches: to read one, or to come back from
+ * them to the focused control. Focus must then stay put. */
 bool pc_a11y_launcher_step(int direction);
 
 /* A scene has loaded (gm_801A4014 in src/melee/gm/gm_1A3F.c, after the

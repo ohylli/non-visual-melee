@@ -539,6 +539,19 @@ void online_page_lines_between_controls(Rml::Context& context) {
     assert(page.take() ==
            (std::vector<Output>{interrupt("Internet discovery can take a few minutes. Some home "
                                           "networks cannot connect without a relay.")}));
+
+    /* A line rewritten while it is held: the next press starts from the
+     * control again. */
+    page.focus("net-name");
+    page.frame();
+    page.take();
+    page.step(1);
+    page.step(1);
+    page.take();
+    page.text("net-code", "WXYZ#999");
+    page.step(1);
+    assert(page.take() == (std::vector<Output>{interrupt("Your connect code")}));
+    page.text("net-code", "ABCD#123");
 }
 
 /* Switching tabs while on a line: the new tab starts from its top. */

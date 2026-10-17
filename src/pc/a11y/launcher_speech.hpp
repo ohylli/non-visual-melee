@@ -29,8 +29,9 @@ void launcher_speech_stop();
 /* One turn of the launcher's loop, after RmlUi has updated the page. */
 void launcher_speech_frame(Clock::time_point now);
 /* Up (-1) or Down (1), before the launcher moves focus. Returns true when
- * launcher speech used the press to read a line of a Settings page, so focus
- * must not move. */
+ * launcher speech used the press for the lines of a Settings page, to read
+ * one or to come back from them to the focused control, so focus must not
+ * move. */
 bool launcher_speech_step(int direction);
 
 }  // namespace a11y
