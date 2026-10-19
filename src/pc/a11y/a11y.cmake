@@ -29,6 +29,7 @@ endif ()
 target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/hooks.cpp
         ${CMAKE_CURRENT_LIST_DIR}/speech.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/event_pipe.cpp
         ${CMAKE_CURRENT_LIST_DIR}/screen_reader_bridge.cpp
         ${CMAKE_CURRENT_LIST_DIR}/rmlui_reader.cpp
         ${CMAKE_CURRENT_LIST_DIR}/launcher_speech.cpp
@@ -172,6 +173,17 @@ if (TARGET unit_tests)
     add_test(NAME launcher_speech COMMAND launcher_speech_test ${PROJECT_SOURCE_DIR}/resources)
     set_tests_properties(launcher_speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests launcher_speech_test)
+
+    # The event pipe's lines turned into SDL events; its own pc_log_line.
+    add_executable(event_pipe_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_event_pipe.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/event_pipe.cpp)
+    target_include_directories(event_pipe_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_link_libraries(event_pipe_test PRIVATE ${AURORA_SDL3_TARGET})
+    target_compile_options(event_pipe_test PRIVATE -UNDEBUG)
+    add_test(NAME event_pipe COMMAND event_pipe_test)
+    set_tests_properties(event_pipe PROPERTIES LABELS melee)
+    add_dependencies(unit_tests event_pipe_test)
 
     # The scene table against a fake bridge; its own pc_log_line.
     add_executable(scene_speech_test EXCLUDE_FROM_ALL

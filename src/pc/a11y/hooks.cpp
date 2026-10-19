@@ -2,6 +2,7 @@
 #include "a11y_hooks.h"
 #include "css_reader.hpp"
 #include "cue_system.hpp"
+#include "event_pipe.hpp"
 #include "game_access.h"
 #include "game_text.hpp"
 #include "launcher_speech.hpp"
@@ -127,6 +128,8 @@ void announce_scene(int previous_scene, int css_exit, int scene_kind) {
 }  // namespace
 
 extern "C" void pc_a11y_init(void) {
+    /* The drivers' event pipe, with speech on or off. */
+    a11y::event_pipe_start();
     if (s_speech != nullptr) {
         return;
     }

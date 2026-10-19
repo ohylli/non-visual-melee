@@ -38,6 +38,9 @@ otherwise in the other:
   b-fork wait '"Holding your coin'
   b-base sleep 1
 
+The key, type and gamepad steps go through the fork's event pipe, which a
+base port build lacks, so address them to b-fork when b may be one.
+
 Each instance's output goes to OUT_DIR/a.log and b.log, its game log beside
 it (a.log.game.log), its settings folder too (a.log.settings, as drive.py
 gives every run) and its recording of controller data (MELEE_NET_RECORD)

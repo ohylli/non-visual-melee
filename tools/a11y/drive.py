@@ -25,6 +25,11 @@ Script steps, one per line (or ';'-separated with -c), '#' starts a comment:
                                  a line of speech
   wait RE [SECONDS]              wait for an output line matching RE,
                                  newer than the last press or wait (default 30)
+  key KEY [KEY...]               press and release each key in turn as an SDL
+                                 key event, waiting until the game takes it
+  type TEXT                      type TEXT, one SDL text event a character
+  gamepad BUTTON [BUTTON...]     press and release each gamepad button in turn
+                                 as an SDL gamepad event, likewise
   sleep SECONDS
   shot PATH                      save the game window as a PNG
   quit                           close the window and wait for a clean exit
@@ -41,6 +46,20 @@ Up Down Left Right (main stick), CUp CDown CLeft CRight, DUp DDown DLeft
 DRight. They drive controller port 1, merged with any real controller there.
 Steering is on (MELEE_A11Y_STEER=1), so on character select the D-pad moves
 the hand from target to target.
+
+key, type and gamepad reach what reacts to SDL events instead: the port
+menu (F1, or Back on a gamepad) and the launcher, which press never reaches.
+They go through the fork's event pipe (MELEE_A11Y_EVENT_FIFO,
+src/pc/a11y/event_pipe.cpp), which pushes real SDL events into the game
+without giving it focus. Each step waits for the game's "[a11y] event N:
+... taken" line, which comes once the game's loop has taken the event, so
+it works while the port menu holds the game still. A KEY is an SDL key name
+(F1 Escape Return Tab Backspace Up Down Left Right Space A), with modifiers
+in front: Shift+Tab, Ctrl+A. A BUTTON is SDL's name: a (the bottom face
+button) b (the right one) x y back guide start leftshoulder rightshoulder
+dpup dpdown dpleft dpright. Pushed keys reach the game's own pad only with
+the window focused (--focus), as real keys do. A base port build has no
+event pipe, so these steps fail on it.
 
 Each run starts from default settings in a settings folder of its own,
 --out's path plus .settings (build/drive/last.log.settings), named to the
@@ -83,6 +102,9 @@ BUTTONS = {
 }
 
 DEFAULT_SHOW = ("[a11y]", "boot scene")
+# Seconds an event step waits for the game's answer; the game itself gives
+# up on an event left in SDL's queue after 10.
+EVENT_TIMEOUT = 15
 UNTIL_SETTLE = 1.5  # seconds a "press ... until" waits for its text before pressing again, by default
 SPEECH = "] speak "  # in every announcement's log line
 PAD_RE = re.compile(r"pad: btn ([0-9a-f]+) stick (-?\d+),(-?\d+) sub (-?\d+),(-?\d+) trig (\d+),(\d+)")
@@ -177,11 +199,14 @@ def cache_dir(slot):
     return path
 
 
-class KeyPipe:
-    """The server end of the pipe the game's fifo thread reads lines from."""
+class Pipe:
+    """The server end of a pipe a thread of the game reads lines from: the
+    key pipe (MELEE_KEY_FIFO) or the event pipe (MELEE_A11Y_EVENT_FIFO)."""
 
-    def __init__(self, name):
+    def __init__(self, name, label, why_missing=""):
         self.name = name
+        self.label = label
+        self.why_missing = why_missing
         self.handle = kernel32.CreateNamedPipeW(name, PIPE_ACCESS_OUTBOUND, 0, 1, 4096, 4096, 0, None)
         if self.handle == INVALID_HANDLE_VALUE:
             raise OSError(ctypes.get_last_error(), "CreateNamedPipeW failed")
@@ -198,11 +223,11 @@ class KeyPipe:
             if proc.poll() is not None:
                 raise ScriptError("the game exited")
             if time.monotonic() > deadline:
-                raise ScriptError("the game never opened the key pipe")
+                raise ScriptError(f"the game never opened the {self.label}{self.why_missing}")
         data = (line + "\n").encode()
         written = wt.DWORD()
         if not kernel32.WriteFile(self.handle, data, len(data), ctypes.byref(written), None):
-            raise ScriptError(f"writing to the key pipe failed ({ctypes.get_last_error()})")
+            raise ScriptError(f"writing to the {self.label} failed ({ctypes.get_last_error()})")
 
     def close(self):
         # CloseHandle blocks while _connect still waits in ConnectNamedPipe,
@@ -501,8 +526,11 @@ class Game:
         self.captured = {}
         full_env = dict(os.environ)
         pipe_name = rf"\\.\pipe\melee-drive-{os.getpid()}" + (f"-{name}" if name else "")
+        event_pipe_name = rf"\\.\pipe\melee-events-{os.getpid()}" + (f"-{name}" if name else "")
+        self.events_sent = 0
         full_env.update({
             "MELEE_KEY_FIFO": pipe_name,
+            "MELEE_A11Y_EVENT_FIFO": event_pipe_name,
             "MELEE_INPUT_TRACE": "1",
             # D-pad steering on character select, which speech off would
             # otherwise switch off.
@@ -532,7 +560,8 @@ class Game:
         # MELEE_USER_DIR ignores it and takes the maintainer's).
         self.settings_dir = fresh_settings_dir(out)
         full_env["MELEE_USER_DIR"] = self.settings_dir
-        self.pipe = KeyPipe(pipe_name)
+        self.pipe = Pipe(pipe_name, "key pipe")
+        self.event_pipe = Pipe(event_pipe_name, "event pipe", " (a base port build has none)")
         self.out_file = open(out, "w", encoding="utf-8")
         self.proc = subprocess.Popen([exe, "--no-card", disc], cwd=REPO, env=full_env,
                                      stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -547,6 +576,21 @@ class Game:
         self.pipe.send(f"{keys} {hold}", self.args.timeout, self.proc)
         if self.output.wait_for(self.output.mark(), pad_pressed(keys), 5 + hold / 1000) is None:
             self.note("warning: no pad change seen for that press")
+
+    def push(self, request):
+        """Send one request down the event pipe ("key F1") and wait for the
+        game's answer to it, which says the game's loop took its events."""
+        self.events_sent += 1
+        n = self.events_sent
+        answer = re.compile(rf"\[a11y\] event {n}: ")
+        start = self.output.mark()
+        self.event_pipe.send(f"{n} {request}", self.args.timeout, self.proc)
+        i = self.output.wait_for(start, answer.search, EVENT_TIMEOUT)
+        if i is None:
+            raise ScriptError(f"no answer to {request!r} from the event pipe")
+        line = self.output.lines[i]
+        if not line.endswith(" taken"):
+            raise ScriptError(f"{request!r}: {line[answer.search(line).end():]}")
 
     def matched(self, rx, i):
         """Line i matched rx: keeps its named groups."""
@@ -597,6 +641,13 @@ class Game:
             if i is None:
                 raise ScriptError(f"timed out after {timeout:g} s waiting for {rest[0]!r}")
             self.cursor = self.matched(rx, i)
+        elif cmd in ("key", "gamepad") and rest:
+            self.cursor = output.mark()
+            for name in rest:
+                self.push(f"{cmd} {name}")
+        elif cmd == "type" and len(rest) == 1:
+            self.cursor = output.mark()
+            self.push(f"text {rest[0]}")
         elif cmd == "sleep" and len(rest) == 1:
             time.sleep(float(rest[0]))
         elif cmd == "shot" and len(rest) == 1:
@@ -611,6 +662,7 @@ class Game:
         """Quit the game if it still runs; its exit code."""
         code = quit_game(self.proc)
         self.pipe.close()
+        self.event_pipe.close()
         time.sleep(0.2)  # let the reader threads drain the last lines
         self.note(f"game exited with code {code}")
         self.out_file.close()
