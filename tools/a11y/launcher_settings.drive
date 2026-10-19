@@ -1,0 +1,121 @@
+# The launcher's Settings: every tab, a setting changed and back, a slider
+# moved, the lines between the controls read with Up and Down on Controls and
+# Online, typing in a text field with a refused character, Tab and Shift+Tab,
+# and back to Home both ways. Waits on each announcement, so a missing or
+# changed line fails the run. Run in launcher mode, with accessibility on but
+# muted, which the line reading needs (as run_level.py runs it):
+#   python tools/a11y/drive.py --launcher --muted tools/a11y/launcher_settings.drive
+# The run's settings folder starts from the defaults, so Player name holds
+# PLAYER and the connect code is the run's own. Display mode is never
+# pressed: fullscreen would take the screen (drive.py refuses it).
+
+wait '"Melee launcher\. Ready to play'
+key Down Down Down
+wait '"Settings, button"$'
+key Return
+wait '"Settings\. Graphics, tab, selected, 1 of 5\. Left and right to switch tabs"$'
+
+# Every tab, wrapping back to Graphics.
+key Right
+wait '"Audio & interface, tab, selected, 2 of 5\. Left and right to switch tabs"$'
+key Right
+wait '"Cheats, tab, selected, 3 of 5\. Left and right to switch tabs"$'
+key Right
+wait '"Controls, tab, selected, 4 of 5\. Left and right to switch tabs\. Text below, Down to read"$'
+key Right
+wait '"Online, tab, selected, 5 of 5\. Left and right to switch tabs"$'
+key Right
+wait '"Graphics, tab, selected, 1 of 5\. '
+
+# Vertical sync off and on again: the new value alone.
+key Down
+wait '"Display mode, Windowed, Enter to change\. Choose windowed or fullscreen\."$'
+key Down
+wait '"Vertical sync, On, Enter to change\. Synchronise presentation with your display\."$'
+key Return
+wait '"Off"$'
+key Return
+wait '"On"$'
+
+# Internal resolution, a slider: one step up and back.
+key Down
+wait '"Internal resolution, slider, Auto\. Left and right to adjust\. Auto follows the window size\."$'
+key Right
+wait '"1x"$'
+key Left
+wait '"Auto"$'
+
+# Controls opens on lines of text: Down reads them, then reaches Back; Up
+# reads them backwards, focus staying on Back, and Down wraps from Back to
+# the tab.
+key Up Up Up
+wait '"Graphics, tab, selected, 1 of 5\. '
+key Left Left
+wait '"Controls, tab, selected, 4 of 5\. '
+key Down
+wait '"Keyboard"$'
+key Down
+wait '"WASD, arrows Move"$'
+key Down Down Down Down Down Down Down
+wait '"IJKL C-stick"$'
+key Down
+wait '"Controller"$'
+key Down
+wait '"Remap a gamepad from the in-game menu: press BACK on the pad, or F1, then open Controls\. Controllers are only detected once the game is running\."$'
+key Down
+wait '"Back to launcher, button"$'
+key Up
+wait '"Remap a gamepad '
+key Up
+wait '"Controller"$'
+key Down
+wait '"Remap a gamepad '
+key Down
+wait '"Back to launcher, button"$'
+key Down
+wait '"Controls, tab, selected, 4 of 5\. '
+
+# Online: Player name, typed into with the cursor at the field's start. #
+# is refused, letters go in as capitals, and a full field says so;
+# Backspace puts PLAYER back.
+key Right
+wait '"Online, tab, selected, 5 of 5\. '
+key Down
+wait '"Player name, edit, PLAYER\. 1.8 letters or digits\. Changes apply to the next search\."$'
+type "#ab1"
+wait '"# not allowed"$'
+wait '"APLAYER"$'
+wait '"ABPLAYER"$'
+wait '"Full, 8 characters at most"$'
+key Backspace
+wait '"APLAYER"$'
+key Backspace
+wait '"PLAYER"$'
+
+# The lines between Online's controls, read in their turn.
+key Down
+wait '"Your connect code"$'
+key Down
+wait '"PLAYER#\w+"$'
+key Down
+wait "\"Friend's connect code, edit, blank\. Leave blank to host your code\. Open Online, Direct Connect in-game\.\"$"
+key Down
+wait '"Input delay, Auto, Enter to change\. Automatic adapts to your connection\. Changes apply next match\."$'
+key Down
+wait '"Internet discovery can take a few minutes\. Some home networks cannot connect without a relay\."$'
+key Down
+wait '"Back to launcher, button"$'
+
+# Tab and Shift+Tab follow the same order.
+key Shift+Tab
+wait '"Internet discovery can take '
+key Tab
+wait '"Back to launcher, button"$'
+
+# Back to Home on the button, then again with Escape.
+key Return
+wait '"Settings, button"$'
+key Return
+wait '"Settings\. Online, tab, selected, 5 of 5\. '
+key Escape
+wait '"Settings, button"$'

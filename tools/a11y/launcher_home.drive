@@ -1,0 +1,49 @@
+# The launcher's Home page: the opening once the start-up disc check is over,
+# every button, a status line (a disc verification started and canceled),
+# and Play Melee, ending on the game's first scene. Waits on each
+# announcement, so a missing or changed line fails the run. Run in launcher
+# mode, with accessibility on but muted (as run_level.py runs it):
+#   python tools/a11y/drive.py --launcher --muted tools/a11y/launcher_home.drive
+# --launcher remembers the disc and turns the update check off, so the
+# opening is the same on every run; drive.py refuses to press Choose disc,
+# Discord or the update banner's buttons, which would leave the window.
+
+# The opening waits for the disc check's result and for focus on Play.
+wait '"Melee launcher\. Ready to play, Disc not verified\. Play Melee, button\. Disc: melee\.iso, Super Smash Bros\. Melee, USA, Revision 2 \(1\.02\)"$'
+
+# Down walks the buttons and wraps to Play.
+key Down
+wait '"Choose disc, button"$'
+key Down
+wait '"Verify disc, button"$'
+key Down
+wait '"Settings, button"$'
+key Down
+wait '"Discord, button"$'
+key Down
+wait '"Quit, button"$'
+key Down
+wait '"Play Melee, button\. Disc: melee\.iso, '
+key Up
+wait '"Quit, button"$'
+key Down
+wait '"Play Melee, button\. '
+
+# Verify disc turns into Cancel verification while the disc is read; the
+# cancel comes back in the status line. Hashing the disc takes seconds, so
+# the second press lands well before it ends.
+key Down Down
+wait '"Verify disc, button"$'
+key Return
+wait '"Cancel verification"$'
+key Return
+wait '"Verify disc"$'
+wait '"Verification canceled\."$' 10
+
+# Play starts the game. With shaders still compiling it says so and starts
+# by itself once they are built.
+key Up Up
+wait '"Play Melee, button\. '
+key Return
+wait "boot scene: state 0 scene 0$" 120
+wait '"Title screen\. Press Start\."$'

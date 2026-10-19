@@ -61,6 +61,28 @@ dpup dpdown dpleft dpright. Pushed keys reach the game's own pad only with
 the window focused (--focus), as real keys do. A base port build has no
 event pipe, so these steps fail on it.
 
+--launcher starts the game on the launcher instead of the disc: the run's
+settings folder gets a launcher.cfg that names the disc (--disc) and turns
+the update check off, so the launcher opens on Home with the disc
+remembered and says the same whatever the network and the latest release.
+Its Play Melee starts the game as a player's would.
+
+A key or gamepad step that would press the focused control (Return, Space,
+a, start) is refused while the last focus announcement names a control that
+leaves the game's window, and in launcher mode also before any has said
+where focus is: Choose disc opens the Windows file dialog, which takes
+focus and cuts off the maintainer's screen reader; the Discord buttons and
+the update banner open the browser; Display mode goes fullscreen.
+
+Speech is off by default (MELEE_A11Y=0): every announcement is still
+logged, marked (off), but features that take keys for speech leave them
+alone, as the launcher's line reading does. --muted keeps accessibility on
+as for a player and only keeps speech from the screen reader
+(MELEE_A11Y_SCREEN_READER=0, announcements marked (muted)); the cue engine
+follows the switch and opens too, unless MELEE_A11Y_CUES=0. The launcher's
+scripts run with it. --speech speaks aloud, over the maintainer's screen
+reader.
+
 Each run starts from default settings in a settings folder of its own,
 --out's path plus .settings (build/drive/last.log.settings), named to the
 game by MELEE_USER_DIR and emptied before the game starts: launcher.cfg,
@@ -184,6 +206,33 @@ def fresh_settings_dir(out):
     shutil.rmtree(path, ignore_errors=True)
     os.makedirs(path)
     return path
+
+
+def write_launcher_cfg(folder, disc):
+    """A launcher.cfg in the run's settings folder naming the disc, in
+    launcher_data.cpp's format (strings as std::quoted writes them), so the
+    launcher opens on Home with the disc remembered. check_updates 0 keeps
+    the update banner away: with it on, what Home says at start would
+    follow the network and the base port's latest release."""
+    quoted = '"' + disc.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    with open(os.path.join(folder, "launcher.cfg"), "w", encoding="utf-8") as f:
+        f.write(f"disc {quoted}\ncheck_updates 0\n")
+
+
+# Presses that act on the focused control of an RmlUi page, by the names the
+# key and gamepad steps take.
+ACTIVATING = {("key", "return"), ("key", "keypad enter"), ("key", "space"), ("gamepad", "a"),
+              ("gamepad", "start")}
+# A speak line that says where focus went: a control's announcement, alone
+# or inside the launcher's opening. Value changes and lines of text do not.
+FOCUS_LINE = re.compile(r", (button|tab|edit|slider)\b|, Enter to change\b")
+# Launcher controls a driven run must never press: Choose disc opens the
+# Windows file dialog, which takes focus and cuts off the maintainer's screen
+# reader mid-sentence; Discord (Home's, and Join Discord on Settings) and the
+# update banner's buttons open the browser, which does too; Display mode
+# switches to fullscreen.
+REFUSED_FOCUS = re.compile(r"\b(Choose disc|Discord|Open release page|View Release|Update Now), button"
+                           r"|\bDisplay mode, \w+, Enter to change")
 
 
 def cache_dir(slot):
@@ -545,7 +594,9 @@ class Game:
             # Empty would mean no cue settings file at all; unset puts it in
             # the run's settings folder.
             del full_env["MELEE_A11Y_CUE_SETTINGS"]
-        if not args.speech:
+        if getattr(args, "muted", False):
+            full_env["MELEE_A11Y_SCREEN_READER"] = "0"
+        elif not args.speech:
             full_env["MELEE_A11Y"] = "0"
         if not args.sound:
             full_env["SDL_AUDIO_DRIVER"] = "dummy"
@@ -554,16 +605,21 @@ class Game:
         full_env.update(env or {})
         exe = exe or os.path.join(REPO, "build", "melee.exe")
         disc = os.path.join(REPO, args.disc)
+        self.launcher = getattr(args, "launcher", False)
 
         os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
         # The settings folder of this run alone (a base port build without
         # MELEE_USER_DIR ignores it and takes the maintainer's).
         self.settings_dir = fresh_settings_dir(out)
         full_env["MELEE_USER_DIR"] = self.settings_dir
+        if self.launcher:
+            write_launcher_cfg(self.settings_dir, disc)
         self.pipe = Pipe(pipe_name, "key pipe")
         self.event_pipe = Pipe(event_pipe_name, "event pipe", " (a base port build has none)")
         self.out_file = open(out, "w", encoding="utf-8")
-        self.proc = subprocess.Popen([exe, "--no-card", disc], cwd=REPO, env=full_env,
+        # No disc argument opens the launcher (src/pc/main.c).
+        command = [exe, "--no-card"] + ([] if self.launcher else [disc])
+        self.proc = subprocess.Popen(command, cwd=REPO, env=full_env,
                                      stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.output = Output(self.proc, self.out_file, None if args.all else DEFAULT_SHOW,
                              f"{name}| " if name else "")
@@ -591,6 +647,22 @@ class Game:
         line = self.output.lines[i]
         if not line.endswith(" taken"):
             raise ScriptError(f"{request!r}: {line[answer.search(line).end():]}")
+
+    def check_press(self, cmd, name):
+        """Refuses a press that would act on a control the run must leave
+        alone (REFUSED_FOCUS), judged by where the last focus announcement
+        put focus. In launcher mode, also one made before any says where."""
+        if (cmd, name.lower()) not in ACTIVATING:
+            return
+        with self.output.cond:
+            spoken = [line for line in self.output.lines if SPEECH in line and FOCUS_LINE.search(line)]
+        if not spoken:
+            if self.launcher:
+                raise ScriptError(f"{cmd} {name} refused: no speech has said where the launcher's focus is")
+            return
+        if REFUSED_FOCUS.search(spoken[-1]):
+            raise ScriptError(f"{cmd} {name} refused: it would press the control focused by {spoken[-1]!r}, "
+                              "which leaves the game's window (see REFUSED_FOCUS in drive.py)")
 
     def matched(self, rx, i):
         """Line i matched rx: keeps its named groups."""
@@ -644,6 +716,7 @@ class Game:
         elif cmd in ("key", "gamepad") and rest:
             self.cursor = output.mark()
             for name in rest:
+                self.check_press(cmd, name)
                 self.push(f"{cmd} {name}")
         elif cmd == "type" and len(rest) == 1:
             self.cursor = output.mark()
@@ -694,9 +767,15 @@ def main():
     ap.add_argument("-c", dest="inline", help="script text instead of a file")
     ap.add_argument("--scene", default="title", help="MELEE_BOOT_SCENE (default title)")
     ap.add_argument("--disc", default="melee.iso", help="disc image, relative to the repo root")
+    ap.add_argument("--launcher", action="store_true",
+                    help="open the launcher, with the disc remembered, instead of starting the disc")
     ap.add_argument("--out", default=os.path.join(REPO, "build", "drive", "last.log"),
                     help="full output transcript (default build/drive/last.log)")
     ap.add_argument("--speech", action="store_true", help="speak through the screen reader (off by default)")
+    ap.add_argument("--muted", action="store_true",
+                    help="accessibility on as with --speech, but nothing reaches the screen reader "
+                         "(MELEE_A11Y_SCREEN_READER=0): for runs that check what the switch changes, "
+                         "such as the launcher's line reading")
     ap.add_argument("--sound", action="store_true", help="play the game's audio (silent by default)")
     ap.add_argument("--focus", action="store_true",
                     help="bring the game window to the front once shown, e.g. for a sighted observer "
@@ -713,6 +792,8 @@ def main():
     sys.stdout.reconfigure(errors="replace")
     if sys.platform != "win32":
         ap.error("Windows only; on Linux use MELEE_KEY_FIFO with a mkfifo pipe")
+    if args.speech and args.muted:
+        ap.error("--speech and --muted contradict each other")
     if (args.script is None) == (args.inline is None):
         ap.error("give a script file or -c TEXT, not both")
     if args.inline is not None:

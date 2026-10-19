@@ -14,7 +14,7 @@ the failure lines of each run that failed. Exits 1 if any run failed.
 Arguments are groups or script names, run in that order, a group's runs
 side by side:
 
-  menus   the seventeen menu drive scripts
+  menus   the nineteen menu drive scripts, the launcher's two among them
   online  css_net.drive at delay 0, delay 10 and over a 100 ms slow link,
           and lan_lobby.drive (--lan)
   NAME    an online run by its name (css_net-delay0, css_net-delay10,
@@ -43,7 +43,11 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 
 MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens", "sss_steps",
          "sss_skipped", "sss_glide_pick", "leaf_screens", "sss_hover", "css_classic", "css_training",
-         "css_slots", "css_portraits", "css_steps", "results", "training_menu"]
+         "css_slots", "css_portraits", "css_steps", "results", "training_menu", "launcher_home",
+         "launcher_settings"]
+# drive.py options a script needs: the launcher's scripts open the launcher,
+# with accessibility on but muted, since its line reading needs the switch on.
+ARGS = {"launcher_home": ["--launcher", "--muted"], "launcher_settings": ["--launcher", "--muted"]}
 # Settings a script needs from the environment.
 ENV = {"results": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE_DEBUG_VS_STAGE": "31"},
        "match_opponent": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
@@ -99,8 +103,8 @@ def drive_run(name, out_dir):
     script = os.path.join(HERE, name + ".drive")
     if not os.path.isfile(script):
         sys.exit(f"no script {script}")
-    return Run(name, [sys.executable, os.path.join(HERE, "drive.py"), script, "--out", out], out, 1,
-               ENV.get(name))
+    return Run(name, [sys.executable, os.path.join(HERE, "drive.py"), *ARGS.get(name, []), script, "--out", out],
+               out, 1, ENV.get(name))
 
 
 def net_run(name, out_dir, base_b):
