@@ -25,7 +25,8 @@ constexpr std::string_view kActionButtons[] = {"performance", "check-now", "sett
  * reading, plus Home, the update banner, Back and the override table. */
 class LauncherReader final : public PageReader {
 public:
-    LauncherReader(Rml::ElementDocument& document, Speech& speech) : PageReader(document, speech) {}
+    LauncherReader(Rml::ElementDocument& document, Speech& speech)
+        : PageReader(document, speech, kActionButtons) {}
 
     void frame(Clock::time_point now) {
         Rml::Element* focus = focused_control();
@@ -74,16 +75,6 @@ public:
     }
 
 private:
-    Control describe(const Rml::Element& element) const override {
-        Control control = describe_control(element);
-        for (const std::string_view id : kActionButtons) {
-            if (element.GetId() == id) {
-                make_action(control);
-            }
-        }
-        return control;
-    }
-
     /* Play is the only way to hear the disc card, which focus never reaches. */
     void add_to_focus_text(const Rml::Element& focus, std::string& text) const override {
         if (focus.GetId() != "play") {

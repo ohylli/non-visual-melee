@@ -25,7 +25,8 @@ constexpr std::string_view kActionButtons[] = {"port-check-update", "bind-reset"
  * the game's start to its end; it speaks only while the menu is open. */
 class PortMenuReader final : public PageReader {
 public:
-    PortMenuReader(Rml::ElementDocument& document, Speech& speech) : PageReader(document, speech) {}
+    PortMenuReader(Rml::ElementDocument& document, Speech& speech)
+        : PageReader(document, speech, kActionButtons) {}
 
     void frame(bool open, Clock::time_point now) {
         if (!open) {
@@ -35,8 +36,10 @@ public:
                 /* Interrupts, so leftover menu speech stops as the game
                  * resumes. */
                 say("Back to game", Mode::interrupt);
+                /* Out of view until the next opening, which takes them
+                 * afresh; nothing to read while closed. */
+                observe_regions(false, now);
             }
-            observe_regions(false, now);
             return;
         }
         Rml::Element* focus = focused_control();
@@ -74,16 +77,6 @@ public:
     }
 
 private:
-    Control describe(const Rml::Element& element) const override {
-        Control control = describe_control(element);
-        for (const std::string_view id : kActionButtons) {
-            if (element.GetId() == id) {
-                make_action(control);
-            }
-        }
-        return control;
-    }
-
     /* "PC settings. <the focused tab's announcement>", interrupting: the menu
      * cuts into whatever the game was saying. The menu opens on the tab used
      * last. */
@@ -109,7 +102,7 @@ private:
     /* The status line and the update check's result, in view while the menu
      * is open on any tab, so a check's result is heard after the player has
      * moved on. "Saved.", which follows every change, is never spoken, nor
-     * what the regions show as the menu opens or while it is closed. */
+     * what the regions show as the menu opens. */
     SpokenOnce observe_regions(bool in_view, Clock::time_point now) {
         SpokenOnce spoken;
         for (WatchedText* watch : {&m_status, &m_update_status}) {

@@ -128,7 +128,7 @@ void CueSystem::set_master_volume(float volume) {
     m_engine->set_master_volume(volume);
 }
 
-void CueSystem::port_menu_open() {
+void CueSystem::silence_for_port_menu() {
     m_match_cues->silence();
 }
 

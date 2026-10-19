@@ -384,9 +384,9 @@ void the_opponent_cue_stops_while_knocked_out_and_comes_back() {
     assert(count_logged_starting("[a11y] cue your position start") == 1);
 }
 
-/* The port menu opened mid-match (CueSystem::port_menu_open, which the tests
- * cannot reach: it opens a device): every voice stops with its ramp and the
- * mix falls silent; the next tick starts the cues again from its snapshot
+/* The port menu opened mid-match (CueSystem::silence_for_port_menu, which
+ * the tests cannot reach: it opens a device): every voice stops with its ramp
+ * and the mix falls silent; the next tick starts the cues again from its snapshot
  * alone, so a gap warning holding on when the menu opened stays off. */
 void silence_stops_every_voice_and_the_next_tick_starts_afresh() {
     Fixture f;

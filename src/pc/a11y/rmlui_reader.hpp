@@ -14,6 +14,7 @@
 #include <chrono>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -68,8 +69,8 @@ bool is_control(const Rml::Element& element);
 Control describe_control(const Rml::Element& element);
 
 /* A button in a setting row that acts rather than cycles ("Performance
- * preset", "Apply"). The page does not mark them, so the caller's override
- * table does: its name becomes "Performance preset: Apply". */
+ * preset", "Apply"). The page does not mark them, so each page's reader
+ * lists them by id: its name becomes "Performance preset: Apply". */
 void make_action(Control& control);
 
 /* A text field's value as spoken: "blank" when it is empty. */
@@ -196,7 +197,10 @@ private:
  * calls these from its frame and step. */
 class PageReader {
 public:
-    PageReader(Rml::ElementDocument& document, Speech& speech);
+    /* `action_buttons`: the ids of the page's setting-row buttons that act
+     * rather than cycle (make_action), a table that outlives the reader. */
+    PageReader(Rml::ElementDocument& document, Speech& speech,
+        std::span<const std::string_view> action_buttons);
     virtual ~PageReader() = default;
     PageReader(const PageReader&) = delete;
     PageReader& operator=(const PageReader&) = delete;
@@ -206,9 +210,6 @@ public:
     void typed(const Rml::Event& event);
 
 protected:
-    /* A control as the page's reader hears it: describe_control, then the
-     * page's own overrides. */
-    virtual Control describe(const Rml::Element& element) const;
     /* What the page adds to a control's focus announcement, if anything. */
     virtual void add_to_focus_text(const Rml::Element& focus, std::string& text) const;
 
@@ -242,11 +243,15 @@ protected:
     void say(std::string_view text, Mode mode);
 
 private:
+    /* A control as the page's reader hears it: describe_control, with the
+     * page's action buttons made actions. */
+    Control describe(const Rml::Element& element) const;
     std::string left_field_text() const;
     void follow_value(const Rml::Element& focus, const Control& control);
 
     Rml::ElementDocument& m_document;
     Speech& m_speech;
+    std::span<const std::string_view> m_action_buttons;
     Rml::ObserverPtr<Rml::Element> m_focus;
     std::string m_focus_value;
     FieldEcho m_field; /* follows the focused control as a text field */
@@ -266,6 +271,9 @@ class ReaderListeners {
 public:
     void attach(PageReader& reader);
     void detach();
+    /* Drops the reader without touching its document, which RmlUi has
+     * already destroyed. */
+    void forget() { m_typed_text.reader = nullptr; }
 
 private:
     class TabKeys final : public Rml::EventListener {
@@ -308,7 +316,10 @@ public:
     }
 
     /* By now RmlUi has unloaded every document, and with it the reader. */
-    void OnShutdown() override { m_reader.reset(); }
+    void OnShutdown() override {
+        m_listeners.forget();
+        m_reader.reset();
+    }
 
     /* Registers the plugin; speech must outlive the matching stop. Call
      * before or after RmlUi starts. */

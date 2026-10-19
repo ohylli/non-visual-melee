@@ -186,7 +186,7 @@ extern "C" void pc_a11y_port_menu_frame(bool open) {
     if (open && s_cue_system != nullptr) {
         /* Before the gate: stopping cues is never wrong, and before the
          * menu's opening is spoken. */
-        s_cue_system->port_menu_open();
+        s_cue_system->silence_for_port_menu();
     }
     if (!game_hook_may_speak()) {
         return;

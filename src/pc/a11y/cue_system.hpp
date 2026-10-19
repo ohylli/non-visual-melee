@@ -45,7 +45,7 @@ public:
      * silent. The game stands still under the menu, so no tick runs to stop
      * them, and the voices would sound on as the last tick left them. The
      * first tick after it closes starts them again. */
-    void port_menu_open();
+    void silence_for_port_menu();
 
 private:
     explicit CueSystem(Speech& speech);

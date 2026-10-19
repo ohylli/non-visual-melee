@@ -562,8 +562,9 @@ void SpokenOnce::add(std::optional<std::string> text) {
     }
 }
 
-PageReader::PageReader(Rml::ElementDocument& document, Speech& speech)
-    : m_document(document), m_speech(speech) {}
+PageReader::PageReader(Rml::ElementDocument& document, Speech& speech,
+    std::span<const std::string_view> action_buttons)
+    : m_document(document), m_speech(speech), m_action_buttons(action_buttons) {}
 
 void PageReader::typed(const Rml::Event& event) {
     if (event.GetTargetElement() == m_focus.get()) {
@@ -572,7 +573,13 @@ void PageReader::typed(const Rml::Event& event) {
 }
 
 Control PageReader::describe(const Rml::Element& element) const {
-    return describe_control(element);
+    Control control = describe_control(element);
+    for (const std::string_view id : m_action_buttons) {
+        if (element.GetId() == id) {
+            make_action(control);
+        }
+    }
+    return control;
 }
 
 void PageReader::add_to_focus_text(const Rml::Element&, std::string&) const {}

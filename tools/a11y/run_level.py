@@ -14,7 +14,7 @@ the failure lines of each run that failed. Exits 1 if any run failed.
 Arguments are groups or script names, run in that order, a group's runs
 side by side:
 
-  menus   the twenty menu drive scripts, the launcher's two and the port
+  menus   the menu drive scripts (MENUS), the launcher's two and the port
           menu's among them
   online  css_net.drive at delay 0, delay 10 and over a 100 ms slow link,
           and lan_lobby.drive (--lan)

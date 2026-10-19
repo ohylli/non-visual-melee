@@ -5,11 +5,13 @@
  * pc_a11y_launcher_frame. docs/a11y/rmlui-screens.md explains the mechanism,
  * docs/adr/0002-launcher-speech-reads-the-page.md why. */
 #pragma once
-#include "rmlui_reader.hpp"
+#include <chrono>
 
 namespace a11y {
 
 class Speech;
+
+using Clock = std::chrono::steady_clock;
 
 /* Registers the plugin; speech must outlive the matching stop. Call before or
  * after RmlUi starts. */
