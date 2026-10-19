@@ -1,6 +1,6 @@
 # 07 Play test by ear
 
-Status: ready-for-human
+Status: resolved (2026-10-19)
 Type: task
 Blocked by: 06
 
@@ -28,3 +28,7 @@ Left for the maintainer, from the review of issues 04 to 06; worth listening for
 - **"Backend set to ... (restart required)." is never heard.** `PortMenu::apply("backend")` writes it, then falls through to `saved()`, which writes "Saved." over it in the same frame (`src/pc/launcher.cpp`), so the player hears the new backend but not that a restart is needed; the same for "Backend set by MELEE_BACKEND environment.". A base port bug. Options: a fix in its own unmarked commit (return after the label once the setting is saved), or a report upstream. Recommendation: the fix, since it helps every player.
 - **An update check's result can go unheard.** Check now writes "Checking for updates...", and the base port writes the result only at the next refresh. If the player closes and reopens the menu first, the refresh comes with the opening, which takes both regions silently, so the result is only in the Check for updates row's help text. Options: queue the result after the opening when it changed while the menu was closed, or leave it. Recommendation: queue it.
 - Already in issue 04's findings: Escape in an Online field closes nothing and says nothing, and a port change says only "Port 2", not the controller's name.
+
+### 2026-10-19, play test (maintainer)
+
+Played by ear with NVDA: no problems found. The review's remarks above are acceptable for now and stay open without issues of their own. The unheard "Backend set to ... (restart required)." matters little, since the backend row's help text already says a change needs a restart.
