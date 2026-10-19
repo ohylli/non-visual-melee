@@ -89,7 +89,7 @@ A menu belonging to the original game, such as the main menu, character select o
 _Avoid_: Game menu, in-game menu, original menu
 
 **Port menu**:
-The settings overlay added by the base port, opened with F1 while the game runs.
+The settings overlay added by the base port, opened with F1 or a controller's Back button while the game runs. The game stands still until it closes.
 _Avoid_: Settings menu, overlay, F1 menu, pause menu
 
 **Launcher**:
