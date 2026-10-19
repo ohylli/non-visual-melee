@@ -124,9 +124,11 @@ BUTTONS = {
 }
 
 DEFAULT_SHOW = ("[a11y]", "boot scene")
-# Seconds an event step waits for the game's answer; the game itself gives
-# up on an event left in SDL's queue after 10.
-EVENT_TIMEOUT = 15
+# Seconds an event step waits for the game's answer: for each event of the
+# request (the game gives up on one left in SDL's queue after 10), and once
+# more for the first request (the game waits up to 30 for SDL to start).
+EVENT_TIMEOUT_EACH = 11
+EVENT_TIMEOUT_START = 30
 UNTIL_SETTLE = 1.5  # seconds a "press ... until" waits for its text before pressing again, by default
 SPEECH = "] speak "  # in every announcement's log line
 PAD_RE = re.compile(r"pad: btn ([0-9a-f]+) stick (-?\d+),(-?\d+) sub (-?\d+),(-?\d+) trig (\d+),(\d+)")
@@ -189,8 +191,8 @@ class ScriptError(Exception):
     pass
 
 
-# The game's shader caches, SQLite files in its settings folder unless
-# MELEE_CACHE_DIR moves them. Two games running at once cannot share them:
+# The game's shader caches, SQLite files in the per-user %APPDATA%\melee-pc
+# unless MELEE_CACHE_DIR moves them (MELEE_USER_DIR does not). Two games running at once cannot share them:
 # the second logs "database is locked" and runs without its GPU cache.
 CACHE_FILES = ("pipeline_cache.db", "dawn_cache.db")
 
@@ -633,15 +635,17 @@ class Game:
         if self.output.wait_for(self.output.mark(), pad_pressed(keys), 5 + hold / 1000) is None:
             self.note("warning: no pad change seen for that press")
 
-    def push(self, request):
-        """Send one request down the event pipe ("key F1") and wait for the
-        game's answer to it, which says the game's loop took its events."""
+    def push(self, request, events):
+        """Send one request down the event pipe ("key F1"), which the game
+        pushes as that many events, and wait for the game's answer to it,
+        which says the game's loop took them."""
         self.events_sent += 1
         n = self.events_sent
         answer = re.compile(rf"\[a11y\] event {n}: ")
         start = self.output.mark()
         self.event_pipe.send(f"{n} {request}", self.args.timeout, self.proc)
-        i = self.output.wait_for(start, answer.search, EVENT_TIMEOUT)
+        timeout = EVENT_TIMEOUT_EACH * events + (EVENT_TIMEOUT_START if n == 1 else 0)
+        i = self.output.wait_for(start, answer.search, timeout)
         if i is None:
             raise ScriptError(f"no answer to {request!r} from the event pipe")
         line = self.output.lines[i]
@@ -651,8 +655,12 @@ class Game:
     def check_press(self, cmd, name):
         """Refuses a press that would act on a control the run must leave
         alone (REFUSED_FOCUS), judged by where the last focus announcement
-        put focus. In launcher mode, also one made before any says where."""
-        if (cmd, name.lower()) not in ACTIVATING:
+        put focus. In launcher mode, also one made before any says where.
+        The last one is current: a page speaks a focus move at the end of
+        the turn that took the press, and the press's release, which its
+        taken answer waits for, is taken only in a later turn."""
+        # Modifiers do not stop a press acting on the focused control.
+        if (cmd, name.lower().split("+")[-1]) not in ACTIVATING:
             return
         with self.output.cond:
             spoken = [line for line in self.output.lines if SPEECH in line and FOCUS_LINE.search(line)]
@@ -717,10 +725,10 @@ class Game:
             self.cursor = output.mark()
             for name in rest:
                 self.check_press(cmd, name)
-                self.push(f"{cmd} {name}")
+                self.push(f"{cmd} {name}", 2)  # a press and its release
         elif cmd == "type" and len(rest) == 1:
             self.cursor = output.mark()
-            self.push(f"text {rest[0]}")
+            self.push(f"text {rest[0]}", len(rest[0]))  # one event a character
         elif cmd == "sleep" and len(rest) == 1:
             time.sleep(float(rest[0]))
         elif cmd == "shot" and len(rest) == 1:

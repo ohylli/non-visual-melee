@@ -54,7 +54,8 @@ bool same_word(std::string_view a, std::string_view b) {
     return true;
 }
 
-/* A press and its release, each a copy of event with type and down set. */
+/* A press and its release, each a copy of event with its type set; the
+ * caller marks the press as down, a field of each event kind's own. */
 void press(PipeRequest& r, SDL_Event event, SDL_EventType down_type, SDL_EventType up_type) {
     PipeEvent e;
     e.event = event;
@@ -151,13 +152,18 @@ Uint32 s_marker = 0;
 /* Every typed character, kept for the run: SDL copies a pushed event but not
  * the text it points at, and aurora hands the raw event on to the loop after
  * routing it, so the text must outlive the turn that took it. A few bytes a
- * character, in driven runs only. */
-std::deque<std::string> s_texts;
+ * character, in driven runs only. Never freed: the game may exit while the
+ * thread pushes, and a destructor would free the text under it. */
+std::deque<std::string>& s_texts = *new std::deque<std::string>;
 
-/* Whether the marker numbered seq is still in SDL's queue. */
+/* Whether the marker numbered seq is still in SDL's queue, or the queue
+ * cannot be read (SDL shutting down): not taken either way. */
 bool marker_queued(Sint32 seq) {
     SDL_Event queued[32];
     const int n = SDL_PeepEvents(queued, 32, SDL_PEEKEVENT, s_marker, s_marker);
+    if (n < 0) {
+        return true;
+    }
     for (int i = 0; i < n; ++i) {
         if (queued[i].user.code == seq) {
             return true;
@@ -207,6 +213,9 @@ std::string push(const PipeEvent& e) {
     const auto deadline = steady_clock::now() + kTakenTimeout;
     while (marker_queued(seq)) {
         if (steady_clock::now() > deadline) {
+            /* Left behind, the marker would crowd later ones out of the
+             * peek; it is the only one in flight, so every marker goes. */
+            SDL_FlushEvent(s_marker);
             return "not taken in " + std::to_string(kTakenTimeout.count() / 1000) + " s";
         }
         std::this_thread::sleep_for(milliseconds(2));
@@ -216,7 +225,7 @@ std::string push(const PipeEvent& e) {
 }
 
 void serve(const PipeRequest& r) {
-    std::string failure = ready();
+    std::string failure;
     for (std::size_t i = 0; failure.empty() && i < r.events.size(); ++i) {
         failure = push(r.events[i]);
     }
@@ -227,25 +236,42 @@ void serve(const PipeRequest& r) {
     }
 }
 
+/* The next line of f, however long, without its line ending; false at the
+ * end of the file. */
+bool read_line(FILE* f, std::string& line) {
+    line.clear();
+    int c;
+    while ((c = std::fgetc(f)) != EOF && c != '\n') {
+        line.push_back(static_cast<char>(c));
+    }
+    if (c == EOF && line.empty()) {
+        return false;
+    }
+    if (!line.empty() && line.back() == '\r') {
+        line.pop_back();
+    }
+    return true;
+}
+
 /* Reads the pipe a line at a time, as keyboard.c's MELEE_KEY_FIFO thread
  * does, and reopens it when the writer goes away. */
 void pipe_thread(std::string path) {
-    char line[4096];
+    std::string line;
     for (;;) {
         FILE* f = std::fopen(path.c_str(), "r"); /* waits for a writer */
         if (f == nullptr) {
             std::this_thread::sleep_for(milliseconds(200));
             continue;
         }
-        while (std::fgets(line, sizeof line, f) != nullptr) {
+        while (read_line(f, line)) {
+            /* SDL first: parsing a key reads SDL's keymap. */
+            const std::string not_ready = ready();
             const PipeRequest r = parse_pipe_line(line);
             if (r.id.empty()) {
-                std::string_view shown = line;
-                while (!shown.empty() && (shown.back() == '\n' || shown.back() == '\r')) {
-                    shown.remove_suffix(1);
-                }
-                pc_log_line("[a11y] event pipe: line not understood: %.*s",
-                    static_cast<int>(shown.size()), shown.data());
+                pc_log_line("[a11y] event pipe: line not understood: %s", line.c_str());
+            } else if (!not_ready.empty()) {
+                pc_log_line(
+                    "[a11y] event %s: %s %s", r.id.c_str(), r.what.c_str(), not_ready.c_str());
             } else if (!r.error.empty()) {
                 pc_log_line("[a11y] event %s: refused: %s", r.id.c_str(), r.error.c_str());
             } else {
