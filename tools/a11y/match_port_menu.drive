@@ -1,0 +1,53 @@
+# The port menu opened mid-match silences the cues: in the debug VS match
+# on Final Destination, Link (player 1) against Mario (player 2), a human
+# slot with no input who stands still. F1 stops every sounding voice just
+# before the menu's opening, nothing starts while it is open, and after
+# "Back to game" the first tick starts the cues again from the match as it
+# stands. Then Link runs off the left edge, the menu opens again over the
+# gap and B closes it, and the gap warning starts again since he still
+# hangs over the gap.
+# Run from Git Bash with the debug match switches, cues on, and accessibility
+# on but muted, as run_level.py runs it:
+#   MELEE_DEBUG_VS=1 MELEE_DEBUG_VS_STOCKS=2 MELEE_A11Y_CUES=1 \
+#     python tools/a11y/drive.py --muted tools/a11y/match_port_menu.drive
+# drive.py cannot fail on a line too many: run_level.py fails the run on a
+# cue start or stop logged between an opening and its "Back to game".
+
+# Start on the title screen goes straight into the debug match.
+wait "state 0 scene 0$"
+press Start until "boot scene: state \d+ scene 2$"
+
+# Both position cues start at GO, Link standing at x = -60.
+wait 'cue your position start pan -0\.35 pitch 1\.07 ' 60
+wait 'cue opponent position start '
+sleep 1
+
+# F1: each voice stops, then the opening, on the same frame.
+key F1
+wait 'cue your position stop '
+wait 'cue opponent position stop '
+wait '"PC settings\. Graphics, tab, selected, 1 of 5\. Left and right to switch tabs"$'
+sleep 1.5
+
+# Escape: "Back to game", then the first tick starts both cues again where
+# Link still stands.
+key Escape
+wait '"Back to game"$'
+wait 'cue your position start pan -0\.35 pitch 1\.07 '
+wait 'cue opponent position start '
+sleep 1
+
+# A dash off the left edge: the gap warning starts past it.
+press Left 450
+wait 'cue gap start pan 0\.00 pitch 1\.00 gain 1\.00$' 5
+
+# F1 over the gap stops it too; the gamepad's B closes the menu, and the gap
+# warning starts again, Link still over the gap.
+key F1
+wait 'cue gap stop '
+wait '"PC settings\. Graphics, tab, selected, 1 of 5\. '
+sleep 1.5
+gamepad b
+wait '"Back to game"$'
+wait 'cue gap start pan 0\.00 pitch 1\.00 gain 1\.00$'
+sleep 0.5

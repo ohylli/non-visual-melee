@@ -14,7 +14,8 @@ the failure lines of each run that failed. Exits 1 if any run failed.
 Arguments are groups or script names, run in that order, a group's runs
 side by side:
 
-  menus   the nineteen menu drive scripts, the launcher's two among them
+  menus   the twenty menu drive scripts, the launcher's two and the port
+          menu's among them
   online  css_net.drive at delay 0, delay 10 and over a 100 ms slow link,
           and lan_lobby.drive (--lan)
   NAME    an online run by its name (css_net-delay0, css_net-delay10,
@@ -44,10 +45,12 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens", "sss_steps",
          "sss_skipped", "sss_glide_pick", "leaf_screens", "sss_hover", "css_classic", "css_training",
          "css_slots", "css_portraits", "css_steps", "results", "training_menu", "launcher_home",
-         "launcher_settings"]
+         "launcher_settings", "port_menu"]
 # drive.py options a script needs: the launcher's scripts open the launcher,
-# with accessibility on but muted, since its line reading needs the switch on.
-ARGS = {"launcher_home": ["--launcher", "--muted"], "launcher_settings": ["--launcher", "--muted"]}
+# with accessibility on but muted, since its line reading needs the switch on,
+# as the port menu's does.
+ARGS = {"launcher_home": ["--launcher", "--muted"], "launcher_settings": ["--launcher", "--muted"],
+        "port_menu": ["--muted"], "match_port_menu": ["--muted"]}
 # Settings a script needs from the environment.
 ENV = {"results": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE_DEBUG_VS_STAGE": "31"},
        "match_opponent": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
@@ -56,11 +59,22 @@ ENV = {"results": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE
                                  "MELEE_DEBUG_VS_STAGE": "31"},
        "match_ledge": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
        "match_ledge_battlefield": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2",
-                                   "MELEE_DEBUG_VS_STAGE": "31"}}
+                                   "MELEE_DEBUG_VS_STAGE": "31"},
+       "match_port_menu": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2", "MELEE_A11Y_CUES": "1"}}
 # Lines a passing run must not log; drive.py cannot fail on an absent line.
 ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           # The Training menu's hidden row, or a value the reader cannot name.
-          "training_menu": re.compile(r"\[a11y\] training menu row ")}
+          "training_menu": re.compile(r"\[a11y\] training menu row "),
+          # The port menu's status line says "Saved." after every change,
+          # and "Saved automatically." at rest; neither is ever spoken.
+          "port_menu": re.compile(r'"Saved')}
+# Lines a passing run must not log between an opening line and the closing
+# line after it: no cue starts or stops while the port menu is open, since
+# the game stands still then and the stops come just before the opening.
+PORT_MENU_CUES = (re.compile(r'\[a11y\] speak \w+.*: "PC settings\. '),
+                  re.compile(r'\[a11y\] speak \w+.*: "Back to game"$'),
+                  re.compile(r"\[a11y\] cue [a-z ]+ (start|stop) "), "while the port menu was open")
+BETWEEN = {"match_port_menu": PORT_MENU_CUES}
 # Lines a passing run logs exactly so many times, or a number of times in a
 # range, for the same reason: the gap warning starts and stops once, at the
 # edge, and never on the floor or the platforms.
@@ -165,8 +179,9 @@ def execute(run, slots, lock):
     run.failures = [line for line in lines if FAILURE.search(line)]
     absent = ABSENT.get(run.name)
     counts = COUNT.get(run.name, [])
+    between = BETWEEN.get(run.name)
     logged_lines = []
-    if absent or counts:
+    if absent or counts or between:
         try:
             with open(run.out, encoding="utf-8", errors="replace") as f:
                 logged_lines = [line.rstrip("\n") for line in f]
@@ -178,6 +193,17 @@ def execute(run, slots, lock):
         if found:
             run.code = run.code or 1
             run.failures += [f">> FAILED: logged {absent.pattern!r}: {line}" for line in found]
+    if between:
+        opening, closing, banned, when = between
+        inside = False
+        for line in logged_lines:
+            if opening.search(line):
+                inside = True
+            elif closing.search(line):
+                inside = False
+            elif inside and banned.search(line):
+                run.code = run.code or 1
+                run.failures.append(f">> FAILED: logged {banned.pattern!r} {when}: {line}")
     for pattern, times in counts:
         logged = sum(1 for line in logged_lines if pattern.search(line))
         if logged not in (times if isinstance(times, range) else (times,)):

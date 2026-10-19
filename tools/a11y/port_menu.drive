@@ -1,0 +1,141 @@
+# The port menu from the main menu: F1 opens it and says the opening, every
+# tab with its first control, a setting changed and back, a slider moved,
+# Restore defaults saying its status line, the lines between the controls
+# read on Controls and Online, typing in a text field with a refused
+# character, Escape closing it with "Back to game", then the gamepad's Back
+# opening it again on the tab used last and B closing it. Waits on each
+# announcement, so a missing or changed line fails the run. Run with
+# accessibility on but muted, which the line reading needs (as run_level.py
+# runs it):
+#   python tools/a11y/drive.py --muted tools/a11y/port_menu.drive
+# then grep -c '"Saved' build/drive/last.log prints 0: the status line's
+# "Saved." follows every change and is never spoken, a line too many that
+# drive.py cannot fail on and run_level.py checks itself.
+# The run's settings folder starts from the defaults, so Player name holds
+# PLAYER and the connect code is the run's own. Display mode is never
+# pressed: fullscreen would take the screen (drive.py refuses it). The
+# update check is left out: Check now asks the network, and its result is
+# written only at the next saved change or opening.
+
+# Title screen to the main menu (main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$" 20 0.3
+sleep 1
+
+# F1 opens the menu on Graphics, a fresh run's first tab.
+key F1
+wait '"PC settings\. Graphics, tab, selected, 1 of 5\. Left and right to switch tabs"$'
+
+# Vertical sync off and on again: the new value alone, "Saved." unsaid.
+key Down
+wait '"Display mode, Windowed, Enter to change"$'
+key Down
+wait '"Vertical sync, On, Enter to change"$'
+key Return
+wait '"Off"$'
+key Return
+wait '"On"$'
+
+# Every tab with its first control.
+key Up Up
+wait '"Graphics, tab, selected, 1 of 5\. Left and right to switch tabs"$'
+key Right
+wait '"Audio & interface, tab, selected, 2 of 5\. Left and right to switch tabs"$'
+
+# Master volume, a slider: a step down and back up.
+key Down
+wait '"Master volume, slider, 100%\. Left and right to adjust\. Left/right or drag to adjust\."$'
+key Left
+wait '"95%"$'
+key Right
+wait '"100%"$'
+
+key Up Right
+wait '"Cheats, tab, selected, 3 of 5\. Left and right to switch tabs"$'
+key Down
+wait '"Unlock everything, \w+, Enter to change\. Unlock all 26 characters, 11 secret stages, and All-Star mode\."$'
+key Up Right
+wait '"Controls, tab, selected, 4 of 5\. Left and right to switch tabs"$'
+key Down
+wait '"Controller, Port 1, Enter to change\. No controller in this port\."$'
+
+# Controls' keyboard lines, read backwards with Up: Up from the tab wraps
+# to Return to game, and Up from there reads the last line first, then on
+# to Restore defaults, whose status line news is spoken once it settles.
+key Up
+wait '"Controls, tab, selected, 4 of 5\. '
+key Up
+wait '"Return to game, button"$'
+key Up
+wait '"IJKL C-stick"$'
+key Up Up Up Up Up Up Up
+wait '"WASD, arrows Move"$'
+key Up
+wait '"Keyboard"$'
+key Up
+wait '"Restore defaults: Restore, button\. Put this port back on its default mapping\."$'
+key Return
+wait '"Defaults restored\."$'
+# Down reads the lines forwards again, to Return to game.
+key Down
+wait '"Keyboard"$'
+key Down
+wait '"WASD, arrows Move"$'
+key Down Down Down Down Down Down Down
+wait '"IJKL C-stick"$'
+key Down
+wait '"Return to game, button"$'
+
+# Online: Player name, typed into with the cursor at the field's start. #
+# is refused, letters go in as capitals, and a full field says so;
+# Backspace puts PLAYER back.
+key Down
+wait '"Controls, tab, selected, 4 of 5\. '
+key Right
+wait '"Online, tab, selected, 5 of 5\. Left and right to switch tabs"$'
+key Down
+wait '"Player name, edit, PLAYER\. 1.8 letters or digits\. Changes apply to the next search\."$'
+type "#ab1"
+wait '"# not allowed"$'
+wait '"APLAYER"$'
+wait '"ABPLAYER"$'
+wait '"Full, 8 characters at most"$'
+key Backspace
+wait '"APLAYER"$'
+key Backspace
+wait '"PLAYER"$'
+
+# The lines between Online's controls, read in their turn.
+key Down
+wait '"Your connect code"$'
+key Down
+wait '"PLAYER#\w+"$'
+key Down
+wait "\"Friend's connect code, edit, blank\. Leave blank to host your code\. Open Online, Direct Connect in-game\.\"$"
+key Down
+wait '"Input delay, Auto, Enter to change\. Automatic adapts to your connection\. Changes apply next match\."$'
+key Down
+wait '"Internet discovery can take a few minutes\. Some home networks cannot connect without a relay\."$'
+key Down
+wait '"Return to game, button"$'
+
+# Escape closes it (not from a text field, which keeps Escape), and the
+# game runs again.
+key Escape
+wait '"Back to game"$'
+press Down
+wait '"VS\. Mode\. Multiplayer battles!"$'
+
+# The gamepad's Back opens it on the tab used last; the shoulder changes
+# tab, the D-pad moves, and B closes it.
+gamepad back
+wait '"PC settings\. Online, tab, selected, 5 of 5\. Left and right to switch tabs"$'
+gamepad leftshoulder
+wait '"Controls, tab, selected, 4 of 5\. Left and right to switch tabs"$'
+gamepad dpdown
+wait '"Controller, Port 1, Enter to change\. '
+gamepad b
+wait '"Back to game"$'
+press Down
+wait '"Trophies\. View trophies\."$'
