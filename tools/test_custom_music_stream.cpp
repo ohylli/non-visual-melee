@@ -15,6 +15,10 @@ extern "C" float pc_get_music_volume(void) {
 extern "C" float pc_audio_get_music_volume(void) {
     return s_test_music_vol;
 }
+/* main.c's settings folder, without MELEE_USER_DIR. */
+extern "C" char* pc_user_dir(void) {
+    return SDL_GetPrefPath(NULL, "melee-pc");
+}
 
 int main(void) {
     SDL_Init(SDL_INIT_AUDIO);

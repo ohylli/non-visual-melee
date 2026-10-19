@@ -425,6 +425,9 @@ char* pc_user_dir(void) {
     }
     dir[n] = '\0';
     if (!SDL_CreateDirectory(dir)) {
+        /* Callers then fall back or go without; say so, since a test run
+         * meant to leave the player's settings alone may not. */
+        pc_log_line("MELEE_USER_DIR: cannot make %s: %s", dir, SDL_GetError());
         SDL_free(dir);
         return NULL;
     }
