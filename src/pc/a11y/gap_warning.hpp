@@ -28,6 +28,8 @@ public:
      * outside a match, while paused, before GO and while you are out, at
      * once, hold or not. */
     std::optional<VoiceTargets> tick(const A11yMatchState& match, const GapMapping& mapping);
+    /* The hold forgotten: the next tick decides from its snapshot alone. */
+    void forget() { m_hold = 0; }
 
 private:
     int m_hold = 0; /* ticks left to sound with no gap */

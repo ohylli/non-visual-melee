@@ -41,6 +41,11 @@ public:
      * the match snapshot (a11y_game_match_state, with what the cues ask of
      * it) and hands it to the cues. */
     void tick(int local_port, bool online, uint64_t held_mask);
+    /* Each frame boundary while the port menu is open: the cues stand
+     * silent. The game stands still under the menu, so no tick runs to stop
+     * them, and the voices would sound on as the last tick left them. The
+     * first tick after it closes starts them again. */
+    void port_menu_open();
 
 private:
     explicit CueSystem(Speech& speech);

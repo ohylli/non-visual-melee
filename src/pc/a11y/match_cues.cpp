@@ -302,6 +302,11 @@ void MatchCues::play(int voice, const std::optional<VoiceTargets>& targets) {
     }
 }
 
+void MatchCues::silence() {
+    m_engine.stop_all();
+    m_gap_warning.forget();
+}
+
 void MatchCues::tick(const A11yMatchState& match) {
     const bool pan_to_camera = m_pan_to_camera.on();
     play(m_your_voice, your_position(match, m_your.mapping(pan_to_camera)));

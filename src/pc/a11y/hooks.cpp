@@ -177,12 +177,17 @@ extern "C" bool pc_a11y_launcher_step(int direction) {
     return a11y::launcher_speech_step(direction);
 }
 
-/* Behind the game hooks' gate, which never silences it wrongly: a re-run
- * frame is simulated inside a tick, never at the frame boundary where the
- * menu's frame runs, and while the menu is open the game stands still. Under
- * MELEE_NET_SYNCTEST, a debug mode, the gate silences every hook, this one
- * too. */
+/* Speech is behind the game hooks' gate, which never silences it wrongly: a
+ * re-run frame is simulated inside a tick, never at the frame boundary where
+ * the menu's frame runs, and while the menu is open the game stands still.
+ * Under MELEE_NET_SYNCTEST, a debug mode, the gate silences every hook, this
+ * one too. */
 extern "C" void pc_a11y_port_menu_frame(bool open) {
+    if (open && s_cue_system != nullptr) {
+        /* Before the gate: stopping cues is never wrong, and before the
+         * menu's opening is spoken. */
+        s_cue_system->port_menu_open();
+    }
     if (!game_hook_may_speak()) {
         return;
     }

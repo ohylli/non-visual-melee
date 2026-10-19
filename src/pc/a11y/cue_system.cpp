@@ -128,6 +128,10 @@ void CueSystem::set_master_volume(float volume) {
     m_engine->set_master_volume(volume);
 }
 
+void CueSystem::port_menu_open() {
+    m_match_cues->silence();
+}
+
 void CueSystem::tick(int local_port, bool online, uint64_t held_mask) {
     A11yMatchState match;
     a11y_game_match_state(local_port, online, held_mask, m_match_cues->edge_offset(), &match);

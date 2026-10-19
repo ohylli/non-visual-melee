@@ -8,8 +8,9 @@
  * stops, and its tone loops without a seam; the ledge warning registers
  * last, with the snapshot's edge offset, starts on each side near a deadly
  * end and stops away from it or over a gap, and pulses 5 times a second on
- * its side. This file supplies the pc_log_line that main.c normally
- * provides. */
+ * its side; silenced for the port menu, every voice stops and the next tick
+ * starts the cues afresh. This file supplies the pc_log_line that main.c
+ * normally provides. */
 #include "cue_engine.hpp"
 #include "cue_settings.hpp"
 #include "match_cues.hpp"
@@ -383,6 +384,48 @@ void the_opponent_cue_stops_while_knocked_out_and_comes_back() {
     assert(count_logged_starting("[a11y] cue your position start") == 1);
 }
 
+/* The port menu opened mid-match (CueSystem::port_menu_open, which the tests
+ * cannot reach: it opens a device): every voice stops with its ramp and the
+ * mix falls silent; the next tick starts the cues again from its snapshot
+ * alone, so a gap warning holding on when the menu opened stays off. */
+void silence_stops_every_voice_and_the_next_tick_starts_afresh() {
+    Fixture f;
+    f.match_cues.tick(over_the_gap());
+    A11yMatchState landed = match_with(1, 60.0f);
+    landed.below = A11yFloorBelow{true, 1, 0.0f};
+    f.match_cues.tick(landed);
+    const int gap = f.match_cues.gap_voice();
+    assert(f.engine.playing(gap));
+    render(f.engine, 0.1f);
+    s_lines.clear();
+    f.match_cues.silence();
+    assert(!f.engine.playing(f.match_cues.your_voice()));
+    assert(!f.engine.playing(f.match_cues.opponent_voice()));
+    assert(!f.engine.playing(gap));
+    assert(count_logged_starting("[a11y] cue your position stop") == 1);
+    assert(count_logged_starting("[a11y] cue opponent position stop") == 1);
+    assert(count_logged_starting("[a11y] cue gap stop") == 1);
+    /* Past the stop ramp, nothing sounds. */
+    std::vector<float> quiet = render(f.engine, 0.5f);
+    const std::size_t past_ramp = static_cast<std::size_t>(0.01 * a11y::kCueRate) * 2;
+    assert(std::all_of(quiet.begin() + static_cast<std::ptrdiff_t>(past_ramp), quiet.end(),
+        [](float sample) { return sample == 0.0f; }));
+    /* Silenced again, as each frame the menu stays open: nothing more. */
+    f.match_cues.silence();
+    assert(s_lines.size() == 3);
+    /* The first tick after: both position cues start at once, pulsing
+     * straight away, and the gap warning's hold is gone. */
+    f.match_cues.tick(landed);
+    assert(f.engine.playing(f.match_cues.your_voice()));
+    assert(f.engine.playing(f.match_cues.opponent_voice()));
+    assert(!f.engine.playing(gap));
+    assert(count_logged_starting("[a11y] cue your position start") == 1);
+    assert(count_logged_starting("[a11y] cue opponent position start") == 1);
+    assert(count_logged_starting("[a11y] cue gap start") == 0);
+    std::vector<double> at = onsets(render(f.engine, 0.1f));
+    assert(!at.empty() && at[0] < 0.02);
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -405,6 +448,7 @@ int main() {
     a_change_of_opponent_moves_the_voice_without_restarting_it();
     the_opponent_cue_stops_while_knocked_out_and_comes_back();
     one_switch_frames_both_pans();
+    silence_stops_every_voice_and_the_next_tick_starts_afresh();
     std::cout << "match_cues: all tests passed\n";
     return 0;
 }

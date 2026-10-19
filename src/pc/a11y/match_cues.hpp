@@ -32,6 +32,11 @@ public:
     /* After every simulated tick, not while rollback re-runs ticks: starts,
      * updates or stops each voice. */
     void tick(const A11yMatchState& match);
+    /* Every voice stops with its ramp, and what the drivers keep between
+     * ticks (the gap warning's hold) is forgotten, so the next tick starts
+     * the cues afresh from its snapshot, as after any silence. Called each
+     * frame the port menu is open, while no tick runs. */
+    void silence();
 
     /* The voices' numbers in the engine, -1 for one it refused. */
     int your_voice() const { return m_your_voice; }
