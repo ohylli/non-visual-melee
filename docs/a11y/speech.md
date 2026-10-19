@@ -22,6 +22,8 @@ Every announcement, and every speech event worth knowing about (startup, the bac
 
 With the accessibility switch off (`MELEE_A11Y=0`), Prism is never started, but announcements are still logged, marked as not spoken. A run can check a feature's announcements without talking over the maintainer's screen reader.
 
+A feature that takes keys for speech leaves them alone with the switch off (the launcher's line reading is one), so a run that checks such a feature needs the switch on without the screen reader: `MELEE_A11Y_SCREEN_READER=0` keeps accessibility on, never starts Prism, and logs each announcement marked as muted.
+
 The port's logger cuts each line at 512 bytes, so a very long announcement is truncated in the log. What gets spoken is not affected.
 
 ## Threading rule

@@ -16,6 +16,12 @@ enum class Mode { interrupt, queue };
 struct Config {
     bool enabled = true; /* MELEE_A11Y: the accessibility switch */
     bool log = true;     /* MELEE_A11Y_LOG: the speech log, a developer switch */
+    /* MELEE_A11Y_SCREEN_READER=0: accessibility stays on, so every feature
+     * acts as it does for a player, but the screen reader is never started
+     * and announcements are only logged. For agent runs that check what the
+     * switch changes (the launcher's line reading) without talking over the
+     * maintainer's screen reader. */
+    bool screen_reader = true;
     /* Steering with the D-pad: follows the accessibility switch;
      * MELEE_A11Y_STEER=1 turns it on by itself, for agent runs with speech
      * off. */

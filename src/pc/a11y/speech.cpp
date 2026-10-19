@@ -30,6 +30,7 @@ Config config_from_environment() {
     Config config;
     config.enabled = env_switch("MELEE_A11Y");
     config.log = env_switch("MELEE_A11Y_LOG");
+    config.screen_reader = env_switch("MELEE_A11Y_SCREEN_READER");
     const char* steer = std::getenv("MELEE_A11Y_STEER");
     config.steer = config.enabled || (steer != nullptr && std::strcmp(steer, "1") == 0);
     const char* cues = std::getenv("MELEE_A11Y_CUES");
@@ -57,6 +58,10 @@ void Speech::init() {
     m_thread = std::this_thread::get_id();
     if (!m_config.enabled) {
         log("speech off (MELEE_A11Y=0)");
+        return;
+    }
+    if (!m_config.screen_reader) {
+        log("screen reader off (MELEE_A11Y_SCREEN_READER=0)");
         return;
     }
     const std::string backend = m_bridge->init();
@@ -91,6 +96,10 @@ void Speech::announce(std::string_view text, Mode mode) {
     m_last = Announcement{std::string(text), mode};
     if (!m_config.enabled) {
         log("speak %s (off): \"%.*s\"", mode_name(mode), text_length(text), text.data());
+        return;
+    }
+    if (!m_config.screen_reader) {
+        log("speak %s (muted): \"%.*s\"", mode_name(mode), text_length(text), text.data());
         return;
     }
     log("speak %s: \"%.*s\"", mode_name(mode), text_length(text), text.data());

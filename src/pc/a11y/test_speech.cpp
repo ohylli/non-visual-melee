@@ -108,6 +108,23 @@ void disabled_never_touches_bridge() {
     assert(logged("[a11y] speech shutdown"));
 }
 
+/* Accessibility stays on, so features act as for a player, but the screen
+ * reader is never started or spoken to. */
+void screen_reader_switch_keeps_accessibility_on() {
+    BridgeCalls calls;
+    a11y::Config config = kOn;
+    config.screen_reader = false;
+    a11y::Speech speech = make_speech(calls, config);
+    speech.init();
+    speech.announce("hello", a11y::Mode::interrupt);
+    speech.shutdown();
+    assert(speech.enabled());
+    assert(calls.inits == 0 && calls.shutdowns == 0 && calls.outputs.empty());
+    assert(logged("[a11y] screen reader off (MELEE_A11Y_SCREEN_READER=0)"));
+    assert(logged("[a11y] speak interrupt (muted): \"hello\""));
+    assert(logged("[a11y] speech shutdown"));
+}
+
 void log_switch_silences_log_only() {
     BridgeCalls calls;
     a11y::Speech speech = make_speech(calls, a11y::Config{true, false});
@@ -193,6 +210,7 @@ int main() {
     interrupt_and_queue_reach_bridge_in_order();
     log_lines_have_the_documented_format();
     disabled_never_touches_bridge();
+    screen_reader_switch_keeps_accessibility_on();
     log_switch_silences_log_only();
     no_backend_still_calls_bridge();
     bridge_error_is_logged();
