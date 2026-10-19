@@ -215,6 +215,7 @@ per-device `.controller` files; everything else shares `launcher.cfg`.
 | `MELEE_LOG_FILE=<path>` | Write the log to a file (default `melee-pc.log` beside `melee.exe` on Windows; empty disables). |
 | `MELEE_WINDOW_TITLE=<t>` | Window title. |
 | `MELEE_FILES_DIR=<dir>` | Loose-file overlay: files here (or in `./files/`) replace the disc's. |
+| `MELEE_USER_DIR=<dir>` | Settings folder (`launcher.cfg`, controller bindings, memory card, net identity, user textures and music) in place of the per-user one, made if missing: a test run starts from default settings and leaves the player's alone. The shader caches keep their own `MELEE_CACHE_DIR`. |
 | `MELEE_CACHE_MAX_MB=<n>` | In-memory archive cache budget (default picked from installed RAM). |
 | `MELEE_PREWARM=0` | Skip the background asset pre-warm after boot. |
 | `MELEE_FAST_FADES=1` | Clamp scene fade delays. |

@@ -31,6 +31,13 @@ void pc_os_yield(void);
  * the engine reported around them. */
 void pc_log_line(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 
+/* The settings folder (src/pc/main.c): launcher.cfg, bindings, memory card,
+ * net identity, user textures and music. SDL_GetPrefPath(NULL, "melee-pc")
+ * unless MELEE_USER_DIR names another, so a test run can start from default
+ * settings and leave the player's alone. Like SDL_GetPrefPath: ends in a
+ * separator, created if missing, freed with SDL_free, NULL on failure. */
+char* pc_user_dir(void);
+
 /* Keyboard -> virtual controller (src/pc/keyboard.c). */
 typedef union SDL_Event SDL_Event;
 void pc_keyboard_event(const SDL_Event* e);

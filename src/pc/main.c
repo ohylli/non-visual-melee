@@ -401,6 +401,36 @@ static AuroraBackend backend_from_env(void) {
     return BACKEND_AUTO;
 }
 
+/* MELEE_USER_DIR: a test run, or two instances on one machine, each with a
+ * settings folder of its own (declared in pc.h). The shader caches keep
+ * their own switch, MELEE_CACHE_DIR. */
+char* pc_user_dir(void) {
+    const char* env = getenv("MELEE_USER_DIR");
+    if (env == NULL || env[0] == '\0') {
+        return SDL_GetPrefPath(NULL, "melee-pc");
+    }
+#if defined(_WIN32)
+    const char sep = '\\';
+#else
+    const char sep = '/';
+#endif
+    size_t n = strlen(env);
+    char* dir = SDL_malloc(n + 2);
+    if (dir == NULL) {
+        return NULL;
+    }
+    memcpy(dir, env, n);
+    if (env[n - 1] != '/' && env[n - 1] != sep) {
+        dir[n++] = sep; /* callers append file names as SDL_GetPrefPath's */
+    }
+    dir[n] = '\0';
+    if (!SDL_CreateDirectory(dir)) {
+        SDL_free(dir);
+        return NULL;
+    }
+    return dir;
+}
+
 /* Android has no way to hand a process an environment: `am start` passes
  * extras, not env, so every MELEE_* knob -- the netplay fixtures, the heap
  * check, the log file -- is unreachable on a phone, which is exactly where
@@ -542,7 +572,7 @@ MELEE_EXPORT int main(int argc, char* argv[]) {
         /* appName doubles as the window title; the save/cache dirs stay
          * pinned so a renamed test window still uses the same memory card. */
         .appName = getenv("MELEE_WINDOW_TITLE") ? getenv("MELEE_WINDOW_TITLE") : "melee-pc",
-        .userPath = SDL_GetPrefPath(NULL, "melee-pc"),
+        .userPath = pc_user_dir(),
         .resourcesPath = resources_path[0] != '\0' ? resources_path : NULL,
         /* MELEE_CACHE_DIR: two instances on one machine (netplay testing)
          * must not share the pipeline-cache SQLite file. */
