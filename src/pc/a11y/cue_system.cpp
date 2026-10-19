@@ -17,9 +17,9 @@
 namespace a11y {
 namespace {
 
-/* MELEE_A11Y_CUE_SETTINGS, or a11y-cues.ini where the base port keeps its
- * own settings; empty for no file: no such folder, or the variable set but
- * empty. UTF-8. */
+/* MELEE_A11Y_CUE_SETTINGS, or a11y-cues.ini in the base port's settings
+ * folder (pc_user_dir, which MELEE_USER_DIR moves); empty for no file: no
+ * such folder, or the variable set but empty. UTF-8. */
 std::string cue_settings_path(const Config& config) {
     if (config.cue_settings.has_value()) {
         if (config.cue_settings->empty() && config.log) {
@@ -28,7 +28,7 @@ std::string cue_settings_path(const Config& config) {
         }
         return *config.cue_settings;
     }
-    char* folder = SDL_GetPrefPath(nullptr, "melee-pc");
+    char* folder = pc_user_dir();
     if (folder == nullptr) {
         if (config.log) {
             pc_log_line(

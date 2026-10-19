@@ -27,7 +27,10 @@ the other plays on:
   b wait '"Connection lost\.'
 
 With --base-b, instance b is a base port build, the one in that build
-directory, so it logs no [a11y] lines. A step addressed to b-fork runs only
+directory, so it logs no [a11y] lines. A base port build lacks MELEE_USER_DIR
+(unless the base port has taken it since), so b then starts from the
+maintainer's own settings in %APPDATA%\melee-pc and may write them, while a
+starts from the defaults. A step addressed to b-fork runs only
 when b is the fork's build and one addressed to b-base only when it is the
 base port's, so one script can wait on b's speech in the one case and wait
 otherwise in the other:
@@ -36,7 +39,8 @@ otherwise in the other:
   b-base sleep 1
 
 Each instance's output goes to OUT_DIR/a.log and b.log, its game log beside
-it (a.log.game.log) and its recording of controller data (MELEE_NET_RECORD)
+it (a.log.game.log), its settings folder too (a.log.settings, as drive.py
+gives every run) and its recording of controller data (MELEE_NET_RECORD)
 to a.rec and b.rec. After the script, the run fails unless both logs show a
 session (net: rollback with), neither logs net: DESYNC, and the two
 recordings hold the same data for the frames both recorded in the session.
@@ -210,7 +214,8 @@ def main():
                     help="no session at boot: the two meet in the LAN lobby")
     ap.add_argument("--seed", default="7", help="MELEE_SEED, shared by both")
     ap.add_argument("--base-b", metavar="BUILD_DIR",
-                    help="run instance b from a base port build directory, such as a worktree's build")
+                    help="run instance b from a base port build directory, such as a worktree's build; "
+                         "it uses the maintainer's own settings folder")
     ap.add_argument("--disc", default="melee.iso", help="disc image, relative to the repo root")
     ap.add_argument("--all", action="store_true", help="print every game line, not just [a11y] and boot scene")
     ap.add_argument("--timeout", type=float, default=30, help="default wait timeout in seconds")

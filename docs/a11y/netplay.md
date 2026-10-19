@@ -66,6 +66,8 @@ A fork build and a base port build pair when their protocol version, version str
 
 The base port does not build natively under MSYS2 as it stands: the fork carries the fix in the root `CMakeLists.txt` (the Windows SDK level pinned for native MinGW builds, without which abseil's time zone code picks a WinRT path MinGW cannot compile, and `zlib1.dll` copied beside the executable). Apply those two blocks to the worktree, uncommitted, before building. Neither changes what the game simulates.
 
+That build also lacks `MELEE_USER_DIR`, the fork's base port fix that moves the settings folder (`pc_user_dir` in `src/pc/main.c`), unless the base port has taken it since. The drivers give each fork instance a fresh settings folder of its own, so a starts from the default settings, but a base port b reads the maintainer's own `%APPDATA%\melee-pc` (player name, Unlock everything and the rest) and saves `launcher.cfg` back into it. The two still pair and stay in sync: the session agrees the rules and the unlock state between the peers, whatever each one's settings say.
+
 ## Timing gotchas for scripts
 
 - Start pressed within a few milliseconds of Ready to Fight appearing is ignored; wait a second first, as the offline scripts do.

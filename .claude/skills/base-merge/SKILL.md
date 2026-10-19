@@ -28,6 +28,12 @@ List the environment variables the drop adds, including new values of existing o
 git diff master...upstream/master -- src tools | grep -E '^\+.*(getenv|MELEE_[A-Z0-9_]+=)'
 ```
 
+A new `SDL_GetPrefPath` call in the port layer (other than for the shader caches, which keep `MELEE_CACHE_DIR`) bypasses `MELEE_USER_DIR`, the fork's base port fix that gives every driven run a settings folder of its own (`pc_user_dir` in `src/pc/main.c`). Route it through `pc_user_dir` in the merge, in the fix's own style, or driven runs reach the maintainer's settings folder again; if the base port has taken the switch, drop the fork's version and say so:
+
+```
+git diff master...upstream/master -- src/pc | grep -E '^\+.*SDL_GetPrefPath'
+```
+
 Check the drop against the fork's CI (`.github/workflows/a11y-windows.yml`). A new file under `.github/workflows/` would run on the fork's next push: after the merge, disable it with `gh workflow disable <name>` before pushing, and say so in the merge notes. A change to `tools/package_windows.sh` or to the base port's Windows job in `build.yml` may need the same change in the fork's workflow, and the fork's `prism.dll` entry in the script's DLL list must survive the merge.
 
 Check every rule in "Online compatibility" in `CLAUDE.md` against the drop: the version string and protocol version, what the LAN lobby and handshake compare between peers, `pc_net_resim()`, and the per-frame journal of sound starts. A change to any of them is a digest item in section 1, with what it means for playing fork builds against base port builds.

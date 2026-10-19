@@ -42,9 +42,12 @@ DRight. They drive controller port 1, merged with any real controller there.
 Steering is on (MELEE_A11Y_STEER=1), so on character select the D-pad moves
 the hand from target to target.
 
-Cue settings come from a file of the run's own, --out's path plus
-.cues.ini, removed before the game starts so it is written afresh with the
-defaults; MELEE_A11Y_CUE_SETTINGS in the environment names another.
+Each run starts from default settings in a settings folder of its own,
+--out's path plus .settings (build/drive/last.log.settings), named to the
+game by MELEE_USER_DIR and emptied before the game starts: launcher.cfg,
+the cue settings and everything else the game keeps in its settings folder
+land there, never in the maintainer's %APPDATA%\melee-pc. A non-empty
+MELEE_A11Y_CUE_SETTINGS in the environment names another cue settings file.
 
 The shader caches come from build/drive/cache/SLOT (--cache-slot, default
 1), first copied from the player's own: games running at once each need a
@@ -146,6 +149,19 @@ class ScriptError(Exception):
 # MELEE_CACHE_DIR moves them. Two games running at once cannot share them:
 # the second logs "database is locked" and runs without its GPU cache.
 CACHE_FILES = ("pipeline_cache.db", "dawn_cache.db")
+
+
+def settings_dir(out):
+    """The settings folder of the run whose transcript is out, beside it."""
+    return os.path.abspath(out) + ".settings"
+
+
+def fresh_settings_dir(out):
+    """settings_dir(out), emptied, so the run starts from the defaults."""
+    path = settings_dir(out)
+    shutil.rmtree(path, ignore_errors=True)
+    os.makedirs(path)
+    return path
 
 
 def cache_dir(slot):
@@ -497,14 +513,10 @@ class Game:
             "MELEE_LOG_FILE": os.path.abspath(out) + ".game.log",
             "MELEE_CACHE_DIR": cache_dir(cache_slot),
         })
-        if not os.environ.get("MELEE_A11Y_CUE_SETTINGS"):
-            # A cue settings file of the run's own, never the maintainer's;
-            # removed first, so each run starts from the defaults. Empty
-            # counts as unset: the game would take the maintainer's file.
-            cue_settings = os.path.abspath(out) + ".cues.ini"
-            if os.path.exists(cue_settings):
-                os.remove(cue_settings)
-            full_env["MELEE_A11Y_CUE_SETTINGS"] = cue_settings
+        if full_env.get("MELEE_A11Y_CUE_SETTINGS") == "":
+            # Empty would mean no cue settings file at all; unset puts it in
+            # the run's settings folder.
+            del full_env["MELEE_A11Y_CUE_SETTINGS"]
         if not args.speech:
             full_env["MELEE_A11Y"] = "0"
         if not args.sound:
@@ -516,6 +528,10 @@ class Game:
         disc = os.path.join(REPO, args.disc)
 
         os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+        # The settings folder of this run alone (a base port build without
+        # MELEE_USER_DIR ignores it and takes the maintainer's).
+        self.settings_dir = fresh_settings_dir(out)
+        full_env["MELEE_USER_DIR"] = self.settings_dir
         self.pipe = KeyPipe(pipe_name)
         self.out_file = open(out, "w", encoding="utf-8")
         self.proc = subprocess.Popen([exe, "--no-card", disc], cwd=REPO, env=full_env,
