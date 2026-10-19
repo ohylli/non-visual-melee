@@ -1,27 +1,29 @@
-# RmlUi screens: how the launcher is read aloud
+# RmlUi screens: how the launcher and the port menu are read aloud
 
 ## Mental model
 
 The launcher, the port menu and the frame-rate display are pages in RmlUi, a UI toolkit that works like a small web browser inside the game: each page is a document of elements (buttons, sliders, text) described in an `.rml` file and styled by an `.rcss` file. RmlUi draws the page itself, so Windows and the screen reader see nothing but pixels. The fork makes a page speak by reading it: it watches which element has keyboard focus, what text is on that element and around it, and a few text regions that report progress and errors, and turns what changed into announcements.
 
 ```
-launcher loop --pc_a11y_launcher_frame()--> fork reader --compare with last frame--> announcements --> speech
-launcher Up/Down --pc_a11y_launcher_step()--> fork reader --read a line?--------------^
-RmlUi --document loaded / key pressed--> fork plugin -----^
+launcher loop --pc_a11y_launcher_frame()--> launcher reader --compare with last frame--> announcements --> speech
+launcher Up/Down --pc_a11y_launcher_step()--> launcher reader --read a line?--------------^
+game loop --pc_a11y_port_menu_frame(open)--> port menu reader --compare with last frame---^
+port menu Up/Down --pc_a11y_port_menu_step()--> port menu reader --read a line?-----------^
+RmlUi --document loaded / key pressed--> fork plugins --------^
 ```
 
-The launcher code tells the fork only two things: "another frame went by" and "the player asked to move up or down". [ADR-0002](../adr/0002-launcher-speech-reads-the-page.md) records why the reader compares the page instead of being told more.
+Each page's code tells the fork only two things: "another frame went by" (for the port menu, with whether it is open) and "the player asked to move up or down". [ADR-0002](../adr/0002-launcher-speech-reads-the-page.md) records why the reader compares the page instead of being told more. Both pages are built alike (tabs, setting rows, sliders, text fields, a status line), so most of the reading is shared: `PageReader` in `rmlui_reader.cpp`. Each page's own reader adds what only it has: the launcher's in `launcher_speech.cpp` (Home, the update banner, Back, its override table), the port menu's in `port_menu_speech.cpp` (the opening, the closing, its status line rule, its override table).
 
 ## One context for every page
 
-Aurora (the port's graphics and UI library) creates a single RmlUi context, named `main`, and every RmlUi page is loaded into it: the launcher first, then after it closes the port menu and the frame-rate display. Anything the fork attaches at context level sees all of them, so the reader checks which document an element belongs to and ignores the pages it does not handle yet. Today that is everything except `launcher.rml`.
+Aurora (the port's graphics and UI library) creates a single RmlUi context, named `main`, and every RmlUi page is loaded into it: the launcher first, then after it closes the port menu and the frame-rate display. Anything the fork attaches at context level sees all of them, so each reader is started for its own document only (`launcher.rml`, `port-menu.rml`) and checks that the focused element belongs to it. The frame-rate display (`fps.rml`) has no reader.
 
 ## How the fork attaches
 
-- **A plugin.** RmlUi lets a program register an `Rml::Plugin`, an object that is told when contexts are created and documents load or unload. The fork registers one from `pc_a11y_init`, which runs before Aurora starts RmlUi; registering early is allowed and the plugin still receives every later notification. On the launcher document's load the plugin attaches the fork's key listener and starts the reader; on unload it stops them. The code is in `launcher_speech.cpp`; the generic page reading it uses is in `rmlui_reader.cpp`.
-- **One frame hook.** `pc_a11y_launcher_frame()` is called once per turn of the launcher's own loop, just after the page is drawn. That is where the reader compares the page with what it saw last frame. It runs after drawing because RmlUi works out styles, and so which elements are visible, only while it updates the page for drawing. The loop runs before the game starts, so the netplay silence rule does not apply to it; the port menu, which runs inside the game loop, will need it.
+- **A plugin a page.** RmlUi lets a program register an `Rml::Plugin`, an object that is told when contexts are created and documents load or unload. The fork registers one for each page it reads (`ReaderPlugin` in `rmlui_reader.cpp`, one in `launcher_speech.cpp` and one in `port_menu_speech.cpp`) from `pc_a11y_init`, which runs before Aurora starts RmlUi; registering early is allowed and a plugin still receives every later notification. On its document's load a plugin attaches the fork's key and typed-text listeners and starts the page's reader; on unload it stops them.
+- **One frame hook.** `pc_a11y_launcher_frame()` is called once per turn of the launcher's own loop, just after the page is drawn. That is where the reader compares the page with what it saw last frame. It runs after drawing because RmlUi works out styles, and so which elements are visible, only while it updates the page for drawing. The loop runs before the game starts, so the netplay silence rule does not apply to it. The port menu's hooks are under "The port menu".
 - **One step hook.** `pc_a11y_launcher_step(direction)` is the first thing the launcher's `focus_step` does, before it moves focus up or down. Every way of moving ends there: the arrow keys, Tab, the D-pad and the stick. It returns true when the reader used the press for the lines of text, to read one or to come back from them to the focused control, and focus then stays put (see "Reading the lines of a page").
-- **Shutdown order.** The fork's shutdown hook runs before Aurora shuts RmlUi down. It unregisters the plugin before speech shuts down, so RmlUi's own shutdown never reaches it. The reverse order is safe too: RmlUi unloads every document first, which stops the reader.
+- **Shutdown order.** The fork's shutdown hook runs before Aurora shuts RmlUi down. It unregisters the plugins before speech shuts down, so RmlUi's own shutdown never reaches them. The reverse order is safe too: RmlUi unloads every document first, which stops the readers.
 - **Plugin lifetime.** RmlUi keeps a pointer to the plugin until it shuts down, so the plugin is a static object. Its event classes include `EVT_BASIC` even though it needs only document events, because RmlUi's shutdown unregisters only the plugins in that class.
 
 ## Where the words come from
@@ -34,18 +36,18 @@ The launcher's labels are real text, so the reader takes them from the page, not
 - The settings tabs are buttons with the class `tab` in a strip; the selected one also carries `selected`, and the position ("1 of 5") is counted among the strip's tabs. A tab's page is found by id, `tab-online` to `page-online`, a convention the port menu shares.
 - A row with no control (the connect code, the Controls page's text) is never focused. The reader reads it line by line with Up and Down instead (next section). The tab announcement of a page that opens with such rows, as Controls does, ends with a hint that there is text below; on a page that opens with a control, such as Online, the lines come in their turn between the controls.
 
-The page cannot tell a button that cycles a value from one that acts, since both sit in a row with only a label. The fork override table in `launcher_speech.cpp` lists the ones that act, by id; they are read as buttons named by row and label: "Performance preset: Apply, button". A base merge that adds an action row needs a line there, or the row is read as a setting with the value "Apply".
+The page cannot tell a button that cycles a value from one that acts, since both sit in a row with only a label. Each page's override table (`kActionButtons` in `launcher_speech.cpp` and in `port_menu_speech.cpp`) lists the ones that act, by id; they are read as buttons named by row and label: "Performance preset: Apply, button". A base merge that adds an action row needs a line there, or the row is read as a setting with the value "Apply".
 
 The page also uses visual separators (" / ", " · ", " → ") that the reader turns into commas, and a line break reads as a comma too. In a page's lines, " · " and a line break end a line instead (next section).
 
 ## Reading the lines of a page
 
-Focus reaches only controls, so the lines of text between them are a reading position the reader keeps itself, beside focus, which stays on the control next to the lines. The generic part is `PageLines` and `tab_page_stops` in `rmlui_reader.cpp`; the launcher's part, which adds Back after the page and speaks what the step lands on, is `LauncherReader::step`.
+Focus reaches only controls, so the lines of text between them are a reading position the reader keeps itself, beside focus, which stays on the control next to the lines. The generic part is `PageLines`, `tab_page_stops` and `PageReader::step_lines` in `rmlui_reader.cpp`; each page's reader names the control its own order puts after the page (the launcher's Back, the port menu's Return to game) and says when the lines may be read at all (`LauncherReader::step`, `PortMenuReader::step`).
 
-- **What a line is.** The page's rows in document order are its stops: a row with a control is that control, and a row without one gives a stop for each of its lines. A line is a heading, or a piece of a paragraph between line breaks and " · " separators, so the keyboard layout reads one key and its action at a time ("X Attack"). The launcher's order on a Settings tab is the tab, the page's controls and Back, which matches the stops as long as `page_focus` in `src/pc/launcher.cpp` lists a page's controls in document order, one per row, and the control on either side of a run of lines is enabled (the launcher's step skips a disabled one, and the lines past it with it).
+- **What a line is.** The page's rows in document order are its stops: a row with a control is that control, and a row without one gives a stop for each of its lines. A line is a heading, or a piece of a paragraph between line breaks and " · " separators, so the keyboard layout reads one key and its action at a time ("X Attack"). The launcher's order on a Settings tab is the tab, the page's controls and Back, and the port menu's the tab, the page's controls and Return to game. Each matches the stops as long as its `page_focus` in `src/pc/launcher.cpp` (the launcher's and `PortMenu`'s) lists a page's controls in document order, one per row, and the control on either side of a run of lines is enabled (the launcher's step skips a disabled one, and the lines past it with it; the port menu disables none).
 - **Moving.** Up or Down from a control onto a line speaks the line and keeps focus where it is. Off the end of a run of lines, the press either returns to the control focus is still on, which is announced again, or is handed back to the launcher, whose own step from that control lands on the control past the lines. So focus never has to be moved by the fork, and the launcher's order stays the base port's.
 - **What ends it.** Any focus change, as when Left and Right switch tabs, a value change on the focused control, since Enter still acts on that control while a line is read, and the line being read changing on the page. The next press starts from the control again.
-- **Accessibility off.** The step hook leaves every press to the launcher.
+- **Accessibility off.** The step hook leaves every press to the page.
 
 A sighted helper sees the focus highlight stay on the control while lines are read; the fork leaves the page's look alone.
 
@@ -73,18 +75,31 @@ What the reader compares:
 
 The opening announcement waits for two things: the status line to settle and focus to reach a control. At start-up with a remembered disc, the launcher checks the disc with every button but Quit disabled, so focus is parked until the check is over. If focus never reaches a control, the opening is spoken without it a second later.
 
+## The port menu
+
+The port menu (F1, or Back on a controller) is `port-menu.rml`, loaded hidden as the game starts (`pc_menu_init`) and shown and hidden by `PortMenu::toggle`, so its reader lives from the game's start to its end and speaks only while the menu is open.
+
+- **Two hooks, as the launcher has.** `pc_a11y_port_menu_frame(open)` is the last line of `pc_menu_update`, which the game loop's frame boundary (`pc_frame_boundary` in `src/pc/vi.c`) runs every frame, open or not, after the frame's events. `open` is the menu's own flag (`pc_menu_is_open()`): the document's visibility is a computed style, which RmlUi refreshes only as it next draws, so on the frame the menu opens or closes it would still say the old state. `pc_a11y_port_menu_step(direction)` is the first line of `PortMenu::focus_step`, where the arrow keys, Tab, the D-pad and the stick all end.
+- **The game stands still while it is open.** `VIWaitForRetrace` loops on the frame boundary until the menu closes, so no game frame runs and none of the game's own hooks fire (scenes, menus, the match tick): the menu's frame is where the fork learns what happens meanwhile. Nothing is re-run then, so the netplay silence rule never comes into play; the hooks still pass the game hooks' gate in `hooks.cpp`, which never silences them wrongly.
+- **Opening.** "PC settings", the page's heading, then the focused tab's announcement, interrupting: "PC settings. Graphics, tab, selected, 1 of 5. Left and right to switch tabs". The menu opens on the tab used last.
+- **Closing.** "Back to game", interrupting, on every way of closing (Escape, B, Start, F1, Back, Guide, Return to game), so leftover menu speech stops as the game resumes. The reader forgets the focused control, so the next opening says it again.
+- **The status line rule.** The status line (`menu-status`) and the update check's result (`port-update-status`, the help text of Check for updates) are watched regions, in view on every tab while the menu is open. "Saved.", which follows every change, is never spoken, nor the line's first text, "Saved automatically."; errors, "Defaults restored." and the bind prompt's texts are. What both show as the menu opens is taken silently, since opening rewrites them.
+- **The update check's result arrives late.** Check now writes "Checking for updates..." to both regions, and the base port writes the result only when the page refreshes, at the next saved change or opening, so that is when the result is heard (base port behaviour).
+- **Controls.** Read by the shared reader: each binding row as a setting with SDL's own names, Restore defaults as a button, and the "Sticks and triggers" heading and the keyboard's lines as lines. Remapping is its own feature, still to be designed.
+- **Escape in an Online field does nothing.** The field keeps the key, as in the launcher, so a player closes the menu from there by moving off the field first, or with F1 (base port behaviour).
+
 ## RmlUi event facts worth knowing
 
 - `focus` and `blur` do not bubble, but a listener added in the capture phase still receives them, on every ancestor down to the element.
 - Enter, numpad Enter and Space on a focused element become a `click`, as RmlUi's default action.
-- Tab and Shift+Tab move focus in document order, which differs from the order the launcher's arrow keys use. The fork's key listener, in the capture phase, turns Tab into Down and Shift+Tab into Up so both keys follow one order. Stopping the event there also stops RmlUi's default action, its own Tab navigation.
+- Tab and Shift+Tab move focus in document order, which differs from the order the pages' arrow keys use. The fork's key listener, in the capture phase on each page read, turns Tab into Down and Shift+Tab into Up so both keys follow one order. Stopping the event there also stops RmlUi's default action, its own Tab navigation.
 - `Element::Focus()` refuses an element whose computed `focus` property is `none`, and computed properties are refreshed only when the page updates. The launcher disables a button by setting that property, so a button enabled and focused in the same frame used to stay unfocused; `Launcher::enabled` now updates the document after enabling.
 - Typed text arrives as a `textinput` event on the focused element. The text field inserts it from its own capture-phase listener, so a listener on the document in the capture phase sees it first and can stop it; the field's length limit (`maxlength`) is applied inside the field, with no event when nothing fits. Aurora also sends a line break as typed text after every Enter, which a one-line field ignores.
 - A text node's text is set after it is created, so `OnElementCreate` in a plugin is too early to read it.
 
 ## Testing without a screen
 
-RmlUi runs without a window when it is given a render interface that draws nothing, which is how RmlUi's own tests work. The fork's test (`test_launcher_speech.cpp`) loads the real `resources/launcher.rml` that way, moves focus and rewrites text through copies of the launcher's own helpers (`text`, `enabled`, `type_online`, and `focus_step` with the Online tab's `page_focus` list, which must follow the launcher's), types and presses keys through the context, runs `Context::Update` and the reader's frame step, and checks the announcements. Time is passed in, so the settle rule is tested without waiting. It is mainly a guard for base merges: if the base port reshapes the page so that a setting's name is no longer found, the test fails before a player hears "On" with no name.
+RmlUi runs without a window when it is given a render interface that draws nothing, which is how RmlUi's own tests work. The port menu's test (`test_port_menu_speech.cpp`) loads the real `resources/port-menu.rml` that way, through copies of `PortMenu`'s helpers (`label`, `toggle`, `show_tab`, and `focus_step` with every tab's `page_focus` list, which must follow the menu's), and passes the open flag as the menu's frame does. The launcher's test (`test_launcher_speech.cpp`) loads the real `resources/launcher.rml` the same way, moves focus and rewrites text through copies of the launcher's own helpers (`text`, `enabled`, `type_online`, and `focus_step` with the Online tab's `page_focus` list, which must follow the launcher's), types and presses keys through the context, runs `Context::Update` and the reader's frame step, and checks the announcements. Time is passed in, so the settle rule is tested without waiting. Both are mainly guards for base merges: if the base port reshapes a page so that a setting's name is no longer found, the test fails before a player hears "On" with no name.
 
 ## How the drivers reach the pages
 

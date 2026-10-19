@@ -33,6 +33,7 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/screen_reader_bridge.cpp
         ${CMAKE_CURRENT_LIST_DIR}/rmlui_reader.cpp
         ${CMAKE_CURRENT_LIST_DIR}/launcher_speech.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/port_menu_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/scene_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/game_text.cpp
         ${CMAKE_CURRENT_LIST_DIR}/game_access.c
@@ -173,6 +174,19 @@ if (TARGET unit_tests)
     add_test(NAME launcher_speech COMMAND launcher_speech_test ${PROJECT_SOURCE_DIR}/resources)
     set_tests_properties(launcher_speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests launcher_speech_test)
+
+    # Port menu speech against the real resources/port-menu.rml, the same way.
+    add_executable(port_menu_speech_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_port_menu_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/port_menu_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/rmlui_reader.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
+    target_include_directories(port_menu_speech_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_link_libraries(port_menu_speech_test PRIVATE rmlui)
+    target_compile_options(port_menu_speech_test PRIVATE -UNDEBUG)
+    add_test(NAME port_menu_speech COMMAND port_menu_speech_test ${PROJECT_SOURCE_DIR}/resources)
+    set_tests_properties(port_menu_speech PROPERTIES LABELS melee)
+    add_dependencies(unit_tests port_menu_speech_test)
 
     # The event pipe's lines turned into SDL events; its own pc_log_line.
     add_executable(event_pipe_test EXCLUDE_FROM_ALL

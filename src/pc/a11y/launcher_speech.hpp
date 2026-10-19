@@ -5,20 +5,11 @@
  * pc_a11y_launcher_frame. docs/a11y/rmlui-screens.md explains the mechanism,
  * docs/adr/0002-launcher-speech-reads-the-page.md why. */
 #pragma once
-#include <chrono>
+#include "rmlui_reader.hpp"
 
 namespace a11y {
 
 class Speech;
-
-using Clock = std::chrono::steady_clock;
-
-/* The two numbers to tune by ear. A watched text is spoken once it has stayed
- * the same this long, so passing messages are skipped. */
-constexpr std::chrono::milliseconds kSettleTime{250};
-/* A text whose only change is its percentage is progress, spoken each time it
- * crosses the next multiple of this, and at 100%. */
-constexpr int kProgressStep = 20;
 
 /* Registers the plugin; speech must outlive the matching stop. Call before or
  * after RmlUi starts. */

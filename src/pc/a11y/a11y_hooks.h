@@ -36,6 +36,22 @@ void pc_a11y_launcher_frame(void);
  * them to the focused control. Focus must then stay put. */
 bool pc_a11y_launcher_step(int direction);
 
+/* Once a frame of the game loop (pc_menu_update in src/pc/launcher.cpp, run
+ * from pc_frame_boundary), after the port menu has reacted to the frame's
+ * input, whether the menu is open or not; open is the menu's own flag,
+ * pc_menu_is_open(). While it is open the game stands still, so none of the
+ * game's own hooks (scenes, menus, the match tick) run. Port menu speech
+ * compares the page with the last frame here, and says the menu's opening and
+ * closing. */
+void pc_a11y_port_menu_frame(bool open);
+
+/* The port menu is about to move focus up (-1) or down (1) (PortMenu::
+ * focus_step in src/pc/launcher.cpp), whether by arrow key, Tab, D-pad or
+ * stick. Returns true when port menu speech used the press for the lines of
+ * text on a tab's page, as pc_a11y_launcher_step does; focus must then stay
+ * put. */
+bool pc_a11y_port_menu_step(int direction);
+
 /* A scene has loaded (gm_801A4014 in src/melee/gm/gm_1A3F.c, after the
  * scene's enter function returns) and its first frame is next. mode_kind is
  * the GameModeKind of the mode being run, which during a memory card

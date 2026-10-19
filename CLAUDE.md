@@ -71,7 +71,7 @@ Windows is the only supported target for fork work; keep code portable in princi
 The players cannot see the screen and the agent cannot hear the game. The speech log bridges that: every announcement and cue is also written into the game's log with an `[a11y]` prefix, interleaved with game events, and the agent checks a change by reading those lines.
 
 - Verify every change with the `verify` skill. It has four levels (quick, menus, online, base merge), from about a minute to about ten; choose the level the change calls for by your own judgement, unless the maintainer names one.
-- "Works" is reserved for what a blind tester has confirmed by ear, on any screen. The launcher's drive scripts check what it says; the port menu, reached through the event pipe too, has no drive script until it speaks and depends on the maintainer play-testing.
+- "Works" is reserved for what a blind tester has confirmed by ear, on any screen. The launcher's drive scripts check what it says; the port menu, reached through the event pipe too, speaks, but its drive scripts are still to come (`.scratch/port-menu/issues/06-port-menu-drive-scripts.md`), so until then a hand-written drive run checks it.
 - A change that adds or changes a verification tool, script, switch, expected log line or known failure updates the `verify` skill in the same change, so the skill stays the one place that says how to verify.
 
 ## Style and lint

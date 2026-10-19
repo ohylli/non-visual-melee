@@ -1381,6 +1381,8 @@ public:
         quiet = false;
     }
     void focus_step(int direction) {
+        if (pc_a11y_port_menu_step(direction))
+            return;
         auto* focus = document->GetContext()->GetFocusElement();
         int index = direction > 0 ? -1 : 0;
         for (size_t i = 0; i < focus_ids.size(); ++i)
@@ -1975,6 +1977,7 @@ extern "C" void pc_menu_update(void) {
             port_menu.counter->Hide();
     }
     port_menu.poll_binding();
+    pc_a11y_port_menu_frame(port_menu.open);
 }
 
 extern "C" bool pc_is_custom_textures_enabled(void) {

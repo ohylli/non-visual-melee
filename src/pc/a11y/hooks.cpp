@@ -12,6 +12,7 @@
 #include "pc/net.h"
 #include "pc/pc.h"
 #include "pc/region.h"
+#include "port_menu_speech.hpp"
 #include "scene_speech.hpp"
 #include "speech.hpp"
 #include "sss_reader.hpp"
@@ -148,12 +149,14 @@ extern "C" void pc_a11y_init(void) {
     s_training = std::make_unique<a11y::TrainingSpeech>(*s_speech);
     s_cue_system = a11y::CueSystem::open(config, *s_speech, s_master_volume);
     a11y::launcher_speech_start(*s_speech);
+    a11y::port_menu_speech_start(*s_speech);
 }
 
 extern "C" void pc_a11y_shutdown(void) {
     if (s_speech == nullptr) {
         return;
     }
+    a11y::port_menu_speech_stop();
     a11y::launcher_speech_stop();
     s_cue_system.reset();
     s_training.reset();
@@ -172,6 +175,22 @@ extern "C" void pc_a11y_launcher_frame(void) {
 
 extern "C" bool pc_a11y_launcher_step(int direction) {
     return a11y::launcher_speech_step(direction);
+}
+
+/* Behind the game hooks' gate, which never silences it wrongly: a re-run
+ * frame is simulated inside a tick, never at the frame boundary where the
+ * menu's frame runs, and while the menu is open the game stands still. Under
+ * MELEE_NET_SYNCTEST, a debug mode, the gate silences every hook, this one
+ * too. */
+extern "C" void pc_a11y_port_menu_frame(bool open) {
+    if (!game_hook_may_speak()) {
+        return;
+    }
+    a11y::port_menu_speech_frame(open, a11y::Clock::now());
+}
+
+extern "C" bool pc_a11y_port_menu_step(int direction) {
+    return game_hook_may_speak() && a11y::port_menu_speech_step(direction);
 }
 
 extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
