@@ -45,8 +45,7 @@ constexpr const char* kPlayerName = "Player name, edit, OTTO. 1-8 letters or dig
                                     "apply to the next search.";
 constexpr const char* kFriendsCode = "Friend's connect code, edit, blank. Leave blank to host "
                                      "your code. Open Online, then Direct Connect, in the game.";
-constexpr const char* kControls =
-    "Controls, 4 of 6. The keyboard layout and controller setup. Text below, Down to read";
+constexpr const char* kControls = "Controls, 4 of 6. The keyboard layout and controller setup.";
 
 /* One launcher page with launcher speech attached, changed through the same
  * calls launcher.cpp makes. */
@@ -144,7 +143,7 @@ public:
         focus(kTabs[tab]);
     }
 
-    /* Launcher::enter_rows: Right or Enter on a category. */
+    /* Launcher::enter_rows, with its hook: Right or Enter on a category. */
     void enter_rows() {
         m_document->UpdateDocument();
         for (const char* id : page_focus()) {
@@ -154,10 +153,18 @@ public:
                 return;
             }
         }
+        a11y::launcher_speech_enter();
     }
 
-    /* Launcher::back: Escape or B. */
+    /* Launcher::horizontal's Left, with its hook, on a category, where the
+     * launcher itself does nothing. */
+    void left() { a11y::launcher_speech_back(); }
+
+    /* Launcher::back, with its hook: Escape or B. */
     void back() {
+        if (a11y::launcher_speech_back()) {
+            return;
+        }
         if (!m_settings) {
             return;
         }
@@ -553,15 +560,7 @@ void categories_and_back(Rml::Context& context) {
     down("Audio, 2 of 6. Volume and reverb.");
     down("Gameplay, 3 of 6. Unlocks, stage hazards and controller fixes.");
     down(kControls);
-    /* Past Controls' lines (controls_page_line_by_line), Up from Online. */
-    page.focus("tab-launcher");
-    page.frame();
-    page.take();
-    page.step(-1);
-    page.frame();
-    assert(page.take() ==
-           (std::vector<Output>{
-               interrupt("Online, 5 of 6. Your player name, connect codes and input delay.")}));
+    down("Online, 5 of 6. Your player name, connect codes and input delay.");
     down("Launcher, 6 of 6. The size of these menus, updates and the community.");
     down("Back, button. Back to the main menu.");
     down("Graphics, 1 of 6. How the game looks.");
@@ -571,7 +570,9 @@ void categories_and_back(Rml::Context& context) {
 }
 
 /* Headings, line breaks and " · " separators each end a line. The page has
- * no rows, so its lines follow its category, and past them Down moves on. */
+ * no rows, so Right or Enter on its category enters its text instead, Up and
+ * Down read the lines around, and Escape or Left go back to the category,
+ * focus on the category all along. */
 void controls_page_line_by_line(Rml::Context& context) {
     Page page(context);
     page.open_settings();
@@ -582,19 +583,40 @@ void controls_page_line_by_line(Rml::Context& context) {
         "C, V Jump", "Q, E Shield", "Tab Grab", "Enter Start", "IJKL C-stick", "Controller",
         "Remap a gamepad from the in-game menu: press BACK on the pad, or F1, then open "
         "Controls. Controllers are only detected once the game is running."};
-    for (const std::string& line : lines) {
+    page.enter_rows();
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(lines.front())}));
+    for (size_t i = 1; i < lines.size(); ++i) {
         page.step(1);
         page.frame();
-        assert(page.take() == (std::vector<Output>{interrupt(line)}));
+        assert(page.take() == (std::vector<Output>{interrupt(lines[i])}));
     }
     assert(page.focused() == page.element("tab-controls"));
     page.step(-1);
     assert(page.take() == (std::vector<Output>{interrupt("Controller")}));
+    /* Pressed again, the line being read. */
+    page.enter_rows();
+    assert(page.take() == (std::vector<Output>{interrupt("Controller")}));
     page.step(1);
     assert(page.take() == (std::vector<Output>{interrupt(lines.back())}));
+    /* The lines wrap around, as the rows of other pages do. */
+    page.step(1);
+    assert(page.take() == (std::vector<Output>{interrupt(lines.front())}));
+    page.step(-1);
+    assert(page.take() == (std::vector<Output>{interrupt(lines.back())}));
 
-    /* Off the last line onto the next category, and Up from there to
-     * Controls itself. */
+    /* Escape back to the category, which stays in Settings; Down then moves
+     * on to the next category. */
+    page.back();
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(kControls)}));
+    assert(page.focused() == page.element("tab-controls"));
+    page.back();
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(kSettings)}));
+    page.show_settings(true);
+    page.frame();
+    page.take();
     page.step(1);
     page.frame();
     assert(page.take() ==
@@ -604,14 +626,27 @@ void controls_page_line_by_line(Rml::Context& context) {
     page.frame();
     assert(page.take() == (std::vector<Output>{interrupt(kControls)}));
 
-    /* Up from the first line returns to the category. */
+    /* Entered afresh from the first line; Left goes back too. */
+    page.enter_rows();
+    assert(page.take() == (std::vector<Output>{interrupt(lines.front())}));
     page.step(1);
-    assert(page.take() == (std::vector<Output>{interrupt("Keyboard")}));
+    page.take();
+    page.left();
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(kControls)}));
+    page.left();
+    page.frame();
+    assert(page.take().empty());
+    page.enter_rows();
+    assert(page.take() == (std::vector<Output>{interrupt(lines.front())}));
+
+    /* Moving off the category ends the reading. */
+    page.focus("tab-online");
+    page.frame();
+    page.take();
     page.step(-1);
     page.frame();
     assert(page.take() == (std::vector<Output>{interrupt(kControls)}));
-    assert(page.focused() == page.element("tab-controls"));
-    /* Up from the category, not reading, moves to the category above. */
     page.step(-1);
     page.frame();
     assert(page.take() == (std::vector<Output>{interrupt(

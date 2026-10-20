@@ -238,17 +238,29 @@ protected:
     std::string remember_focus(Rml::Element& focus, bool explain = false);
     /* No control known: the next focus is announced, whatever it is. */
     void forget_focus();
-    /* The control's announcement, with the hint that a category's page is
-     * text alone, and what the page adds. */
+    /* The control's announcement and what the page adds. */
     std::string focus_text(Rml::Element& focus, bool explain = false) const;
     /* Up (-1) or Down (1), before the page moves focus: over the lines of
-     * the open category's page, between its controls, or after the category
-     * when the page has none. `wrap`: the page's column of rows wraps around.
-     * Speaks what the step lands on and returns true when the press was used,
-     * so focus must stay put. Leaves every press to the page while the
-     * accessibility switch is off. */
+     * the open category's page, between its controls, or over the lines of a
+     * page of text alone once entered (enter_text). `wrap`: the page's column
+     * of rows wraps around. Speaks what the step lands on and returns true
+     * when the press was used, so focus must stay put. Leaves every press to
+     * the page while the accessibility switch is off. */
     bool step_lines(int direction, bool wrap);
-    void stop_reading_lines() { m_lines.clear(); }
+    /* Right or Enter on the focused category, which found no control to
+     * focus on its page: a page of text alone, as the launcher's Controls
+     * is, is entered instead, its first line spoken, or the line being read
+     * again. Focus stays on the category meanwhile. Returns true when the
+     * page was text alone. */
+    bool enter_text();
+    /* Back, while reading a page of text alone: to its category, announced
+     * again. Returns true when the press was used, so the page must not act
+     * on it. */
+    bool leave_text();
+    void stop_reading_lines() {
+        m_lines.clear();
+        m_text_line = -1;
+    }
 
     /* Whether the element's own display shows it, whatever its ancestors do. */
     bool displayed(const char* id) const;
@@ -268,8 +280,13 @@ private:
     Rml::ObserverPtr<Rml::Element> m_focus;
     std::string m_focus_value;
     std::string m_focus_detail;
+    /* The text alone of the open category's page, with focus on the
+     * category: its stops, all lines; empty when it is not. */
+    std::vector<PageStop> text_alone(const Rml::Element& focus) const;
+
     FieldEcho m_field; /* follows the focused control as a text field */
     PageLines m_lines;
+    int m_text_line = -1; /* the line read on a page of text alone, -1 when out of it */
 };
 
 /* Whether the document was loaded from a file of this name. */

@@ -706,7 +706,7 @@ void PageReader::follow_focus(Rml::Element* focus, std::string_view prefix, bool
         return;
     }
     if (focus != m_focus.get()) {
-        m_lines.clear();
+        stop_reading_lines();
         std::string text(prefix);
         append_sentence(text, left_field_text());
         append_sentence(text, remember_focus(*focus, explain));
@@ -769,7 +769,7 @@ void PageReader::forget_focus() {
     m_focus.reset();
     m_focus_value.clear();
     m_focus_detail.clear();
-    m_lines.clear();
+    stop_reading_lines();
 }
 
 namespace {
@@ -785,19 +785,43 @@ std::string PageReader::focus_text(Rml::Element& focus, bool explain) const {
     Control control = describe(focus);
     control.explain = explain;
     std::string text = focus_announcement(control);
-    /* Rows with no control, which focus never reaches, are read line by line
-     * with Up and Down, in their turn between the controls. A page of text
-     * alone, as the launcher's Controls is, has no rows to enter: its lines
-     * follow its category (step_lines), which says so. */
-    if (control.role == Role::category) {
-        const Rml::Element* page = category_page(focus);
-        const std::vector<PageStop> stops = page ? page_stops(*page) : std::vector<PageStop>{};
-        if (!stops.empty() && !has_control(stops)) {
-            append_sentence(text, "Text below, Down to read");
-        }
-    }
     add_to_focus_text(focus, text);
     return text;
+}
+
+std::vector<PageStop> PageReader::text_alone(const Rml::Element& focus) const {
+    const Rml::Element* category = selected_category(m_document);
+    const Rml::Element* page = category != nullptr ? category_page(*category) : nullptr;
+    if (!m_speech.enabled() || &focus != category || &focus != m_focus.get() || page == nullptr) {
+        return {};
+    }
+    std::vector<PageStop> stops = page_stops(*page);
+    return has_control(stops) ? std::vector<PageStop>{} : stops;
+}
+
+bool PageReader::enter_text() {
+    const Rml::Element* focus = focused_control();
+    const std::vector<PageStop> stops =
+        focus != nullptr ? text_alone(*focus) : std::vector<PageStop>{};
+    if (stops.empty()) {
+        m_text_line = -1;
+        return false;
+    }
+    /* Pressed again while reading, the line being read. */
+    m_text_line = std::clamp(m_text_line, 0, static_cast<int>(stops.size()) - 1);
+    say(stops[m_text_line].line, Mode::interrupt);
+    return true;
+}
+
+bool PageReader::leave_text() {
+    Rml::Element* focus = focused_control();
+    if (m_text_line < 0 || focus == nullptr || text_alone(*focus).empty()) {
+        m_text_line = -1;
+        return false;
+    }
+    m_text_line = -1;
+    say(focus_text(*focus), Mode::interrupt);
+    return true;
 }
 
 bool PageReader::step_lines(int direction, bool wrap) {
@@ -805,23 +829,24 @@ bool PageReader::step_lines(int direction, bool wrap) {
     const Rml::Element* category = selected_category(m_document);
     const Rml::Element* page = category != nullptr ? category_page(*category) : nullptr;
     if (!m_speech.enabled() || focus == nullptr || focus != m_focus.get() || page == nullptr) {
-        m_lines.clear();
+        stop_reading_lines();
         return false;
     }
-    std::vector<PageStop> stops = page_stops(*page);
-    const bool in_rows = std::any_of(stops.begin(), stops.end(),
-        [focus](const PageStop& stop) { return stop.control == focus; });
-    if (!in_rows) {
-        /* Focus in the sidebar, which moves between categories: only a page
-         * of text alone is read from there, after its category, and past its
-         * lines the page's own step moves on to the next category. */
-        if (focus != category || has_control(stops)) {
-            m_lines.clear();
-            return false;
+    /* A page of text alone, entered: its lines are the column, wrapping as
+     * the page's rows do, and focus stays on its category. */
+    if (m_text_line >= 0) {
+        const std::vector<PageStop> lines = text_alone(*focus);
+        if (!lines.empty()) {
+            const int count = static_cast<int>(lines.size());
+            m_text_line = std::min(m_text_line, count - 1) + direction;
+            m_text_line =
+                wrap ? (m_text_line + count) % count : std::clamp(m_text_line, 0, count - 1);
+            say(lines[m_text_line].line, Mode::interrupt);
+            return true;
         }
-        stops.insert(stops.begin(), PageStop{category, {}});
-        wrap = false;
+        m_text_line = -1;
     }
+    const std::vector<PageStop> stops = page_stops(*page);
     const PageLines::Move move = m_lines.step(stops, *focus, direction, wrap);
     /* Focus stays put: a text field has already moved its cursor to an end
      * for the press. */

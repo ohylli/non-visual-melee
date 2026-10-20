@@ -177,6 +177,14 @@ extern "C" bool pc_a11y_launcher_step(int direction) {
     return a11y::launcher_speech_step(direction);
 }
 
+extern "C" void pc_a11y_launcher_enter_text(void) {
+    a11y::launcher_speech_enter();
+}
+
+extern "C" bool pc_a11y_launcher_back(void) {
+    return a11y::launcher_speech_back();
+}
+
 /* Speech is behind the game hooks' gate, which never silences it wrongly: a
  * re-run frame is simulated inside a tick, never at the frame boundary where
  * the menu's frame runs, and while the menu is open the game stands still.

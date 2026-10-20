@@ -16,3 +16,7 @@ The base merge of v0.4.0-beta (f4f4a4b) redesigned the launcher and the port men
 ## Done when
 
 The maintainer's findings are recorded below, each either fixed or filed as its own issue, and CLAUDE.md's Launcher and Port menu status lines no longer name this issue.
+
+## Comments
+
+2026-10-20: finding on the launcher's Controls page. Down from its category read the keyboard lines one by one, so reaching Online meant going through all of them, while one Up jumped back to the category. Fixed: Controls is now entered like any other category, with Right or Enter (A), which reads its first line; Up and Down go round its lines, and Escape, B or Left go back to the category, so Down on the category moves straight on to Online (hooks `pc_a11y_launcher_enter_text` and `pc_a11y_launcher_back`). The maintainer tested it by ear with NVDA and it works. The rest of the play test is still to do.

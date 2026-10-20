@@ -26,5 +26,12 @@ void launcher_speech_frame(Clock::time_point now);
  * one or to come back from them to the focused control, so focus must not
  * move. */
 bool launcher_speech_step(int direction);
+/* Right, Enter or A on a Settings category found no row to focus: a page of
+ * text alone is entered, its lines read with Up and Down. */
+void launcher_speech_enter();
+/* Escape, B or Left, before the launcher goes back. Returns true when
+ * launcher speech used the press to leave a page of text alone for its
+ * category, so the launcher must not act on it. */
+bool launcher_speech_back();
 
 }  // namespace a11y

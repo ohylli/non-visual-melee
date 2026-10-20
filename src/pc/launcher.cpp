@@ -492,9 +492,12 @@ class Launcher final : public Rml::EventListener {
                 return;
             }
         }
+        pc_a11y_launcher_enter_text();
     }
     // B or Escape: rows to categories, categories to the main menu.
     void back() {
+        if (pc_a11y_launcher_back())
+            return;
         if (!settings) {
             if (verification.valid())
                 cancel = true;
@@ -537,6 +540,8 @@ class Launcher final : public Rml::EventListener {
     /* Left and Right: Melee's arrows. They step a value either way, move a
      * slider, or cross between the categories and the rows. */
     void horizontal(int direction) {
+        if (direction < 0 && pc_a11y_launcher_back())
+            return;
         auto* focus = document->GetContext()->GetFocusElement();
         if (!focus || focus->IsPseudoClassSet("disabled"))
             return;

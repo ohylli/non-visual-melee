@@ -36,6 +36,18 @@ void pc_a11y_launcher_frame(void);
  * them to the focused control. Focus must then stay put. */
 bool pc_a11y_launcher_step(int direction);
 
+/* Right, Enter or A on a Settings category found no row of its page to focus
+ * (the end of enter_rows in src/pc/launcher.cpp). Launcher speech enters the
+ * page if it is text alone, as Controls is, and reads its lines with Up and
+ * Down from there; focus stays on the category. */
+void pc_a11y_launcher_enter_text(void);
+
+/* Escape, B or Left, before the launcher acts on it (back and horizontal in
+ * src/pc/launcher.cpp). Returns true when launcher speech used the press to
+ * leave a page of text alone for its category; the launcher must then do
+ * nothing. */
+bool pc_a11y_launcher_back(void);
+
 /* Once a frame of the game loop (pc_menu_update in src/pc/launcher.cpp, run
  * from pc_frame_boundary), after the port menu has reacted to the frame's
  * input, whether the menu is open or not; open is the menu's own flag,

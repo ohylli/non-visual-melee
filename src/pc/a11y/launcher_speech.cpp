@@ -67,6 +67,16 @@ public:
         return step_lines(direction, true);
     }
 
+    /* Right, Enter or A on a category whose page had no row to focus. */
+    void enter() {
+        if (m_opened && displayed("preferences")) {
+            enter_text();
+        }
+    }
+
+    /* Escape, B or Left, before the launcher goes back. */
+    bool back() { return m_opened && displayed("preferences") && leave_text(); }
+
 private:
     /* Play is the only way to hear the disc card, which focus never reaches. */
     void add_to_focus_text(const Rml::Element& focus, std::string& text) const override {
@@ -131,6 +141,17 @@ void launcher_speech_frame(Clock::time_point now) {
 bool launcher_speech_step(int direction) {
     LauncherReader* reader = s_plugin.reader();
     return reader != nullptr && reader->step(direction);
+}
+
+void launcher_speech_enter() {
+    if (LauncherReader* reader = s_plugin.reader()) {
+        reader->enter();
+    }
+}
+
+bool launcher_speech_back() {
+    LauncherReader* reader = s_plugin.reader();
+    return reader != nullptr && reader->back();
 }
 
 }  // namespace a11y

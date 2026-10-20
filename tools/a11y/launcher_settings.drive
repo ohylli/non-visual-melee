@@ -1,7 +1,8 @@
-# The launcher's Settings: every category and Back, Controls' lines read with
-# Down from its category, a setting stepped both ways and with Enter, a
-# slider moved, the rows wrapping around past the hidden Diagnostics row,
-# Left and Escape back to the categories, the lines between Online's rows,
+# The launcher's Settings: every category and Back, Controls' text entered
+# with Right, read line by line around and left with Escape, a setting
+# stepped both ways and with Enter, a slider moved, the rows wrapping around
+# past the hidden Diagnostics row, Left and Escape back to the categories,
+# the lines between Online's rows,
 # typing in a text field with a refused character, Tab and Shift+Tab, and
 # back to Home both ways. Waits on each announcement, so a missing or changed
 # line fails the run. Run in launcher mode, with accessibility on but muted,
@@ -17,15 +18,15 @@ wait '"Settings, button\. '
 key Return
 wait '"Settings\. Graphics, 1 of 6\. Up and down to choose, right to enter\. How the game looks\."$'
 
-# Every category, Controls' lines on the way, then Back and round to
+# Every category, Controls' text on the way, then Back and round to
 # Graphics.
 key Down
 wait '"Audio, 2 of 6\. Volume and reverb\."$'
 key Down
 wait '"Gameplay, 3 of 6\. Unlocks, stage hazards and controller fixes\."$'
 key Down
-wait '"Controls, 4 of 6\. The keyboard layout and controller setup\. Text below, Down to read"$'
-key Down
+wait '"Controls, 4 of 6\. The keyboard layout and controller setup\."$'
+key Right
 wait '"Keyboard"$'
 key Down
 wait '"WASD, arrows Move"$'
@@ -39,6 +40,10 @@ key Up
 wait '"Controller"$'
 key Down
 wait '"Remap a gamepad '
+key Down
+wait '"Keyboard"$'
+key Escape
+wait '"Controls, 4 of 6\. The keyboard layout and controller setup\."$'
 key Down
 wait '"Online, 5 of 6\. Your player name, connect codes and input delay\."$'
 key Down
