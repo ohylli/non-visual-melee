@@ -223,6 +223,16 @@ def write_launcher_cfg(folder, disc):
         f.write(f"disc {quoted}\ncheck_updates 0\n")
 
 
+def category_names():
+    """The names of the sidebar categories on the launcher's and the port
+    menu's pages, as their buttons ("tab-x") show them."""
+    names = set()
+    for page in ("launcher.rml", "port-menu.rml"):
+        with open(os.path.join(REPO, "resources", page), encoding="utf-8") as f:
+            names.update(re.findall(r'<button id="tab-[^"]*"[^>]*>\s*<span>([^<]+)</span>', f.read()))
+    return sorted(names)
+
+
 # Presses that act on the focused control of an RmlUi page, by the names the
 # key and gamepad steps take.
 ACTIVATING = {("key", "return"), ("key", "keypad enter"), ("key", "space"), ("gamepad", "a"),
@@ -230,8 +240,12 @@ ACTIVATING = {("key", "return"), ("key", "keypad enter"), ("key", "space"), ("ga
 # Presses that step the focused setting's value either way.
 STEPPING = {("key", "left"), ("key", "right"), ("gamepad", "dpleft"), ("gamepad", "dpright")}
 # A speak line that says where focus went: a control's announcement, alone
-# or inside an opening. Value changes and lines of text do not.
-FOCUS_LINE = re.compile(r", (button|edit|slider)\b|, \d+ of \d+\b|, (Enter|Left and right) to change\b")
+# or inside an opening. A category's starts with its name, after the opening
+# ("Settings. ", "PC settings. ") if any, and ends there or at a full stop.
+# Value changes and lines of text do not count.
+FOCUS_LINE = re.compile(r", (button|edit|slider)\b|, (Enter|Left and right) to change\b"
+                        r'|: "(?:Settings\. |PC settings\. )?(?:' + "|".join(map(re.escape, category_names()))
+                        + r')[."]')
 # Controls a driven run must never press: Choose Disc opens the Windows file
 # dialog, which takes focus and cuts off the maintainer's screen reader
 # mid-sentence; Discord (Home's, and Join Discord on Settings) and the update

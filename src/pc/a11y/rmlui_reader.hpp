@@ -50,8 +50,6 @@ struct Control {
     std::string detail; /* live text in the row's name: "No controller in this port." */
     std::string help;   /* the description the page shows for it; empty when it adds nothing */
     bool disabled = false;
-    /* Add how to move: a category's announcement on arriving in the settings. */
-    bool explain = false;
 };
 
 /* The visible text inside an element, whitespace collapsed and trimmed. */
@@ -73,8 +71,9 @@ std::string field_value(const Control& control);
 
 /* "Choose Disc, button. <help>", "Vertical sync, On, Left and right to
  * change. <help>", "Master volume, slider, 80%. Left and right to adjust.
- * <help>", "Graphics. <help>". */
-std::string focus_announcement(const Control& control);
+ * <help>", "Graphics. <help>". `explain` adds how to move to a category's
+ * announcement, on arriving in the settings. */
+std::string focus_announcement(const Control& control, bool explain = false);
 
 /* One stop on a category's page in the order Up and Down move through it: a
  * control, or one line of a row that has none, which focus never reaches. */
@@ -243,9 +242,8 @@ protected:
     /* Right or Enter on the focused category, which found no control to
      * focus on its page: a page of text alone, as the launcher's Controls
      * is, is entered instead, its first line spoken, or the line being read
-     * again. Focus stays on the category meanwhile. Returns true when the
-     * page was text alone. */
-    bool enter_text();
+     * again. Focus stays on the category meanwhile. */
+    void enter_text();
     /* Back, while reading a page of text alone: to its category, announced
      * again. Returns true when the press was used, so the page must not act
      * on it. */
@@ -267,16 +265,17 @@ private:
     Control describe(const Rml::Element& element) const;
     std::string left_field_text() const;
     void follow_value(const Rml::Element& focus, const Control& control);
+    /* The open category's page, or null without one. */
+    const Rml::Element* open_page() const;
+    /* The text alone of the open category's page, with focus on the
+     * category: its stops, all lines; empty when it is not. */
+    std::vector<PageStop> text_alone(const Rml::Element& focus) const;
 
     Rml::ElementDocument& m_document;
     Speech& m_speech;
     Rml::ObserverPtr<Rml::Element> m_focus;
     std::string m_focus_value;
     std::string m_focus_detail;
-    /* The text alone of the open category's page, with focus on the
-     * category: its stops, all lines; empty when it is not. */
-    std::vector<PageStop> text_alone(const Rml::Element& focus) const;
-
     FieldEcho m_field; /* follows the focused control as a text field */
     PageLines m_lines;
     int m_text_line = -1; /* the line read on a page of text alone, -1 when out of it */

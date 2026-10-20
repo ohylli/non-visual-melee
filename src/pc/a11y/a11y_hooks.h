@@ -60,7 +60,7 @@ void pc_a11y_port_menu_frame(bool open);
 /* The port menu is about to move focus up (-1) or down (1) (PortMenu::
  * focus_step in src/pc/launcher.cpp), whether by arrow key, Tab, D-pad or
  * stick. Returns true when port menu speech used the press for the lines of
- * text on a tab's page, as pc_a11y_launcher_step does; focus must then stay
+ * text between a page's rows, as pc_a11y_launcher_step does; focus must then stay
  * put. */
 bool pc_a11y_port_menu_step(int direction);
 

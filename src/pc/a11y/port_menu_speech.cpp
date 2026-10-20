@@ -19,8 +19,8 @@ constexpr std::chrono::milliseconds kOpeningFocusWait{1000};
  * bar, "Melee PC / Settings". */
 constexpr const char* kHeading = "PC settings";
 
-/* Whether the element is one of the Controls page's binding buttons: "bind-0"
- * to "bind-11", "axis-0" to "axis-9" and "menu-binding". Their label is the
+/* Whether the element is one of the Controls page's binding buttons: the
+ * numbered "bind-" and "axis-" ids, and "menu-binding". Their label is the
  * binding, which is what a value is, though the page marks them as buttons
  * that act; the remapping feature decides their words. */
 bool is_binding(const Rml::Element& element) {

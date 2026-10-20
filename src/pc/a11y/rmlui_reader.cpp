@@ -312,7 +312,7 @@ std::string field_value(const Control& control) {
     return spoken_value(control.value);
 }
 
-std::string focus_announcement(const Control& control) {
+std::string focus_announcement(const Control& control, bool explain) {
     std::string text = control.name;
     const auto add = [&text](std::string_view part) {
         if (part.empty()) {
@@ -351,7 +351,7 @@ std::string focus_announcement(const Control& control) {
         add(field_value(control));
         break;
     case Role::category:
-        if (control.explain) {
+        if (explain) {
             moves = "Up and down to choose, right to enter";
         }
         break;
@@ -765,35 +765,38 @@ bool has_control(const std::vector<PageStop>& stops) {
 }  // namespace
 
 std::string PageReader::focus_text(Rml::Element& focus, bool explain) const {
-    Control control = describe(focus);
-    control.explain = explain;
-    std::string text = focus_announcement(control);
+    std::string text = focus_announcement(describe(focus), explain);
     add_to_focus_text(focus, text);
     return text;
 }
 
-std::vector<PageStop> PageReader::text_alone(const Rml::Element& focus) const {
+const Rml::Element* PageReader::open_page() const {
     const Rml::Element* category = selected_category(m_document);
-    const Rml::Element* page = category != nullptr ? category_page(*category) : nullptr;
-    if (!m_speech.enabled() || &focus != category || &focus != m_focus.get() || page == nullptr) {
+    return category != nullptr ? category_page(*category) : nullptr;
+}
+
+std::vector<PageStop> PageReader::text_alone(const Rml::Element& focus) const {
+    const Rml::Element* page = open_page();
+    if (!m_speech.enabled() || &focus != selected_category(m_document) || &focus != m_focus.get() ||
+        page == nullptr)
+    {
         return {};
     }
     std::vector<PageStop> stops = page_stops(*page);
     return has_control(stops) ? std::vector<PageStop>{} : stops;
 }
 
-bool PageReader::enter_text() {
+void PageReader::enter_text() {
     const Rml::Element* focus = focused_control();
     const std::vector<PageStop> stops =
         focus != nullptr ? text_alone(*focus) : std::vector<PageStop>{};
     if (stops.empty()) {
         m_text_line = -1;
-        return false;
+        return;
     }
     /* Pressed again while reading, the line being read. */
     m_text_line = std::clamp(m_text_line, 0, static_cast<int>(stops.size()) - 1);
     say(stops[m_text_line].line, Mode::interrupt);
-    return true;
 }
 
 bool PageReader::leave_text() {
@@ -809,8 +812,7 @@ bool PageReader::leave_text() {
 
 bool PageReader::step_lines(int direction, bool wrap) {
     Rml::Element* focus = focused_control();
-    const Rml::Element* category = selected_category(m_document);
-    const Rml::Element* page = category != nullptr ? category_page(*category) : nullptr;
+    const Rml::Element* page = open_page();
     if (!m_speech.enabled() || focus == nullptr || focus != m_focus.get() || page == nullptr) {
         stop_reading_lines();
         return false;
