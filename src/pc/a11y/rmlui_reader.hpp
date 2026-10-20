@@ -189,7 +189,11 @@ struct WatchedText {
 class SpokenOnce {
 public:
     void add(std::optional<std::string> text);
-    const std::vector<std::string>& texts() const { return m_texts; }
+    const std::vector<std::string>& texts() const& { return m_texts; }
+    /* Before C++23, `for (... : make().texts())` destroys the SpokenOnce
+     * before the loop body runs, which then reads freed strings: keep it in
+     * a named local. */
+    void texts() && = delete;
 
 private:
     std::vector<std::string> m_texts;

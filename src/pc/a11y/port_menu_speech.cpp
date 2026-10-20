@@ -72,7 +72,8 @@ public:
             return;
         }
         follow_focus(focus, "");
-        for (const std::string& text : observe_regions(focus, true, now).texts()) {
+        const SpokenOnce spoken = observe_regions(focus, true, now);
+        for (const std::string& text : spoken.texts()) {
             say(text, Mode::queue);
         }
     }
