@@ -210,21 +210,6 @@ std::string form_value(const Rml::Element& element) {
     return form != nullptr ? collapse_whitespace(form->GetValue()) : std::string();
 }
 
-CategoryPlace place_of(const Rml::Element& category) {
-    CategoryPlace place;
-    const Rml::Element* sidebar = category.GetParentNode();
-    for (int i = 0; sidebar != nullptr && i < sidebar->GetNumChildren(); ++i) {
-        const Rml::Element* sibling = sidebar->GetChild(i);
-        if (is_category(*sibling)) {
-            ++place.count;
-            if (sibling == &category) {
-                place.position = place.count;
-            }
-        }
-    }
-    return place;
-}
-
 /* Whether a description says something the name and the live text do not:
  * the pages fill some with the row's name ("Display mode") or with "-". */
 bool adds_to(std::string_view help, const Control& control) {
@@ -292,7 +277,6 @@ Control describe_control(const Rml::Element& element) {
         if (is_category(element)) {
             control.role = Role::category;
             control.name = control.value;
-            control.place = place_of(element);
         } else if (control.name.empty()) {
             control.role = Role::button;
             control.name = control.value;
@@ -367,7 +351,6 @@ std::string focus_announcement(const Control& control) {
         add(field_value(control));
         break;
     case Role::category:
-        add(std::to_string(control.place.position) + " of " + std::to_string(control.place.count));
         if (control.explain) {
             moves = "Up and down to choose, right to enter";
         }

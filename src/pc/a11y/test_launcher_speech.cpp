@@ -45,7 +45,7 @@ constexpr const char* kPlayerName = "Player name, edit, OTTO. 1-8 letters or dig
                                     "apply to the next search.";
 constexpr const char* kFriendsCode = "Friend's connect code, edit, blank. Leave blank to host "
                                      "your code. Open Online, then Direct Connect, in the game.";
-constexpr const char* kControls = "Controls, 4 of 6. The keyboard layout and controller setup.";
+constexpr const char* kControls = "Controls. The keyboard layout and controller setup.";
 
 /* One launcher page with launcher speech attached, changed through the same
  * calls launcher.cpp makes. */
@@ -533,15 +533,14 @@ void entering_and_leaving_settings(Rml::Context& context) {
     page.show_settings(true);
     page.run(a11y::kSettleTime);
     assert(page.take() == (std::vector<Output>{interrupt(
-                              "Settings. Graphics, 1 of 6. Up and down to choose, right to enter. "
+                              "Settings. Graphics. Up and down to choose, right to enter. "
                               "How the game looks.")}));
     page.enter_rows();
     page.frame();
     page.take();
     page.back();
     page.frame();
-    assert(
-        page.take() == (std::vector<Output>{interrupt("Graphics, 1 of 6. How the game looks.")}));
+    assert(page.take() == (std::vector<Output>{interrupt("Graphics. How the game looks.")}));
     page.back();
     page.run(a11y::kSettleTime);
     assert(page.take() == (std::vector<Output>{interrupt(kSettings)}));
@@ -557,13 +556,13 @@ void categories_and_back(Rml::Context& context) {
         page.frame();
         assert(page.take() == (std::vector<Output>{interrupt(said)}));
     };
-    down("Audio, 2 of 6. Volume and reverb.");
-    down("Gameplay, 3 of 6. Unlocks, stage hazards and controller fixes.");
+    down("Audio. Volume and reverb.");
+    down("Gameplay. Unlocks, stage hazards and controller fixes.");
     down(kControls);
-    down("Online, 5 of 6. Your player name, connect codes and input delay.");
-    down("Launcher, 6 of 6. The size of these menus, updates and the community.");
+    down("Online. Your player name, connect codes and input delay.");
+    down("Launcher. The size of these menus, updates and the community.");
     down("Back, button. Back to the main menu.");
-    down("Graphics, 1 of 6. How the game looks.");
+    down("Graphics. How the game looks.");
     page.step(-1);
     page.frame();
     assert(page.take() == (std::vector<Output>{interrupt("Back, button. Back to the main menu.")}));
@@ -619,9 +618,8 @@ void controls_page_line_by_line(Rml::Context& context) {
     page.take();
     page.step(1);
     page.frame();
-    assert(page.take() ==
-           (std::vector<Output>{
-               interrupt("Online, 5 of 6. Your player name, connect codes and input delay.")}));
+    assert(page.take() == (std::vector<Output>{interrupt(
+                              "Online. Your player name, connect codes and input delay.")}));
     page.step(-1);
     page.frame();
     assert(page.take() == (std::vector<Output>{interrupt(kControls)}));
@@ -650,7 +648,7 @@ void controls_page_line_by_line(Rml::Context& context) {
     page.step(-1);
     page.frame();
     assert(page.take() == (std::vector<Output>{interrupt(
-                              "Gameplay, 3 of 6. Unlocks, stage hazards and controller fixes.")}));
+                              "Gameplay. Unlocks, stage hazards and controller fixes.")}));
 }
 
 /* A page with rows reads its lines only from its rows: Down on its category
@@ -663,9 +661,8 @@ void category_with_rows_moves_on(Rml::Context& context) {
     page.take();
     page.step(1);
     page.frame();
-    assert(page.take() ==
-           (std::vector<Output>{interrupt(
-               "Launcher, 6 of 6. The size of these menus, updates and the community.")}));
+    assert(page.take() == (std::vector<Output>{interrupt(
+                              "Launcher. The size of these menus, updates and the community.")}));
 }
 
 /* The lines sit between the rows, in the page's order, and the rows wrap
@@ -739,9 +736,8 @@ void leaving_the_rows_ends_reading(Rml::Context& context) {
     page.take();
     page.back();
     page.frame();
-    assert(page.take() ==
-           (std::vector<Output>{
-               interrupt("Online, 5 of 6. Your player name, connect codes and input delay.")}));
+    assert(page.take() == (std::vector<Output>{interrupt(
+                              "Online. Your player name, connect codes and input delay.")}));
     page.enter_rows();
     page.frame();
     assert(page.take() == (std::vector<Output>{interrupt(kPlayerName)}));

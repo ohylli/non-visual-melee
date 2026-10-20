@@ -29,7 +29,7 @@ sleep 1
 
 # F1 opens the menu on Graphics, a fresh run's first category.
 key F1
-wait '"PC settings\. Graphics, 1 of 5\. Up and down to choose, right to enter"$'
+wait '"PC settings\. Graphics\. Up and down to choose, right to enter"$'
 
 # Into the rows. Vertical sync off and on: the new value alone, "Saved."
 # unsaid.
@@ -42,11 +42,11 @@ wait '"Off"$'
 key Left
 wait '"On"$'
 key Escape
-wait '"Graphics, 1 of 5"$'
+wait '"Graphics"$'
 
 # Audio: Master volume, a slider, a step down and back up.
 key Down
-wait '"Audio, 2 of 5"$'
+wait '"Audio"$'
 key Right
 wait '"Master volume, slider, 100%\. Left and right to adjust\. Left/right or drag to adjust\."$'
 key Left
@@ -56,19 +56,19 @@ wait '"100%"$'
 key Down
 wait '"Music volume, slider, 100%\. Left and right to adjust\. Background music volume\."$'
 key Escape
-wait '"Audio, 2 of 5"$'
+wait '"Audio"$'
 
 key Down
-wait '"Gameplay, 3 of 5"$'
+wait '"Gameplay"$'
 key Right
 wait '"Unlock everything, \w+, Left and right to change\. Unlock all 26 characters, 11 secret stages, and All-Star mode\."$'
 key Escape
-wait '"Gameplay, 3 of 5"$'
+wait '"Gameplay"$'
 
 # Controls: the input device stepped to Keyboard, with its live line, and
 # back to Port 1.
 key Down
-wait '"Controls, 4 of 5"$'
+wait '"Controls"$'
 key Right
 wait '"Input device, Port 1, Left and right to change\. No controller in this port\. Choose a controller port or Keyboard\. Select a row to change its binding\."$'
 key Left
@@ -104,7 +104,7 @@ wait '"Enter Start"$'
 key Down Down
 wait '"Resume, button\. Close settings and return to the game\."$'
 key Up
-wait '"Online, 5 of 5"$'
+wait '"Online"$'
 
 # Online: Player name, typed into with the cursor at the field's start. #
 # is refused, letters go in as capitals, and a full field says so;
@@ -142,13 +142,13 @@ wait '"VS\. Mode\. Multiplayer battles!"$'
 # The gamepad's Back opens it on the category used last; the shoulder
 # changes category, the D-pad enters the rows, and B goes back, then closes.
 gamepad back
-wait '"PC settings\. Online, 5 of 5\. Up and down to choose, right to enter"$'
+wait '"PC settings\. Online\. Up and down to choose, right to enter"$'
 gamepad leftshoulder
-wait '"Controls, 4 of 5"$'
+wait '"Controls"$'
 gamepad dpright
 wait '"Input device, Port 1, Left and right to change\. '
 gamepad b
-wait '"Controls, 4 of 5"$'
+wait '"Controls"$'
 gamepad b
 wait '"Back to game"$'
 press Down

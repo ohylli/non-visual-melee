@@ -42,12 +42,6 @@ enum class Role {
     other,
 };
 
-/* A category's place among the sidebar's categories. */
-struct CategoryPlace {
-    int position = 0; /* 1-based */
-    int count = 0;
-};
-
 /* A focusable control as the player hears it. */
 struct Control {
     Role role = Role::other;
@@ -58,7 +52,6 @@ struct Control {
     bool disabled = false;
     /* Add how to move: a category's announcement on arriving in the settings. */
     bool explain = false;
-    CategoryPlace place; /* categories only */
 };
 
 /* The visible text inside an element, whitespace collapsed and trimmed. */
@@ -80,7 +73,7 @@ std::string field_value(const Control& control);
 
 /* "Choose Disc, button. <help>", "Vertical sync, On, Left and right to
  * change. <help>", "Master volume, slider, 80%. Left and right to adjust.
- * <help>", "Graphics, 1 of 6. <help>". */
+ * <help>", "Graphics. <help>". */
 std::string focus_announcement(const Control& control);
 
 /* One stop on a category's page in the order Up and Down move through it: a

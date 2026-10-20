@@ -20,3 +20,5 @@ The maintainer's findings are recorded below, each either fixed or filed as its 
 ## Comments
 
 2026-10-20: finding on the launcher's Controls page. Down from its category read the keyboard lines one by one, so reaching Online meant going through all of them, while one Up jumped back to the category. Fixed: Controls is now entered like any other category, with Right or Enter (A), which reads its first line; Up and Down go round its lines, and Escape, B or Left go back to the category, so Down on the category moves straight on to Online (hooks `pc_a11y_launcher_enter_text` and `pc_a11y_launcher_back`). The maintainer tested it by ear with NVDA and it works. The rest of the play test is still to do.
+
+2026-10-20: finding on the categories of both pages. A category said its position among them ("Graphics, 1 of 6"), which no other reader does. Fixed: a category says its name and description alone ("Graphics. How the game looks."), and in the port menu its name alone ("Audio"). The maintainer tested it by ear with NVDA and it works.

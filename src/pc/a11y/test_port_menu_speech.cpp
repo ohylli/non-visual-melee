@@ -33,8 +33,7 @@ std::vector<Output> none() {
     return {};
 }
 
-constexpr const char* kOpening =
-    "PC settings. Graphics, 1 of 5. Up and down to choose, right to enter";
+constexpr const char* kOpening = "PC settings. Graphics. Up and down to choose, right to enter";
 constexpr const char* kResume = "Resume, button. Close settings and return to the game.";
 
 /* The port menu's tab_ids, without the launcher's own category. */
@@ -371,15 +370,14 @@ void reopening_and_the_ways_out(Rml::Context& context) {
     menu.open();
     menu.step(1);
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt("Audio, 2 of 5")}));
+    assert(menu.take() == (std::vector<Output>{interrupt("Audio")}));
     menu.back();
     menu.frame();
     assert(menu.take() == (std::vector<Output>{interrupt("Back to game")}));
     menu.toggle();
     menu.frame();
-    assert(menu.take() ==
-           (std::vector<Output>{
-               interrupt("PC settings. Audio, 2 of 5. Up and down to choose, right to enter")}));
+    assert(menu.take() == (std::vector<Output>{interrupt(
+                              "PC settings. Audio. Up and down to choose, right to enter")}));
     /* Up from the first category, around to the sidebar's end. */
     menu.show_tab(0);
     menu.frame();
@@ -435,8 +433,7 @@ void every_categorys_first_row(Rml::Context& context) {
         {interrupt("Player name, edit, PLAYER. 1–8 letters or digits. Changes apply to the next "
                    "search.")},
     };
-    const char* categories[] = {"Graphics, 1 of 5", "Audio, 2 of 5", "Gameplay, 3 of 5",
-        "Controls, 4 of 5", "Online, 5 of 5"};
+    const char* categories[] = {"Graphics", "Audio", "Gameplay", "Controls", "Online"};
     for (int tab = 0; tab < kTabCount; ++tab) {
         menu.show_tab(tab);
         menu.frame();
@@ -588,7 +585,7 @@ void controls_rows_and_lines(Rml::Context& context) {
     /* Up from Resume is the sidebar's: the last category, not the lines. */
     menu.step(-1);
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt("Online, 5 of 5")}));
+    assert(menu.take() == (std::vector<Output>{interrupt("Online")}));
 }
 
 /* Online: the connect code between the fields, the closing note after Input
@@ -622,7 +619,7 @@ void online_lines(Rml::Context& context) {
     menu.take();
     menu.step(-1);
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt("Online, 5 of 5")}));
+    assert(menu.take() == (std::vector<Output>{interrupt("Online")}));
 }
 
 /* The status line is spoken queued once it settles, except "Saved.", which

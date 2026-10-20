@@ -16,16 +16,16 @@ wait '"Melee launcher\. Ready to play'
 key Down Down Down
 wait '"Settings, button\. '
 key Return
-wait '"Settings\. Graphics, 1 of 6\. Up and down to choose, right to enter\. How the game looks\."$'
+wait '"Settings\. Graphics\. Up and down to choose, right to enter\. How the game looks\."$'
 
 # Every category, Controls' text on the way, then Back and round to
 # Graphics.
 key Down
-wait '"Audio, 2 of 6\. Volume and reverb\."$'
+wait '"Audio\. Volume and reverb\."$'
 key Down
-wait '"Gameplay, 3 of 6\. Unlocks, stage hazards and controller fixes\."$'
+wait '"Gameplay\. Unlocks, stage hazards and controller fixes\."$'
 key Down
-wait '"Controls, 4 of 6\. The keyboard layout and controller setup\."$'
+wait '"Controls\. The keyboard layout and controller setup\."$'
 key Right
 wait '"Keyboard"$'
 key Down
@@ -43,15 +43,15 @@ wait '"Remap a gamepad '
 key Down
 wait '"Keyboard"$'
 key Escape
-wait '"Controls, 4 of 6\. The keyboard layout and controller setup\."$'
+wait '"Controls\. The keyboard layout and controller setup\."$'
 key Down
-wait '"Online, 5 of 6\. Your player name, connect codes and input delay\."$'
+wait '"Online\. Your player name, connect codes and input delay\."$'
 key Down
-wait '"Launcher, 6 of 6\. The size of these menus, updates and the community\."$'
+wait '"Launcher\. The size of these menus, updates and the community\."$'
 key Down
 wait '"Back, button\. Back to the main menu\."$'
 key Down
-wait '"Graphics, 1 of 6\. How the game looks\."$'
+wait '"Graphics\. How the game looks\."$'
 
 # Into Graphics' rows. Vertical sync off and on with Right and Left, then
 # with Enter: the new value alone.
@@ -76,24 +76,24 @@ wait '"1x"$'
 key Left
 wait '"Auto"$'
 key Escape
-wait '"Graphics, 1 of 6\. How the game looks\."$'
+wait '"Graphics\. How the game looks\."$'
 
 # Launcher's rows: Up from the first wraps to the last shown, past
 # Diagnostics, which only Android shows; Left on a button goes back.
 key Up Up
-wait '"Launcher, 6 of 6\. '
+wait '"Launcher\. '
 key Right
 wait '"Interface size, slider, 100%\. Left and right to adjust\. The size of these menus\."$'
 key Up
 wait '"Discord community: Join Discord, button\. Join the community Discord server in your browser\."$'
 key Left
-wait '"Launcher, 6 of 6\. '
+wait '"Launcher\. '
 
 # Online: Player name, typed into with the cursor at the field's start. #
 # is refused, letters go in as capitals, and a full field says so;
 # Backspace puts PLAYER back.
 key Up
-wait '"Online, 5 of 6\. '
+wait '"Online\. '
 key Right
 wait '"Player name, edit, PLAYER\. 1-8 letters or digits\. Changes apply to the next search\."$'
 type "#ab1"
@@ -130,13 +130,13 @@ wait '"Player name, edit, PLAYER\. '
 key Up Up
 wait '"Input delay, Auto, '
 key Escape
-wait '"Online, 5 of 6\. '
+wait '"Online\. '
 key Escape
 wait '"Settings, button\. '
 
 # Settings again opens on Online; Back returns Home.
 key Return
-wait '"Settings\. Online, 5 of 6\. Up and down to choose, right to enter\. '
+wait '"Settings\. Online\. Up and down to choose, right to enter\. '
 key Down Down
 wait '"Back, button\. '
 key Return
