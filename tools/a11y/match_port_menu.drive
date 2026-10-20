@@ -26,7 +26,7 @@ sleep 1
 key F1
 wait 'cue your position stop '
 wait 'cue opponent position stop '
-wait '"PC settings\. Graphics, tab, selected, 1 of 5\. Left and right to switch tabs"$'
+wait '"PC settings\. Graphics, 1 of 5\. Up and down to choose, right to enter"$'
 sleep 1.5
 
 # Escape: "Back to game", then the first tick starts both cues again where
@@ -45,7 +45,7 @@ wait 'cue gap start pan 0\.00 pitch 1\.00 gain 1\.00$' 5
 # warning starts again, Link still over the gap.
 key F1
 wait 'cue gap stop '
-wait '"PC settings\. Graphics, tab, selected, 1 of 5\. '
+wait '"PC settings\. Graphics, 1 of 5\. '
 sleep 1.5
 gamepad b
 wait '"Back to game"$'

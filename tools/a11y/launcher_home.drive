@@ -1,49 +1,49 @@
 # The launcher's Home page: the opening once the start-up disc check is over,
-# every button, a status line (a disc verification started and canceled),
-# and Play Melee, ending on the game's first scene. Waits on each
-# announcement, so a missing or changed line fails the run. Run in launcher
-# mode, with accessibility on but muted (as run_level.py runs it):
+# every button with its description, a status line (a disc verification
+# started and canceled), and Play, ending on the game's first scene. Waits on
+# each announcement, so a missing or changed line fails the run. Run in
+# launcher mode, with accessibility on but muted (as run_level.py runs it):
 #   python tools/a11y/drive.py --launcher --muted tools/a11y/launcher_home.drive
 # --launcher remembers the disc and turns the update check off, so the
-# opening is the same on every run; drive.py refuses to press Choose disc,
+# opening is the same on every run; drive.py refuses to press Choose Disc,
 # Discord or the update banner's buttons, which would leave the window.
 
 # The opening waits for the disc check's result and for focus on Play.
-wait '"Melee launcher\. Ready to play, Disc not verified\. Play Melee, button\. Disc: melee\.iso, Super Smash Bros\. Melee, USA, Revision 2 \(1\.02\)"$'
+wait '"Melee launcher\. Ready to play, Disc not verified\. Play, button\. Start Melee from this disc\. Disc: melee\.iso, Super Smash Bros\. Melee, USA, Revision 2 \(1\.02\)"$'
 
 # Down walks the buttons and wraps to Play.
 key Down
-wait '"Choose disc, button"$'
+wait '"Choose Disc, button\. Pick a Melee disc image: ISO, GCM, CISO, RVZ, GCZ or WIA\."$'
 key Down
-wait '"Verify disc, button"$'
+wait '"Verify Disc, button\. Check the disc image against the original NTSC-U 1\.02 disc\."$'
 key Down
-wait '"Settings, button"$'
+wait '"Settings, button\. Graphics, audio, gameplay, controls, online play and the launcher itself\."$'
 key Down
-wait '"Discord, button"$'
+wait '"Discord, button\. Join the community Discord server in your browser\."$'
 key Down
-wait '"Quit, button"$'
+wait '"Quit, button\. Close Melee PC\."$'
 key Down
-wait '"Play Melee, button\. Disc: melee\.iso, '
+wait '"Play, button\. Start Melee from this disc\. Disc: melee\.iso, '
 key Up
-wait '"Quit, button"$'
+wait '"Quit, button\. '
 key Down
-wait '"Play Melee, button\. '
+wait '"Play, button\. '
 
-# Verify disc turns into Cancel verification while the disc is read; the
-# cancel comes back in the status line. Hashing the disc takes seconds, so
-# the second press lands well before it ends.
+# Verify Disc turns into Cancel Verify while the disc is read; the cancel
+# comes back in the status line. Hashing the disc takes seconds, so the
+# second press lands well before it ends.
 key Down Down
-wait '"Verify disc, button"$'
+wait '"Verify Disc, button\. '
 key Return
-wait '"Cancel verification"$'
+wait '"Cancel Verify"$'
 key Return
-wait '"Verify disc"$'
+wait '"Verify Disc"$'
 wait '"Verification canceled\."$' 10
 
 # Play starts the game. With shaders still compiling it says so and starts
 # by itself once they are built.
 key Up Up
-wait '"Play Melee, button\. '
+wait '"Play, button\. '
 key Return
 wait "boot scene: state 0 scene 0$" 120
 wait '"Title screen\. Press Start\."$'

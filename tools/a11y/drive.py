@@ -65,14 +65,16 @@ event pipe, so these steps fail on it.
 settings folder gets a launcher.cfg that names the disc (--disc) and turns
 the update check off, so the launcher opens on Home with the disc
 remembered and says the same whatever the network and the latest release.
-Its Play Melee starts the game as a player's would.
+Its Play starts the game as a player's would.
 
 A key or gamepad step that would press the focused control (Return, Space,
 a, start) is refused while the last focus announcement names a control that
 leaves the game's window, and in launcher mode also before any has said
-where focus is: Choose disc opens the Windows file dialog, which takes
+where focus is: Choose Disc opens the Windows file dialog, which takes
 focus and cuts off the maintainer's screen reader; the Discord buttons and
-the update banner open the browser; Display mode goes fullscreen.
+the update banner open the browser; Display mode goes fullscreen. Left and
+Right (dpleft, dpright) on Display mode are refused too, since stepping its
+value goes fullscreen as well.
 
 Speech is off by default (MELEE_A11Y=0): every announcement is still
 logged, marked (off), but features that take keys for speech leave them
@@ -225,16 +227,19 @@ def write_launcher_cfg(folder, disc):
 # key and gamepad steps take.
 ACTIVATING = {("key", "return"), ("key", "keypad enter"), ("key", "space"), ("gamepad", "a"),
               ("gamepad", "start")}
+# Presses that step the focused setting's value either way.
+STEPPING = {("key", "left"), ("key", "right"), ("gamepad", "dpleft"), ("gamepad", "dpright")}
 # A speak line that says where focus went: a control's announcement, alone
-# or inside the launcher's opening. Value changes and lines of text do not.
-FOCUS_LINE = re.compile(r", (button|tab|edit|slider)\b|, Enter to change\b")
-# Launcher controls a driven run must never press: Choose disc opens the
-# Windows file dialog, which takes focus and cuts off the maintainer's screen
-# reader mid-sentence; Discord (Home's, and Join Discord on Settings) and the
-# update banner's buttons open the browser, which does too; Display mode
-# switches to fullscreen.
-REFUSED_FOCUS = re.compile(r"\b(Choose disc|Discord|Open release page|View Release|Update Now), button"
-                           r"|\bDisplay mode, \w+, Enter to change")
+# or inside an opening. Value changes and lines of text do not.
+FOCUS_LINE = re.compile(r", (button|edit|slider)\b|, \d+ of \d+\b|, (Enter|Left and right) to change\b")
+# Controls a driven run must never press: Choose Disc opens the Windows file
+# dialog, which takes focus and cuts off the maintainer's screen reader
+# mid-sentence; Discord (Home's, and Join Discord on Settings) and the update
+# banner's buttons open the browser, which does too; Display mode switches to
+# fullscreen, and so does stepping its value with Left or Right.
+REFUSED_FOCUS = re.compile(r"\b(Choose Disc|Discord|Join Discord|Open release page|View Release|Update Now),"
+                           r" button|\bDisplay mode, \w+, ", re.IGNORECASE)
+REFUSED_STEP_FOCUS = re.compile(r"\bDisplay mode, \w+, ", re.IGNORECASE)
 
 
 def cache_dir(slot):
@@ -654,13 +659,19 @@ class Game:
 
     def check_press(self, cmd, name):
         """Refuses a press that would act on a control the run must leave
-        alone (REFUSED_FOCUS), judged by where the last focus announcement
-        put focus. In launcher mode, also one made before any says where.
+        alone (REFUSED_FOCUS, REFUSED_STEP_FOCUS for Left and Right), judged
+        by where the last focus announcement put focus. In launcher mode,
+        also one made before any says where.
         The last one is current: a page speaks a focus move at the end of
         the turn that took the press, and the press's release, which its
         taken answer waits for, is taken only in a later turn."""
         # Modifiers do not stop a press acting on the focused control.
-        if (cmd, name.lower().split("+")[-1]) not in ACTIVATING:
+        press = (cmd, name.lower().split("+")[-1])
+        if press in ACTIVATING:
+            refused = REFUSED_FOCUS
+        elif press in STEPPING:
+            refused = REFUSED_STEP_FOCUS
+        else:
             return
         with self.output.cond:
             spoken = [line for line in self.output.lines if SPEECH in line and FOCUS_LINE.search(line)]
@@ -668,7 +679,7 @@ class Game:
             if self.launcher:
                 raise ScriptError(f"{cmd} {name} refused: no speech has said where the launcher's focus is")
             return
-        if REFUSED_FOCUS.search(spoken[-1]):
+        if refused.search(spoken[-1]):
             raise ScriptError(f"{cmd} {name} refused: it would press the control focused by {spoken[-1]!r}, "
                               "which leaves the game's window (see REFUSED_FOCUS in drive.py)")
 

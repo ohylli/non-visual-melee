@@ -66,8 +66,10 @@ ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           # The Training menu's hidden row, or a value the reader cannot name.
           "training_menu": re.compile(r"\[a11y\] training menu row "),
           # The port menu's status line says "Saved." after every change,
-          # and "Saved automatically." at rest; neither is ever spoken.
-          "port_menu": re.compile(r'"Saved')}
+          # "Settings save automatically." as the menu first opens, and each
+          # focus's description, which the focus announcement has said (a
+          # category's only repeats its name); none of them is ever spoken.
+          "port_menu": re.compile(r'"(Saved|Settings save automatically|\w+ settings\.")')}
 # Lines a passing run must not log between an opening line and the closing
 # line after it: no cue starts or stops while the port menu is open, since
 # the game stands still then and the stops come just before the opening.
