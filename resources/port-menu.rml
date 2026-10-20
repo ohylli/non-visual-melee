@@ -38,6 +38,7 @@
           <button id="tab-online" class="plate small" data-desc="Online settings.">
             <span>Online</span>
           </button>
+          <button id="tab-accessibility" class="plate small" data-desc="Accessibility settings."><span>Accessibility</span></button><!-- a11y: the fork's category (docs/adr/0007) -->
           <button id="resume" class="plate small back" data-desc="Close settings and return to the game.">
             <span>Resume</span>
           </button>
@@ -314,6 +315,7 @@
               <p>WASD / arrows Move · X Attack · Z Special · C / V Jump · Q / E Shield<br />Tab Grab · Enter Start · IJKL C-stick</p>
             </div>
           </div>
+          <div id="page-accessibility" class="page"></div><!-- a11y: its rows are built by src/pc/a11y/settings_page.cpp -->
         </div>
       </div>
       <div id="descbar">

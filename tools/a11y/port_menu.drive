@@ -104,6 +104,8 @@ wait '"Enter Start"$'
 key Down Down
 wait '"Resume, button\. Close settings and return to the game\."$'
 key Up
+wait '"Accessibility"$'
+key Up
 wait '"Online"$'
 
 # Online: Player name, typed into with the cursor at the field's start. #

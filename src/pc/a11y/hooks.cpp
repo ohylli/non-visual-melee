@@ -16,6 +16,7 @@
 #include "pc/region.h"
 #include "port_menu_speech.hpp"
 #include "scene_speech.hpp"
+#include "settings_page.hpp"
 #include "speech.hpp"
 #include "sss_reader.hpp"
 #include "switches.hpp"
@@ -25,7 +26,12 @@
 #include <dolphin/pad.h>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
+
+/* Melee's own menu bank, which the port menu plays its sounds from
+ * (src/pc/launcher.cpp). */
+extern "C" void lbAudioAx_80024030(int);
 
 namespace {
 
@@ -233,6 +239,24 @@ extern "C" void pc_a11y_init(void) {
         /* Found as the file was read, before speech was on. */
         s_speech->announce(s_settings->problem(), a11y::Mode::queue);
     }
+    /* The Accessibility category's rows, built as the launcher's and the
+     * port menu's pages load. The port menu's sounds are the base port's
+     * own, played from the same place its rows play them, outside the
+     * simulation, so they are counted in no netplay tick's sound order. */
+    a11y::settings_pages_start(
+        *s_settings, a11y::SettingsPageHost{
+                         [](std::string_view cue) {
+                             if (s_cue_system != nullptr) {
+                                 s_cue_system->preview(cue, a11y::Clock::now());
+                             }
+                         },
+                         [] {
+                             if (s_cue_system != nullptr) {
+                                 s_cue_system->stop_preview(a11y::Clock::now());
+                             }
+                         },
+                         [](a11y::MenuSound sound) { lbAudioAx_80024030(static_cast<int>(sound)); },
+                     });
     a11y::launcher_speech_start(*s_speech);
     a11y::port_menu_speech_start(*s_speech);
 }
@@ -243,6 +267,7 @@ extern "C" void pc_a11y_shutdown(void) {
     }
     a11y::port_menu_speech_stop();
     a11y::launcher_speech_stop();
+    a11y::settings_pages_stop();
     s_cue_system.reset();
     s_switches.reset();
     s_settings.reset();
@@ -261,6 +286,9 @@ extern "C" void pc_a11y_launcher_frame(void) {
         /* A hand edit shows in an open menu. */
         s_settings->poll(a11y::Clock::now());
     }
+    /* The Accessibility category's values written before the reader reads
+     * the page, and a preview stopped once its row has lost focus. */
+    a11y::settings_pages_frame(a11y::SettingsHost::launcher, true);
     if (s_cue_system != nullptr) {
         s_cue_system->preview_frame(a11y::Clock::now());
     }
@@ -290,6 +318,9 @@ extern "C" void pc_a11y_port_menu_frame(bool open) {
          * menu's opening is spoken. */
         s_cue_system->silence_for_port_menu();
     }
+    /* Before the gate too: the Accessibility category's values, and a
+     * preview stopped once its row has lost focus or the menu has closed. */
+    a11y::settings_pages_frame(a11y::SettingsHost::port_menu, open);
     if (s_cue_system != nullptr) {
         /* At every frame boundary, the menu open or not, outside the
          * simulation: a preview never touches the game. */

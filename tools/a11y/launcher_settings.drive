@@ -47,6 +47,8 @@ wait '"Controls\. The keyboard layout and controller setup\."$'
 key Down
 wait '"Online\. Your player name, connect codes and input delay\."$'
 key Down
+wait '"Accessibility\. Speech, steering and the audio cues of Non-Visual Melee\."$'
+key Down
 wait '"Launcher\. The size of these menus, updates and the community\."$'
 key Down
 wait '"Back, button\. Back to the main menu\."$'
@@ -91,8 +93,8 @@ wait '"Launcher\. '
 
 # Online: Player name, typed into with the cursor at the field's start. #
 # is refused, letters go in as capitals, and a full field says so;
-# Backspace puts PLAYER back.
-key Up
+# Backspace puts PLAYER back. Up twice from Launcher, past Accessibility.
+key Up Up
 wait '"Online\. '
 key Right
 wait '"Player name, edit, PLAYER\. 1-8 letters or digits\. Changes apply to the next search\."$'
@@ -137,7 +139,7 @@ wait '"Settings, button\. '
 # Settings again opens on Online; Back returns Home.
 key Return
 wait '"Settings\. Online\. Up and down to choose, right to enter\. '
-key Down Down
+key Down Down Down
 wait '"Back, button\. '
 key Return
 wait '"Settings, button\. '

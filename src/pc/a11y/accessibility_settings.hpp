@@ -54,6 +54,8 @@ public:
     /* A front end's change, held to the value's range and saved to its
      * line. True when the value changed. */
     bool set(const NamedValue& named, float value, Clock::time_point now);
+    /* Whether a change is saved: false with no file. */
+    bool saves() const { return m_file != nullptr; }
 
     /* The file's last error, to repeat where it will be heard, and how many
      * have been spoken (ValueFile::problem); empty and 0 with no file. */

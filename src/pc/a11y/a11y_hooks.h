@@ -195,4 +195,31 @@ uint16_t pc_a11y_chat_buttons(uint16_t buttons);
 
 #ifdef __cplusplus
 }
+
+/* The Accessibility category of the launcher's Settings and of the port menu
+ * (docs/adr/0007-the-accessibility-category-is-wired-into-the-base-ports-menus.md),
+ * for the handlers of Launcher and PortMenu in src/pc/launcher.cpp, which are
+ * C++ and act on element ids; defined in settings_page.cpp, which builds the
+ * category's rows into its empty page as the document loads. Each hand-off
+ * returns true when the id is one of the fork's rows and the fork has acted on
+ * it, so the base port's handler must then do nothing. */
+#include <string>
+#include <vector>
+namespace Rml {
+class ElementDocument;
+class Event;
+}  // namespace Rml
+
+/* The category's rows' ids in their order, for page_focus. */
+std::vector<std::string> pc_a11y_settings_rows();
+/* Whether the id is one of the fork's sliders, for is_slider, which the
+ * base port's own handlers use to tell a slider from a text field. */
+bool pc_a11y_settings_slider(const std::string& id);
+/* Enter, A or a click on the element (Launcher::action, PortMenu::apply). */
+bool pc_a11y_settings_press(Rml::ElementDocument* document, const std::string& id);
+/* Left (-1) or Right (1) on the element (Launcher::horizontal,
+ * PortMenu::step), by keys, D-pad or stick. */
+bool pc_a11y_settings_step(Rml::ElementDocument* document, const std::string& id, int direction);
+/* A Change event on the document: a slider stepped by RmlUi or dragged. */
+bool pc_a11y_settings_change(Rml::Event& event);
 #endif

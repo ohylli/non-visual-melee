@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -31,10 +32,12 @@ using rmlui_test::queue;
 
 std::string s_resources;
 
-/* The launcher's tab_ids. */
-constexpr const char* kTabs[] = {
-    "tab-graphics", "tab-audio", "tab-cheats", "tab-controls", "tab-online", "tab-launcher"};
-constexpr int kTabCount = 6;
+/* The launcher's tab_ids, with the fork's Accessibility before Launcher. */
+constexpr const char* kTabs[] = {"tab-graphics", "tab-audio", "tab-cheats", "tab-controls",
+    "tab-online", "tab-accessibility", "tab-launcher"};
+constexpr int kTabCount = 7;
+constexpr int kAccessibilityTab = 5;
+constexpr int kLauncherTab = 6;
 
 /* What the openings and Settings say, again and again. */
 constexpr const char* kChoose =
@@ -46,6 +49,8 @@ constexpr const char* kPlayerName = "Player name, edit, OTTO. 1-8 letters or dig
 constexpr const char* kFriendsCode = "Friend's connect code, edit, blank. Leave blank to host "
                                      "your code. Open Online, then Direct Connect, in the game.";
 constexpr const char* kControls = "Controls. The keyboard layout and controller setup.";
+constexpr const char* kAccessibility =
+    "Accessibility. Speech, steering and the audio cues of Non-Visual Melee.";
 
 /* One launcher page with launcher speech attached, changed through the same
  * calls launcher.cpp makes. */
@@ -53,12 +58,15 @@ class Page {
 public:
     explicit Page(Rml::Context& context, const char* file = "launcher.rml", bool speech = true)
         : m_context(context),
-          m_speech(a11y::Config{speech, false}, std::make_unique<FakeBridge>(m_outputs)) {
+          m_speech(a11y::Config{speech, false}, std::make_unique<FakeBridge>(m_outputs)),
+          m_a11y(m_speech) {
         m_speech.init();
+        m_a11y.start(speech);
         a11y::launcher_speech_start(m_speech);
         m_document = m_context.LoadDocument(s_resources + "/" + file);
         assert(m_document != nullptr);
         m_document->AddEventListener(Rml::EventId::Textinput, &m_filter, true);
+        m_document->AddEventListener(Rml::EventId::Change, &m_change);
         m_document->Show();
     }
 
@@ -71,6 +79,7 @@ public:
     }
 
     Rml::ElementDocument& document() { return *m_document; }
+    rmlui_test::A11ySettings& a11y() { return m_a11y; }
 
     Rml::Element* element(const char* id) {
         Rml::Element* e = m_document->GetElementById(id);
@@ -146,14 +155,31 @@ public:
     /* Launcher::enter_rows, with its hook: Right or Enter on a category. */
     void enter_rows() {
         m_document->UpdateDocument();
-        for (const char* id : page_focus()) {
-            Rml::Element* e = element(id);
+        for (const std::string& id : page_focus()) {
+            Rml::Element* e = element(id.c_str());
             if (e->IsVisible(true) && !e->IsPseudoClassSet("disabled")) {
-                focus(id);
+                focus(id.c_str());
                 return;
             }
         }
         a11y::launcher_speech_enter();
+    }
+
+    /* Left (-1) or Right (1) on one of the fork's rows: Launcher::horizontal's
+     * hand-off, then one turn of the loop. */
+    void horizontal(int direction) {
+        const bool handed = pc_a11y_settings_step(m_document, focused()->GetId(), direction);
+        assert(handed);
+        frame();
+    }
+
+    /* Enter, A or a click on one of the fork's rows: Launcher::action's
+     * hand-off (from activate_focus, or RmlUi's own click on Enter), then one
+     * turn of the loop. */
+    void press() {
+        const bool handed = pc_a11y_settings_press(m_document, focused()->GetId());
+        assert(handed);
+        frame();
     }
 
     /* Launcher::horizontal's Left, with its hook, on a category, where the
@@ -182,7 +208,7 @@ public:
         if (a11y::launcher_speech_step(direction)) {
             return;
         }
-        std::vector<const char*> ids;
+        std::vector<std::string> ids;
         if (in_rows()) {
             ids = page_focus();
         } else {
@@ -192,15 +218,15 @@ public:
         const int count = static_cast<int>(ids.size());
         int index = direction > 0 ? -1 : 0;
         for (int i = 0; i < count; ++i) {
-            if (element(ids[i]) == focused()) {
+            if (element(ids[i].c_str()) == focused()) {
                 index = i;
             }
         }
         for (int i = 0; i < count; ++i) {
             index = (index + direction + count) % count;
-            Rml::Element* e = element(ids[index]);
+            Rml::Element* e = element(ids[index].c_str());
             if (e->IsVisible(true) && !e->IsPseudoClassSet("disabled")) {
-                focus(ids[index]);
+                focus(ids[index].c_str());
                 return;
             }
         }
@@ -284,6 +310,7 @@ public:
     void frame() {
         m_now += kFrame;
         m_context.Update();
+        a11y::settings_pages_frame(a11y::SettingsHost::launcher, true);
         a11y::launcher_speech_frame(m_now);
     }
 
@@ -339,6 +366,7 @@ public:
 
     void close() {
         m_document->RemoveEventListener(Rml::EventId::Textinput, &m_filter, true);
+        m_document->RemoveEventListener(Rml::EventId::Change, &m_change);
         m_document->Close();
         m_context.Update();
         m_document = nullptr;
@@ -356,7 +384,7 @@ private:
     }
 
     /* Launcher::page_focus */
-    std::vector<const char*> page_focus() const {
+    std::vector<std::string> page_focus() const {
         switch (m_tab) {
         case 0:
             return {"display", "sync", "resolution", "aspect", "hud-mode", "aa", "filter",
@@ -368,6 +396,8 @@ private:
         case 4:
             return {"net-name", "net-target", "net-delay"};
         case 5:
+            return pc_a11y_settings_rows();
+        case 6:
             return {"scale", "check-updates", "check-now", "settings-discord", "export-logs"};
         default:
             return {};
@@ -376,10 +406,12 @@ private:
 
     Rml::Context& m_context;
     OnlineFilter m_filter;
+    rmlui_test::SettingsChange m_change;
     int m_tab = 0;
     bool m_settings = false;
     std::vector<Output> m_outputs;
     a11y::Speech m_speech;
+    rmlui_test::A11ySettings m_a11y;
     Rml::ElementDocument* m_document = nullptr;
     a11y::Clock::time_point m_now;
 };
@@ -560,6 +592,7 @@ void categories_and_back(Rml::Context& context) {
     down("Gameplay. Unlocks, stage hazards and controller fixes.");
     down(kControls);
     down("Online. Your player name, connect codes and input delay.");
+    down(kAccessibility);
     down("Launcher. The size of these menus, updates and the community.");
     down("Back, button. Back to the main menu.");
     down("Graphics. How the game looks.");
@@ -661,8 +694,7 @@ void category_with_rows_moves_on(Rml::Context& context) {
     page.take();
     page.step(1);
     page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt(
-                              "Launcher. The size of these menus, updates and the community.")}));
+    assert(page.take() == (std::vector<Output>{interrupt(kAccessibility)}));
 }
 
 /* The lines sit between the rows, in the page's order, and the rows wrap
@@ -938,7 +970,7 @@ void settings_status_messages(Rml::Context& context) {
  * The row's own line, the check's result, is read with the row. */
 void update_check_is_spoken_once(Rml::Context& context) {
     Page page(context);
-    page.open_rows(5);
+    page.open_rows(kLauncherTab);
     page.focus("check-now");
     page.frame();
     assert(page.take() == (std::vector<Output>{interrupt(
@@ -955,6 +987,175 @@ void update_check_is_spoken_once(Rml::Context& context) {
     page.text("check-status", "Update available: v0.2.0");
     page.run(a11y::kSettleTime);
     assert(page.take() == (std::vector<Output>{queue("Update available: v0.2.0")}));
+}
+
+/* The fork's category: its rows, built from the accessibility settings, read
+ * as any page's rows are, from the first to the last and around. */
+constexpr const char* kAccessibilityRow =
+    "Accessibility, On, Left and right to change. Turns everything Non-Visual Melee adds on or "
+    "off: speech, steering and the cues.";
+constexpr const char* kSpeechRow =
+    "Speech, On, Left and right to change. Turns speech through the screen reader on or off.";
+
+void accessibility_category_rows(Rml::Context& context) {
+    Page page(context);
+    page.open_settings();
+    page.show_tab(kAccessibilityTab);
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(kAccessibility)}));
+    page.enter_rows();
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(kAccessibilityRow)}));
+    const std::vector<std::string> rows = pc_a11y_settings_rows();
+    assert(rows.size() == 12);
+    assert(rows.front() == "a11y-accessibility-on");
+    assert(rows[4] == "a11y-cues-volume");
+    assert(rows[7] == "a11y-gap_warning-preview");
+    assert(rows.back() == "a11y-ledge_warning-distance");
+    const std::vector<std::string> said{kSpeechRow,
+        "Steering, On, Left and right to change. The D-pad steps the hand on character select and "
+        "the cursor on stage select. Off, the D-pad does what the game makes of it, quick chat "
+        "included.",
+        "Cues, On, Left and right to change. Turns every cue on or off.",
+        "Cue volume, slider, 100%. Left and right to adjust. The loudness of all cues together, "
+        "under the master volume; the game's sound effect and music volumes leave cues alone.",
+        "Gap warning, On, Left and right to change. Turns the gap warning on or off.",
+        "Gap warning volume, slider, 100%. Left and right to adjust. The loudness of the gap "
+        "warning, under the cue volume.",
+        "Preview gap warning: Play, button. Plays a short sample of the gap warning, as it sounds "
+        "in a match.",
+        "Ledge warning, On, Left and right to change. Turns the ledge warning on or off.",
+        "Ledge warning volume, slider, 100%. Left and right to adjust. The loudness of the ledge "
+        "warning, under the cue volume.",
+        "Preview ledge warning: Play, button. Plays a short sample of the ledge warning, as it "
+        "sounds in a match.",
+        "Ledge warning distance, slider, 40 units. Left and right to adjust. How far from the edge "
+        "the warning starts, in stage units.",
+        kAccessibilityRow};
+    for (const std::string& text : said) {
+        page.step(1);
+        page.frame();
+        assert(page.take() == (std::vector<Output>{interrupt(text)}));
+    }
+    /* Escape: back to the category. */
+    page.back();
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(kAccessibility)}));
+}
+
+/* A switch flips with Left, Right, Enter or A, and says its new value, as
+ * the base port's two-state settings do; the change reaches the settings. */
+void accessibility_switch(Rml::Context& context) {
+    Page page(context);
+    page.open_rows(kAccessibilityTab);
+    page.step(1);
+    page.step(1);
+    page.frame();
+    page.take();
+    assert(page.focused() == page.element("a11y-steering-on"));
+    page.horizontal(1);
+    assert(page.take() == (std::vector<Output>{interrupt("Off")}));
+    assert(page.a11y().value("steering.on").value == 0.0f);
+    page.horizontal(-1);
+    assert(page.take() == (std::vector<Output>{interrupt("On")}));
+    page.press();
+    assert(page.take() == (std::vector<Output>{interrupt("Off")}));
+    assert(!page.a11y().switches.state().steering);
+    /* The launcher plays no sounds. */
+    assert(page.a11y().take().empty());
+}
+
+/* A slider steps by its value's step, with the D-pad through the hand-off
+ * and with the keyboard's arrows through RmlUi's own slider and its Change;
+ * Enter leaves it as it is. */
+void accessibility_slider(Rml::Context& context) {
+    Page page(context);
+    page.open_rows(kAccessibilityTab);
+    page.focus("a11y-cues-volume");
+    page.frame();
+    page.take();
+    page.horizontal(-1);
+    assert(page.take() == (std::vector<Output>{interrupt("95%")}));
+    assert(page.a11y().value("cues.volume").value == 95.0f);
+    page.key(Rml::Input::KI_LEFT);
+    assert(page.take() == (std::vector<Output>{interrupt("90%")}));
+    assert(page.a11y().value("cues.volume").value == 90.0f);
+    page.press();
+    assert(page.take().empty());
+    assert(page.a11y().value("cues.volume").value == 90.0f);
+    /* Held at the top of the range. */
+    page.focus("a11y-gap_warning-volume");
+    page.frame();
+    page.take();
+    page.horizontal(1);
+    assert(page.take().empty());
+    assert(page.a11y().value("gap_warning.volume").value == 100.0f);
+    /* A value in stage units, a unit a step. */
+    page.focus("a11y-ledge_warning-distance");
+    page.frame();
+    page.take();
+    page.horizontal(1);
+    assert(page.take() == (std::vector<Output>{interrupt("41 units")}));
+    /* A hand edit, polled, shows on the page and is said as the new value. */
+    page.a11y().settings.model().set(page.a11y().value("ledge_warning.distance"), 30.0f);
+    a11y::settings_pages_frame(a11y::SettingsHost::launcher, true);
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt("30 units")}));
+}
+
+/* Preview plays its cue on Enter or A, again from its start when pressed
+ * again, and says nothing: the cue is the answer. Leaving the row stops it.
+ * Its arrows are the page's: Left goes back to the category. */
+void accessibility_preview(Rml::Context& context) {
+    Page page(context);
+    page.open_rows(kAccessibilityTab);
+    page.focus("a11y-gap_warning-preview");
+    page.frame();
+    page.take();
+    page.press();
+    assert(page.take().empty());
+    assert(page.a11y().take() == (std::vector<std::string>{"preview gap_warning"}));
+    a11y::settings_pages_frame(a11y::SettingsHost::launcher, true);
+    assert(page.a11y().take().empty());
+    page.press();
+    assert(page.a11y().take() == (std::vector<std::string>{"preview gap_warning"}));
+    assert(!pc_a11y_settings_step(&page.document(), "a11y-gap_warning-preview", -1));
+    page.step(1);
+    page.frame();
+    a11y::settings_pages_frame(a11y::SettingsHost::launcher, true);
+    assert(page.a11y().take() == (std::vector<std::string>{"stop"}));
+    /* Leaving the launcher stops it too. */
+    page.focus("a11y-ledge_warning-preview");
+    page.press();
+    assert(page.a11y().take() == (std::vector<std::string>{"preview ledge_warning"}));
+    page.close();
+    assert(page.a11y().take() == (std::vector<std::string>{"stop"}));
+}
+
+/* Speech or Accessibility switched off from its row says so last; on again,
+ * it says so first and the row announces itself again, once. */
+void accessibility_switches_speech(Rml::Context& context) {
+    Page page(context);
+    page.open_rows(kAccessibilityTab);
+    page.step(1);
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(kSpeechRow)}));
+    page.press();
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt("Speech off")}));
+    page.press();
+    assert(page.take() == (std::vector<Output>{interrupt("Speech on"), queue(kSpeechRow)}));
+    page.run(a11y::kSettleTime * 2);
+    assert(page.take().empty());
+    page.step(-1);
+    page.frame();
+    page.take();
+    page.press();
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt("Accessibility off")}));
+    page.press();
+    assert(page.take() ==
+           (std::vector<Output>{interrupt("Accessibility on"), queue(kAccessibilityRow)}));
 }
 
 /* Every control in the launcher, on every view and page, has a name. Guards
@@ -998,12 +1199,16 @@ void rmlui_shutdown_before_stop(Rml::Context& context) {
     std::vector<Output> outputs;
     a11y::Speech speech(a11y::Config{true, false}, std::make_unique<FakeBridge>(outputs));
     speech.init();
+    auto settings = std::make_unique<rmlui_test::A11ySettings>(speech);
+    settings->start(true);
     a11y::launcher_speech_start(speech);
     Rml::ElementDocument* document = context.LoadDocument(s_resources + "/launcher.rml");
     assert(document != nullptr);
     Rml::Shutdown();
     a11y::launcher_speech_frame(a11y::Clock::time_point() + a11y::kSettleTime * 2);
+    a11y::settings_pages_frame(a11y::SettingsHost::launcher, true);
     a11y::launcher_speech_stop();
+    settings.reset();
     speech.shutdown();
     assert(outputs.empty());
 }
@@ -1046,6 +1251,11 @@ int main(int argc, char** argv) {
     text_field_leaving_focus(*context);
     settings_status_messages(*context);
     update_check_is_spoken_once(*context);
+    accessibility_category_rows(*context);
+    accessibility_switch(*context);
+    accessibility_slider(*context);
+    accessibility_preview(*context);
+    accessibility_switches_speech(*context);
     every_control_has_a_name(*context);
     other_documents_are_ignored(*context);
     unloading_stops_the_reader(*context);

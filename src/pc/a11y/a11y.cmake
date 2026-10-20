@@ -34,6 +34,7 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/rmlui_reader.cpp
         ${CMAKE_CURRENT_LIST_DIR}/launcher_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/port_menu_speech.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/settings_page.cpp
         ${CMAKE_CURRENT_LIST_DIR}/scene_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/game_text.cpp
         ${CMAKE_CURRENT_LIST_DIR}/game_access.c
@@ -164,11 +165,20 @@ if (TARGET unit_tests)
     add_dependencies(unit_tests speech_test)
 
     # Launcher speech against the real resources/launcher.rml, in an RmlUi
-    # context that draws nothing; also a fake bridge and its own pc_log_line.
+    # context that draws nothing, with the Accessibility category's rows
+    # built from the accessibility settings; also a fake bridge and its own
+    # pc_log_line.
     add_executable(launcher_speech_test EXCLUDE_FROM_ALL
             ${CMAKE_CURRENT_LIST_DIR}/test_launcher_speech.cpp
             ${CMAKE_CURRENT_LIST_DIR}/launcher_speech.cpp
             ${CMAKE_CURRENT_LIST_DIR}/rmlui_reader.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/settings_page.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/accessibility_settings.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/value_model.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/value_file.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/switches.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/cue_settings.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/cue_engine.cpp
             ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
     target_include_directories(launcher_speech_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
     target_link_libraries(launcher_speech_test PRIVATE rmlui)
@@ -182,6 +192,13 @@ if (TARGET unit_tests)
             ${CMAKE_CURRENT_LIST_DIR}/test_port_menu_speech.cpp
             ${CMAKE_CURRENT_LIST_DIR}/port_menu_speech.cpp
             ${CMAKE_CURRENT_LIST_DIR}/rmlui_reader.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/settings_page.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/accessibility_settings.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/value_model.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/value_file.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/switches.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/cue_settings.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/cue_engine.cpp
             ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
     target_include_directories(port_menu_speech_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
     target_link_libraries(port_menu_speech_test PRIVATE rmlui)

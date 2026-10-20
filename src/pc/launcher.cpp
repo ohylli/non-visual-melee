@@ -179,8 +179,12 @@ int backend_next(int mode, int direction = 1) {
 #endif
 }
 
+// clang-format off: a11y keeps the fork's id on a line of its own
 constexpr const char* tab_ids[] = {
-    "tab-graphics", "tab-audio", "tab-cheats", "tab-controls", "tab-online", "tab-launcher"};
+    "tab-graphics", "tab-audio", "tab-cheats", "tab-controls", "tab-online", // a11y: then
+    "tab-accessibility", // a11y: the fork's category, before Launcher (docs/adr/0007)
+    "tab-launcher"}; // a11y
+// clang-format on (a11y)
 
 template <size_t N>
 int index_of(const char* const (&ids)[N], const Rml::String& id) {
@@ -350,7 +354,9 @@ class Launcher final : public Rml::EventListener {
             return {"unlock-all", "frozen-stadium", "free-camera", "ucf"};
         case 4:
             return {"net-name", "net-target", "net-delay"};
-        case 5:
+        case 5:                              // a11y: Accessibility, the fork's rows
+            return pc_a11y_settings_rows();  // a11y
+        case 6:                              // a11y: Launcher, after Accessibility
             return {"scale", "check-updates", "check-now", "settings-discord", "export-logs"};
         default:
             return {};
@@ -546,6 +552,8 @@ class Launcher final : public Rml::EventListener {
         if (!focus || focus->IsPseudoClassSet("disabled"))
             return;
         const auto id = focus->GetId();
+        if (pc_a11y_settings_step(document, id, direction))  // a11y: the fork's rows
+            return;                                          // a11y
         if (settings && index_of(tab_ids, id) >= 0) {
             if (direction > 0)
                 enter_rows();
@@ -587,6 +595,8 @@ class Launcher final : public Rml::EventListener {
             e->SetAttribute("value", value);
     }
     static bool is_slider(const Rml::String& id) {
+        if (pc_a11y_settings_slider(id))  // a11y: the fork's sliders
+            return true;                  // a11y
         return id == "volume" || id == "resolution" || id == "scale" || id == "music-volume" ||
                id == "sfx-volume";
     }
@@ -718,6 +728,8 @@ class Launcher final : public Rml::EventListener {
         controls();
     }
     void action(const std::string& id, int direction = 1) {
+        if (pc_a11y_settings_press(document, id))  // a11y: the fork's rows
+            return;                                // a11y
         if (id == "export-logs") {
             pc_android_export_logs();
             return;
@@ -1003,6 +1015,8 @@ public:
                 target = target->GetParentNode();
             }
         } else if (event.GetId() == Rml::EventId::Change) {
+            if (pc_a11y_settings_change(event))  // a11y: the fork's sliders
+                return;                          // a11y
             auto* target = event.GetTargetElement();
             if (!target || quiet)
                 return;
@@ -1521,6 +1535,8 @@ public:
         return index_of(tab_ids, id) >= 0 || id == "resume" || id == "quit-game";
     }
     static bool is_slider(const Rml::String& id) {
+        if (pc_a11y_settings_slider(id))  // a11y: the fork's sliders
+            return true;                  // a11y
         return id == "volume" || id == "resolution" || id == "scale" || id == "music-volume" ||
                id == "sfx-volume";
     }
@@ -1548,6 +1564,8 @@ public:
             return {"unlock-all", "frozen-stadium", "free-camera", "ucf"};
         case 4:
             return {"net-name", "net-target", "net-delay"};
+        case 5:                              // a11y: Accessibility, the fork's rows
+            return pc_a11y_settings_rows();  // a11y
         default: {
             std::vector<std::string> ids{"pad-port"};
             for (int i = 0; i < PAD_BUTTON_COUNT; ++i)
@@ -1921,6 +1939,8 @@ public:
         refresh_bindings();
     }
     void apply(const Rml::String& id, int direction = 1) {
+        if (pc_a11y_settings_press(document, id))  // a11y: the fork's rows
+            return;                                // a11y
         if (id == "net-delay") {
             prefs.net_delay = (prefs.net_delay + 1 + direction + 6) % 6 - 1;
             saved();
@@ -2089,6 +2109,8 @@ public:
         if (!focus)
             return;
         const auto id = focus->GetId();
+        if (pc_a11y_settings_step(document, id, direction))  // a11y: the fork's rows
+            return;                                          // a11y
         if (index_of(tab_ids, id) >= 0) {
             if (direction > 0)
                 enter_rows();
@@ -2280,6 +2302,8 @@ public:
             return;
         }
         if (event.GetId() == Rml::EventId::Change) {
+            if (pc_a11y_settings_change(event))  // a11y: the fork's sliders
+                return;                          // a11y
             auto* target = event.GetTargetElement();
             if (target && !quiet && change_online(event)) {
                 saved();

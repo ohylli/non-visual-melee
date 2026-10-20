@@ -56,6 +56,7 @@
         <button id="tab-cheats" class="plate small" data-desc="Unlocks, stage hazards and controller fixes."><span>Gameplay</span></button>
         <button id="tab-controls" class="plate small" data-desc="The keyboard layout and controller setup."><span>Controls</span></button>
         <button id="tab-online" class="plate small" data-desc="Your player name, connect codes and input delay."><span>Online</span></button>
+        <button id="tab-accessibility" class="plate small" data-desc="Speech, steering and the audio cues of Non-Visual Melee."><span>Accessibility</span></button><!-- a11y: the fork's category (docs/adr/0007) -->
         <button id="tab-launcher" class="plate small" data-desc="The size of these menus, updates and the community."><span>Launcher</span></button>
         <button id="back" class="plate small back" data-desc="Back to the main menu."><span>Back</span></button>
       </div>
@@ -108,6 +109,7 @@
           <div class="row" data-desc="Automatic adapts to your connection. Changes apply next match."><span class="name">Input delay</span><button id="net-delay" class="value">Auto</button></div>
           <p class="note">Internet discovery can take a few minutes. Some home networks cannot connect without a relay.</p>
         </div>
+        <div id="page-accessibility" class="page"></div><!-- a11y: its rows are built by src/pc/a11y/settings_page.cpp -->
         <div id="page-launcher" class="page">
           <div class="row" data-desc="The size of these menus."><span class="name">Interface size</span>
             <div class="slider-control"><input type="range" class="range" id="scale" min="75" max="150" step="25" value="100" /><span id="scale-val" class="slider-value">100%</span></div></div>

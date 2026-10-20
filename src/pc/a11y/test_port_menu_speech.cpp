@@ -35,11 +35,18 @@ std::vector<Output> none() {
 
 constexpr const char* kOpening = "PC settings. Graphics. Up and down to choose, right to enter";
 constexpr const char* kResume = "Resume, button. Close settings and return to the game.";
+constexpr const char* kAccessibilityRow =
+    "Accessibility, On, Left and right to change. Turns everything Non-Visual Melee adds on or "
+    "off: speech, steering and the cues.";
+constexpr const char* kSpeechRow =
+    "Speech, On, Left and right to change. Turns speech through the screen reader on or off.";
 
-/* The port menu's tab_ids, without the launcher's own category. */
+/* The port menu's tab_ids, with the fork's Accessibility and without the
+ * launcher's own category. */
 constexpr const char* kTabs[] = {
-    "tab-graphics", "tab-audio", "tab-cheats", "tab-controls", "tab-online"};
-constexpr int kTabCount = 5;
+    "tab-graphics", "tab-audio", "tab-cheats", "tab-controls", "tab-online", "tab-accessibility"};
+constexpr int kTabCount = 6;
+constexpr int kAccessibilityTab = 5;
 
 /* The port menu with port menu speech attached, changed through the same
  * calls PortMenu makes. Loaded hidden, as pc_menu_init loads it when the game
@@ -49,13 +56,15 @@ public:
     explicit Menu(Rml::Context& context, bool speech = true)
         : m_context(context),
           m_speech(a11y::Config{speech, false}, std::make_unique<FakeBridge>(m_outputs)),
-          m_describe(*this) {
+          m_describe(*this), m_a11y(m_speech) {
         m_speech.init();
+        m_a11y.start(speech);
         a11y::port_menu_speech_start(m_speech);
         m_document = m_context.LoadDocument(s_resources + "/port-menu.rml");
         assert(m_document != nullptr);
         m_document->AddEventListener(Rml::EventId::Textinput, &m_filter, true);
         m_document->AddEventListener(Rml::EventId::Focus, &m_describe, true);
+        m_document->AddEventListener(Rml::EventId::Change, &m_change);
         refresh();
         m_context.Update();
     }
@@ -70,6 +79,7 @@ public:
 
     Rml::ElementDocument& document() { return *m_document; }
     a11y::Speech& speech() { return m_speech; }
+    rmlui_test::A11ySettings& a11y() { return m_a11y; }
 
     Rml::Element* element(const char* id) {
         Rml::Element* e = m_document->GetElementById(id);
@@ -207,6 +217,22 @@ public:
         assert(focused);
     }
 
+    /* Left (-1) or Right (1) on one of the fork's rows: PortMenu::step's
+     * hand-off, then one frame. */
+    void horizontal(int direction) {
+        const bool handed = pc_a11y_settings_step(m_document, focused()->GetId(), direction);
+        assert(handed);
+        frame();
+    }
+
+    /* Enter, A or a click on one of the fork's rows: PortMenu::apply's
+     * hand-off, then one frame. */
+    void press() {
+        const bool handed = pc_a11y_settings_press(m_document, focused()->GetId());
+        assert(handed);
+        frame();
+    }
+
     /* Opens the menu and takes the opening. */
     void open() {
         toggle();
@@ -227,6 +253,7 @@ public:
      * updates the page as the next frame draws it. */
     void frame() {
         m_now += kFrame;
+        a11y::settings_pages_frame(a11y::SettingsHost::port_menu, m_open);
         a11y::port_menu_speech_frame(m_open, m_quitting, m_now);
         m_context.Update();
     }
@@ -265,6 +292,7 @@ public:
     void unload() {
         m_document->RemoveEventListener(Rml::EventId::Textinput, &m_filter, true);
         m_document->RemoveEventListener(Rml::EventId::Focus, &m_describe, true);
+        m_document->RemoveEventListener(Rml::EventId::Change, &m_change);
         m_document->Close();
         m_context.Update();
         m_document = nullptr;
@@ -319,6 +347,8 @@ private:
             return {"unlock-all", "frozen-stadium", "free-camera", "ucf"};
         case 4:
             return {"net-name", "net-target", "net-delay"};
+        case 5:
+            return pc_a11y_settings_rows();
         default: {
             std::vector<std::string> ids{"pad-port"};
             for (int i = 0; i < 12; ++i) {
@@ -342,6 +372,8 @@ private:
     std::vector<Output> m_outputs;
     a11y::Speech m_speech;
     Describe m_describe;
+    rmlui_test::A11ySettings m_a11y;
+    rmlui_test::SettingsChange m_change;
     Rml::ElementDocument* m_document = nullptr;
     a11y::Clock::time_point m_now;
 };
@@ -433,8 +465,10 @@ void every_categorys_first_row(Rml::Context& context) {
                    "Choose a controller port or Keyboard. Select a row to change its binding.")},
         {interrupt("Player name, edit, PLAYER. 1–8 letters or digits. Changes apply to the next "
                    "search.")},
+        {interrupt(kAccessibilityRow)},
     };
-    const char* categories[] = {"Graphics", "Audio", "Gameplay", "Controls", "Online"};
+    const char* categories[] = {
+        "Graphics", "Audio", "Gameplay", "Controls", "Online", "Accessibility"};
     for (int tab = 0; tab < kTabCount; ++tab) {
         menu.show_tab(tab);
         menu.frame();
@@ -586,7 +620,7 @@ void controls_rows_and_lines(Rml::Context& context) {
     /* Up from Resume is the sidebar's: the last category, not the lines. */
     menu.step(-1);
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt("Online")}));
+    assert(menu.take() == (std::vector<Output>{interrupt("Accessibility")}));
 }
 
 /* Online: the connect code between the fields, the closing note after Input
@@ -744,6 +778,131 @@ void speech_back_on_announces_the_focused_row(Rml::Context& context) {
     assert(menu.take() == none());
 }
 
+/* The fork's category, last before Resume: its rows read as the menu's own,
+ * the description under each name left out; the column of rows ends at
+ * Resume. */
+void accessibility_category_rows(Rml::Context& context) {
+    Menu menu(context);
+    menu.open();
+    menu.show_tab(kAccessibilityTab);
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt("Accessibility")}));
+    menu.step(1);
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kResume)}));
+    menu.show_tab(kAccessibilityTab);
+    menu.enter_rows();
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kAccessibilityRow)}));
+    menu.step(1);
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kSpeechRow)}));
+    menu.focus("a11y-ledge_warning-distance");
+    menu.frame();
+    assert(menu.take() ==
+           (std::vector<Output>{interrupt(
+               "Ledge warning distance, slider, 40 units. Left and right to adjust. How far from "
+               "the edge the warning starts, in stage units.")}));
+    menu.step(1);
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kResume)}));
+}
+
+/* A switch flips with Left, Right, Enter or A and says its new value; the
+ * menu's confirm sound plays, as for its own settings, and "Saved." stays
+ * unsaid. */
+void accessibility_switch(Rml::Context& context) {
+    Menu menu(context);
+    menu.open_rows(kAccessibilityTab);
+    menu.focus("a11y-gap_warning-on");
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(
+                              "Gap warning, On, Left and right to change. Turns the gap warning "
+                              "on or off.")}));
+    menu.a11y().take();
+    menu.horizontal(-1);
+    assert(menu.take() == (std::vector<Output>{interrupt("Off")}));
+    assert(menu.a11y().value("gap_warning.on").value == 0.0f);
+    assert(menu.a11y().take() == (std::vector<std::string>{"sound 1"}));
+    menu.press();
+    assert(menu.take() == (std::vector<Output>{interrupt("On")}));
+    assert(menu.a11y().take() == (std::vector<std::string>{"sound 1"}));
+    menu.status("Saved.");
+    menu.run(a11y::kSettleTime * 2);
+    assert(menu.take() == none());
+}
+
+/* A slider steps by its value's step with the move sound, by the D-pad
+ * through the hand-off and by the keyboard's arrows through RmlUi's slider;
+ * Enter or A leaves it as it is, silently. */
+void accessibility_slider(Rml::Context& context) {
+    Menu menu(context);
+    menu.open_rows(kAccessibilityTab);
+    menu.focus("a11y-cues-volume");
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(
+                              "Cue volume, slider, 100%. Left and right to adjust. The loudness of "
+                              "all cues together, under the master volume; the game's sound "
+                              "effect and music volumes leave cues alone.")}));
+    menu.a11y().take();
+    menu.horizontal(-1);
+    assert(menu.take() == (std::vector<Output>{interrupt("95%")}));
+    assert(menu.a11y().take() == (std::vector<std::string>{"sound 2"}));
+    menu.key(Rml::Input::KI_LEFT);
+    assert(menu.take() == (std::vector<Output>{interrupt("90%")}));
+    assert(menu.a11y().value("cues.volume").value == 90.0f);
+    assert(menu.a11y().take() == (std::vector<std::string>{"sound 2"}));
+    menu.press();
+    assert(menu.take() == none());
+    assert(menu.a11y().take().empty());
+}
+
+/* Preview plays its cue, silently and with no sound of the menu's; leaving
+ * the row stops it, and so does closing the menu. */
+void accessibility_preview(Rml::Context& context) {
+    Menu menu(context);
+    menu.open_rows(kAccessibilityTab);
+    menu.focus("a11y-ledge_warning-preview");
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(
+                              "Preview ledge warning: Play, button. Plays a short sample of the "
+                              "ledge warning, as it sounds in a match.")}));
+    menu.a11y().take();
+    menu.press();
+    assert(menu.take() == none());
+    assert(menu.a11y().take() == (std::vector<std::string>{"preview ledge_warning"}));
+    menu.step(-1);
+    menu.frame();
+    assert(menu.a11y().take() == (std::vector<std::string>{"stop"}));
+    menu.step(1);
+    menu.press();
+    menu.take();
+    assert(menu.a11y().take() == (std::vector<std::string>{"preview ledge_warning"}));
+    menu.toggle();
+    menu.frame();
+    assert(menu.a11y().take() == (std::vector<std::string>{"stop"}));
+    assert(menu.take() == (std::vector<Output>{interrupt("Back to game")}));
+}
+
+/* Speech switched off from its row says so last; on again, it says so
+ * first and the row announces itself again. */
+void accessibility_switches_speech(Rml::Context& context) {
+    Menu menu(context);
+    menu.open_rows(kAccessibilityTab);
+    menu.step(1);
+    menu.frame();
+    menu.take();
+    menu.press();
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt("Speech off")}));
+    /* The menu's keys are its own meanwhile. */
+    assert(!a11y::port_menu_speech_step(1));
+    menu.press();
+    assert(menu.take() == (std::vector<Output>{interrupt("Speech on"), queue(kSpeechRow)}));
+    menu.run(a11y::kSettleTime * 2);
+    assert(menu.take() == none());
+}
+
 /* Every control in the menu, on every page, has a name. Guards against a
  * base merge adding a row the reader cannot name. */
 void every_control_has_a_name(Rml::Context& context) {
@@ -825,6 +984,11 @@ int main(int argc, char** argv) {
     tab_becomes_down(*context);
     speech_off_leaves_the_keys_alone(*context);
     speech_back_on_announces_the_focused_row(*context);
+    accessibility_category_rows(*context);
+    accessibility_switch(*context);
+    accessibility_slider(*context);
+    accessibility_preview(*context);
+    accessibility_switches_speech(*context);
     every_control_has_a_name(*context);
     other_documents_are_ignored(*context);
     unloading_stops_the_reader(*context);
