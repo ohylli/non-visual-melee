@@ -14,7 +14,6 @@
 #include <chrono>
 #include <memory>
 #include <optional>
-#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -34,17 +33,17 @@ constexpr std::chrono::milliseconds kSettleTime{250};
 constexpr int kProgressStep = 20;
 
 enum class Role {
-    button,  /* acts when pressed: "Choose disc" */
-    setting, /* a button in a setting row whose label is the value; Enter cycles it */
+    button,  /* acts when pressed: "Choose Disc"; in a row, named by row and label */
+    setting, /* a button in a row whose label is the value; Left and Right step it */
+    binding, /* a button in a row whose label is the value; Enter asks for a new one */
     slider,
     edit,
-    tab,
+    category, /* a settings category in the sidebar; focusing it opens its page */
     other,
 };
 
-/* A tab's place in its strip. */
-struct TabPlace {
-    bool selected = false;
+/* A category's place among the sidebar's categories. */
+struct CategoryPlace {
     int position = 0; /* 1-based */
     int count = 0;
 };
@@ -52,11 +51,14 @@ struct TabPlace {
 /* A focusable control as the player hears it. */
 struct Control {
     Role role = Role::other;
-    std::string name;  /* "Choose disc", "Vertical sync" */
-    std::string value; /* what a value change speaks: a label, a slider's shown value */
-    std::string help;  /* the setting row's help sentence; empty outside a row */
+    std::string name;   /* "Choose Disc", "Vertical sync" */
+    std::string value;  /* what a value change speaks: a label, a slider's shown value */
+    std::string detail; /* live text in the row's name: "No controller in this port." */
+    std::string help;   /* the description the page shows for it; empty when it adds nothing */
     bool disabled = false;
-    TabPlace tab; /* tabs only */
+    /* Add how to move: a category's announcement on arriving in the settings. */
+    bool explain = false;
+    CategoryPlace place; /* categories only */
 };
 
 /* The visible text inside an element, whitespace collapsed and trimmed. */
@@ -66,38 +68,43 @@ std::string element_text(const Rml::Element& element);
  * anywhere else (a container, the document) is not announced. */
 bool is_control(const Rml::Element& element);
 
-Control describe_control(const Rml::Element& element);
+/* The description the page shows for an element in its description bar: the
+ * data-desc attribute of the element or its nearest ancestor that has one,
+ * as the pages look it up. Empty when none has. */
+std::string page_description(const Rml::Element& element);
 
-/* A button in a setting row that acts rather than cycles ("Performance
- * preset", "Apply"). The page does not mark them, so each page's reader
- * lists them by id: its name becomes "Performance preset: Apply". */
-void make_action(Control& control);
+Control describe_control(const Rml::Element& element);
 
 /* A text field's value as spoken: "blank" when it is empty. */
 std::string field_value(const Control& control);
 
-/* "Choose disc, button", "Vertical sync, On, Enter to change. <help>",
- * "Master volume, slider, 80%. Left and right to adjust. <help>". */
+/* "Choose Disc, button. <help>", "Vertical sync, On, Left and right to
+ * change. <help>", "Master volume, slider, 80%. Left and right to adjust.
+ * <help>", "Graphics, 1 of 6. <help>". */
 std::string focus_announcement(const Control& control);
 
-/* One stop on a tab's page in the order Up and Down move through it: a
+/* One stop on a category's page in the order Up and Down move through it: a
  * control, or one line of a row that has none, which focus never reaches. */
 struct PageStop {
     const Rml::Element* control = nullptr; /* null for a line */
     std::string line;
 };
 
-/* The selected tab of the document's tab strip (class "tab" and "selected"),
- * or null when it has none. */
-const Rml::Element* selected_tab(const Rml::ElementDocument& document);
+/* The open category of the document's sidebar (#categories, ids "tab-x",
+ * class "selected"), or null when it has none. */
+const Rml::Element* selected_category(const Rml::ElementDocument& document);
 
-/* The tab followed by its page's stops in document order: a row with a
- * control gives its first control, a row without one its lines. A line is a
- * heading, or a piece of a paragraph between line breaks and " · "
- * separators: "Keyboard", "WASD / arrows Move", "X Attack". The page is found
- * by the id convention the RmlUi pages share, "tab-x" to "page-x"; a tab
- * without one gives the tab alone. */
-std::vector<PageStop> tab_page_stops(const Rml::Element& tab);
+/* The category's page by the id convention the RmlUi pages share, "tab-x" to
+ * "page-x"; null without one. */
+const Rml::Element* category_page(const Rml::Element& category);
+
+/* The page's visible rows as stops in document order: a row with a control
+ * gives its first control, a row without one its lines. A row with a name is
+ * one line, the name and what the row shows beside it: "Your connect code,
+ * PLAYER#1234". Other text is a line for each heading, and for each piece of
+ * a paragraph between line breaks and " · " separators: "Keyboard", "WASD /
+ * arrows Move", "X Attack". */
+std::vector<PageStop> page_stops(const Rml::Element& page);
 
 /* A reading position on a line of a page, kept beside focus, which stays on
  * the control next to the lines. Up and Down go to it before the page's own
@@ -114,8 +121,10 @@ public:
     };
 
     /* Up (-1) or Down (1) from the focused control, over the stops it is
-     * one of. */
-    Move step(const std::vector<PageStop>& stops, const Rml::Element& focus, int direction);
+     * one of. `wrap`: the stops are a ring, as a column whose last row leads
+     * back to its first; otherwise moving off either end hands back. */
+    Move step(
+        const std::vector<PageStop>& stops, const Rml::Element& focus, int direction, bool wrap);
     const std::string& line() const { return m_line; }
     bool reading() const { return m_index >= 0; }
     void clear() { m_index = -1; }
@@ -163,6 +172,10 @@ struct WatchedText {
     const char* id;
     /* The region's idle texts, never spoken: "Saved automatically." */
     std::vector<std::string_view> resting{};
+    /* What the page writes here for the focused control, which its focus
+     * announcement already says: a change to it is taken without being
+     * spoken. Set before each observe. */
+    std::string echo{};
     std::string seen{};        /* the text on the last frame, empty while hidden */
     Clock::time_point since{}; /* when `seen` last changed */
     bool pending = false;      /* `seen` waits to settle before it is spoken */
@@ -192,15 +205,12 @@ private:
 
 /* What every page's reader shares, from comparing the page with the last
  * frame: the focused control's announcement and value, a focused text
- * field's echo, and the lines between the controls of a tab's page. A page's
- * own reader adds its opening, its watched regions and its focus order, and
- * calls these from its frame and step. */
+ * field's echo, and the lines between the controls of a category's page. A
+ * page's own reader adds its opening, its watched regions and its overrides,
+ * and calls these from its frame and step. */
 class PageReader {
 public:
-    /* `action_buttons`: the ids of the page's setting-row buttons that act
-     * rather than cycle (make_action), a table that outlives the reader. */
-    PageReader(Rml::ElementDocument& document, Speech& speech,
-        std::span<const std::string_view> action_buttons);
+    PageReader(Rml::ElementDocument& document, Speech& speech);
     virtual ~PageReader() = default;
     PageReader(const PageReader&) = delete;
     PageReader& operator=(const PageReader&) = delete;
@@ -210,30 +220,34 @@ public:
     void typed(const Rml::Event& event);
 
 protected:
+    /* The page's overrides, for controls whose shape the generic reading
+     * gets wrong. */
+    virtual void adjust(const Rml::Element& element, Control& control) const;
     /* What the page adds to a control's focus announcement, if anything. */
     virtual void add_to_focus_text(const Rml::Element& focus, std::string& text) const;
 
     /* The control with focus in this document, or null while focus is parked
      * off any control. */
     Rml::Element* focused_control() const;
-    /* A new control gets its focus announcement, after `prefix`, interrupting;
-     * a new value on the same one gets the value alone. Focus parked off any
-     * control keeps the last control, so returning to it is silent. Either
-     * change ends reading the page's lines. */
-    void follow_focus(Rml::Element* focus, std::string_view prefix);
+    /* A new control gets its focus announcement, after `prefix`, interrupting,
+     * with how to move when `explain`; a new value on the same one gets the
+     * value alone. Focus parked off any control keeps the last control, so
+     * returning to it is silent. Either change ends reading the page's lines. */
+    void follow_focus(Rml::Element* focus, std::string_view prefix, bool explain = false);
     /* Makes `focus` the known control and returns its focus announcement. */
-    std::string remember_focus(Rml::Element& focus);
+    std::string remember_focus(Rml::Element& focus, bool explain = false);
     /* No control known: the next focus is announced, whatever it is. */
     void forget_focus();
-    /* The control's announcement, with the hint that a tab's page opens
-     * with lines, and what the page adds. */
-    std::string focus_text(Rml::Element& focus) const;
-    /* Up (-1) or Down (1), before the page moves focus: over the selected
-     * tab's page, whose stops `after_page` follows in the page's own order.
+    /* The control's announcement, with the hint that a category's page is
+     * text alone, and what the page adds. */
+    std::string focus_text(Rml::Element& focus, bool explain = false) const;
+    /* Up (-1) or Down (1), before the page moves focus: over the lines of
+     * the open category's page, between its controls, or after the category
+     * when the page has none. `wrap`: the page's column of rows wraps around.
      * Speaks what the step lands on and returns true when the press was used,
      * so focus must stay put. Leaves every press to the page while the
      * accessibility switch is off. */
-    bool step_lines(int direction, const Rml::Element* after_page);
+    bool step_lines(int direction, bool wrap);
     void stop_reading_lines() { m_lines.clear(); }
 
     /* Whether the element's own display shows it, whatever its ancestors do. */
@@ -243,17 +257,17 @@ protected:
     void say(std::string_view text, Mode mode);
 
 private:
-    /* A control as the page's reader hears it: describe_control, with the
-     * page's action buttons made actions. */
+    /* A control as the page's reader hears it: describe_control, then the
+     * page's overrides. */
     Control describe(const Rml::Element& element) const;
     std::string left_field_text() const;
     void follow_value(const Rml::Element& focus, const Control& control);
 
     Rml::ElementDocument& m_document;
     Speech& m_speech;
-    std::span<const std::string_view> m_action_buttons;
     Rml::ObserverPtr<Rml::Element> m_focus;
     std::string m_focus_value;
+    std::string m_focus_detail;
     FieldEcho m_field; /* follows the focused control as a text field */
     PageLines m_lines;
 };

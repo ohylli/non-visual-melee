@@ -34,8 +34,13 @@ std::vector<Output> none() {
 }
 
 constexpr const char* kOpening =
-    "PC settings. Graphics, tab, selected, 1 of 5. Left and right to switch tabs";
-constexpr const char* kResume = "Return to game, button";
+    "PC settings. Graphics, 1 of 5. Up and down to choose, right to enter";
+constexpr const char* kResume = "Resume, button. Close settings and return to the game.";
+
+/* The port menu's tab_ids, without the launcher's own category. */
+constexpr const char* kTabs[] = {
+    "tab-graphics", "tab-audio", "tab-cheats", "tab-controls", "tab-online"};
+constexpr int kTabCount = 5;
 
 /* The port menu with port menu speech attached, changed through the same
  * calls PortMenu makes. Loaded hidden, as pc_menu_init loads it when the game
@@ -44,12 +49,14 @@ class Menu {
 public:
     explicit Menu(Rml::Context& context, bool speech = true)
         : m_context(context),
-          m_speech(a11y::Config{speech, false}, std::make_unique<FakeBridge>(m_outputs)) {
+          m_speech(a11y::Config{speech, false}, std::make_unique<FakeBridge>(m_outputs)),
+          m_describe(*this) {
         m_speech.init();
         a11y::port_menu_speech_start(m_speech);
         m_document = m_context.LoadDocument(s_resources + "/port-menu.rml");
         assert(m_document != nullptr);
         m_document->AddEventListener(Rml::EventId::Textinput, &m_filter, true);
+        m_document->AddEventListener(Rml::EventId::Focus, &m_describe, true);
         refresh();
         m_context.Update();
     }
@@ -106,13 +113,17 @@ public:
         label("port-update-status", "Up to date (v0.1.8-beta)");
         label("pad-port", "Port 1");
         label("pad-name", "No controller in this port.");
+        label("bind-name-0", "A");
+        label("bind-0", "Unbound");
         label("axis-name-0", "Stick Left");
         label("axis-0", "leftx -");
+        label("menu-binding", "Back");
     }
 
-    /* PortMenu::toggle */
-    void toggle() {
+    /* PortMenu::toggle; `quitting` as Quit game sets pc_exit_requested. */
+    void toggle(bool quitting = false) {
         m_open = !m_open;
+        m_quitting = quitting;
         if (m_open) {
             refresh();
             m_document->Show();
@@ -124,23 +135,63 @@ public:
 
     /* PortMenu::show_tab */
     void show_tab(int next) {
-        static constexpr const char* pages[] = {
-            "page-graphics", "page-audio", "page-cheats", "page-controls", "page-online"};
-        m_tab = (next + 5) % 5;
-        for (int i = 0; i < 5; ++i) {
+        m_tab = (next + kTabCount) % kTabCount;
+        for (int i = 0; i < kTabCount; ++i) {
             element(kTabs[i])->SetClass("selected", i == m_tab);
-            element(pages[i])->SetClass("selected", i == m_tab);
+            const std::string page = std::string("page-") + (kTabs[i] + 4);
+            element(page.c_str())->SetClass("selected", i == m_tab);
         }
         focus(kTabs[m_tab]);
     }
 
-    /* PortMenu::focus_step with its hook: Up (-1) or Down (1) through the
-     * tab, the page's controls (PortMenu::page_focus) and Return to game. */
+    /* PortMenu::enter_rows: Right or Enter on a category. */
+    void enter_rows() {
+        m_document->UpdateDocument();
+        for (const std::string& id : page_focus()) {
+            Rml::Element* e = element(id.c_str());
+            if (e->IsVisible(true)) {
+                focus(id.c_str());
+                return;
+            }
+        }
+    }
+
+    /* PortMenu::back: Escape or B. */
+    void back() {
+        if (focused() != nullptr && !is_sidebar(focused()->GetId())) {
+            show_tab(m_tab);
+        } else {
+            toggle();
+        }
+    }
+
+    /* PortMenu::focus_step with its hook: Up (-1) or Down (1), in the
+     * sidebar over the categories, Resume and Quit game, around; in the rows
+     * through PortMenu::show_tab's focus_ids, the category, the page's rows
+     * (PortMenu::page_focus), Resume and Quit game. */
     void step(int direction) {
         if (a11y::port_menu_speech_step(direction)) {
             return;
         }
-        const std::vector<std::string> ids = focus_ids();
+        const Rml::String id = focused() != nullptr ? focused()->GetId() : "";
+        if (is_sidebar(id)) {
+            const int current = id == "quit-game" ? kTabCount + 1 :
+                                id == "resume"    ? kTabCount :
+                                                    m_tab;
+            const int next = (current + direction + kTabCount + 2) % (kTabCount + 2);
+            if (next < kTabCount) {
+                show_tab(next);
+            } else {
+                focus(next == kTabCount ? "resume" : "quit-game");
+            }
+            return;
+        }
+        std::vector<std::string> ids{kTabs[m_tab]};
+        for (const std::string& row : page_focus()) {
+            ids.push_back(row);
+        }
+        ids.push_back("resume");
+        ids.push_back("quit-game");
         const int count = static_cast<int>(ids.size());
         int index = direction > 0 ? -1 : 0;
         for (int i = 0; i < count; ++i) {
@@ -163,11 +214,20 @@ public:
         take();
     }
 
+    /* Opens the menu and the rows of a category. */
+    void open_rows(int tab) {
+        open();
+        show_tab(tab);
+        enter_rows();
+        frame();
+        take();
+    }
+
     /* One frame of the game loop: the menu's frame with its hook, then RmlUi
      * updates the page as the next frame draws it. */
     void frame() {
         m_now += kFrame;
-        a11y::port_menu_speech_frame(m_open, m_now);
+        a11y::port_menu_speech_frame(m_open, m_quitting, m_now);
         m_context.Update();
     }
 
@@ -204,35 +264,63 @@ public:
 
     void unload() {
         m_document->RemoveEventListener(Rml::EventId::Textinput, &m_filter, true);
+        m_document->RemoveEventListener(Rml::EventId::Focus, &m_describe, true);
         m_document->Close();
         m_context.Update();
         m_document = nullptr;
     }
 
 private:
-    static constexpr const char* kTabs[] = {
-        "tab-graphics", "tab-audio", "tab-cheats", "tab-controls", "tab-online"};
+    /* PortMenu::ProcessEvent's Focus branch: the status line shows the
+     * focused row's description. */
+    class Describe final : public Rml::EventListener {
+    public:
+        explicit Describe(Menu& menu) : m_menu(menu) {}
+        void ProcessEvent(Rml::Event& event) override {
+            if (!m_menu.m_open) {
+                return;
+            }
+            Rml::String description;
+            for (Rml::Element* e = event.GetTargetElement();
+                e != nullptr && e != m_menu.m_document && description.empty();
+                e = e->GetParentNode())
+            {
+                description = e->GetAttribute<Rml::String>("data-desc", "");
+            }
+            if (!description.empty()) {
+                m_menu.status(description);
+            }
+        }
 
-    /* PortMenu::show_tab's focus_ids, from PortMenu::page_focus. */
-    std::vector<std::string> focus_ids() const {
-        std::vector<std::string> ids{kTabs[m_tab]};
+    private:
+        Menu& m_menu;
+    };
+
+    /* PortMenu::is_sidebar */
+    static bool is_sidebar(const Rml::String& id) {
+        for (const char* tab : kTabs) {
+            if (id == tab) {
+                return true;
+            }
+        }
+        return id == "resume" || id == "quit-game";
+    }
+
+    /* PortMenu::page_focus */
+    std::vector<std::string> page_focus() const {
         switch (m_tab) {
         case 0:
-            ids.insert(ids.end(), {"display", "sync", "resolution", "aspect", "hud-mode", "aa",
-                                      "filter", "filter-mode", "custom-textures", "backend"});
-            break;
+            return {"display", "sync", "resolution", "aspect", "hud-mode", "aa", "filter",
+                "filter-mode", "custom-textures", "backend"};
         case 1:
-            ids.insert(ids.end(), {"volume", "music-volume", "sfx-volume", "mute", "reverb", "fps",
-                                      "scale", "port-check-update"});
-            break;
+            return {"volume", "music-volume", "sfx-volume", "mute", "reverb", "fps", "scale",
+                "port-check-update"};
         case 2:
-            ids.insert(ids.end(), {"unlock-all", "frozen-stadium", "free-camera", "ucf"});
-            break;
+            return {"unlock-all", "frozen-stadium", "free-camera", "ucf"};
         case 4:
-            ids.insert(ids.end(), {"net-name", "net-target", "net-delay"});
-            break;
-        default:
-            ids.push_back("pad-port");
+            return {"net-name", "net-target", "net-delay"};
+        default: {
+            std::vector<std::string> ids{"pad-port"};
             for (int i = 0; i < 12; ++i) {
                 ids.push_back("bind-" + std::to_string(i));
             }
@@ -240,23 +328,26 @@ private:
                 ids.push_back("axis-" + std::to_string(i));
             }
             ids.push_back("bind-reset");
-            break;
+            ids.push_back("menu-binding");
+            return ids;
         }
-        ids.push_back("resume");
-        return ids;
+        }
     }
 
     Rml::Context& m_context;
     OnlineFilter m_filter;
     int m_tab = 0;
     bool m_open = false;
+    bool m_quitting = false;
     std::vector<Output> m_outputs;
     a11y::Speech m_speech;
+    Describe m_describe;
     Rml::ElementDocument* m_document = nullptr;
     a11y::Clock::time_point m_now;
 };
 
-/* Silent until opened; the opening interrupts, and so does the closing. */
+/* Silent until opened; the opening interrupts, and so does the closing. The
+ * status line's description of each focus is never spoken. */
 void opening_and_closing(Rml::Context& context) {
     Menu menu(context);
     menu.run(a11y::kSettleTime * 2);
@@ -273,29 +364,43 @@ void opening_and_closing(Rml::Context& context) {
     assert(menu.take() == none());
 }
 
-/* The menu opens on the tab used last; Return to game closes it too. */
-void reopening_on_the_last_tab(Rml::Context& context) {
+/* The menu opens on the category used last. Escape on a category closes it,
+ * Resume too, and Quit game says what it does. */
+void reopening_and_the_ways_out(Rml::Context& context) {
     Menu menu(context);
     menu.open();
-    menu.show_tab(1);
+    menu.step(1);
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt(
-                              "Audio & interface, tab, selected, 2 of 5. Left and right to switch "
-                              "tabs")}));
-    menu.toggle();
+    assert(menu.take() == (std::vector<Output>{interrupt("Audio, 2 of 5")}));
+    menu.back();
     menu.frame();
     assert(menu.take() == (std::vector<Output>{interrupt("Back to game")}));
     menu.toggle();
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt(
-                              "PC settings. Audio & interface, tab, selected, 2 of 5. Left and "
-                              "right to switch tabs")}));
+    assert(menu.take() ==
+           (std::vector<Output>{
+               interrupt("PC settings. Audio, 2 of 5. Up and down to choose, right to enter")}));
+    /* Up from the first category, around to the sidebar's end. */
+    menu.show_tab(0);
+    menu.frame();
+    menu.take();
     menu.step(-1);
     menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(
+                              "Quit game, button. Quit the game and return to the desktop.")}));
+    menu.step(-1);
+    menu.frame();
+    menu.run(a11y::kSettleTime * 2);
     assert(menu.take() == (std::vector<Output>{interrupt(kResume)}));
     menu.toggle(); /* PortMenu::apply("resume") */
     menu.frame();
     assert(menu.take() == (std::vector<Output>{interrupt("Back to game")}));
+    menu.toggle();
+    menu.frame();
+    menu.take();
+    menu.toggle(true); /* PortMenu::apply("quit-game") */
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt("Quitting the game")}));
 }
 
 /* While closed, the page may change and keep focus, and nothing is said;
@@ -314,45 +419,51 @@ void closed_menu_is_silent(Rml::Context& context) {
     assert(menu.take() == none());
 }
 
-/* Every tab's first control, read from the tab with Down. */
-void every_tabs_first_control(Rml::Context& context) {
+/* Every category, then its first row, entered with Right. Descriptions that
+ * only repeat the name are left out. */
+void every_categorys_first_row(Rml::Context& context) {
     Menu menu(context);
     menu.open();
     const std::vector<std::vector<Output>> expected{
-        {interrupt("Display mode, Windowed, Enter to change")},
+        {interrupt("Display mode, Windowed, Left and right to change")},
         {interrupt("Master volume, slider, 100%. Left and right to adjust. Left/right or drag "
                    "to adjust.")},
-        {interrupt("Unlock everything, Normal, Enter to change. Unlock all 26 characters, 11 "
-                   "secret stages, and All-Star mode.")},
-        {interrupt("Controller, Port 1, Enter to change. No controller in this port.")},
+        {interrupt("Unlock everything, Normal, Left and right to change. Unlock all 26 "
+                   "characters, 11 secret stages, and All-Star mode.")},
+        {interrupt("Input device, Port 1, Left and right to change. No controller in this port. "
+                   "Choose a controller port or Keyboard. Select a row to change its binding.")},
         {interrupt("Player name, edit, PLAYER. 1–8 letters or digits. Changes apply to the next "
                    "search.")},
     };
-    const char* tabs[] = {"Graphics, tab, selected, 1 of 5",
-        "Audio & interface, tab, selected, 2 of 5", "Cheats, tab, selected, 3 of 5",
-        "Controls, tab, selected, 4 of 5", "Online, tab, selected, 5 of 5"};
-    for (int tab = 0; tab < 5; ++tab) {
+    const char* categories[] = {"Graphics, 1 of 5", "Audio, 2 of 5", "Gameplay, 3 of 5",
+        "Controls, 4 of 5", "Online, 5 of 5"};
+    for (int tab = 0; tab < kTabCount; ++tab) {
         menu.show_tab(tab);
         menu.frame();
         if (tab > 0) {
-            /* No page opens with text, so no hint. */
-            assert(menu.take() ==
-                   (std::vector<Output>{
-                       interrupt(std::string(tabs[tab]) + ". Left and right to switch tabs")}));
+            assert(menu.take() == (std::vector<Output>{interrupt(categories[tab])}));
         }
-        menu.step(1);
+        menu.enter_rows();
         menu.frame();
         assert(menu.take() == expected[static_cast<size_t>(tab)]);
+        menu.run(a11y::kSettleTime * 2);
+        assert(menu.take() == none());
+        /* Escape in the rows: back to the category. */
+        menu.back();
+        menu.frame();
+        assert(menu.take() == (std::vector<Output>{interrupt(categories[tab])}));
     }
 }
 
-/* Enter cycles a value: the new value alone is said, and "Saved." never. */
+/* Left and Right step a value: the new value alone is said, and "Saved."
+ * never. */
 void setting_and_its_value(Rml::Context& context) {
     Menu menu(context);
-    menu.open();
-    menu.focus("sync");
+    menu.open_rows(0);
+    menu.step(1);
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt("Vertical sync, On, Enter to change")}));
+    assert(menu.take() ==
+           (std::vector<Output>{interrupt("Vertical sync, On, Left and right to change")}));
     /* PortMenu::apply("sync"), then saved() and its refresh. */
     menu.label("sync", "Off");
     menu.status("Saved.");
@@ -364,18 +475,21 @@ void setting_and_its_value(Rml::Context& context) {
     menu.label("aa", "4x MSAA");
     menu.focus("aa");
     menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(
+                              "Anti-aliasing RESTART, 4x MSAA, Left and right to change")}));
+    /* A row's own description, once the name is left out of it. */
+    menu.focus("aspect");
+    menu.frame();
     assert(menu.take() ==
-           (std::vector<Output>{interrupt("Anti-aliasing RESTART, 4x MSAA, Enter to change")}));
+           (std::vector<Output>{interrupt(
+               "Aspect ratio, Original (73:60), Left and right to change. Applies to fights. Menus "
+               "and cutscenes keep the original aspect. Applied when the menu closes.")}));
 }
 
 /* Left and Right step a slider; Enter cycles it, wrapping from the top. */
 void slider_steps_and_wraps(Rml::Context& context) {
     Menu menu(context);
-    menu.open();
-    menu.show_tab(1);
-    menu.focus("volume");
-    menu.frame();
-    menu.take();
+    menu.open_rows(1);
     /* PortMenu::step(-1), then saved(). */
     menu.slider("volume", 95.0f);
     menu.label("volume-val", "95%");
@@ -391,16 +505,18 @@ void slider_steps_and_wraps(Rml::Context& context) {
     menu.frame();
     menu.run(a11y::kSettleTime * 2);
     assert(menu.take() == (std::vector<Output>{interrupt("100%"), interrupt("0%")}));
+    /* Each slider has its own name. */
+    menu.step(1);
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(
+                              "Music volume, slider, 100%. Left and right to adjust. Background "
+                              "music volume.")}));
 }
 
 /* An Online field echoes typing and explains a refused character. */
 void text_field_typing(Rml::Context& context) {
     Menu menu(context);
-    menu.open();
-    menu.show_tab(4);
-    menu.focus("net-name");
-    menu.frame();
-    menu.take();
+    menu.open_rows(4);
     menu.key(Rml::Input::KI_END);
     menu.take();
     assert(menu.type("#") == (std::vector<Output>{interrupt("# not allowed")}));
@@ -416,12 +532,23 @@ void text_field_typing(Rml::Context& context) {
     assert(menu.type("a#") == (std::vector<Output>{interrupt("A"), interrupt("A#")}));
 }
 
-/* Controls: a heading between the buttons and axes, and the keyboard's lines
- * between Restore defaults and Return to game. */
-void controls_lines(Rml::Context& context) {
+/* Controls: the input device's live line, the bindings, a heading between
+ * the buttons and axes, and the keyboard's lines after the last row, before
+ * Resume. */
+void controls_rows_and_lines(Rml::Context& context) {
     Menu menu(context);
-    menu.open();
-    menu.show_tab(3);
+    menu.open_rows(3);
+    /* PortMenu::apply("pad-port", -1): around to Keyboard, whose live line
+     * comes with it. */
+    menu.label("pad-port", "Keyboard");
+    menu.label("pad-name", "Player 1 · Escape cancels · Delete clears a binding");
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(
+                              "Keyboard, Player 1, Escape cancels, Delete clears a binding")}));
+    menu.step(1);
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt("A, Unbound, Enter to change")}));
+
     menu.focus("bind-11");
     menu.frame();
     menu.take();
@@ -437,6 +564,11 @@ void controls_lines(Rml::Context& context) {
     assert(menu.take() == (std::vector<Output>{interrupt(
                               "Restore defaults: Restore, button. Put this port back on its "
                               "default mapping.")}));
+    menu.step(1);
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(
+                              "Menu button, Back, Enter to change. Choose the button that opens "
+                              "settings on all controllers. Guide and F1 always work too.")}));
     const std::vector<std::string> lines{"Keyboard", "WASD, arrows Move", "X Attack", "Z Special",
         "C, V Jump", "Q, E Shield", "Tab Grab", "Enter Start", "IJKL C-stick"};
     for (const std::string& line : lines) {
@@ -444,31 +576,28 @@ void controls_lines(Rml::Context& context) {
         menu.frame();
         assert(menu.take() == (std::vector<Output>{interrupt(line)}));
     }
-    assert(menu.focused() == menu.element("bind-reset"));
-    menu.step(1);
-    menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt(kResume)}));
+    assert(menu.focused() == menu.element("menu-binding"));
     menu.step(-1);
-    assert(menu.take() == (std::vector<Output>{interrupt(lines.back())}));
+    assert(menu.take() == (std::vector<Output>{interrupt(lines[lines.size() - 2])}));
+    menu.step(1);
     menu.step(1);
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt(kResume)}));
+    menu.run(a11y::kSettleTime * 2);
+    assert(menu.take() == (std::vector<Output>{interrupt(lines.back()), interrupt(kResume)}));
     assert(menu.focused() == menu.element("resume"));
+    /* Up from Resume is the sidebar's: the last category, not the lines. */
+    menu.step(-1);
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt("Online, 5 of 5")}));
 }
 
 /* Online: the connect code between the fields, the closing note after Input
- * delay. */
+ * delay, then Resume. */
 void online_lines(Rml::Context& context) {
     Menu menu(context);
-    menu.open();
-    menu.show_tab(4);
-    menu.focus("net-name");
-    menu.frame();
-    menu.take();
+    menu.open_rows(4);
     menu.step(1);
-    assert(menu.take() == (std::vector<Output>{interrupt("Your connect code")}));
-    menu.step(1);
-    assert(menu.take() == (std::vector<Output>{interrupt("PLAYER#AB12")}));
+    assert(menu.take() == (std::vector<Output>{interrupt("Your connect code, PLAYER#AB12")}));
     menu.step(1);
     menu.frame();
     assert(menu.take() == (std::vector<Output>{interrupt(
@@ -476,9 +605,9 @@ void online_lines(Rml::Context& context) {
                               "Open Online, Direct Connect in-game.")}));
     menu.step(1);
     menu.frame();
-    assert(menu.take() ==
-           (std::vector<Output>{interrupt("Input delay, Auto, Enter to change. Automatic adapts "
-                                          "to your connection. Changes apply next match.")}));
+    assert(menu.take() == (std::vector<Output>{interrupt(
+                              "Input delay, Auto, Left and right to change. Automatic adapts to "
+                              "your connection. Changes apply next match.")}));
     menu.step(1);
     assert(menu.take() ==
            (std::vector<Output>{interrupt("Internet discovery can take a few minutes. Some home "
@@ -486,10 +615,19 @@ void online_lines(Rml::Context& context) {
     menu.step(1);
     menu.frame();
     assert(menu.take() == (std::vector<Output>{interrupt(kResume)}));
+    /* Up from the first row onto the category, which has nothing above. */
+    menu.show_tab(4);
+    menu.enter_rows();
+    menu.frame();
+    menu.take();
+    menu.step(-1);
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt("Online, 5 of 5")}));
 }
 
 /* The status line is spoken queued once it settles, except "Saved.", which
- * follows every change, and what it shows as the menu opens. */
+ * follows every change, the description it shows for each focus, and what it
+ * shows as the menu opens. */
 void status_line(Rml::Context& context) {
     Menu menu(context);
     menu.status("Saved.");
@@ -507,11 +645,16 @@ void status_line(Rml::Context& context) {
     assert(menu.take() ==
            (std::vector<Output>{
                queue("Press a button on the controller. Escape cancels."), queue("Canceled.")}));
+    /* A move writes the new focus's description: said with the focus only. */
+    menu.enter_rows();
+    menu.run(a11y::kSettleTime * 2);
+    assert(menu.take() ==
+           (std::vector<Output>{interrupt("Display mode, Windowed, Left and right to change")}));
     /* Closed and opened again on the same text: only the opening. */
     menu.toggle();
     menu.frame();
     menu.take();
-    menu.status("Saved automatically.");
+    menu.status("Settings save automatically.");
     menu.frame();
     menu.toggle();
     menu.frame();
@@ -520,11 +663,11 @@ void status_line(Rml::Context& context) {
 }
 
 /* PortMenu::apply("port-check-update") writes the same text to both regions;
- * the result shows when the next save refreshes the page. */
+ * the result shows when the next save refreshes the page. The row's
+ * description is left out: it is the result the page showed first. */
 void update_check(Rml::Context& context) {
     Menu menu(context);
-    menu.open();
-    menu.show_tab(1);
+    menu.open_rows(1);
     menu.focus("port-check-update");
     menu.frame();
     assert(menu.take() == (std::vector<Output>{interrupt(
@@ -533,7 +676,7 @@ void update_check(Rml::Context& context) {
     menu.status("Checking for updates...");
     menu.run(a11y::kSettleTime);
     assert(menu.take() == (std::vector<Output>{queue("Checking for updates...")}));
-    /* The result arrives after the player has moved to another tab. */
+    /* The result arrives after the player has moved to another category. */
     menu.show_tab(0);
     menu.frame();
     menu.take();
@@ -560,16 +703,13 @@ void tab_becomes_down(Rml::Context& context) {
  * port, over the lines. */
 void speech_off_leaves_the_keys_alone(Rml::Context& context) {
     Menu menu(context, false);
-    menu.open();
-    menu.show_tab(4);
-    menu.focus("net-name");
-    menu.frame();
+    menu.open_rows(4);
     menu.step(1);
     assert(menu.focused() == menu.element("net-target"));
 }
 
-/* Every control in the menu, on every tab, has a name. Guards against a base
- * merge adding a row the reader cannot name. */
+/* Every control in the menu, on every page, has a name. Guards against a
+ * base merge adding a row the reader cannot name. */
 void every_control_has_a_name(Rml::Context& context) {
     Menu menu(context);
     int controls = 0;
@@ -602,7 +742,7 @@ void other_documents_are_ignored(Rml::Context& context) {
     for (int i = 0; i < 60; ++i) {
         now += kFrame;
         context.Update();
-        a11y::port_menu_speech_frame(true, now);
+        a11y::port_menu_speech_frame(true, false, now);
     }
     assert(!a11y::port_menu_speech_step(1));
     document->Close();
@@ -631,18 +771,18 @@ int main(int argc, char** argv) {
     NullRender render;
     Rml::SetRenderInterface(&render);
     Rml::Initialise();
-    Rml::LoadFontFace(s_resources + "/font.ttf");
+    rmlui_test::load_fonts(s_resources);
     Rml::Context* context = Rml::CreateContext("main", Rml::Vector2i(1280, 720));
     assert(context != nullptr);
 
     opening_and_closing(*context);
-    reopening_on_the_last_tab(*context);
+    reopening_and_the_ways_out(*context);
     closed_menu_is_silent(*context);
-    every_tabs_first_control(*context);
+    every_categorys_first_row(*context);
     setting_and_its_value(*context);
     slider_steps_and_wraps(*context);
     text_field_typing(*context);
-    controls_lines(*context);
+    controls_rows_and_lines(*context);
     online_lines(*context);
     status_line(*context);
     update_check(*context);

@@ -4,41 +4,54 @@
 #include "speech.hpp"
 #include <RmlUi/Core/Element.h>
 #include <RmlUi/Core/ElementDocument.h>
+#include <cctype>
 #include <string>
 #include <string_view>
 
 namespace a11y {
 namespace {
 
-/* The menu focuses its tab as it opens. If no control has focus by then,
- * the opening is spoken without it after this long. */
+/* The menu focuses its category as it opens. If no control has focus by
+ * then, the opening is spoken without it after this long. */
 constexpr std::chrono::milliseconds kOpeningFocusWait{1000};
 
-/* The fork's overrides, for controls whose shape the generic reader gets
- * wrong. These buttons sit in a setting row but act instead of cycling a
- * value, so they are read as "Check for updates: Check now, button". The
- * Controls tab's binding buttons act too, but their label is the binding,
- * which is what a value is; the remapping feature decides their words. */
-constexpr std::string_view kActionButtons[] = {"port-check-update", "bind-reset"};
+/* What the opening calls the menu. The page names itself only in its title
+ * bar, "Melee PC / Settings". */
+constexpr const char* kHeading = "PC settings";
+
+/* Whether the element is one of the Controls page's binding buttons: "bind-0"
+ * to "bind-11", "axis-0" to "axis-9" and "menu-binding". Their label is the
+ * binding, which is what a value is, though the page marks them as buttons
+ * that act; the remapping feature decides their words. */
+bool is_binding(const Rml::Element& element) {
+    const Rml::String& id = element.GetId();
+    for (const std::string_view prefix : {"bind-", "axis-"}) {
+        if (id.size() > prefix.size() && id.compare(0, prefix.size(), prefix) == 0 &&
+            std::isdigit(static_cast<unsigned char>(id[prefix.size()])))
+        {
+            return true;
+        }
+    }
+    return id == "menu-binding";
+}
 
 /* Reads the port menu's document for as long as it is loaded, which is from
  * the game's start to its end; it speaks only while the menu is open. */
 class PortMenuReader final : public PageReader {
 public:
-    PortMenuReader(Rml::ElementDocument& document, Speech& speech)
-        : PageReader(document, speech, kActionButtons) {}
+    PortMenuReader(Rml::ElementDocument& document, Speech& speech) : PageReader(document, speech) {}
 
-    void frame(bool open, Clock::time_point now) {
+    void frame(bool open, bool quitting, Clock::time_point now) {
         if (!open) {
             if (m_open) {
                 m_open = false;
                 forget_focus();
                 /* Interrupts, so leftover menu speech stops as the game
-                 * resumes. */
-                say("Back to game", Mode::interrupt);
+                 * resumes, or as it shuts down after Quit game. */
+                say(quitting ? "Quitting the game" : "Back to game", Mode::interrupt);
                 /* Out of view until the next opening, which takes them
                  * afresh; nothing to read while closed. */
-                observe_regions(false, now);
+                observe_regions(nullptr, false, now);
             }
             return;
         }
@@ -50,60 +63,67 @@ public:
         }
         if (m_opening) {
             if (focus == nullptr && now - m_opened_at < kOpeningFocusWait) {
-                observe_regions(false, now);
+                observe_regions(focus, false, now);
                 return;
             }
             say_opening(focus);
             /* The menu rewrote both regions as it opened: taken silently. */
-            observe_regions(true, now);
+            observe_regions(focus, true, now);
             return;
         }
         follow_focus(focus, "");
-        for (const std::string& text : observe_regions(true, now).texts()) {
+        for (const std::string& text : observe_regions(focus, true, now).texts()) {
             say(text, Mode::queue);
         }
     }
 
-    /* Up or Down, before the menu moves focus: over the lines of the
-     * selected tab's page between the controls. */
+    /* Up or Down, before the menu moves focus: over the lines of the open
+     * category's page between its rows. */
     bool step(int direction) {
         if (!m_open || m_opening) {
             stop_reading_lines();
             return false;
         }
-        /* The menu's own order (PortMenu::show_tab): the tab, the page's
-         * controls, then Return to game. */
-        return step_lines(direction, document().GetElementById("resume"));
+        /* The menu's column of rows (PortMenu::show_tab) does not wrap: past
+         * the last row it moves on to Resume, before the first to the
+         * category. */
+        return step_lines(direction, false);
     }
 
 private:
-    /* "PC settings. <the focused tab's announcement>", interrupting: the menu
-     * cuts into whatever the game was saying. The menu opens on the tab used
-     * last. */
+    void adjust(const Rml::Element& element, Control& control) const override {
+        if (is_binding(element)) {
+            control.role = Role::binding;
+        }
+        /* A category's description only repeats its name: "Graphics
+         * settings.". Check for updates' is the result the page showed
+         * first, which it never rewrites; the row's live text says the
+         * current one. */
+        if (control.role == Role::category || element.GetId() == "port-check-update") {
+            control.help.clear();
+        }
+    }
+
+    /* "PC settings. <the focused category's announcement, with how to
+     * move>", interrupting: the menu cuts into whatever the game was saying.
+     * The menu opens on the category used last. */
     void say_opening(Rml::Element* focus) {
         m_opening = false;
-        std::string text = heading();
+        std::string text = kHeading;
         if (focus != nullptr) {
-            append_sentence(text, remember_focus(*focus));
+            append_sentence(text, remember_focus(*focus, true));
         }
         say(text, Mode::interrupt);
     }
 
-    /* The page's heading, "PC settings". */
-    std::string heading() const {
-        Rml::Element* block = document().GetElementById("heading");
-        Rml::ElementList found;
-        if (block != nullptr) {
-            block->GetElementsByTagName(found, "h1");
-        }
-        return found.empty() ? std::string() : element_text(*found.front());
-    }
-
     /* The status line and the update check's result, in view while the menu
-     * is open on any tab, so a check's result is heard after the player has
-     * moved on. "Saved.", which follows every change, is never spoken, nor
-     * what the regions show as the menu opens. */
-    SpokenOnce observe_regions(bool in_view, Clock::time_point now) {
+     * is open on any category, so a check's result is heard after the player
+     * has moved on. "Saved.", which follows every change, is never spoken,
+     * nor what the regions show as the menu opens, nor the description the
+     * status line shows for the focused control, which its announcement
+     * has said. */
+    SpokenOnce observe_regions(const Rml::Element* focus, bool in_view, Clock::time_point now) {
+        m_status.echo = focus != nullptr ? page_description(*focus) : std::string();
         SpokenOnce spoken;
         for (WatchedText* watch : {&m_status, &m_update_status}) {
             spoken.add(watch->observe_in_view(text_of(watch->id), in_view, now));
@@ -114,7 +134,7 @@ private:
     bool m_open = false;
     bool m_opening = false; /* open, the opening not yet spoken */
     Clock::time_point m_opened_at;
-    WatchedText m_status{"menu-status", {"Saved.", "Saved automatically."}};
+    WatchedText m_status{"menu-status", {"Saved."}};
     WatchedText m_update_status{"port-update-status"};
 };
 
@@ -130,9 +150,9 @@ void port_menu_speech_stop() {
     s_plugin.stop();
 }
 
-void port_menu_speech_frame(bool open, Clock::time_point now) {
+void port_menu_speech_frame(bool open, bool quitting, Clock::time_point now) {
     if (PortMenuReader* reader = s_plugin.reader()) {
-        reader->frame(open, now);
+        reader->frame(open, quitting, now);
     }
 }
 

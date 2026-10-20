@@ -13,6 +13,7 @@
 #include <cassert>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -29,6 +30,23 @@ using rmlui_test::Output;
 using rmlui_test::queue;
 
 std::string s_resources;
+
+/* The launcher's tab_ids. */
+constexpr const char* kTabs[] = {
+    "tab-graphics", "tab-audio", "tab-cheats", "tab-controls", "tab-online", "tab-launcher"};
+constexpr int kTabCount = 6;
+
+/* What the openings and Settings say, again and again. */
+constexpr const char* kChoose =
+    "Choose Disc, button. Pick a Melee disc image: ISO, GCM, CISO, RVZ, GCZ or WIA.";
+constexpr const char* kSettings = "Settings, button. Graphics, audio, gameplay, controls, online "
+                                  "play and the launcher itself.";
+constexpr const char* kPlayerName = "Player name, edit, OTTO. 1-8 letters or digits. Changes "
+                                    "apply to the next search.";
+constexpr const char* kFriendsCode = "Friend's connect code, edit, blank. Leave blank to host "
+                                     "your code. Open Online, then Direct Connect, in the game.";
+constexpr const char* kControls =
+    "Controls, 4 of 6. The keyboard layout and controller setup. Text below, Down to read";
 
 /* One launcher page with launcher speech attached, changed through the same
  * calls launcher.cpp makes. */
@@ -61,6 +79,8 @@ public:
         return e;
     }
 
+    Rml::Element* focused() { return m_context.GetFocusElement(); }
+
     /* Launcher::text */
     void text(const char* id, const std::string& value) {
         Rml::Element* e = element(id);
@@ -83,6 +103,12 @@ public:
 
     void status(const std::string& value) { text("status", value); }
 
+    /* Launcher::note */
+    void note(const std::string& value) {
+        text("settings-status", value);
+        element("settings-status")->SetProperty("display", value.empty() ? "none" : "block");
+    }
+
     /* refresh_online's write to a text field */
     void field(const char* id, const std::string& value) {
         auto* e = dynamic_cast<Rml::ElementFormControl*>(element(id));
@@ -90,57 +116,107 @@ public:
         e->SetValue(value);
     }
 
+    /* Focus moved by the launcher, with what its focus listener does
+     * (Launcher::describe): a category taking focus opens its page. */
+    void focus(const char* id) {
+        const bool focused = element(id)->Focus();
+        assert(focused);
+        for (int i = 0; i < kTabCount; ++i) {
+            if (m_settings && std::strcmp(id, kTabs[i]) == 0 && i != m_tab) {
+                select_tab(i);
+            }
+        }
+    }
+
+    /* Launcher::select_tab */
+    void select_tab(int tab) {
+        m_tab = tab;
+        for (int i = 0; i < kTabCount; ++i) {
+            element(kTabs[i])->SetClass("selected", i == tab);
+            const std::string page = std::string("page-") + (kTabs[i] + 4);
+            element(page.c_str())->SetClass("selected", i == tab);
+        }
+    }
+
     /* Launcher::show_tab */
     void show_tab(int tab) {
-        static constexpr const char* pages[] = {
-            "page-graphics", "page-audio", "page-cheats", "page-controls", "page-online"};
-        for (int i = 0; i < 5; ++i) {
-            element(kTabs[i])->SetClass("selected", i == tab);
-            element(pages[i])->SetClass("selected", i == tab);
-        }
-        m_tab = tab;
+        select_tab(tab);
         focus(kTabs[tab]);
     }
 
-    /* Launcher::focus_step on the Controls or Online tab, with its hook: Up
-     * (-1) or Down (1) through the tab, the page's controls
-     * (Launcher::page_focus) and Back. */
+    /* Launcher::enter_rows: Right or Enter on a category. */
+    void enter_rows() {
+        m_document->UpdateDocument();
+        for (const char* id : page_focus()) {
+            Rml::Element* e = element(id);
+            if (e->IsVisible(true) && !e->IsPseudoClassSet("disabled")) {
+                focus(id);
+                return;
+            }
+        }
+    }
+
+    /* Launcher::back: Escape or B. */
+    void back() {
+        if (!m_settings) {
+            return;
+        }
+        if (in_rows()) {
+            show_tab(m_tab);
+        } else {
+            show_settings(false);
+        }
+    }
+
+    /* Launcher::focus_step, with its hook: Up (-1) or Down (1) through the
+     * column that holds focus (Launcher::column), the categories and Back or
+     * the open page's rows, wrapping around. */
     void step(int direction) {
         if (a11y::launcher_speech_step(direction)) {
             return;
         }
-        std::vector<const char*> ids{kTabs[m_tab]};
-        if (m_tab == 4) {
-            ids.insert(ids.end(), {"net-name", "net-target", "net-delay"});
+        std::vector<const char*> ids;
+        if (in_rows()) {
+            ids = page_focus();
+        } else {
+            ids.assign(std::begin(kTabs), std::end(kTabs));
+            ids.push_back("back");
         }
-        ids.push_back("back");
         const int count = static_cast<int>(ids.size());
         int index = direction > 0 ? -1 : 0;
         for (int i = 0; i < count; ++i) {
-            if (element(ids[i]) == m_context.GetFocusElement()) {
+            if (element(ids[i]) == focused()) {
                 index = i;
             }
         }
-        focus(ids[(index + direction + count) % count]);
+        for (int i = 0; i < count; ++i) {
+            index = (index + direction + count) % count;
+            Rml::Element* e = element(ids[index]);
+            if (e->IsVisible(true) && !e->IsPseudoClassSet("disabled")) {
+                focus(ids[index]);
+                return;
+            }
+        }
     }
 
     /* Launcher::show_settings, with the parts of refresh_settings the tests
      * hear from. */
     void show_settings(bool show) {
-        element("home")->SetProperty("display", show ? "none" : "block");
-        element("preferences")->SetProperty("display", show ? "block" : "none");
+        m_settings = show;
+        m_document->SetClass("in-settings", show);
         if (!show) {
             focus("settings");
             return;
         }
+        text("display", "Windowed");
         text("sync", "On");
         text("aa", "4x MSAA");
         text("volume-val", "100%");
         field("net-name", "OTTO");
         text("net-code", "ABCD#123");
         text("check-status", "Melee-PC is up to date (v0.1.8-beta).");
-        text("settings-status", "Saved automatically.");
-        show_tab(0);
+        note("");
+        show_tab(m_tab);
     }
 
     /* Opens with a disc, then enters Settings. */
@@ -151,9 +227,13 @@ public:
         take();
     }
 
-    void focus(const char* id) {
-        const bool focused = element(id)->Focus();
-        assert(focused);
+    /* Opens with a disc, enters Settings and the rows of a category. */
+    void open_rows(int tab) {
+        open_settings();
+        show_tab(tab);
+        enter_rows();
+        frame();
+        take();
     }
 
     /* The launcher's constructor with no disc remembered, then the opening. */
@@ -163,7 +243,7 @@ public:
         focus("choose");
         run(a11y::kSettleTime);
         assert(take() == (std::vector<Output>{
-                             queue("Melee launcher. No disc selected. Choose disc, button")}));
+                             queue(std::string("Melee launcher. No disc selected. ") + kChoose)}));
     }
 
     /* The launcher's constructor and start-up disc check with a good disc
@@ -188,9 +268,9 @@ public:
         focus("play");
         run(a11y::kSettleTime);
         assert(take() == (std::vector<Output>{queue(
-                             "Melee launcher. Ready to play, Disc not verified. Play Melee, "
-                             "button. Disc: melee.iso, Super Smash Bros. Melee, USA, Revision 2 "
-                             "(1.02)")}));
+                             "Melee launcher. Ready to play, Disc not verified. Play, button. "
+                             "Start Melee from this disc. Disc: melee.iso, Super Smash Bros. "
+                             "Melee, USA, Revision 2 (1.02)")}));
     }
 
     /* One turn of the launcher's loop: RmlUi updates the page, then the hook. */
@@ -258,12 +338,39 @@ public:
     }
 
 private:
-    static constexpr const char* kTabs[] = {
-        "tab-graphics", "tab-audio", "tab-cheats", "tab-controls", "tab-online"};
+    /* Launcher::in_rows */
+    bool in_rows() {
+        for (Rml::Element* e = focused(); e != nullptr; e = e->GetParentNode()) {
+            if (e->GetId() == "settings-content") {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /* Launcher::page_focus */
+    std::vector<const char*> page_focus() const {
+        switch (m_tab) {
+        case 0:
+            return {"display", "sync", "resolution", "aspect", "hud-mode", "aa", "filter",
+                "filter-mode", "fps", "custom-textures", "backend", "performance"};
+        case 1:
+            return {"volume", "music-volume", "sfx-volume", "mute", "reverb"};
+        case 2:
+            return {"unlock-all", "frozen-stadium", "free-camera", "ucf"};
+        case 4:
+            return {"net-name", "net-target", "net-delay"};
+        case 5:
+            return {"scale", "check-updates", "check-now", "settings-discord", "export-logs"};
+        default:
+            return {};
+        }
+    }
 
     Rml::Context& m_context;
     OnlineFilter m_filter;
     int m_tab = 0;
+    bool m_settings = false;
     std::vector<Output> m_outputs;
     a11y::Speech m_speech;
     Rml::ElementDocument* m_document = nullptr;
@@ -278,8 +385,8 @@ void opening_without_disc(Rml::Context& context) {
     page.run(a11y::kSettleTime - kFrame * 2);
     assert(page.take().empty());
     page.run(kFrame * 2);
-    assert(page.take() ==
-           (std::vector<Output>{queue("Melee launcher. No disc selected. Choose disc, button")}));
+    assert(page.take() == (std::vector<Output>{
+                              queue(std::string("Melee launcher. No disc selected. ") + kChoose)}));
 }
 
 /* Also the Play announcement, which carries the disc. */
@@ -288,18 +395,21 @@ void opening_waits_for_the_disc_check(Rml::Context& context) {
     page.open_with_disc();
 }
 
+/* Home's buttons say what they do, from the description bar's text. */
 void focus_change_is_announced(Rml::Context& context) {
     Page page(context);
     page.open_with_disc();
     page.focus("choose");
     page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt("Choose disc, button")}));
+    assert(page.take() == (std::vector<Output>{interrupt(kChoose)}));
     page.focus("discord");
     page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt("Discord, button")}));
+    assert(page.take() ==
+           (std::vector<Output>{
+               interrupt("Discord, button. Join the community Discord server in your browser.")}));
 }
 
-/* The file dialog disables Choose disc, which parks focus on its container,
+/* The file dialog disables Choose Disc, which parks focus on its container,
  * and focuses it again when cancelled. */
 void returning_to_the_same_control_is_silent(Rml::Context& context) {
     Page page(context);
@@ -329,16 +439,19 @@ void verify_reports_progress_in_steps(Rml::Context& context) {
     page.open_with_disc();
     page.focus("verify");
     page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt("Verify disc, button")}));
+    assert(page.take() == (std::vector<Output>{interrupt(
+                              "Verify Disc, button. Check the disc image against the original "
+                              "NTSC-U 1.02 disc.")}));
 
-    /* Launcher::action("verify"): busy, so everything else is disabled. */
+    /* Launcher::action("verify"), then Launcher::controls: busy, so
+     * everything else is disabled. */
     for (const char* id : {"play", "choose", "settings", "discord"}) {
         page.enabled(id, false);
     }
-    page.text("verify", "Cancel verification");
+    page.text("verify-label", "Cancel Verify");
     page.focus("verify");
     page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt("Cancel verification")}));
+    assert(page.take() == (std::vector<Output>{interrupt("Cancel Verify")}));
 
     for (int percent = 0; percent <= 100; percent += 3) {
         page.status("Verifying disc / " + std::to_string(percent) + "%");
@@ -354,10 +467,10 @@ void verify_reports_progress_in_steps(Rml::Context& context) {
     for (const char* id : {"play", "choose", "settings", "discord"}) {
         page.enabled(id, true);
     }
-    page.text("verify", "Verify disc");
+    page.text("verify-label", "Verify Disc");
     page.focus("verify");
     page.run(a11y::kSettleTime);
-    assert(page.take() == (std::vector<Output>{interrupt("Verify disc"),
+    assert(page.take() == (std::vector<Output>{interrupt("Verify Disc"),
                               queue("Verified, matches the original USA revision 2 disc.")}));
 }
 
@@ -374,17 +487,16 @@ void update_banner_is_announced(Rml::Context& context) {
                queue("A newer version of Melee PC is available (v0.2.0).")}));
 
     /* Launcher::show_settings there and back: the banner stays put. */
-    page.element("home")->SetProperty("display", "none");
-    page.element("preferences")->SetProperty("display", "block");
+    page.document().SetClass("in-settings", true);
     page.run(a11y::kSettleTime);
-    page.element("home")->SetProperty("display", "block");
-    page.element("preferences")->SetProperty("display", "none");
+    page.document().SetClass("in-settings", false);
     page.run(a11y::kSettleTime);
     assert(page.take().empty());
 
     page.focus("update-action");
     page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt("Update Now, button")}));
+    assert(page.take() ==
+           (std::vector<Output>{interrupt("Update Now, button. Download the new version.")}));
     page.text("update-action", "Downloading...");
     page.frame();
     assert(page.take() == (std::vector<Output>{interrupt("Downloading...")}));
@@ -400,48 +512,72 @@ void tab_becomes_down(Rml::Context& context) {
     page.document().RemoveEventListener(Rml::EventId::Keydown, &log);
     assert(log.keys == (std::vector<int>{Rml::Input::KI_DOWN, Rml::Input::KI_UP}));
     /* RmlUi's own Tab navigation did not run. */
-    assert(context.GetFocusElement() == page.element("choose"));
+    assert(page.focused() == page.element("choose"));
 }
 
+/* Arriving in Settings says how to move there; coming back to a category
+ * does not. */
 void entering_and_leaving_settings(Rml::Context& context) {
     Page page(context);
     page.open_with_disc();
     page.focus("settings");
     page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt("Settings, button")}));
+    assert(page.take() == (std::vector<Output>{interrupt(kSettings)}));
     page.show_settings(true);
     page.run(a11y::kSettleTime);
     assert(page.take() == (std::vector<Output>{interrupt(
-                              "Settings. Graphics, tab, selected, 1 of 5. Left and right to switch "
-                              "tabs")}));
-    page.show_settings(false);
+                              "Settings. Graphics, 1 of 6. Up and down to choose, right to enter. "
+                              "How the game looks.")}));
+    page.enter_rows();
+    page.frame();
+    page.take();
+    page.back();
+    page.frame();
+    assert(
+        page.take() == (std::vector<Output>{interrupt("Graphics, 1 of 6. How the game looks.")}));
+    page.back();
     page.run(a11y::kSettleTime);
-    assert(page.take() == (std::vector<Output>{interrupt("Settings, button")}));
+    assert(page.take() == (std::vector<Output>{interrupt(kSettings)}));
 }
 
-/* A tab whose page opens with rows without a control says so; Up and Down
- * read them. A page that opens with a control does not. */
-void tab_with_text_gives_a_hint(Rml::Context& context) {
+/* Up and Down walk the categories and Back, around; the count leaves Back
+ * out. */
+void categories_and_back(Rml::Context& context) {
     Page page(context);
     page.open_settings();
-    page.show_tab(4);
+    const auto down = [&page](const std::string& said) {
+        page.step(1);
+        page.frame();
+        assert(page.take() == (std::vector<Output>{interrupt(said)}));
+    };
+    down("Audio, 2 of 6. Volume and reverb.");
+    down("Gameplay, 3 of 6. Unlocks, stage hazards and controller fixes.");
+    down(kControls);
+    /* Past Controls' lines (controls_page_line_by_line), Up from Online. */
+    page.focus("tab-launcher");
     page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt(
-                              "Online, tab, selected, 5 of 5. Left and right to switch tabs")}));
-    page.show_tab(3);
+    page.take();
+    page.step(-1);
     page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt(
-                              "Controls, tab, selected, 4 of 5. Left and right to switch tabs. "
-                              "Text below, Down to read")}));
+    assert(page.take() ==
+           (std::vector<Output>{
+               interrupt("Online, 5 of 6. Your player name, connect codes and input delay.")}));
+    down("Launcher, 6 of 6. The size of these menus, updates and the community.");
+    down("Back, button. Back to the main menu.");
+    down("Graphics, 1 of 6. How the game looks.");
+    page.step(-1);
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt("Back, button. Back to the main menu.")}));
 }
 
-/* Headings, line breaks and " · " separators each end a line. */
+/* Headings, line breaks and " · " separators each end a line. The page has
+ * no rows, so its lines follow its category, and past them Down moves on. */
 void controls_page_line_by_line(Rml::Context& context) {
     Page page(context);
     page.open_settings();
     page.show_tab(3);
     page.frame();
-    page.take();
+    assert(page.take() == (std::vector<Output>{interrupt(kControls)}));
     const std::vector<std::string> lines{"Keyboard", "WASD, arrows Move", "X Attack", "Z Special",
         "C, V Jump", "Q, E Shield", "Tab Grab", "Enter Start", "IJKL C-stick", "Controller",
         "Remap a gamepad from the in-game menu: press BACK on the pad, or F1, then open "
@@ -451,82 +587,100 @@ void controls_page_line_by_line(Rml::Context& context) {
         page.frame();
         assert(page.take() == (std::vector<Output>{interrupt(line)}));
     }
-    assert(page.document().GetContext()->GetFocusElement() == page.element("tab-controls"));
+    assert(page.focused() == page.element("tab-controls"));
     page.step(-1);
     assert(page.take() == (std::vector<Output>{interrupt("Controller")}));
     page.step(1);
     assert(page.take() == (std::vector<Output>{interrupt(lines.back())}));
 
-    /* Off the last line onto Back, and from Back up onto the last line. */
+    /* Off the last line onto the next category, and Up from there to
+     * Controls itself. */
     page.step(1);
     page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt("Back to launcher, button")}));
+    assert(page.take() ==
+           (std::vector<Output>{
+               interrupt("Online, 5 of 6. Your player name, connect codes and input delay.")}));
     page.step(-1);
     page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt(lines.back())}));
-    assert(page.document().GetContext()->GetFocusElement() == page.element("back"));
-    /* Back down to Back, where focus stayed. */
-    page.step(1);
-    page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt("Back to launcher, button")}));
+    assert(page.take() == (std::vector<Output>{interrupt(kControls)}));
 
-    /* Down from Back wraps to the tab; up from the first line returns to it. */
-    page.step(1);
-    page.frame();
-    page.take();
+    /* Up from the first line returns to the category. */
     page.step(1);
     assert(page.take() == (std::vector<Output>{interrupt("Keyboard")}));
     page.step(-1);
     page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(kControls)}));
+    assert(page.focused() == page.element("tab-controls"));
+    /* Up from the category, not reading, moves to the category above. */
+    page.step(-1);
+    page.frame();
     assert(page.take() == (std::vector<Output>{interrupt(
-                              "Controls, tab, selected, 4 of 5. Left and right to switch tabs. "
-                              "Text below, Down to read")}));
+                              "Gameplay, 3 of 6. Unlocks, stage hazards and controller fixes.")}));
 }
 
-/* The lines sit between the controls, in the page's order. */
-void online_page_lines_between_controls(Rml::Context& context) {
+/* A page with rows reads its lines only from its rows: Down on its category
+ * moves to the next one. */
+void category_with_rows_moves_on(Rml::Context& context) {
     Page page(context);
     page.open_settings();
     page.show_tab(4);
     page.frame();
-    page.step(1);
-    page.frame();
     page.take();
     page.step(1);
-    assert(page.take() == (std::vector<Output>{interrupt("Your connect code")}));
-    page.step(1);
-    assert(page.take() == (std::vector<Output>{interrupt("ABCD#123")}));
-    page.step(1);
-    page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt(
-                              "Friend's connect code, edit, blank. Leave blank to host your code. "
-                              "Open Online, Direct Connect in-game.")}));
-    page.step(-1);
-    assert(page.take() == (std::vector<Output>{interrupt("ABCD#123")}));
-    page.step(-1);
-    page.step(-1);
     page.frame();
     assert(page.take() ==
-           (std::vector<Output>{interrupt("Your connect code"),
-               interrupt("Player name, edit, OTTO. 1–8 letters or digits. Changes apply to the "
-                         "next search.")}));
+           (std::vector<Output>{interrupt(
+               "Launcher, 6 of 6. The size of these menus, updates and the community.")}));
+}
+
+/* The lines sit between the rows, in the page's order, and the rows wrap
+ * around, the lines after the last one included. */
+void online_page_lines_between_rows(Rml::Context& context) {
+    Page page(context);
+    page.open_rows(4);
+    assert(page.focused() == page.element("net-name"));
+    page.step(1);
+    assert(page.take() == (std::vector<Output>{interrupt("Your connect code, ABCD#123")}));
+    page.step(1);
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(kFriendsCode)}));
+    page.step(-1);
+    assert(page.take() == (std::vector<Output>{interrupt("Your connect code, ABCD#123")}));
+    page.step(-1);
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(kPlayerName)}));
+
+    const std::string note = "Internet discovery can take a few minutes. Some home networks "
+                             "cannot connect without a relay.";
+    /* Up from the first row: the line after the last row, then that row. */
+    page.step(-1);
+    assert(page.take() == (std::vector<Output>{interrupt(note)}));
+    page.step(-1);
+    page.frame();
+    assert(page.focused() == page.element("net-delay"));
+    assert(page.take() == (std::vector<Output>{interrupt(
+                              "Input delay, Auto, Left and right to change. Automatic adapts to "
+                              "your connection. Changes apply next match.")}));
+    /* And Down from the last row past the line, around to the first. */
+    page.step(1);
+    assert(page.take() == (std::vector<Output>{interrupt(note)}));
+    page.step(1);
+    page.frame();
+    assert(page.focused() == page.element("net-name"));
+    assert(page.take() == (std::vector<Output>{interrupt(kPlayerName)}));
 
     page.focus("net-delay");
     page.frame();
     page.take();
     page.step(1);
-    assert(page.take() ==
-           (std::vector<Output>{interrupt("Internet discovery can take a few minutes. Some home "
-                                          "networks cannot connect without a relay.")}));
+    assert(page.take() == (std::vector<Output>{interrupt(note)}));
     /* A value change on the control focus is on ends the reading; the next
      * press starts from that control again. */
-    page.text("net-delay", "1 frame");
+    page.text("net-delay", "1 frames");
     page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt("1 frame")}));
+    assert(page.take() == (std::vector<Output>{interrupt("1 frames")}));
     page.step(1);
-    assert(page.take() ==
-           (std::vector<Output>{interrupt("Internet discovery can take a few minutes. Some home "
-                                          "networks cannot connect without a relay.")}));
+    assert(page.take() == (std::vector<Output>{interrupt(note)}));
 
     /* A line rewritten while it is held: the next press starts from the
      * control again. */
@@ -534,32 +688,30 @@ void online_page_lines_between_controls(Rml::Context& context) {
     page.frame();
     page.take();
     page.step(1);
-    page.step(1);
     page.take();
     page.text("net-code", "WXYZ#999");
     page.step(1);
-    assert(page.take() == (std::vector<Output>{interrupt("Your connect code")}));
+    assert(page.take() == (std::vector<Output>{interrupt("Your connect code, WXYZ#999")}));
     page.text("net-code", "ABCD#123");
 }
 
-/* Switching tabs while on a line: the new tab starts from its top. */
-void tab_switch_ends_reading(Rml::Context& context) {
+/* Leaving the rows while on a line: the category is announced, and the next
+ * press starts afresh. */
+void leaving_the_rows_ends_reading(Rml::Context& context) {
     Page page(context);
-    page.open_settings();
-    page.show_tab(3);
-    page.frame();
-    page.step(1);
+    page.open_rows(4);
     page.step(1);
     page.take();
-    page.show_tab(4);
+    page.back();
     page.frame();
-    page.take();
-    page.step(1);
-    page.frame();
-    assert(page.document().GetContext()->GetFocusElement() == page.element("net-name"));
     assert(page.take() ==
-           (std::vector<Output>{interrupt("Player name, edit, OTTO. 1–8 letters or digits. "
-                                          "Changes apply to the next search.")}));
+           (std::vector<Output>{
+               interrupt("Online, 5 of 6. Your player name, connect codes and input delay.")}));
+    page.enter_rows();
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(kPlayerName)}));
+    page.step(1);
+    assert(page.take() == (std::vector<Output>{interrupt("Your connect code, ABCD#123")}));
 }
 
 /* With the accessibility switch off, Up and Down move focus as in the base
@@ -574,38 +726,42 @@ void speech_off_leaves_the_keys_alone(Rml::Context& context) {
     page.show_tab(3);
     page.frame();
     page.step(1);
-    assert(page.document().GetContext()->GetFocusElement() == page.element("back"));
+    assert(page.focused() == page.element("tab-online"));
 }
 
 void cycling_setting_and_its_value(Rml::Context& context) {
     Page page(context);
-    page.open_settings();
-    page.focus("sync");
+    page.open_rows(0);
+    assert(page.focused() == page.element("display"));
+    page.step(1);
     page.frame();
-    assert(page.take() ==
-           (std::vector<Output>{interrupt("Vertical sync, On, Enter to change. Synchronise "
-                                          "presentation with your display.")}));
+    assert(page.take() == (std::vector<Output>{
+                              interrupt("Vertical sync, On, Left and right to change. Synchronise "
+                                        "presentation with your display.")}));
     page.text("sync", "Off");
     page.frame();
     assert(page.take() == (std::vector<Output>{interrupt("Off")}));
     /* A badge is part of the name. */
     page.focus("aa");
     page.frame();
-    assert(page.take() ==
-           (std::vector<Output>{interrupt("Anti-aliasing RESTART, 4x MSAA, Enter to change. "
-                                          "Smooth polygon edges with multisampling.")}));
+    assert(page.take() == (std::vector<Output>{interrupt(
+                              "Anti-aliasing RESTART, 4x MSAA, Left and right to change. Smooth "
+                              "polygon edges with multisampling. Applies after a restart.")}));
 }
 
 /* Launcher::step_slider writes the slider and the span beside it. */
 void slider_step(Rml::Context& context) {
     Page page(context);
-    page.open_settings();
-    page.show_tab(1);
+    page.open_rows(1);
+    assert(page.focused() == page.element("volume"));
+    page.focus("music-volume");
+    page.frame();
+    page.take();
     page.focus("volume");
     page.frame();
-    assert(page.take() ==
-           (std::vector<Output>{interrupt("Master volume, slider, 100%. Left and right to adjust. "
-                                          "Use left/right arrows or drag slider.")}));
+    assert(page.take() == (std::vector<Output>{interrupt(
+                              "Master volume, slider, 100%. Left and right to adjust. Everything "
+                              "the game plays. Left and right adjust it.")}));
     page.element("volume")->SetAttribute("value", 95.0f);
     page.text("volume-val", "95%");
     page.frame();
@@ -616,11 +772,9 @@ void slider_step(Rml::Context& context) {
 void focus_player_name(Page& page) {
     page.open_settings();
     page.show_tab(4);
-    page.focus("net-name");
+    page.enter_rows();
     page.frame();
-    assert(page.take() ==
-           (std::vector<Output>{interrupt("Player name, edit, OTTO. 1–8 letters or digits. "
-                                          "Changes apply to the next search.")}));
+    assert(page.take() == (std::vector<Output>{interrupt(kPlayerName)}));
     page.key(Rml::Input::KI_END);
     page.take();
 }
@@ -693,11 +847,9 @@ void text_field_lines_keep_quiet(Rml::Context& context) {
     page.key(Rml::Input::KI_HOME);
     assert(page.take() == (std::vector<Output>{interrupt("O")}));
     page.arrow(1);
-    assert(page.take() == (std::vector<Output>{interrupt("Your connect code")}));
+    assert(page.take() == (std::vector<Output>{interrupt("Your connect code, ABCD#123")}));
     page.arrow(-1);
-    assert(page.take() ==
-           (std::vector<Output>{interrupt("Player name, edit, OTTO. 1–8 letters or digits. "
-                                          "Changes apply to the next search.")}));
+    assert(page.take() == (std::vector<Output>{interrupt(kPlayerName)}));
     /* The cursor is where Up left it, at the start. */
     page.key(Rml::Input::KI_RIGHT);
     assert(page.take() == (std::vector<Output>{interrupt("T")}));
@@ -712,9 +864,7 @@ void text_field_leaving_focus(Rml::Context& context) {
     page.take();
     page.focus("net-target");
     page.frame();
-    assert(page.take() == (std::vector<Output>{interrupt(
-                              "Friend's connect code, edit, blank. Leave blank to host your code. "
-                              "Open Online, Direct Connect in-game.")}));
+    assert(page.take() == (std::vector<Output>{interrupt(kFriendsCode)}));
     page.focus("net-name");
     page.frame();
     page.take();
@@ -729,11 +879,10 @@ void text_field_leaving_focus(Rml::Context& context) {
     page.focus("net-target");
     page.frame();
     assert(page.take() ==
-           (std::vector<Output>{interrupt("Player name, O. Friend's connect code, edit, blank. "
-                                          "Leave blank to host your code. Open Online, Direct "
-                                          "Connect in-game.")}));
+           (std::vector<Output>{interrupt(std::string("Player name, O. ") + kFriendsCode)}));
 }
 
+/* Launcher::action("performance") writes its note under the rows. */
 void settings_status_messages(Rml::Context& context) {
     Page page(context);
     page.open_settings();
@@ -746,29 +895,29 @@ void settings_status_messages(Rml::Context& context) {
     const std::string preset =
         "Performance preset: internal resolution 1x, anti-aliasing off, filtering 1x and "
         "reverb off. Anti-aliasing and filtering apply after a restart.";
-    page.text("settings-status", preset);
+    page.note(preset);
     page.run(a11y::kSettleTime);
     assert(page.take() == (std::vector<Output>{queue(preset)}));
-    page.text("settings-status", "Saved automatically.");
+    page.note("");
     page.run(a11y::kSettleTime);
     assert(page.take().empty());
 }
 
-/* Launcher::action("check-now") writes the same text to both status lines. */
+/* Launcher::action("check-now") writes the same text to both status lines.
+ * The row's own line, the check's result, is read with the row. */
 void update_check_is_spoken_once(Rml::Context& context) {
     Page page(context);
-    page.open_settings();
-    page.show_tab(1);
+    page.open_rows(5);
     page.focus("check-now");
     page.frame();
-    assert(page.take() ==
-           (std::vector<Output>{interrupt("Check for updates now: Check now, button. Melee-PC is "
-                                          "up to date (v0.1.8-beta).")}));
+    assert(page.take() == (std::vector<Output>{interrupt(
+                              "Updates: Check now, button. Melee-PC is up to date (v0.1.8-beta). "
+                              "Look for a new release now.")}));
     page.status("Checking for updates...");
     page.text("check-status", "Checking for updates...");
     page.run(a11y::kSettleTime);
     assert(page.take() == (std::vector<Output>{queue("Checking for updates...")}));
-    /* The result arrives after the player has moved to another tab. */
+    /* The result arrives after the player has moved to another category. */
     page.show_tab(0);
     page.frame();
     page.take();
@@ -777,7 +926,7 @@ void update_check_is_spoken_once(Rml::Context& context) {
     assert(page.take() == (std::vector<Output>{queue("Update available: v0.2.0")}));
 }
 
-/* Every control in the launcher, on every view and tab, has a name. Guards
+/* Every control in the launcher, on every view and page, has a name. Guards
  * against a base merge adding a row the reader cannot name. */
 void every_control_has_a_name(Rml::Context& context) {
     Page page(context);
@@ -839,7 +988,7 @@ int main(int argc, char** argv) {
     NullRender render;
     Rml::SetRenderInterface(&render);
     Rml::Initialise();
-    Rml::LoadFontFace(s_resources + "/font.ttf");
+    rmlui_test::load_fonts(s_resources);
     Rml::Context* context = Rml::CreateContext("main", Rml::Vector2i(1280, 720));
     assert(context != nullptr);
 
@@ -852,10 +1001,11 @@ int main(int argc, char** argv) {
     update_banner_is_announced(*context);
     tab_becomes_down(*context);
     entering_and_leaving_settings(*context);
-    tab_with_text_gives_a_hint(*context);
+    categories_and_back(*context);
     controls_page_line_by_line(*context);
-    online_page_lines_between_controls(*context);
-    tab_switch_ends_reading(*context);
+    category_with_rows_moves_on(*context);
+    online_page_lines_between_rows(*context);
+    leaving_the_rows_ends_reading(*context);
     speech_off_leaves_the_keys_alone(*context);
     cycling_setting_and_its_value(*context);
     slider_step(*context);

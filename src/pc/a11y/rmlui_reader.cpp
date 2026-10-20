@@ -24,7 +24,9 @@ std::string spoken_value(const std::string& value) {
     return value.empty() ? kBlank : value;
 }
 
-void collect_text(const Rml::Element& element, std::string& out) {
+/* `skip_detail`: leaves out the live text a row's name holds (class
+ * "detail"), which is read on its own. */
+void collect_text(const Rml::Element& element, std::string& out, bool skip_detail = false) {
     if (const auto* text = dynamic_cast<const Rml::ElementText*>(&element)) {
         out += text->GetText();
         out += ' ';
@@ -37,8 +39,8 @@ void collect_text(const Rml::Element& element, std::string& out) {
     }
     for (int i = 0; i < element.GetNumChildren(); ++i) {
         const Rml::Element* child = element.GetChild(i);
-        if (child->IsVisible()) {
-            collect_text(*child, out);
+        if (child->IsVisible() && !(skip_detail && child->IsClassSet("detail"))) {
+            collect_text(*child, out, skip_detail);
         }
     }
 }
@@ -71,21 +73,67 @@ const Rml::Element* find_in_document(const Rml::Element& element, const Rml::Str
     return document != nullptr ? document->GetElementById(id) : nullptr;
 }
 
-/* A setting row: a description (heading and help sentence) beside a control. */
+/* A row of a settings page: a name (class "name") beside a control, or
+ * beside text alone. */
 const Rml::Element* row_of(const Rml::Element& element) {
     for (const Rml::Element* e = element.GetParentNode(); e != nullptr; e = e->GetParentNode()) {
-        if (e->IsClassSet("setting")) {
+        if (e->IsClassSet("row")) {
             return e;
         }
     }
     return nullptr;
 }
 
-/* The text of the first descendant with the tag, empty if there is none. */
-std::string first_text(const Rml::Element& element, const char* tag) {
+/* The first descendant with the class, or null. */
+const Rml::Element* first_of_class(const Rml::Element& element, const char* name) {
     Rml::ElementList found;
-    const_cast<Rml::Element&>(element).GetElementsByTagName(found, tag);
-    return found.empty() ? std::string() : element_text(*found.front());
+    const_cast<Rml::Element&>(element).GetElementsByClassName(found, name);
+    return found.empty() ? nullptr : found.front();
+}
+
+/* The row's name, with a badge such as "RESTART" in it, without its live
+ * text. */
+std::string row_name(const Rml::Element& row) {
+    const Rml::Element* name = first_of_class(row, "name");
+    if (name == nullptr) {
+        return "";
+    }
+    std::string text;
+    collect_text(*name, text, true);
+    return collapse_whitespace(text);
+}
+
+/* The row's live text: a detail span the page rewrites, which has an id
+ * ("No controller in this port.", the update check's result). A detail
+ * without one only repeats the row's description. */
+std::string row_detail(const Rml::Element& row) {
+    Rml::ElementList found;
+    const_cast<Rml::Element&>(row).GetElementsByClassName(found, "detail");
+    std::string text;
+    for (const Rml::Element* detail : found) {
+        const std::string part = detail->GetId().empty() ? "" : element_text(*detail);
+        if (!part.empty()) {
+            text += text.empty() ? part : ", " + part;
+        }
+    }
+    return text;
+}
+
+std::string lowercase(std::string_view text) {
+    std::string out(text);
+    for (char& c : out) {
+        if (c >= 'A' && c <= 'Z') {
+            c = static_cast<char>(c - 'A' + 'a');
+        }
+    }
+    return out;
+}
+
+/* A category of the settings sidebar: a button "tab-x" in #categories. */
+bool is_category(const Rml::Element& element) {
+    const Rml::Element* parent = element.GetParentNode();
+    return element.GetTagName() == "button" && element.GetId().rfind("tab-", 0) == 0 &&
+           parent != nullptr && parent->GetId() == "categories";
 }
 
 /* The first control inside the element, in document order. */
@@ -162,20 +210,50 @@ std::string form_value(const Rml::Element& element) {
     return form != nullptr ? collapse_whitespace(form->GetValue()) : std::string();
 }
 
-void describe_tab(const Rml::Element& tab, Control& control) {
-    control.role = Role::tab;
-    TabPlace& place = control.tab;
-    place.selected = tab.IsClassSet("selected");
-    const Rml::Element* strip = tab.GetParentNode();
-    for (int i = 0; strip != nullptr && i < strip->GetNumChildren(); ++i) {
-        const Rml::Element* sibling = strip->GetChild(i);
-        if (sibling->IsClassSet("tab")) {
+CategoryPlace place_of(const Rml::Element& category) {
+    CategoryPlace place;
+    const Rml::Element* sidebar = category.GetParentNode();
+    for (int i = 0; sidebar != nullptr && i < sidebar->GetNumChildren(); ++i) {
+        const Rml::Element* sibling = sidebar->GetChild(i);
+        if (is_category(*sibling)) {
             ++place.count;
-            if (sibling == &tab) {
+            if (sibling == &category) {
                 place.position = place.count;
             }
         }
     }
+    return place;
+}
+
+/* Whether a description says something the name and the live text do not:
+ * the pages fill some with the row's name ("Display mode") or with "-". */
+bool adds_to(std::string_view help, const Control& control) {
+    while (!help.empty() && help.back() == '.') {
+        help.remove_suffix(1);
+    }
+    if (help.empty() || help == "-") {
+        return false;
+    }
+    const std::string said = lowercase(control.name + " " + control.detail);
+    return said.find(lowercase(help)) == std::string::npos;
+}
+
+/* The line of a row that has no control: its name and what it shows. */
+std::string row_line(const Rml::Element& row) {
+    std::string line = row_name(row);
+    const auto add = [&line](const std::string& part) {
+        if (!part.empty()) {
+            line += line.empty() ? part : ", " + part;
+        }
+    };
+    add(row_detail(row));
+    for (int i = 0; i < row.GetNumChildren(); ++i) {
+        const Rml::Element* child = row.GetChild(i);
+        if (child->IsVisible() && !child->IsClassSet("name")) {
+            add(element_text(*child));
+        }
+    }
+    return line;
 }
 
 }  // namespace
@@ -191,47 +269,59 @@ bool is_control(const Rml::Element& element) {
     return tag == "button" || tag == "input" || tag == "select" || tag == "textarea";
 }
 
+std::string page_description(const Rml::Element& element) {
+    for (const Rml::Element* e = &element; e != nullptr; e = e->GetParentNode()) {
+        const Rml::String desc = e->GetAttribute<Rml::String>("data-desc", "");
+        if (!desc.empty()) {
+            return collapse_whitespace(desc);
+        }
+    }
+    return "";
+}
+
 Control describe_control(const Rml::Element& element) {
     Control control;
     control.disabled = element.IsPseudoClassSet("disabled");
     if (const Rml::Element* row = row_of(element)) {
-        control.name = first_text(*row, "h3");
-        control.help = first_text(*row, "p");
+        control.name = row_name(*row);
+        control.detail = row_detail(*row);
     }
     const Rml::String& tag = element.GetTagName();
     if (tag == "button") {
         control.value = element_text(element);
-        if (element.IsClassSet("tab")) {
-            describe_tab(element, control);
+        if (is_category(element)) {
+            control.role = Role::category;
             control.name = control.value;
-        } else if (!control.name.empty()) {
-            control.role = Role::setting;
-        } else {
+            control.place = place_of(element);
+        } else if (control.name.empty()) {
             control.role = Role::button;
             control.name = control.value;
+        } else if (element.IsClassSet("action")) {
+            control.role = Role::button;
+        } else {
+            control.role = Role::setting;
         }
-        return control;
-    }
-    control.value = form_value(element);
-    if (tag == "input") {
-        const Rml::String type = element.GetAttribute<Rml::String>("type", "text");
-        if (type == "range") {
-            control.role = Role::slider;
-            /* The span beside a slider shows its value as the player reads it
-             * ("80%", "Auto"); the slider's own value is a bare number. */
-            if (const Rml::Element* shown = find_in_document(element, element.GetId() + "-val")) {
-                control.value = element_text(*shown);
+    } else {
+        control.value = form_value(element);
+        if (tag == "input") {
+            const Rml::String type = element.GetAttribute<Rml::String>("type", "text");
+            if (type == "range") {
+                control.role = Role::slider;
+                /* The span beside a slider shows its value as the player reads
+                 * it ("80%", "Auto"); the slider's own value is a bare number. */
+                if (const Rml::Element* shown = find_in_document(element, element.GetId() + "-val"))
+                {
+                    control.value = element_text(*shown);
+                }
+            } else if (type == "text" || type == "password") {
+                control.role = Role::edit;
             }
-        } else if (type == "text" || type == "password") {
-            control.role = Role::edit;
         }
+    }
+    if (std::string help = page_description(element); adds_to(help, control)) {
+        control.help = std::move(help);
     }
     return control;
-}
-
-void make_action(Control& control) {
-    control.role = Role::button;
-    control.name = control.name.empty() ? control.value : control.name + ": " + control.value;
 }
 
 std::string field_value(const Control& control) {
@@ -249,30 +339,38 @@ std::string focus_announcement(const Control& control) {
         }
         text += part;
     };
-    std::string_view hint;
+    std::string_view keys;  /* after a comma: "Vertical sync, On, Left and right to change" */
+    std::string_view moves; /* a sentence of its own: "Left and right to adjust" */
     switch (control.role) {
     case Role::button:
+        /* A row's button that acts: "Performance preset: Apply". */
+        if (control.value != control.name && !control.value.empty()) {
+            text += ": " + control.value;
+        }
         add("button");
         break;
     case Role::setting:
         add(control.value);
+        keys = "Left and right to change";
+        break;
+    case Role::binding:
+        add(control.value);
+        keys = "Enter to change";
         break;
     case Role::slider:
         add("slider");
         add(control.value);
-        hint = "Left and right to adjust";
+        moves = "Left and right to adjust";
         break;
     case Role::edit:
         add("edit");
         add(field_value(control));
         break;
-    case Role::tab:
-        add("tab");
-        if (control.tab.selected) {
-            add("selected");
+    case Role::category:
+        add(std::to_string(control.place.position) + " of " + std::to_string(control.place.count));
+        if (control.explain) {
+            moves = "Up and down to choose, right to enter";
         }
-        add(std::to_string(control.tab.position) + " of " + std::to_string(control.tab.count));
-        hint = "Left and right to switch tabs";
         break;
     case Role::other:
         if (control.value != control.name) {
@@ -282,11 +380,11 @@ std::string focus_announcement(const Control& control) {
     }
     if (control.disabled) {
         add("unavailable");
-    } else if (control.role == Role::setting) {
-        add("Enter to change");
     } else {
-        append_sentence(text, hint);
+        add(keys);
+        append_sentence(text, moves);
     }
+    append_sentence(text, control.detail);
     append_sentence(text, control.help);
     return text;
 }
@@ -379,47 +477,57 @@ bool FieldEcho::changed_on_leaving(const Rml::Element& field) const {
     return field_state(field).value != m_value;
 }
 
-const Rml::Element* selected_tab(const Rml::ElementDocument& document) {
-    Rml::ElementList tabs;
-    const_cast<Rml::ElementDocument&>(document).GetElementsByClassName(tabs, "tab");
-    for (const Rml::Element* tab : tabs) {
-        if (tab->IsClassSet("selected")) {
-            return tab;
+const Rml::Element* selected_category(const Rml::ElementDocument& document) {
+    const Rml::Element* sidebar =
+        const_cast<Rml::ElementDocument&>(document).GetElementById("categories");
+    for (int i = 0; sidebar != nullptr && i < sidebar->GetNumChildren(); ++i) {
+        const Rml::Element* category = sidebar->GetChild(i);
+        if (is_category(*category) && category->IsClassSet("selected")) {
+            return category;
         }
     }
     return nullptr;
 }
 
-std::vector<PageStop> tab_page_stops(const Rml::Element& tab) {
-    std::vector<PageStop> stops{PageStop{&tab, {}}};
-    const Rml::String& id = tab.GetId();
-    if (id.rfind("tab-", 0) != 0) {
-        return stops;
-    }
-    const Rml::Element* page = find_in_document(tab, "page-" + id.substr(4));
-    for (int i = 0; page != nullptr && i < page->GetNumChildren(); ++i) {
-        const Rml::Element* row = page->GetChild(i);
+const Rml::Element* category_page(const Rml::Element& category) {
+    const Rml::String& id = category.GetId();
+    return id.rfind("tab-", 0) == 0 ? find_in_document(category, "page-" + id.substr(4)) : nullptr;
+}
+
+std::vector<PageStop> page_stops(const Rml::Element& page) {
+    std::vector<PageStop> stops;
+    for (int i = 0; i < page.GetNumChildren(); ++i) {
+        const Rml::Element* row = page.GetChild(i);
+        if (!row->IsVisible()) {
+            continue;
+        }
         if (const Rml::Element* control = first_control(*row)) {
             stops.push_back(PageStop{control, {}});
             continue;
         }
         std::vector<std::string> lines;
-        collect_lines(*row, lines);
+        if (first_of_class(*row, "name") != nullptr) {
+            lines.push_back(row_line(*row));
+        } else {
+            collect_lines(*row, lines);
+        }
         for (std::string& line : lines) {
-            stops.push_back(PageStop{nullptr, std::move(line)});
+            if (!line.empty()) {
+                stops.push_back(PageStop{nullptr, std::move(line)});
+            }
         }
     }
     return stops;
 }
 
 PageLines::Move PageLines::step(
-    const std::vector<PageStop>& stops, const Rml::Element& focus, int direction) {
-    const auto is_line = [&stops](int index) {
-        return index >= 0 && index < static_cast<int>(stops.size()) &&
-               stops[index].control == nullptr;
+    const std::vector<PageStop>& stops, const Rml::Element& focus, int direction, bool wrap) {
+    const int count = static_cast<int>(stops.size());
+    const auto is_line = [&stops, count](int index) {
+        return index >= 0 && index < count && stops[index].control == nullptr;
     };
     int at = -1;
-    for (int i = 0; i < static_cast<int>(stops.size()); ++i) {
+    for (int i = 0; i < count && at < 0; ++i) {
         if (stops[i].control == &focus) {
             at = i;
         }
@@ -433,7 +541,10 @@ PageLines::Move PageLines::step(
     if (reading() && !(is_line(m_index) && stops[m_index].line == m_line)) {
         clear();
     }
-    const int next = (reading() ? m_index : at) + direction;
+    int next = (reading() ? m_index : at) + direction;
+    if (wrap) {
+        next = (next + count) % count;
+    }
     if (is_line(next)) {
         m_index = next;
         m_line = stops[next].line;
@@ -524,7 +635,7 @@ std::optional<std::string> WatchedText::observe(const std::string& text, Clock::
     since = now;
     if (!before || !after || before->rest != after->rest) {
         progress_level = -1;
-        pending = !text.empty();
+        pending = !text.empty() && text != echo;
         return std::nullopt;
     }
     /* Progress: spoken at each step, never after settling. The text that
@@ -562,9 +673,8 @@ void SpokenOnce::add(std::optional<std::string> text) {
     }
 }
 
-PageReader::PageReader(Rml::ElementDocument& document, Speech& speech,
-    std::span<const std::string_view> action_buttons)
-    : m_document(document), m_speech(speech), m_action_buttons(action_buttons) {}
+PageReader::PageReader(Rml::ElementDocument& document, Speech& speech)
+    : m_document(document), m_speech(speech) {}
 
 void PageReader::typed(const Rml::Event& event) {
     if (event.GetTargetElement() == m_focus.get()) {
@@ -574,13 +684,11 @@ void PageReader::typed(const Rml::Event& event) {
 
 Control PageReader::describe(const Rml::Element& element) const {
     Control control = describe_control(element);
-    for (const std::string_view id : m_action_buttons) {
-        if (element.GetId() == id) {
-            make_action(control);
-        }
-    }
+    adjust(element, control);
     return control;
 }
+
+void PageReader::adjust(const Rml::Element&, Control&) const {}
 
 void PageReader::add_to_focus_text(const Rml::Element&, std::string&) const {}
 
@@ -593,7 +701,7 @@ Rml::Element* PageReader::focused_control() const {
     return focus;
 }
 
-void PageReader::follow_focus(Rml::Element* focus, std::string_view prefix) {
+void PageReader::follow_focus(Rml::Element* focus, std::string_view prefix, bool explain) {
     if (focus == nullptr) {
         return;
     }
@@ -601,7 +709,7 @@ void PageReader::follow_focus(Rml::Element* focus, std::string_view prefix) {
         m_lines.clear();
         std::string text(prefix);
         append_sentence(text, left_field_text());
-        append_sentence(text, remember_focus(*focus));
+        append_sentence(text, remember_focus(*focus, explain));
         say(text, Mode::interrupt);
         return;
     }
@@ -636,33 +744,55 @@ void PageReader::follow_value(const Rml::Element& focus, const Control& control)
     if (control.value != m_focus_value) {
         m_lines.clear();
         m_focus_value = control.value;
-        say(control.value, Mode::interrupt);
+        std::string text = control.value;
+        /* Live text that changed with the value says what the value now
+         * means: "Port 2, No controller in this port.". Changing alone, it is
+         * the page's news, which the page's watched regions speak. */
+        if (control.detail != m_focus_detail && !control.detail.empty()) {
+            text += ", " + control.detail;
+        }
+        say(text, Mode::interrupt);
     }
+    m_focus_detail = control.detail;
 }
 
-std::string PageReader::remember_focus(Rml::Element& focus) {
+std::string PageReader::remember_focus(Rml::Element& focus, bool explain) {
     m_focus = focus.GetObserverPtr();
-    m_focus_value = describe(focus).value;
+    const Control control = describe(focus);
+    m_focus_value = control.value;
+    m_focus_detail = control.detail;
     m_field.start(focus);
-    return focus_text(focus);
+    return focus_text(focus, explain);
 }
 
 void PageReader::forget_focus() {
     m_focus.reset();
     m_focus_value.clear();
+    m_focus_detail.clear();
     m_lines.clear();
 }
 
-std::string PageReader::focus_text(Rml::Element& focus) const {
-    const Control control = describe(focus);
+namespace {
+
+bool has_control(const std::vector<PageStop>& stops) {
+    return std::any_of(
+        stops.begin(), stops.end(), [](const PageStop& stop) { return stop.control != nullptr; });
+}
+
+}  // namespace
+
+std::string PageReader::focus_text(Rml::Element& focus, bool explain) const {
+    Control control = describe(focus);
+    control.explain = explain;
     std::string text = focus_announcement(control);
     /* Rows with no control, which focus never reaches, are read line by line
-     * with Up and Down. A page that opens with them, as the launcher's
-     * Controls page does, says so; on one that opens with a control, the
-     * lines come in their turn between the controls. */
-    if (control.role == Role::tab) {
-        const std::vector<PageStop> stops = tab_page_stops(focus);
-        if (stops.size() > 1 && stops[1].control == nullptr) {
+     * with Up and Down, in their turn between the controls. A page of text
+     * alone, as the launcher's Controls is, has no rows to enter: its lines
+     * follow its category (step_lines), which says so. */
+    if (control.role == Role::category) {
+        const Rml::Element* page = category_page(focus);
+        const std::vector<PageStop> stops = page ? page_stops(*page) : std::vector<PageStop>{};
+        if (!stops.empty() && !has_control(stops)) {
             append_sentence(text, "Text below, Down to read");
         }
     }
@@ -670,18 +800,29 @@ std::string PageReader::focus_text(Rml::Element& focus) const {
     return text;
 }
 
-bool PageReader::step_lines(int direction, const Rml::Element* after_page) {
+bool PageReader::step_lines(int direction, bool wrap) {
     Rml::Element* focus = focused_control();
-    const Rml::Element* tab = selected_tab(m_document);
-    if (!m_speech.enabled() || focus == nullptr || focus != m_focus.get() || tab == nullptr ||
-        after_page == nullptr)
-    {
+    const Rml::Element* category = selected_category(m_document);
+    const Rml::Element* page = category != nullptr ? category_page(*category) : nullptr;
+    if (!m_speech.enabled() || focus == nullptr || focus != m_focus.get() || page == nullptr) {
         m_lines.clear();
         return false;
     }
-    std::vector<PageStop> stops = tab_page_stops(*tab);
-    stops.push_back(PageStop{after_page, {}});
-    const PageLines::Move move = m_lines.step(stops, *focus, direction);
+    std::vector<PageStop> stops = page_stops(*page);
+    const bool in_rows = std::any_of(stops.begin(), stops.end(),
+        [focus](const PageStop& stop) { return stop.control == focus; });
+    if (!in_rows) {
+        /* Focus in the sidebar, which moves between categories: only a page
+         * of text alone is read from there, after its category, and past its
+         * lines the page's own step moves on to the next category. */
+        if (focus != category || has_control(stops)) {
+            m_lines.clear();
+            return false;
+        }
+        stops.insert(stops.begin(), PageStop{category, {}});
+        wrap = false;
+    }
+    const PageLines::Move move = m_lines.step(stops, *focus, direction, wrap);
     /* Focus stays put: a text field has already moved its cursor to an end
      * for the press. */
     if (move != PageLines::Move::page) {

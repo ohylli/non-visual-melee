@@ -21,10 +21,11 @@ void port_menu_speech_start(Speech& speech);
 void port_menu_speech_stop();
 /* Once a frame of the game loop, after the menu has reacted to the frame's
  * input, whether the menu is open or not: says the opening as it opens,
- * "Back to game" as it closes, and in between follows the page. */
-void port_menu_speech_frame(bool open, Clock::time_point now);
+ * "Back to game" as it closes, or "Quitting the game" when `quitting` (the
+ * game shutting down, as Quit game asks), and in between follows the page. */
+void port_menu_speech_frame(bool open, bool quitting, Clock::time_point now);
 /* Up (-1) or Down (1), before the menu moves focus. Returns true when port
- * menu speech used the press for the lines of a tab's page, so focus must not
+ * menu speech used the press for the lines of a category's page, so focus must not
  * move. */
 bool port_menu_speech_step(int direction);
 

@@ -65,6 +65,16 @@ inline Output queue(std::string text) {
 
 constexpr std::chrono::milliseconds kFrame{16};
 
+/* The menus' fonts, as the base port's load_menu_fonts (src/pc/launcher.cpp)
+ * loads them: a text field lays out its text, and so places its cursor, only
+ * in a face it has. */
+inline void load_fonts(const std::string& resources) {
+    Rml::LoadFontFace(resources + "/font.ttf", true);
+    Rml::LoadFontFace(resources + "/font-bold.ttf");
+    Rml::LoadFontFace(resources + "/menu.ttf");
+    Rml::LoadFontFace(resources + "/menu-bold.ttf");
+}
+
 /* A copy of the base port's type_online (src/pc/launcher.cpp), which both
  * pages' Online fields share: typed text in an Online field loses a character
  * the field cannot store and goes in as capitals. */

@@ -5,8 +5,6 @@
 #include <RmlUi/Core/Element.h>
 #include <RmlUi/Core/ElementDocument.h>
 #include <string>
-#include <string_view>
-#include <vector>
 
 namespace a11y {
 namespace {
@@ -16,17 +14,11 @@ namespace {
  * spoken without it after this long. */
 constexpr std::chrono::milliseconds kOpeningFocusWait{1000};
 
-/* The fork's overrides, for controls whose shape the generic reader gets
- * wrong. These buttons sit in a setting row but act instead of cycling a
- * value, so they are read as "Performance preset: Apply, button". */
-constexpr std::string_view kActionButtons[] = {"performance", "check-now", "settings-discord"};
-
 /* Reads one launcher document for as long as it is loaded: the shared page
- * reading, plus Home, the update banner, Back and the override table. */
+ * reading, plus Home, the update banner and the Settings view. */
 class LauncherReader final : public PageReader {
 public:
-    LauncherReader(Rml::ElementDocument& document, Speech& speech)
-        : PageReader(document, speech, kActionButtons) {}
+    LauncherReader(Rml::ElementDocument& document, Speech& speech) : PageReader(document, speech) {}
 
     void frame(Clock::time_point now) {
         Rml::Element* focus = focused_control();
@@ -35,13 +27,15 @@ public:
             return;
         }
         const bool settings_shown = displayed("preferences");
-        /* Entering Settings: its tab's announcement says where the player is. */
-        follow_focus(focus, settings_shown && !m_settings_shown ? "Settings" : "");
+        /* Entering Settings: its category's announcement says where the
+         * player is, and how to move there. */
+        const bool entering = settings_shown && !m_settings_shown;
+        follow_focus(focus, entering ? "Settings" : "", entering);
         m_settings_shown = settings_shown;
 
         SpokenOnce spoken;
         spoken.add(m_status.observe(text_of(m_status.id), now));
-        /* Watched while Settings is shown, whichever tab: an update check's
+        /* Watched while Settings is shown, whichever category: an update check's
          * result still arrives after the player has moved on. */
         for (WatchedText* watch : {&m_settings_status, &m_check_status}) {
             spoken.add(watch->observe_in_view(text_of(watch->id), settings_shown, now));
@@ -61,17 +55,16 @@ public:
         }
     }
 
-    /* Up or Down, before the launcher moves focus: on a Settings tab, moves
-     * over the lines of its page between the controls. Returns true when the
+    /* Up or Down, before the launcher moves focus: in Settings, moves over
+     * the lines of the open page between its rows. Returns true when the
      * press was used for that, and focus must stay put. */
     bool step(int direction) {
         if (!m_opened || !displayed("preferences")) {
             stop_reading_lines();
             return false;
         }
-        /* The launcher's own order on a Settings tab: the tab, the page's
-         * controls, then Back. */
-        return step_lines(direction, document().GetElementById("back"));
+        /* The launcher's column of rows (Launcher::column) wraps around. */
+        return step_lines(direction, true);
     }
 
 private:
@@ -111,7 +104,7 @@ private:
     bool m_update_shown = false;
     bool m_settings_shown = false;
     WatchedText m_status{"status"};
-    WatchedText m_settings_status{"settings-status", {"Saved automatically."}};
+    WatchedText m_settings_status{"settings-status"};
     WatchedText m_check_status{"check-status"};
     WatchedText m_update_title{"update-title"};
     WatchedText m_update_desc{"update-desc"};

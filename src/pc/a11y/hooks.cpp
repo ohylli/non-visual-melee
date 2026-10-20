@@ -191,7 +191,7 @@ extern "C" void pc_a11y_port_menu_frame(bool open) {
     if (!game_hook_may_speak()) {
         return;
     }
-    a11y::port_menu_speech_frame(open, a11y::Clock::now());
+    a11y::port_menu_speech_frame(open, pc_exit_requested, a11y::Clock::now());
 }
 
 extern "C" bool pc_a11y_port_menu_step(int direction) {
