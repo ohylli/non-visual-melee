@@ -1,6 +1,6 @@
 # 08 Play test the readers on the redesigned pages
 
-Status: ready-for-human
+Status: resolved (2026-10-20)
 Type: task
 
 The base merge of v0.4.0-beta (f4f4a4b) redesigned the launcher and the port menu after Melee's own main menu: a sidebar of categories, each opening a page of rows, two levels of navigation, and a description bar. The readers were adapted to it (`rmlui_reader.cpp`, `launcher_speech.cpp`, `port_menu_speech.cpp`, primer `docs/a11y/rmlui-screens.md`), with the wording the maintainer chose on 2026-10-20: a category says its name, position and description ("Graphics, 1 of 6. How the game looks."), with "Up and down to choose, right to enter" only on arriving in the sidebar; a setting row says "Left and right to change"; every control ends with the description the page shows for it; the launcher's Controls text is read with Down from its category. The unit tests and the drive scripts pass; nothing of it is heard yet.
@@ -22,3 +22,5 @@ The maintainer's findings are recorded below, each either fixed or filed as its 
 2026-10-20: finding on the launcher's Controls page. Down from its category read the keyboard lines one by one, so reaching Online meant going through all of them, while one Up jumped back to the category. Fixed: Controls is now entered like any other category, with Right or Enter (A), which reads its first line; Up and Down go round its lines, and Escape, B or Left go back to the category, so Down on the category moves straight on to Online (hooks `pc_a11y_launcher_enter_text` and `pc_a11y_launcher_back`). The maintainer tested it by ear with NVDA and it works. The rest of the play test is still to do.
 
 2026-10-20: finding on the categories of both pages. A category said its position among them ("Graphics, 1 of 6"), which no other reader does. Fixed: a category says its name and description alone ("Graphics. How the game looks."), and in the port menu its name alone ("Audio"). The maintainer tested it by ear with NVDA and it works.
+
+2026-10-20: the maintainer finished the play test by ear with NVDA: apart from the two findings above, both fixed, nothing more to fix. CLAUDE.md's Launcher and Port menu status lines no longer name this issue. Resolved.
