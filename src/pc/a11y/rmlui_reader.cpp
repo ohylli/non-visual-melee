@@ -685,11 +685,12 @@ Rml::Element* PageReader::focused_control() const {
 }
 
 void PageReader::follow_focus(Rml::Element* focus, std::string_view prefix, bool explain) {
-    const bool speech_back = m_speech.enabled() && !m_speech_was_on;
-    m_speech_was_on = m_speech.enabled();
     if (focus == nullptr) {
+        /* Speech's return is kept for the row that gets focus next. */
         return;
     }
+    const bool speech_back = m_speech.enabled() && !m_speech_was_on;
+    m_speech_was_on = m_speech.enabled();
     if (focus != m_focus.get()) {
         stop_reading_lines();
         std::string text(prefix);

@@ -115,7 +115,7 @@ std::string row_markup(const ShownRow& row, SettingsHost host) {
 class Page {
 public:
     Page(Rml::ElementDocument& document, SettingsHost host, AccessibilitySettings& settings,
-        const SettingsPageHost& game)
+        const SettingsPageGame& game)
         : m_document(document), m_host(host), m_settings(settings), m_game(game) {
         Rml::Element* page = document.GetElementById(kPageId);
         if (page == nullptr) {
@@ -265,7 +265,8 @@ private:
     /* Saved through the settings, whose listener does the rest (a switch's
      * last announcement included); the readers hear the new value from the
      * page. In the port menu, its sound, and "Saved." on its status line, as
-     * after a change of its own rows; the reader never speaks that. */
+     * after a change of its own rows (a copy of PortMenu::saved's text and
+     * element, to check at a base merge); the reader never speaks that. */
     void change(const NamedValue& named, float value, MenuSound sound) {
         const bool changed = m_settings.set(named, value, Clock::now());
         refresh();
@@ -293,7 +294,7 @@ private:
     Rml::ElementDocument& m_document;
     SettingsHost m_host;
     AccessibilitySettings& m_settings;
-    const SettingsPageHost& m_game;
+    const SettingsPageGame& m_game;
     std::vector<Row> m_rows;
     const Row* m_preview = nullptr; /* the Preview row whose cue this page started */
     bool m_writing = false;
@@ -334,9 +335,9 @@ public:
     /* By now RmlUi has unloaded every document, and with it every page. */
     void OnShutdown() override { m_pages.clear(); }
 
-    void start(AccessibilitySettings& settings, SettingsPageHost host) {
+    void start(AccessibilitySettings& settings, SettingsPageGame game) {
         m_settings = &settings;
-        m_game = std::move(host);
+        m_game = std::move(game);
         m_ids.clear();
         for (const ShownRow& row : settings.shown()) {
             m_ids.push_back(settings_row_id(row));
@@ -380,10 +381,9 @@ public:
         if (m_settings == nullptr) {
             return false;
         }
-        const std::vector<ShownRow>& rows = m_settings->shown();
-        for (std::size_t i = 0; i < rows.size() && i < m_ids.size(); ++i) {
-            if (m_ids[i] == id) {
-                return is_slider(rows[i]);
+        for (const ShownRow& row : m_settings->shown()) {
+            if (settings_row_id(row) == id) {
+                return is_slider(row);
             }
         }
         return false;
@@ -391,7 +391,7 @@ public:
 
 private:
     AccessibilitySettings* m_settings = nullptr;
-    SettingsPageHost m_game;
+    SettingsPageGame m_game;
     std::vector<std::string> m_ids; /* the rows' ids, in the rows' order */
     std::vector<std::unique_ptr<Page>> m_pages;
     bool m_registered = false;
@@ -407,8 +407,8 @@ std::string settings_row_id(const ShownRow& row) {
     return id;
 }
 
-void settings_pages_start(AccessibilitySettings& settings, SettingsPageHost host) {
-    s_plugin.start(settings, std::move(host));
+void settings_pages_start(AccessibilitySettings& settings, SettingsPageGame game) {
+    s_plugin.start(settings, std::move(game));
 }
 
 void settings_pages_stop() {

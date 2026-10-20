@@ -692,6 +692,22 @@ void an_override_holds_for_the_run_and_is_never_written() {
     assert(spoken.empty());
 }
 
+/* A file that lacks an overridden key, as after a hand edit removed its
+ * line: the line appended is the default the file now holds, never the
+ * override, so the next run without the variable is as the file says. */
+void an_override_of_a_key_the_file_lacks_is_not_appended() {
+    Fixture f("override_missing.ini");
+    write_file(f.path, "cues.volume = 60\n");
+    const a11y::NamedValue& on = *f.model.find("cues.on");
+    f.model.override_value(on, 0.0f);
+    f.load();
+    assert(on.value == 0.0f && on.overridden && on.saved == 1.0f);
+    const std::string text = read_file(f.path);
+    assert(text.find("cues.on = on\n") != std::string::npos);
+    assert(text.find("cues.on = off") == std::string::npos);
+    assert(f.poll_later().empty());
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -724,6 +740,7 @@ int main(int argc, char** argv) {
     the_shown_rows_list_in_order_with_each_cues_three();
     the_settings_tell_their_listener_every_change();
     an_override_holds_for_the_run_and_is_never_written();
+    an_override_of_a_key_the_file_lacks_is_not_appended();
     std::cout << "accessibility_settings: all tests passed\n";
     return 0;
 }

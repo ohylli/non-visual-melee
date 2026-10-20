@@ -279,7 +279,8 @@ std::string ValueModel::write(const std::vector<const NamedValue*>& only, bool a
                 text += "\n# " + group.title + "\n";
                 heading = true;
             }
-            float value = at_defaults ? named->default_value : named->value;
+            /* Under an override, the file's own value: an override is never written. */
+            float value = at_defaults ? named->default_value : file_value(*named);
             text += "\n" + describe(*named) + format_line(*named, value);
         }
     }

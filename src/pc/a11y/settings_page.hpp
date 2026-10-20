@@ -27,7 +27,8 @@ class AccessibilitySettings;
 struct ShownRow;
 
 /* The port menu's own sounds, numbered as Melee's menu bank plays them
- * (lbAudioAx_80024030, as PortMenu in src/pc/launcher.cpp plays them). */
+ * (lbAudioAx_80024030): copies of PortMenu's SFX_BACK, SFX_CONFIRM and
+ * SFX_MOVE in src/pc/launcher.cpp, to check at a base merge. */
 enum class MenuSound {
     back = 0,
     confirm = 1,
@@ -35,7 +36,7 @@ enum class MenuSound {
 };
 
 /* What the rows ask of the game. */
-struct SettingsPageHost {
+struct SettingsPageGame {
     /* A cue's preview, by the cue's id (CueSystem::preview), and its stop
      * (CueSystem::stop_preview), nothing when none plays. */
     std::function<void(std::string_view cue)> preview;
@@ -56,10 +57,10 @@ enum class SettingsHost {
  * beside it, as the base port's are, at the id and "-val". */
 std::string settings_row_id(const ShownRow& row);
 
-/* Registers the plugin; the settings and the host's functions must outlive
+/* Registers the plugin; the settings and the game's functions must outlive
  * the matching stop. Call once every feature has registered its values, and
  * before RmlUi loads either page. */
-void settings_pages_start(AccessibilitySettings& settings, SettingsPageHost host);
+void settings_pages_start(AccessibilitySettings& settings, SettingsPageGame game);
 /* Unregisters the plugin and drops the pages, stopping a preview one of
  * them started. RmlUi may shut down before or after. */
 void settings_pages_stop();

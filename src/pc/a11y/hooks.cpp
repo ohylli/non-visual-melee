@@ -244,7 +244,7 @@ extern "C" void pc_a11y_init(void) {
      * own, played from the same place its rows play them, outside the
      * simulation, so they are counted in no netplay tick's sound order. */
     a11y::settings_pages_start(
-        *s_settings, a11y::SettingsPageHost{
+        *s_settings, a11y::SettingsPageGame{
                          [](std::string_view cue) {
                              if (s_cue_system != nullptr) {
                                  s_cue_system->preview(cue, a11y::Clock::now());

@@ -42,7 +42,7 @@ Four switches are settings like any other, rows of the accessibility settings in
 
 - `MELEE_A11Y=1` forces Accessibility on, the way back for a player who saved it off and starts the game silent; editing `a11y.ini` is the other.
 - An override of Steering or Cues holds against Accessibility as well, so an agent run with Accessibility off (`MELEE_A11Y=0`) still steers with `MELEE_A11Y_STEER=1` and hears cues with `MELEE_A11Y_CUES=1`. Without an override they sit under Accessibility like any switch.
-- The developer switches stay environment-only, never settings: `MELEE_A11Y_LOG`, `MELEE_A11Y_SCREEN_READER`, the cue dump and trace, the event pipe and the text dump.
+- The developer switches stay environment-only, never settings: `MELEE_A11Y_LOG`, `MELEE_A11Y_SCREEN_READER`, the cue dump, trace and previews, the event pipe and the text dump.
 
 ## Threading rule
 

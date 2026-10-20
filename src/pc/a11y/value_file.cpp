@@ -7,10 +7,15 @@
 #include <fstream>
 #include <iterator>
 #include <system_error>
+#include <thread>
 #include <utility>
 
 namespace a11y {
 namespace {
+
+/* A save's rename, tried again while another program has the file open. */
+constexpr int kRenameAttempts = 5;
+constexpr std::chrono::milliseconds kRenameRetry{10};
 
 std::filesystem::path utf8_path(const std::string& path) {
     return std::filesystem::path(
@@ -99,7 +104,18 @@ bool ValueFile::save(const std::string& text) {
         std::filesystem::remove(temporary, error);
         return false;
     }
-    std::filesystem::rename(temporary, m_path, error);
+    /* On Windows the rename fails while another program holds the file open
+     * without sharing its deletion, as an editor, a virus scanner or the
+     * drive scripts' ini step may for a moment: tried again a few times. */
+    for (int attempt = 0; attempt < kRenameAttempts; ++attempt) {
+        if (attempt > 0) {
+            std::this_thread::sleep_for(kRenameRetry);
+        }
+        std::filesystem::rename(temporary, m_path, error);
+        if (!error) {
+            break;
+        }
+    }
     if (error) {
         std::filesystem::remove(temporary, error);
         return false;

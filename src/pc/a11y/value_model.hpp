@@ -178,10 +178,11 @@ public:
      * writes. True when the value the game uses changed. */
     bool override_value(const NamedValue& named, float value);
 
-    /* The whole model as the file's text, every value at its current value
-     * or its default, the keys kept from an earlier read last. */
+    /* The whole model as the file's text, every value at the file's value
+     * (under an override, the file's own) or its default, the keys kept
+     * from an earlier read last. */
     std::string to_text(bool at_defaults = false) const;
-    /* Only these values, at their current values, under their groups'
+    /* Only these values, at the file's values, under their groups'
      * headings: what to append to a file that lacks them. */
     std::string to_text(const std::vector<const NamedValue*>& only) const;
     /* Applies a text to the model: values it lacks go back to their

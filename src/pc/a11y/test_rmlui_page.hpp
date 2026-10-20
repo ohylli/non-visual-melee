@@ -145,7 +145,7 @@ public:
         settings.load(a11y::Clock::now());
         switches.start();
         a11y::settings_pages_start(settings,
-            a11y::SettingsPageHost{
+            a11y::SettingsPageGame{
                 [this](std::string_view cue) { asked.push_back("preview " + std::string(cue)); },
                 [this] { asked.push_back("stop"); },
                 [this](a11y::MenuSound sound) {
