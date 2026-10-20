@@ -117,16 +117,16 @@ void both_cues_register_and_fit() {
     assert(f.match_cues.your_voice() >= 0 && f.match_cues.opponent_voice() >= 0);
     const auto& groups = f.model.groups();
     assert(groups.size() == 6);
-    /* First the value both share, one switch for both pans. */
-    assert(groups[1].id == "position_cues" && groups[1].title == "Position cues");
-    assert(groups[1].values.size() == 1);
+    assert(groups[1].id == "your_position" && groups[2].id == "opponent_position");
+    assert(groups[2].title == "Opponent's position cue");
+    /* After both, the value they share, one switch for both pans. */
+    assert(groups[3].id == "position_cues" && groups[3].title == "Position cues");
+    assert(groups[3].values.size() == 1);
     const a11y::NamedValue* pan_to_camera = f.model.find("position_cues.pan_to_camera");
     assert(pan_to_camera != nullptr && pan_to_camera->kind == a11y::ValueKind::toggle);
     assert(pan_to_camera->default_value == 1.0f);
-    assert(groups[2].id == "your_position" && groups[3].id == "opponent_position");
-    assert(groups[3].title == "Opponent's position cue");
     std::vector<std::string> keys;
-    for (const a11y::NamedValue* named : groups[3].values) {
+    for (const a11y::NamedValue* named : groups[2].values) {
         keys.push_back(named->key);
     }
     assert((keys == std::vector<std::string>{"opponent_position.on", "opponent_position.volume",
@@ -161,6 +161,36 @@ void the_gap_warning_registers_after_the_position_cues() {
     assert(hold->default_value == 10.0f && hold->unit == "ticks");
     assert(f.model.find("gap_warning.boost")->default_value == 1.0f);
     assert(f.model.find("gap_warning.on")->description == "Turns the gap warning on or off.");
+}
+
+/* The menus' rows, as the spec's Rows table has them after the switches
+ * the cues do not own. */
+void the_cues_rows_are_the_menus_rows() {
+    Fixture f;
+    std::vector<std::string> rows;
+    for (const a11y::ShownRow& row : f.model.shown()) {
+        rows.push_back(row.value != nullptr ?
+                           row.value->key + " " + row.value->label :
+                           "preview " + row.action->group + " " + row.action->label);
+    }
+    assert((rows == std::vector<std::string>{
+                        "cues.on Cues",
+                        "cues.volume Cue volume",
+                        "your_position.on Your position cue",
+                        "your_position.volume Your position cue volume",
+                        "preview your_position Preview your position cue",
+                        "opponent_position.on Opponent's position cue",
+                        "opponent_position.volume Opponent's position cue volume",
+                        "preview opponent_position Preview opponent's position cue",
+                        "position_cues.pan_to_camera Position cues follow the camera",
+                        "gap_warning.on Gap warning",
+                        "gap_warning.volume Gap warning volume",
+                        "preview gap_warning Preview gap warning",
+                        "ledge_warning.on Ledge warning",
+                        "ledge_warning.volume Ledge warning volume",
+                        "preview ledge_warning Preview ledge warning",
+                        "ledge_warning.distance Ledge warning distance",
+                    }));
 }
 
 /* You falling past Final Destination's left edge, nothing below. */
@@ -440,6 +470,7 @@ extern "C" void pc_log_line(const char* fmt, ...) {
 int main() {
     both_cues_register_and_fit();
     the_gap_warning_registers_after_the_position_cues();
+    the_cues_rows_are_the_menus_rows();
     the_gap_warning_starts_holds_and_stops();
     the_gap_tone_loops_without_a_seam();
     the_ledge_warning_registers_last();

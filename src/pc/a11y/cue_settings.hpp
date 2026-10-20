@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* The cues' part of the value model (primer docs/a11y/cues.md, "Cue
- * settings"): the values every cue shares, those each cue has (its switch,
- * volume and boost), and how they reach the cue engine's volume chain. A cue
- * registers its own group through add_cue, adds its mapping values to that
- * group, and reads them all through typed handles. Game thread only. */
+/* The cues' part of the accessibility settings (primer docs/a11y/cues.md,
+ * "The cues' values"): the values every cue shares, those each cue has (its
+ * switch, volume and boost), and how they reach the cue engine's volume
+ * chain. A cue registers its own group through add_cue, adds its mapping
+ * values to that group as tuning values, and reads them all through typed
+ * handles. Game thread only. */
 #pragma once
 #include "cue_engine.hpp"
 #include "value_model.hpp"
@@ -31,12 +32,15 @@ struct CueGroup {
 
 class CueSettings {
 public:
-    /* Registers the values for all cues: the switch and the cue volume. */
+    /* Registers the values for all cues, both shown: the switch and the cue
+     * volume. */
     explicit CueSettings(ValueModel& model);
 
-    /* Registers a cue's group, titled as the file and the port menu head
-     * it ("Your position cue"), with its switch, volume and the boost it
-     * starts with, and gives it the next cue number. */
+    /* Registers a cue's group, titled as the file heads it and the menus
+     * name it ("Your position cue"), with its switch, volume and the boost it
+     * starts with, and gives it the next cue number. The switch and the
+     * volume are shown, followed by an action, Preview, whose group is the
+     * cue's id; the boost is a tuning value. */
     CueGroup add_cue(const std::string& id, const std::string& title, float default_boost);
     /* Registers a group for values several cues share, with no cue of its
      * own: no switch, volume or cue number. */

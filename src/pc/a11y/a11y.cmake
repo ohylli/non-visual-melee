@@ -57,6 +57,7 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/cue_engine.cpp
         ${CMAKE_CURRENT_LIST_DIR}/cue_output.cpp
         ${CMAKE_CURRENT_LIST_DIR}/cue_sounds.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/accessibility_settings.cpp
         ${CMAKE_CURRENT_LIST_DIR}/cue_settings.cpp
         ${CMAKE_CURRENT_LIST_DIR}/cue_system.cpp
         ${CMAKE_CURRENT_LIST_DIR}/value_model.cpp
@@ -348,21 +349,22 @@ if (TARGET unit_tests)
         set_tests_properties(cue_dump_analysis PROPERTIES LABELS melee FIXTURES_REQUIRED cue_dump)
     endif ()
 
-    # The value model and its file against files in a scratch folder, and
-    # the cue settings feeding the cue engine rendered into a buffer; a fake
-    # bridge and its own pc_log_line.
-    add_executable(cue_settings_test EXCLUDE_FROM_ALL
-            ${CMAKE_CURRENT_LIST_DIR}/test_cue_settings.cpp
+    # The accessibility settings: the value model, its file against files in
+    # a scratch folder, the menus' rows, and the cues' values feeding the cue
+    # engine rendered into a buffer; a fake bridge and its own pc_log_line.
+    add_executable(accessibility_settings_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_accessibility_settings.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/accessibility_settings.cpp
             ${CMAKE_CURRENT_LIST_DIR}/value_model.cpp
             ${CMAKE_CURRENT_LIST_DIR}/value_file.cpp
             ${CMAKE_CURRENT_LIST_DIR}/cue_settings.cpp
             ${CMAKE_CURRENT_LIST_DIR}/cue_engine.cpp
             ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
-    target_include_directories(cue_settings_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
-    target_compile_options(cue_settings_test PRIVATE -UNDEBUG)
-    add_test(NAME cue_settings COMMAND cue_settings_test ${CMAKE_BINARY_DIR}/cue_settings_test)
-    set_tests_properties(cue_settings PROPERTIES LABELS melee)
-    add_dependencies(unit_tests cue_settings_test)
+    target_include_directories(accessibility_settings_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(accessibility_settings_test PRIVATE -UNDEBUG)
+    add_test(NAME accessibility_settings COMMAND accessibility_settings_test ${CMAKE_BINARY_DIR}/accessibility_settings_test)
+    set_tests_properties(accessibility_settings PROPERTIES LABELS melee)
+    add_dependencies(unit_tests accessibility_settings_test)
 
     # The position cues' driver against hand-written match snapshots.
     add_executable(position_cue_test EXCLUDE_FROM_ALL

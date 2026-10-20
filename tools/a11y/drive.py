@@ -88,9 +88,11 @@ reader.
 Each run starts from default settings in a settings folder of its own,
 --out's path plus .settings (build/drive/last.log.settings), named to the
 game by MELEE_USER_DIR and emptied before the game starts: launcher.cfg,
-the cue settings and everything else the game keeps in its settings folder
-land there, never in the maintainer's %APPDATA%\melee-pc. A non-empty
-MELEE_A11Y_CUE_SETTINGS in the environment names another cue settings file.
+the accessibility settings (a11y.ini, which MELEE_A11Y_SETTINGS names to the
+game) and everything else the game keeps in its settings folder land there,
+never in the maintainer's %APPDATA%\melee-pc. A non-empty
+MELEE_A11Y_SETTINGS in the environment names another accessibility
+settings file instead, kept as it is.
 
 The shader caches come from build/drive/cache/SLOT (--cache-slot, default
 1), first copied from the player's own: games running at once each need a
@@ -611,10 +613,6 @@ class Game:
             "MELEE_LOG_FILE": os.path.abspath(out) + ".game.log",
             "MELEE_CACHE_DIR": cache_dir(cache_slot),
         })
-        if full_env.get("MELEE_A11Y_CUE_SETTINGS") == "":
-            # Empty would mean no cue settings file at all; unset puts it in
-            # the run's settings folder.
-            del full_env["MELEE_A11Y_CUE_SETTINGS"]
         if getattr(args, "muted", False):
             full_env["MELEE_A11Y_SCREEN_READER"] = "0"
         elif not args.speech:
@@ -633,6 +631,10 @@ class Game:
         # MELEE_USER_DIR ignores it and takes the maintainer's).
         self.settings_dir = fresh_settings_dir(out)
         full_env["MELEE_USER_DIR"] = self.settings_dir
+        if not full_env.get("MELEE_A11Y_SETTINGS"):
+            # The accessibility settings in the run's folder too, named
+            # outright: empty would mean no file at all.
+            full_env["MELEE_A11Y_SETTINGS"] = os.path.join(self.settings_dir, "a11y.ini")
         if self.launcher:
             write_launcher_cfg(self.settings_dir, disc)
         self.pipe = Pipe(pipe_name, "key pipe")

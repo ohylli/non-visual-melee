@@ -62,6 +62,56 @@ std::vector<const NamedValue*> ValueFile::poll(Clock::time_point now) {
         return {};
     }
     m_next_check = now + kPollInterval;
+    return check();
+}
+
+std::vector<const NamedValue*> ValueFile::set(
+    const NamedValue& named, float value, Clock::time_point now) {
+    m_next_check = now + kPollInterval;
+    std::vector<const NamedValue*> changed = check();
+    if (!m_model.set(named, value)) {
+        return changed;
+    }
+    changed.erase(std::remove(changed.begin(), changed.end(), &named), changed.end());
+    changed.push_back(&named);
+    if (!m_read) {
+        log("could not read " + utf8_string(m_path) + " to save " + named.key + "; " + named.key +
+            " = " + format_value(named) + " until the game closes");
+        return changed;
+    }
+    if (save(m_model.edit_text(m_text, named))) {
+        log("saved " + named.key + " = " + format_value(named));
+    } else {
+        log("could not save " + named.key + " = " + format_value(named) + " to " +
+            utf8_string(m_path));
+    }
+    return changed;
+}
+
+bool ValueFile::save(const std::string& text) {
+    std::filesystem::path temporary = m_path;
+    temporary += ".tmp";
+    std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
+    out << text;
+    out.close();
+    std::error_code error;
+    if (!out) {
+        std::filesystem::remove(temporary, error);
+        return false;
+    }
+    std::filesystem::rename(temporary, m_path, error);
+    if (error) {
+        std::filesystem::remove(temporary, error);
+        return false;
+    }
+    /* What the poll compares against: the next one finds the file as saved,
+     * so it reads nothing and says nothing (spec open question 1). */
+    m_text = text;
+    m_stamped = stamp(m_stamp);
+    return true;
+}
+
+std::vector<const NamedValue*> ValueFile::check() {
     Stamp current;
     if (!stamp(current)) {
         /* Deleted: back to the defaults, with a file to edit again. */
@@ -85,6 +135,7 @@ bool ValueFile::ensure_written() {
     std::string text = "# " + m_name + " for Non-Visual Melee.\n" +
                        "# One value a line: key = value. Lines starting with # are comments.\n" +
                        "# The game reads this file again about half a second after it is saved.\n" +
+                       "# A change in the game's menus edits only its own line here.\n" +
                        "# Delete the file to get every value back at its default.\n";
     text += m_model.to_text(true);
     std::ofstream out(m_path, std::ios::binary);
@@ -102,15 +153,17 @@ std::vector<const NamedValue*> ValueFile::read(bool append_missing) {
     std::ifstream in(m_path, std::ios::binary);
     if (!in) {
         log("could not read " + utf8_string(m_path));
+        m_read = false;
         return {};
     }
     std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     in.close();
     m_stamped = stamp(m_stamp);
-    if (!append_missing && text == m_text) {
+    if (!append_missing && m_read && text == m_text) {
         return {};
     }
     m_text = text;
+    m_read = true;
     TextRead result = m_model.read_text(text);
     report(result);
     if (append_missing && !result.missing.empty()) {
@@ -161,7 +214,7 @@ void ValueFile::report(const TextRead& read) {
             m_unknown_logged.end())
         {
             m_unknown_logged.push_back(key);
-            log(key + " is not a known setting; kept in the file");
+            log(key + " is not a known key; kept in the file");
         }
     }
     m_problem.clear();

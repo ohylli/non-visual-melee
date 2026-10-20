@@ -34,11 +34,11 @@ struct Config {
      * engine's mix and its voices' targets; empty for none. */
     std::string cue_dump;
     std::string cue_trace;
-    /* MELEE_A11Y_CUE_SETTINGS: the cue settings file; unset for the one in
-     * the folder where the base port keeps its settings. Set but empty, as a
-     * shell slip leaves it, means no file at all: an agent run that meant a
-     * scratch file must not fall back to the player's. */
-    std::optional<std::string> cue_settings;
+    /* MELEE_A11Y_SETTINGS: the accessibility settings file; unset for
+     * a11y.ini in the folder where the base port keeps its settings. Set but
+     * empty, as a shell slip leaves it, means no file at all: an agent run
+     * that meant a scratch file must not fall back to the player's. */
+    std::optional<std::string> settings_file;
 };
 
 /* The only place the configuration is read from; swap its body when fork

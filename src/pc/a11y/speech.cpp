@@ -39,9 +39,9 @@ Config config_from_environment() {
     config.cue_dump = dump != nullptr ? dump : "";
     const char* trace = std::getenv("MELEE_A11Y_CUE_TRACE");
     config.cue_trace = trace != nullptr ? trace : "";
-    const char* cue_settings = std::getenv("MELEE_A11Y_CUE_SETTINGS");
-    if (cue_settings != nullptr) {
-        config.cue_settings = cue_settings;
+    const char* settings_file = std::getenv("MELEE_A11Y_SETTINGS");
+    if (settings_file != nullptr) {
+        config.settings_file = settings_file;
     }
     return config;
 }

@@ -1,40 +1,45 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The cue system (primer docs/a11y/cues.md): the cue engine and its output,
- * the cue settings with the file behind them and the cues of a match, opened
- * together as the game starts and closed together at shutdown. The hooks
- * forward to it. Game thread only. */
+ * the cues' part of the accessibility settings and the cues of a match,
+ * opened together as the game starts and closed together at shutdown. The
+ * hooks forward to it. Game thread only. */
 #pragma once
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace a11y {
 
 struct Config;
+class AccessibilitySettings;
 class CueEngine;
 class CueOutput;
 class CueSettings;
 class MatchCues;
+struct NamedValue;
 class Speech;
-class ValueFile;
-class ValueModel;
 
 class CueSystem {
 public:
     /* Opens the engine, not on first use: opening the stream takes part of a
-     * frame (ADR-0005). Then every cue registers its values and the cue
-     * settings are read. Null while cues are off, and when the output could
-     * not open, which is logged and said. master_volume is the launcher's,
-     * kept from before. */
+     * frame (ADR-0005). Then every cue registers its values in the
+     * accessibility settings, which are read after it, and the engine gets
+     * their levels at the defaults. Null while cues are off, and when the
+     * output could not open, which is logged and said. master_volume is the
+     * launcher's, kept from before. */
     static std::unique_ptr<CueSystem> open(
-        const Config& config, Speech& speech, float master_volume);
+        const Config& config, Speech& speech, AccessibilitySettings& settings, float master_volume);
     ~CueSystem();
     CueSystem(const CueSystem&) = delete;
     CueSystem& operator=(const CueSystem&) = delete;
 
-    /* After the scene's announcement: every cue stops, since cues belong to
-     * the screen they play on, and the settings file is looked at, so an
-     * error in it is queued behind the announcement. */
+    /* After the scene's announcement and before the settings file is
+     * looked at: every cue stops, since cues belong to the screen they play
+     * on. */
     void scene_entered();
+    /* Values of the accessibility settings changed: the levels they make up
+     * go to the engine. */
+    void settings_changed(const std::vector<const NamedValue*>& changed);
     /* The launcher's master volume with mute applied. */
     void set_master_volume(float volume);
     /* After every simulated tick, not while rollback re-runs ticks: reads
@@ -48,17 +53,15 @@ public:
     void silence_for_port_menu();
 
 private:
-    explicit CueSystem(Speech& speech);
-    void open_settings(const Config& config);
+    CueSystem(Speech& speech, AccessibilitySettings& settings);
     void poll_settings();
 
     Speech& m_speech;
+    AccessibilitySettings& m_settings;
     /* Destroyed in reverse: the output first, since its callback renders the
-     * engine, and the engine last. The file is null when it has no path. */
+     * engine, and the engine last. */
     std::unique_ptr<CueEngine> m_engine;
-    std::unique_ptr<ValueModel> m_model;
     std::unique_ptr<CueSettings> m_cue_settings;
-    std::unique_ptr<ValueFile> m_file;
     std::unique_ptr<MatchCues> m_match_cues;
     std::unique_ptr<CueOutput> m_output;
     /* The last tick read had a match running, since the scene was entered. */

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "a11y_hooks.h"
+#include "accessibility_settings.hpp"
 #include "css_reader.hpp"
 #include "cue_system.hpp"
 #include "event_pipe.hpp"
@@ -10,6 +11,7 @@
 #include "menu_speech.hpp"
 #include "menu_text.hpp"
 #include "pc/net.h"
+#include "pc/paths.h"
 #include "pc/pc.h"
 #include "pc/region.h"
 #include "port_menu_speech.hpp"
@@ -17,9 +19,12 @@
 #include "speech.hpp"
 #include "sss_reader.hpp"
 #include "training_speech.hpp"
+#include <SDL3/SDL.h>
 #include <cstdlib>
 #include <dolphin/pad.h>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace {
 
@@ -32,8 +37,10 @@ std::unique_ptr<a11y::CssReader> s_css;
 std::unique_ptr<a11y::SssReader> s_sss;
 std::unique_ptr<a11y::LobbySpeech> s_lobby;
 std::unique_ptr<a11y::TrainingSpeech> s_training;
-/* The cue engine, the cue settings and the cues of a match; null while
- * cues are off or their output could not open. */
+/* The accessibility settings and their file, a11y.ini. */
+std::unique_ptr<a11y::AccessibilitySettings> s_settings;
+/* The cue engine, the cues' values and the cues of a match; null while cues
+ * are off or their output could not open. */
 std::unique_ptr<a11y::CueSystem> s_cue_system;
 /* The launcher's master volume with mute applied, kept from before the
  * engine opens. */
@@ -56,6 +63,39 @@ bool s_css_to_rules = false;
 /* The menu reader was fed from character select on the last frame read,
  * so the next frame it is not is a new visit. */
 bool s_css_menu_fed = false;
+
+/* MELEE_A11Y_SETTINGS, or a11y.ini in the base port's settings folder
+ * (pc_get_pref_path, which MELEE_USER_DIR moves); empty for no file: no such
+ * folder, or the variable set but empty. UTF-8. */
+std::string settings_file_path(const a11y::Config& config) {
+    if (config.settings_file.has_value()) {
+        if (config.settings_file->empty() && config.log) {
+            pc_log_line("[a11y] accessibility settings: MELEE_A11Y_SETTINGS is empty; using the "
+                        "defaults, no file");
+        }
+        return *config.settings_file;
+    }
+    char* folder = pc_get_pref_path();
+    if (folder == nullptr) {
+        if (config.log) {
+            pc_log_line("[a11y] accessibility settings: no settings folder (%s); using the "
+                        "defaults",
+                SDL_GetError());
+        }
+        return "";
+    }
+    std::string path = std::string(folder) + "a11y.ini";
+    SDL_free(folder);
+    return path;
+}
+
+/* Every change to the accessibility settings, from the file or a menu, to
+ * the features that keep a copy. */
+void settings_changed(const std::vector<const a11y::NamedValue*>& changed) {
+    if (s_cue_system != nullptr) {
+        s_cue_system->settings_changed(changed);
+    }
+}
 
 /* The gate every hook from game code passes through. While rollback re-runs
  * frames (pc_net_resim), each hook is reached again for a frame that was
@@ -147,7 +187,12 @@ extern "C" void pc_a11y_init(void) {
     s_sss = std::make_unique<a11y::SssReader>(*s_speech, config.steer);
     s_lobby = std::make_unique<a11y::LobbySpeech>(*s_speech);
     s_training = std::make_unique<a11y::TrainingSpeech>(*s_speech);
-    s_cue_system = a11y::CueSystem::open(config, *s_speech, s_master_volume);
+    s_settings = std::make_unique<a11y::AccessibilitySettings>(
+        *s_speech, settings_file_path(config), config.log);
+    s_settings->listen(settings_changed);
+    s_cue_system = a11y::CueSystem::open(config, *s_speech, *s_settings, s_master_volume);
+    /* Once every feature has registered its values. */
+    s_settings->load(a11y::Clock::now());
     a11y::launcher_speech_start(*s_speech);
     a11y::port_menu_speech_start(*s_speech);
 }
@@ -159,6 +204,7 @@ extern "C" void pc_a11y_shutdown(void) {
     a11y::port_menu_speech_stop();
     a11y::launcher_speech_stop();
     s_cue_system.reset();
+    s_settings.reset();
     s_training.reset();
     s_lobby.reset();
     s_sss.reset();
@@ -170,6 +216,10 @@ extern "C" void pc_a11y_shutdown(void) {
 }
 
 extern "C" void pc_a11y_launcher_frame(void) {
+    if (s_settings != nullptr) {
+        /* A hand edit shows in an open menu. */
+        s_settings->poll(a11y::Clock::now());
+    }
     a11y::launcher_speech_frame(a11y::Clock::now());
 }
 
@@ -199,6 +249,11 @@ extern "C" void pc_a11y_port_menu_frame(bool open) {
     if (!game_hook_may_speak()) {
         return;
     }
+    if (open) {
+        /* A hand edit shows in the open menu; the game stands still, so no
+         * tick polls. */
+        s_settings->poll(a11y::Clock::now());
+    }
     a11y::port_menu_speech_frame(open, pc_exit_requested, a11y::Clock::now());
 }
 
@@ -223,6 +278,12 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
     if (s_cue_system != nullptr) {
         /* After the scene's announcement, which interrupts. */
         s_cue_system->scene_entered();
+    }
+    if (s_settings != nullptr) {
+        /* After the announcement too, so an error in the file is queued
+         * behind it; a screen that speaks its opening on its first frame
+         * still cuts it off. */
+        s_settings->poll(a11y::Clock::now());
     }
 }
 

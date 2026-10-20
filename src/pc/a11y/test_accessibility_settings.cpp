@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* The value model, its text, its file against real files in a
- * scratch folder, and the cue settings feeding the cue engine rendered into
- * a buffer. Speech goes to a fake screen reader bridge; this file supplies
+/* The accessibility settings: the value model, its text, its file against
+ * real files in a scratch folder, the line edit a menu's change saves, the
+ * menus' rows, and the cues' values feeding the cue engine rendered into a
+ * buffer. Speech goes to a fake screen reader bridge; this file supplies
  * the pc_log_line that main.c normally provides. Its one argument is the
  * scratch folder. */
+#include "accessibility_settings.hpp"
 #include "cue_engine.hpp"
 #include "cue_settings.hpp"
 #include "value_model.hpp"
@@ -94,7 +96,8 @@ struct Fixture {
     }
 
     void open() {
-        file = std::make_unique<ValueFile>(model, speech, "Cue settings", path.string(), true);
+        file = std::make_unique<ValueFile>(
+            model, speech, a11y::AccessibilitySettings::kName, path.string(), true);
     }
 
     std::vector<const a11y::NamedValue*> load() {
@@ -116,7 +119,8 @@ void a_missing_file_is_written_with_defaults_and_descriptions() {
     std::vector<const a11y::NamedValue*> changed = f.load();
     assert(changed.empty());
     assert(fs::exists(f.path));
-    assert(count_logged("[a11y] cue settings: written with defaults: " + f.path.string()) == 1);
+    assert(count_logged(
+               "[a11y] accessibility settings: written with defaults: " + f.path.string()) == 1);
     const std::string text = read_file(f.path);
     for (const char* expected :
         {
@@ -179,8 +183,10 @@ void a_value_out_of_range_is_clamped_and_logged() {
     std::vector<const a11y::NamedValue*> changed = f.load();
     assert(f.value("cues.volume") == 100.0f);
     assert(changed.empty());
-    assert(count_logged(
-               "[a11y] cue settings: line 1: cues.volume 150 is out of range, using 100%") == 1);
+    assert(
+        count_logged(
+            "[a11y] accessibility settings: line 1: cues.volume 150 is out of range, using 100%") ==
+        1);
     write_file(f.path, "cues.volume = -3\n");
     f.file->load(f.now);
     assert(f.value("cues.volume") == 0.0f);
@@ -197,18 +203,19 @@ void an_unreadable_line_keeps_its_last_value_and_is_reported_by_number() {
     assert(f.value("cues.volume") == 50.0f);
     assert(f.value("cues.on") == 0.0f);
     assert(changed.size() == 1 && changed[0]->key == "cues.on");
-    assert((f.spoken == std::vector<std::string>{"Cue settings, lines 2 and 4 not understood."}));
-    assert(count_logged("[a11y] cue settings: line 2 not understood: cues.volume = loud; "
+    assert((f.spoken ==
+            std::vector<std::string>{"Accessibility settings, lines 2 and 4 not understood."}));
+    assert(count_logged("[a11y] accessibility settings: line 2 not understood: cues.volume = loud; "
                         "cues.volume stays 50%") == 1);
-    assert(count_logged("[a11y] cue settings: line 4 not understood: nonsense") == 1);
+    assert(count_logged("[a11y] accessibility settings: line 4 not understood: nonsense") == 1);
     /* Said once: an unchanged file is not read again. */
     f.poll_later();
     assert(f.spoken.size() == 1);
     edit_file(f.path, "cues.volume = 70\ncues.on = maybe\n");
     f.poll_later();
-    assert(f.spoken.back() == "Cue settings, line 2 not understood.");
+    assert(f.spoken.back() == "Accessibility settings, line 2 not understood.");
     assert(f.value("cues.volume") == 70.0f && f.value("cues.on") == 0.0f);
-    assert(f.file->problem() == "Cue settings, line 2 not understood.");
+    assert(f.file->problem() == "Accessibility settings, line 2 not understood.");
     edit_file(f.path, "cues.volume = 70\ncues.on = on\n");
     f.poll_later();
     assert(f.file->problem().empty() && f.spoken.size() == 2);
@@ -229,7 +236,7 @@ void a_reload_applies_only_what_changed() {
     std::vector<const a11y::NamedValue*> changed = f.poll_later();
     assert(changed.size() == 1 && changed[0] == &gap.values.volume.named());
     assert(gap.values.volume.value() == 30.0f);
-    assert((s_lines == std::vector<std::string>{"[a11y] cue settings: gap.volume = 30"}));
+    assert((s_lines == std::vector<std::string>{"[a11y] accessibility settings: gap.volume = 30"}));
     /* Unchanged since: nothing read, nothing applied. */
     assert(f.poll_later().empty());
     /* Rewritten with the same text: read, nothing applied. */
@@ -254,8 +261,9 @@ void an_unknown_key_is_logged_once_and_kept() {
     Fixture f("unknown.ini");
     write_file(f.path, "cues.on = on\ncues.volume = 100\nold.thing = 3 s\n");
     f.load();
-    assert(count_logged(
-               "[a11y] cue settings: old.thing is not a known setting; kept in the file") == 1);
+    assert(
+        count_logged(
+            "[a11y] accessibility settings: old.thing is not a known key; kept in the file") == 1);
     assert(f.spoken.empty());
     assert(f.model.unknown().at("old.thing") == "3 s");
     edit_file(f.path, "cues.on = off\ncues.volume = 100\nold.thing = 3 s\n");
@@ -281,8 +289,10 @@ void a_newly_registered_value_takes_its_default_and_joins_the_file() {
     assert(text.find("\n# Gap warning\n") != std::string::npos);
     assert(text.find("0 to 30 ticks, default 4 ticks.\ngap.hold = 4\n") != std::string::npos);
     assert(text.find("cues.volume = 100") == std::string::npos);
-    assert(count_logged("[a11y] cue settings: added what the file lacked, at the defaults: gap.on, "
-                        "gap.volume, gap.boost, gap.hold") == 1);
+    assert(
+        count_logged(
+            "[a11y] accessibility settings: added what the file lacked, at the defaults: gap.on, "
+            "gap.volume, gap.boost, gap.hold") == 1);
     /* The appended file is what was read: no reload follows. */
     assert(f.poll_later().empty());
 }
@@ -361,6 +371,241 @@ void cue_settings_feed_the_volume_chain() {
     assert(std::fabs(rms(engine, a11y::kCueRate / 10) - full * 2) < full * 0.05f);
 }
 
+void a_menu_change_edits_only_its_own_line() {
+    Fixture f("line_edit.ini");
+    a11y::CueGroup gap = f.cues.add_cue("gap", "Gap warning", 1.0f);
+    /* The player's own order, spacing, comments and a key the game does
+     * not know; every value present, so loading appends nothing. */
+    const std::string before = "# my own notes\n"
+                               "cues.on = on\n"
+                               "\n"
+                               "  gap.volume=40   # quieter, by ear\n"
+                               "old.thing = 3 s\n"
+                               "cues.volume = 70\n"
+                               "gap.on = off\n"
+                               "gap.boost = 1\n";
+    write_file(f.path, before);
+    f.load();
+    s_lines.clear();
+    std::vector<const a11y::NamedValue*> changed =
+        f.file->set(gap.values.volume.named(), 55.0f, f.now);
+    assert(changed.size() == 1 && changed[0] == &gap.values.volume.named());
+    assert(gap.values.volume.value() == 55.0f);
+    std::string after = before;
+    after.replace(after.find("gap.volume=40"), 13, "gap.volume=55");
+    assert(read_file(f.path) == after);
+    assert((s_lines ==
+            std::vector<std::string>{"[a11y] accessibility settings: saved gap.volume = 55"}));
+    /* A switch is written as the file writes one. */
+    f.file->set(gap.values.on.named(), 1.0f, f.now);
+    after.replace(after.find("gap.on = off"), 12, "gap.on = on");
+    assert(read_file(f.path) == after);
+    /* Held to the range, as the model holds it. */
+    f.file->set(gap.values.volume.named(), 400.0f, f.now);
+    assert(read_file(f.path).find("  gap.volume=100   # quieter, by ear\n") != std::string::npos);
+    /* No change, no write. */
+    s_lines.clear();
+    assert(f.file->set(gap.values.volume.named(), 100.0f, f.now).empty());
+    assert(s_lines.empty());
+    /* The temporary file is gone after the rename. */
+    assert(!fs::exists(fs::path(f.path.string() + ".tmp")));
+    assert(f.spoken.empty());
+}
+
+void a_line_edit_keeps_line_endings_and_edits_the_line_read() {
+    ValueModel model;
+    CueSettings cues(model);
+    a11y::CueGroup gap = cues.add_cue("gap", "Gap warning", 1.0f);
+    const a11y::NamedValue& volume = gap.values.volume.named();
+    model.set(volume, 30.0f);
+    assert(model.edit_text("gap.volume = 5\r\ngap.on = on\r\n", volume) ==
+           "gap.volume = 30\r\ngap.on = on\r\n");
+    /* Of two lines with the key, the last is the one read. */
+    assert(model.edit_text("gap.volume = 1\ngap.volume = 2\n", volume) ==
+           "gap.volume = 1\ngap.volume = 30\n");
+    /* No value written yet, and a value right before a comment. */
+    assert(model.edit_text("gap.volume =\n", volume) == "gap.volume = 30\n");
+    assert(model.edit_text("gap.volume = # by ear\n", volume) == "gap.volume = 30 # by ear\n");
+    assert(model.edit_text("gap.volume = 7", volume) == "gap.volume = 30");
+}
+
+void a_missing_key_is_added_under_its_group() {
+    ValueModel model;
+    CueSettings cues(model);
+    a11y::CueGroup gap = cues.add_cue("gap", "Gap warning", 1.0f);
+    cues.add_cue("ledge", "Ledge warning", 1.0f);
+    const a11y::NamedValue& volume = gap.values.volume.named();
+    model.set(volume, 30.0f);
+    const std::string entry = "\n# The loudness of the gap warning, under the cue volume. 0 to "
+                              "100%, default 100%.\ngap.volume = 30\n";
+    /* At the end of its group, before the blank lines and the next
+     * group's heading; a key commented out is no line of its own. */
+    const std::string head = "# All cues\ncues.on = on\n\n# Gap warning\ngap.on = on\n"
+                             "# gap.volume = 5\ngap.boost = 1\n";
+    const std::string tail = "\n\n# Ledge warning\nledge.on = on\n";
+    assert(model.edit_text(head + tail, volume) == head + entry + tail);
+    /* The group last, its last line without an ending. */
+    assert(model.edit_text("# Gap warning\ngap.on = on", volume) ==
+           "# Gap warning\ngap.on = on\n" + entry);
+    /* No heading: the group's heading with the line, at the end. */
+    assert(model.edit_text("cues.on = on\n", volume) == "cues.on = on\n\n# Gap warning\n" + entry);
+    assert(model.edit_text("", volume) == "\n# Gap warning\n" + entry);
+    /* A text with \r\n gets \r\n. */
+    assert(model.edit_text("# Gap warning\r\ngap.on = on\r\n", volume) ==
+           "# Gap warning\r\ngap.on = on\r\n\r\n# The loudness of the gap warning, under the cue "
+           "volume. 0 to 100%, default 100%.\r\ngap.volume = 30\r\n");
+
+    /* In the file: the player deletes the line, the poll puts the value back
+     * to its default, and a menu's change adds the line under its group. */
+    Fixture f("under_group.ini");
+    a11y::CueGroup file_gap = f.cues.add_cue("gap", "Gap warning", 1.0f);
+    f.cues.add_cue("ledge", "Ledge warning", 1.0f);
+    write_file(f.path, head + tail +
+                           "ledge.volume = 100\nledge.boost = 1\ncues.volume = 100\n"
+                           "gap.volume = 60\n");
+    f.load();
+    assert(file_gap.values.volume.value() == 60.0f);
+    const std::string edited = head + tail +
+                               "ledge.volume = 100\nledge.boost = 1\n"
+                               "cues.volume = 100\n";
+    edit_file(f.path, edited);
+    f.poll_later();
+    assert(file_gap.values.volume.value() == 100.0f);
+    f.file->set(file_gap.values.volume.named(), 30.0f, f.now);
+    const std::string saved = read_file(f.path);
+    assert(
+        saved == head + entry + tail + "ledge.volume = 100\nledge.boost = 1\ncues.volume = 100\n");
+}
+
+void the_games_own_write_is_polled_back_silently() {
+    Fixture f("own_write.ini");
+    a11y::CueGroup gap = f.cues.add_cue("gap", "Gap warning", 1.0f);
+    f.load();
+    s_lines.clear();
+    f.now += ValueFile::kPollInterval * 3;
+    f.file->set(gap.values.volume.named(), 30.0f, f.now);
+    assert(s_lines.size() == 1);
+    /* The poll finds the file as the game saved it: nothing read, applied,
+     * logged or said, however often it looks. */
+    assert(f.poll_later().empty());
+    assert(f.poll_later().empty());
+    assert(f.file->poll(f.now + std::chrono::seconds(10)).empty());
+    assert(s_lines.size() == 1 && f.spoken.empty());
+    assert(gap.values.volume.value() == 30.0f);
+    /* And the file holds the change for the next start. */
+    ValueModel again;
+    CueSettings again_cues(again);
+    again_cues.add_cue("gap", "Gap warning", 1.0f);
+    again.read_text(read_file(f.path));
+    assert(again.find("gap.volume")->value == 30.0f);
+}
+
+void a_hand_edit_not_yet_polled_survives_a_menu_change() {
+    Fixture f("hand_and_menu.ini");
+    a11y::CueGroup gap = f.cues.add_cue("gap", "Gap warning", 1.0f);
+    f.load();
+    std::string text = read_file(f.path);
+    text.replace(text.find("cues.volume = 100"), 17, "cues.volume = 40");
+    edit_file(f.path, text);
+    /* At once, before the poll would look again. */
+    std::vector<const a11y::NamedValue*> changed = f.file->set(gap.values.on.named(), 0.0f, f.now);
+    assert(changed.size() == 2);
+    assert(f.value("cues.volume") == 40.0f && !gap.values.on.on());
+    const std::string saved = read_file(f.path);
+    assert(saved.find("\ncues.volume = 40\n") != std::string::npos);
+    assert(saved.find("\ngap.on = off\n") != std::string::npos);
+    assert(count_logged("[a11y] accessibility settings: cues.volume = 40") == 1);
+}
+
+std::string row_name(const a11y::ShownRow& row) {
+    return row.value != nullptr ? row.value->label : "[" + row.action->label + "]";
+}
+
+void the_shown_rows_list_in_order_with_each_cues_three() {
+    ValueModel model;
+    CueSettings cues(model);
+    a11y::CueGroup gap = cues.add_cue("gap", "Gap warning", 1.0f);
+    a11y::Number hold = gap.group.add_number(
+        a11y::NumberSpec{"hold", "Hold", "Ticks of hold.", "ticks", 4.0f, 0.0f, 30.0f, 1.0f});
+    a11y::Switch wide =
+        cues.add_shared("both", "Both cues")
+            .add_switch(a11y::SwitchSpec{"wide", "Wide pan", "Pans wide.", true, true});
+    a11y::CueGroup ledge = cues.add_cue("ledge", "Ledge warning", 1.0f);
+    a11y::Number distance = ledge.group.add_number(a11y::NumberSpec{"distance",
+        "Ledge warning distance", "How far.", "units", 30.0f, 5.0f, 100.0f, 1.0f, true});
+    std::vector<std::string> names;
+    for (const a11y::ShownRow& row : model.shown()) {
+        assert((row.value == nullptr) != (row.action == nullptr));
+        names.push_back(row_name(row));
+    }
+    assert((
+        names == std::vector<std::string>{"Cues", "Cue volume", "Gap warning", "Gap warning volume",
+                     "[Preview gap warning]", "Wide pan", "Ledge warning", "Ledge warning volume",
+                     "[Preview ledge warning]", "Ledge warning distance"}));
+    const std::vector<a11y::ShownRow>& rows = model.shown();
+    assert(rows[2].value == &gap.values.on.named() && rows[3].value == &gap.values.volume.named());
+    assert(rows[4].action->group == "gap" && rows[4].action->key == "gap.preview");
+    assert(rows[4].action->description == "Plays a short sample of the gap warning, as it sounds "
+                                          "in a match.");
+    assert(rows[5].value == &wide.named() && rows[8].action->group == "ledge");
+    assert(rows[9].value == &distance.named());
+    /* The rest are tuning values: in the file, not in the menus. */
+    assert(!gap.values.boost.named().shown && !hold.named().shown);
+    assert(model.find("gap.preview") == nullptr);
+    const std::string text = model.to_text();
+    assert(text.find("gap.hold = 4\n") != std::string::npos);
+    assert(text.find("preview") == std::string::npos && text.find("Preview") == std::string::npos);
+}
+
+void the_settings_tell_their_listener_every_change() {
+    std::vector<std::string> spoken;
+    a11y::Speech speech{a11y::Config{true, true}, std::make_unique<FakeBridge>(spoken)};
+    speech.init();
+    const fs::path path = s_dir / "a11y.ini";
+    fs::remove(path);
+    s_lines.clear();
+    a11y::AccessibilitySettings settings(speech, path.string(), true);
+    CueSettings cues(settings.model());
+    a11y::CueGroup gap = cues.add_cue("gap", "Gap warning", 1.0f);
+    std::vector<std::string> heard;
+    auto listener = [&heard](const std::vector<const a11y::NamedValue*>& changed) {
+        for (const a11y::NamedValue* named : changed) {
+            heard.push_back(named->key + " = " + a11y::format_value(*named));
+        }
+    };
+    settings.listen(listener);
+    Clock::time_point now = Clock::now();
+    settings.load(now);
+    assert(heard.empty() && fs::exists(path));
+    assert(read_file(path).rfind("# Accessibility settings for Non-Visual Melee.\n", 0) == 0);
+    assert(settings.shown().size() == 5);
+    /* A menu's change. */
+    assert(settings.set(gap.values.volume.named(), 20.0f, now));
+    assert((heard == std::vector<std::string>{"gap.volume = 20"}));
+    assert(!settings.set(gap.values.volume.named(), 20.0f, now));
+    assert(heard.size() == 1);
+    /* A hand edit. */
+    std::string text = read_file(path);
+    text.replace(text.find("cues.on = on"), 12, "cues.on = off");
+    edit_file(path, text);
+    settings.poll(now + ValueFile::kPollInterval * 2);
+    assert((heard == std::vector<std::string>{"gap.volume = 20", "cues.on = off"}));
+    assert(settings.problem().empty() && settings.problems_spoken() == 0);
+
+    /* No file: changes apply and are told, and nothing is saved. */
+    a11y::AccessibilitySettings bare(speech, "", true);
+    CueSettings bare_cues(bare.model());
+    heard.clear();
+    bare.listen(listener);
+    bare.load(now);
+    bare.poll(now + std::chrono::seconds(5));
+    assert(bare.set(*bare.model().find("cues.volume"), 50.0f, now));
+    assert((heard == std::vector<std::string>{"cues.volume = 50"}));
+    assert(
+        count_logged("[a11y] accessibility settings: cues.volume = 50, not saved: no file") == 1);
+    assert(bare.problem().empty() && spoken.empty());
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -373,7 +618,7 @@ extern "C" void pc_log_line(const char* fmt, ...) {
 }
 
 int main(int argc, char** argv) {
-    s_dir = argc > 1 ? fs::path(argv[1]) : fs::path("cue_settings_test");
+    s_dir = argc > 1 ? fs::path(argv[1]) : fs::path("accessibility_settings_test");
     fs::create_directories(s_dir);
     a_missing_file_is_written_with_defaults_and_descriptions();
     the_text_is_parsed_with_spaces_comments_units_and_commas();
@@ -385,6 +630,13 @@ int main(int argc, char** argv) {
     a_newly_registered_value_takes_its_default_and_joins_the_file();
     the_model_describes_each_value_for_a_menu();
     cue_settings_feed_the_volume_chain();
-    std::cout << "cue_settings: all tests passed\n";
+    a_menu_change_edits_only_its_own_line();
+    a_line_edit_keeps_line_endings_and_edits_the_line_read();
+    a_missing_key_is_added_under_its_group();
+    the_games_own_write_is_polled_back_silently();
+    a_hand_edit_not_yet_polled_survives_a_menu_change();
+    the_shown_rows_list_in_order_with_each_cues_three();
+    the_settings_tell_their_listener_every_change();
+    std::cout << "accessibility_settings: all tests passed\n";
     return 0;
 }

@@ -240,10 +240,10 @@ MatchCues::GapValues MatchCues::add_gap_values(ValueGroup group) {
 MatchCues::LedgeValues MatchCues::add_ledge_values(ValueGroup group) {
     const LedgeMapping defaults;
     return LedgeValues{
-        group.add_number(NumberSpec{"distance", "Warning distance",
-            "From this distance to a deadly end of the floor below you and nearer, the warning "
-            "sounds on that side. A dash covers 30 units in under half a second.",
-            "units", defaults.distance, 5.0f, 100.0f, 1.0f}),
+        group.add_number(NumberSpec{"distance", "Ledge warning distance",
+            "How far from the edge the warning starts, in stage units. Final Destination is "
+            "about 170 wide.",
+            "units", defaults.distance, 5.0f, 100.0f, 1.0f, true}),
         group.add_number(NumberSpec{"pan_floor", "Pan floor",
             "How far to the side the warning sounds at the edge itself; at the warning distance "
             "it is fully to that side.",
@@ -261,17 +261,16 @@ MatchCues::LedgeValues MatchCues::add_ledge_values(ValueGroup group) {
 
 MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
     : m_engine(engine),
-      m_pan_to_camera(settings.add_shared("position_cues", "Position cues")
-              .add_switch(SwitchSpec{"pan_to_camera", "Pan to the camera's view",
-                  "On, both position cues are fully left or right at the sides of the camera's "
-                  "view, giving the stage more of the pan; off, at the side blast zones, so the "
-                  "pan goes on moving until a knockout.",
-                  StageMapping{}.pan_to_camera})),
       m_your_cue(settings.add_cue("your_position", "Your position cue", kYourBoost)),
       m_your(add_your_values(m_your_cue.group)),
       m_opponent_cue(
           settings.add_cue("opponent_position", "Opponent's position cue", kOpponentBoost)),
       m_opponent(add_opponent_values(m_opponent_cue.group)),
+      m_pan_to_camera(settings.add_shared("position_cues", "Position cues")
+              .add_switch(SwitchSpec{"pan_to_camera", "Position cues follow the camera",
+                  "On, the cues pan across what the camera shows; off, across the whole stage to "
+                  "the side blast zones.",
+                  StageMapping{}.pan_to_camera, true})),
       m_gap_cue(settings.add_cue("gap_warning", "Gap warning", kGapBoost)),
       m_gap(add_gap_values(m_gap_cue.group)),
       m_ledge_cue(settings.add_cue("ledge_warning", "Ledge warning", kLedgeBoost)),

@@ -8,13 +8,19 @@ namespace {
 
 constexpr const char* kGroup = "cues";
 
-/* A cue's title as it reads inside a sentence: "the gap warning", but
- * "your position cue". */
-std::string in_sentence(std::string title) {
+/* "Gap warning" as it reads after a word: "gap warning". */
+std::string lowered_first(std::string title) {
     if (!title.empty()) {
         title[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(title[0])));
     }
-    return title.starts_with("your ") ? title : "the " + title;
+    return title;
+}
+
+/* A cue's title as it reads inside a sentence: "the gap warning", but
+ * "your position cue". */
+std::string in_sentence(const std::string& title) {
+    std::string name = lowered_first(title);
+    return name.starts_with("your ") ? name : "the " + name;
 }
 
 bool touches(const std::vector<const NamedValue*>& changed, const NamedValue& named) {
@@ -30,12 +36,12 @@ CueLevel CueValues::level() const {
 CueSettings::CueSettings(ValueModel& model)
     : m_model(model),
       m_on(model.group(kGroup, "All cues")
-              .add_switch(SwitchSpec{"on", "Cues", "Turns every cue on or off.", true})),
+              .add_switch(SwitchSpec{"on", "Cues", "Turns every cue on or off.", true, true})),
       m_volume(model.group(kGroup, "All cues")
               .add_number(NumberSpec{"volume", "Cue volume",
                   "The loudness of all cues together, under the master volume; the game's "
                   "sound effect and music volumes leave cues alone.",
-                  "%", 100.0f, 0.0f, 100.0f, 5.0f})) {}
+                  "%", 100.0f, 0.0f, 100.0f, 5.0f, true})) {}
 
 ValueGroup CueSettings::add_shared(const std::string& id, const std::string& title) {
     return m_model.group(id, title);
@@ -45,9 +51,14 @@ CueGroup CueSettings::add_cue(
     const std::string& id, const std::string& title, float default_boost) {
     ValueGroup group = m_model.group(id, title);
     std::string name = in_sentence(title);
-    Switch on = group.add_switch(SwitchSpec{"on", title, "Turns " + name + " on or off.", true});
+    /* Its three rows in the menus: the switch, the volume and Preview. */
+    Switch on =
+        group.add_switch(SwitchSpec{"on", title, "Turns " + name + " on or off.", true, true});
     Number volume = group.add_number(NumberSpec{"volume", title + " volume",
-        "The loudness of " + name + ", under the cue volume.", "%", 100.0f, 0.0f, 100.0f, 5.0f});
+        "The loudness of " + name + ", under the cue volume.", "%", 100.0f, 0.0f, 100.0f, 5.0f,
+        true});
+    group.add_action(ActionSpec{"preview", "Preview " + lowered_first(title),
+        "Plays a short sample of " + name + ", as it sounds in a match."});
     std::string lifts = "Lifts " + name +
                         " under its volume, for a sound that reads quieter "
                         "than the others at the same volume.";

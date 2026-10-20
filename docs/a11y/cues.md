@@ -36,7 +36,7 @@ miniaudio 0.11.25 is downloaded at configure and compiled once into its own libr
 
 ## Lifecycle and switches
 
-- `CueSystem` (`cue_system.cpp`) holds the engine, its output, the cue settings with their file and the match cues, and opens and closes them together; the hooks in `hooks.cpp` only forward to it.
+- `CueSystem` (`cue_system.cpp`) holds the engine, its output, the cues' part of the accessibility settings and the match cues, and opens and closes them together; the hooks in `hooks.cpp` only forward to it. The accessibility settings themselves, with their file, belong to `hooks.cpp`, since they outlive a closed engine.
 - The engine opens in `pc_a11y_init`, as the game starts: opening the stream takes part of a frame, too much for first use mid-game. It closes first thing in `pc_a11y_shutdown`.
 - Opening early moves the process's heap layout. That once made a base port bug much likelier: the file cache took heap buffers below 0x01000000 for ARAM offsets and cached garbled archives (fixed in `file_cache.cpp`, see `store_host`). If a crash rate rises only with cues on, suspect another place where a low host address is taken for ARAM.
 - Every voice stops, with its ramp, when a scene is entered (`pc_a11y_scene_entered`): cues belong to the screen they play on.
@@ -46,17 +46,25 @@ miniaudio 0.11.25 is downloaded at configure and compiled once into its own libr
 - Master volume comes from the `pc_a11y_master_volume` hook in `pc_audio_set_volume`, the launcher's volume with mute applied, kept even before the engine opens. The second stream does not see the game's gain, so the engine applies it itself. The game's sound effect and music sliders do not affect cues.
 - Online, the engine needs no `net_sfx_private`: it never reaches the game's sounds. The hooks that drive cues stay silent while `pc_net_resim()` is true, so voices keep their last targets through a rollback.
 
-## Cue settings
+## Accessibility settings
+
+The cue values grew into the fork's whole model of settings, the accessibility settings (`CONTEXT.md`), kept in one file, `a11y.ini`. The cues were its first users and still hold most of its values, which is why it is described here.
 
 ### The model
 
-Cue settings are one model of named values (`ValueModel` in `value_model.hpp`, each value a `NamedValue`), with a text file as its first front end and the port menu meant as the second. Each value has a key (`cues.volume`), a short label for a menu row, a one-line description, a unit, a default and a range; a switch is a value of 0 or 1. That is enough to draw a switch or a slider for every value, and for the file to explain itself. Values sit in groups, one for all cues, one per cue, and one for values several cues share (`CueSettings::add_shared`), and a group's title heads it in the file. The code says value rather than setting throughout, since `CONTEXT.md` keeps "setting" for the port's own options.
+The accessibility settings are one model of named values (`ValueModel` in `value_model.hpp`, each value a `NamedValue`), owned with its file by `AccessibilitySettings` (`accessibility_settings.hpp`), which `pc_a11y_init` creates before any feature registers. Each value has a key (`cues.volume`), a short label for a menu row, a one-line description, a unit, a default and a range; a switch is a value of 0 or 1. That is enough to draw a switch or a slider for every value, and for the file to explain itself. Values sit in groups, one for all cues, one per cue, and one for values several cues share (`CueSettings::add_shared`), and a group's title heads it in the file.
 
-The model knows nothing about any cue. A feature registers its own values and keeps the typed handles it gets back (`Switch`, `Number`), which read the current value without looking up a key, so reading them every tick costs nothing. The model is fork-wide in principle: steering's values could join it later.
+The model knows nothing about any cue. A feature registers its own values and keeps the typed handles it gets back (`Switch`, `Number`), which read the current value without looking up a key, so reading them every tick costs nothing.
+
+### Settings and tuning values
+
+A value registered with `shown` set is a setting: a row of the launcher's and the port menu's Accessibility category. Every other value is a tuning value, changed only in the file. `ValueModel::shown` lists the rows in the order they were registered, which is the file's order too: the shown values, and the actions, rows that do something rather than hold a value. A front end walks that list and keeps none of its own: a row with a value is a switch or a slider by the value's kind, a row with an action is a button. The only actions so far are the cues' Preview buttons, whose `group` is the cue's id.
+
+To show a tuning value, set `shown` where it is registered; to move a row, move its registration. The menus have no group headings, so a shown value's label names what it is about ("Ledge warning distance", not "Distance").
 
 ### The cues' values
 
-`cue_settings.hpp` registers the values for all cues (a switch and the cue volume, 0 to 100%) and gives every cue the same three of its own through `add_cue`: a switch, its volume and its boost (a factor of 1 to 8 under the volume, for a short click that reads quieter than a held tone). `add_cue` also hands out the cue's number in the engine. The cue then adds its mapping values to the group it got back:
+`cue_settings.hpp` registers the values for all cues (a switch and the cue volume, 0 to 100%, both shown) and gives every cue the same three of its own through `add_cue`: a switch and its volume, both shown and followed by the cue's Preview action, and its boost (a factor of 1 to 8 under the volume, for a short click that reads quieter than a held tone), a tuning value. A cue registered with `add_cue` so appears in the menus with no other change. `add_cue` also hands out the cue's number in the engine. The cue then adds its mapping values to the group it got back, as tuning values unless one is worth a row:
 
 ```cpp
 a11y::CueGroup cue = cue_settings.add_cue("your_position", "Your position cue", 2.0f);
@@ -66,16 +74,26 @@ a11y::Number pitch_range = cue.group.add_number({"pitch_range", "Pitch range",
 
 Every cue registers before the file is read, so a value the file lacks can be added to it. These values feed the volume chain: the all-cues switch and cue volume become the mix level, each cue's switch, volume and boost its cue level. A switch turned off is a level turned off: the engine glides that cue to silence while its voices keep running underneath, and turning it back on brings them back where they are.
 
+Every change after the file's first read, from a hand edit or a menu, goes to the settings' one listener, which `hooks.cpp` points at `CueSystem::settings_changed`; it applies only the levels the changed values make up.
+
 ### The file
 
-- **Where.** `a11y-cues.ini` in the folder where the base port keeps its own settings (`pc_get_pref_path`: `%APPDATA%\melee-pc` on Windows, or the folder `MELEE_USER_DIR` names). `MELEE_A11Y_CUE_SETTINGS=<path>` names another file; set but empty, it means no file and the defaults, so a run that meant a scratch file and lost its path never falls back to the player's. `drive.py` and `drive_net.py` give each run a fresh settings folder of its own, so no agent run reads or writes the maintainer's file.
-- **What it looks like.** Plain text, one `key = value` a line, each value under its group's `#` heading and right below its description, which ends with the range and the default. A switch is `on` or `off` (also yes, no, true, false, 1, 0); a number may carry its unit (`80%`) and a decimal comma. `#` starts a comment anywhere on a line.
-- **A missing file** is written with every value at its default, so there is something to edit. A value the code has and the file lacks, as after an update that adds a cue, takes its default and is appended to the end of the file under its heading, leaving everything the player wrote as it was. A key the file has and the code does not is logged once and left in the file; the model keeps it too, for a front end that rewrites the whole file.
-- **Errors.** A line that cannot be read keeps its value's last setting, is logged and is spoken as one announcement ("Cue settings, lines 3 and 7 not understood."); the other lines apply. A value out of range is clamped and logged, not spoken.
+- **Where.** `a11y.ini` in the folder where the base port keeps its own settings (`pc_get_pref_path`: `%APPDATA%\melee-pc` on Windows, or the folder `MELEE_USER_DIR` names). `MELEE_A11Y_SETTINGS=<path>` names another file; set but empty, it means no file and the defaults, so a run that meant a scratch file and lost its path never falls back to the player's. An older `a11y-cues.ini` beside it is no longer read. `drive.py` and `drive_net.py` give each run a fresh settings folder of its own and name its `a11y.ini` in `MELEE_A11Y_SETTINGS`, so no agent run reads or writes the maintainer's file.
+- **What it looks like.** Plain text, one `key = value` a line, each value under its group's `#` heading and right below its description, which ends with the range and the default. A switch is `on` or `off` (also yes, no, true, false, 1, 0); a number may carry its unit (`80%`) and a decimal comma. `#` starts a comment anywhere on a line. Of two lines with the same key, the last counts.
+- **A missing file** is written with every value at its default, so there is something to edit. A value the code has and the file lacks, as after an update that adds a cue, takes its default and is appended to the end of the file under its heading, leaving everything the player wrote as it was. A key the file has and the code does not is logged once and left in the file.
+- **Errors.** A line that cannot be read keeps its value's last setting, is logged and is spoken as one announcement ("Accessibility settings, lines 3 and 7 not understood."); the other lines apply. A value out of range is clamped and logged, not spoken.
+
+### Saving a menu's change
+
+A front end changes a value through `AccessibilitySettings::set`, never by writing the model and the file itself. The game then edits only that value's line (`ValueModel::edit_text`): the value on the key's last line is replaced, keeping the key as written, its spacing, a comment after it and the line's ending; with no such line, the line and its description go at the end of its group, under its heading. Comments, order, the player's other lines and unknown keys stay as written. The text goes to a temporary file that is renamed over `a11y.ini`, so a crash halfway leaves the old file whole, as the base port saves `launcher.cfg`.
+
+Two orderings matter. The file is read just before the edit, whatever the poll's interval, so a hand edit saved a moment before a menu change is applied and kept rather than lost under the save. And the save leaves the file's stamp and text as the poll last saw them, so the poll that follows the game's own write reads nothing and says nothing.
+
+With no file (`MELEE_A11Y_SETTINGS` empty, or no settings folder) a change applies until the game closes.
 
 ### Live reload
 
-The file is read once as the engine opens, then `poll` looks at it about twice a second from scene entry and, in a match, from the match tick. Only a file whose time or size changed is read, only a text that changed is parsed, and only values that changed are applied and logged. Deleting the file brings every value back to its default and writes the file afresh. A line removed from the file goes back to its default too.
+The file is read once as the game starts, once every feature has registered, then `poll` looks at it about twice a second: at scene entry, in a match from the match tick, and every frame while the launcher or the port menu is open (`pc_a11y_launcher_frame`, `pc_a11y_port_menu_frame`), so an open menu shows a hand edit. Only a file whose time or size changed is read, only a text that changed is parsed, and only values that changed are applied and logged. Deleting the file brings every value back to its default and writes the file afresh. A line removed from the file goes back to its default too.
 
 The spoken error is queued, and speech right at startup or at a scene change can cut it off: the launcher and the screens that speak their opening on their first frame interrupt. `ValueFile::problem` keeps the last read's error so a later moment, such as a match starting, can say it again.
 
@@ -86,7 +104,7 @@ The cues of a match follow one idea: once a tick, read the match into a snapshot
 ```
 gm_RunSimTick --pc_a11y_match_tick--> a11y_game_match_state --> A11yMatchState
                                                                    |
-     cue settings' values -------------------> drivers (pure) <---+
+     the cues' values -----------------------> drivers (pure) <---+
                                                   |
                                                   v
                                  MatchCues: start, set targets or stop each voice
@@ -94,7 +112,7 @@ gm_RunSimTick --pc_a11y_match_tick--> a11y_game_match_state --> A11yMatchState
 
 ### The tick hook
 
-`pc_a11y_match_tick(held_mask)` runs right after each simulation tick, beside the replay recorder (`gameplay-state.md`, "The tick hook"), in every scene that ticks. `CueSystem::tick` reads the snapshot there, handing it what the cues ask of it (the ledge warning's edge offset), and passes it to the cues; the snapshot's casts are safe only there (ADR-0006). While a rollback re-runs ticks it does nothing, so the voices keep their last targets and pick up from the next tick played for the first time. In a match it also polls the cue settings file, and on the first tick of a match it says the settings file's last error again, if there is one: speech at a scene change may have cut it off, and a match is where the player listens.
+`pc_a11y_match_tick(held_mask)` runs right after each simulation tick, beside the replay recorder (`gameplay-state.md`, "The tick hook"), in every scene that ticks. `CueSystem::tick` reads the snapshot there, handing it what the cues ask of it (the ledge warning's edge offset), and passes it to the cues; the snapshot's casts are safe only there (ADR-0006). While a rollback re-runs ticks it does nothing, so the voices keep their last targets and pick up from the next tick played for the first time. In a match it also polls the accessibility settings file, and on the first tick of a match it says the settings file's last error again, if there is one: speech at a scene change may have cut it off, and a match is where the player listens.
 
 ### The match snapshot
 
@@ -111,7 +129,7 @@ gm_RunSimTick --pc_a11y_match_tick--> a11y_game_match_state --> A11yMatchState
 
 ### Drivers
 
-A driver is a pure function from the snapshot and its cue's mapping values to its voice's targets, or to none when the cue is silent (`position_cue.hpp`, `ledge_warning.hpp`); the gap warning's keeps one count beside, its hold (`gap_warning.hpp`). The cues about you share one test of whether you are in play, `you_in_play` (`match_state.hpp`): a match running, not paused, past GO, and you neither knocked out nor waiting to respawn. Tests feed the drivers hand-written snapshots (`test_position_cue.cpp`, `test_gap_warning.cpp`, `test_ledge_warning.cpp`). `MatchCues` (`match_cues.cpp`) owns the rest: it registers each cue's values and voices once, as the cue settings open, and each tick starts a voice that has targets (a start while playing only changes them), and stops one that has none. Its own tests (`test_match_cues.cpp`) render the voices into a buffer.
+A driver is a pure function from the snapshot and its cue's mapping values to its voice's targets, or to none when the cue is silent (`position_cue.hpp`, `ledge_warning.hpp`); the gap warning's keeps one count beside, its hold (`gap_warning.hpp`). The cues about you share one test of whether you are in play, `you_in_play` (`match_state.hpp`): a match running, not paused, past GO, and you neither knocked out nor waiting to respawn. Tests feed the drivers hand-written snapshots (`test_position_cue.cpp`, `test_gap_warning.cpp`, `test_ledge_warning.cpp`). `MatchCues` (`match_cues.cpp`) owns the rest: it registers each cue's values and voices once, as the cue system opens, and each tick starts a voice that has targets (a start while playing only changes them), and stops one that has none. Its own tests (`test_match_cues.cpp`) render the voices into a buffer.
 
 The two position cues share the stage mapping (`StageMapping`, `stage_targets`): pan and pitch from a fighter's place, the same code for both, each cue with its own pitch range in its own group of the file and one pan frame for both (below).
 

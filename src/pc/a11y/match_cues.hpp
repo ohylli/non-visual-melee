@@ -25,8 +25,8 @@ public:
      * pulse fits the same way. */
     static constexpr float kOpponentFastestInterval = 0.2f;
 
-    /* Before the cue settings file is read, so the file gains these
-     * values. */
+    /* Before the accessibility settings file is read, so the file gains
+     * these values. */
     MatchCues(CueSettings& settings, CueEngine& engine);
 
     /* After every simulated tick, not while rollback re-runs ticks: starts,
@@ -94,14 +94,15 @@ private:
     void play(int voice, const std::optional<VoiceTargets>& targets);
 
     CueEngine& m_engine;
-    /* In the order the cue settings file lists them: the values both
-     * position cues share, then each cue registers its group and its
-     * values. */
-    Switch m_pan_to_camera;
+    /* In the order the accessibility settings list them, in the file and
+     * in the menus: each cue registers its group and its values, the value
+     * both position cues share after the second, so its row sits beside
+     * theirs. */
     CueGroup m_your_cue;
     YourValues m_your;
     CueGroup m_opponent_cue;
     OpponentValues m_opponent;
+    Switch m_pan_to_camera;
     CueGroup m_gap_cue;
     GapValues m_gap;
     GapWarning m_gap_warning;

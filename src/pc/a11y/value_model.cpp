@@ -9,6 +9,10 @@
 namespace a11y {
 namespace {
 
+/* Heads the keys a text had that the model does not, when the whole model
+ * is written. */
+constexpr std::string_view kUnknownTitle = "Not known to this version of the game, kept as written";
+
 std::string_view trim(std::string_view text) {
     const char* space = " \t\r\n";
     std::size_t first = text.find_first_not_of(space);
@@ -17,6 +21,14 @@ std::string_view trim(std::string_view text) {
     }
     std::size_t last = text.find_last_not_of(space);
     return text.substr(first, last - first + 1);
+}
+
+/* A line without its ending. */
+std::string_view line_body(std::string_view line) {
+    while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) {
+        line.remove_suffix(1);
+    }
+    return line;
 }
 
 std::string lowered(std::string_view text) {
@@ -114,6 +126,7 @@ Switch ValueGroup::add_switch(const SwitchSpec& spec) {
     named.min = 0.0f;
     named.max = 1.0f;
     named.step = 1.0f;
+    named.shown = spec.shown;
     return Switch(m_model->add(m_index, std::move(named)));
 }
 
@@ -128,7 +141,16 @@ Number ValueGroup::add_number(const NumberSpec& spec) {
     named.max = spec.max;
     named.default_value = std::clamp(spec.default_value, spec.min, spec.max);
     named.step = spec.step;
+    named.shown = spec.shown;
     return Number(m_model->add(m_index, std::move(named)));
+}
+
+const NamedAction& ValueGroup::add_action(const ActionSpec& spec) {
+    const ValueModel::Group& owner = m_model->m_groups[m_index];
+    NamedAction& added = m_model->m_actions.emplace_back(
+        NamedAction{owner.id + "." + spec.name, owner.id, spec.label, spec.description});
+    m_model->m_shown.push_back(ShownRow{nullptr, &added});
+    return added;
 }
 
 ValueGroup ValueModel::group(std::string_view id, std::string_view title) {
@@ -152,6 +174,9 @@ NamedValue& ValueModel::add(std::size_t group, NamedValue named) {
     }
     NamedValue& added = m_values.emplace_back(std::move(named));
     owner.values.push_back(&added);
+    if (added.shown) {
+        m_shown.push_back(ShownRow{&added, nullptr});
+    }
     return added;
 }
 
@@ -159,6 +184,15 @@ NamedValue* ValueModel::find_mutable(std::string_view key) {
     for (NamedValue& named : m_values) {
         if (named.key == key) {
             return &named;
+        }
+    }
+    return nullptr;
+}
+
+const ValueModel::Group* ValueModel::group_of(const NamedValue& named) const {
+    for (const Group& group : m_groups) {
+        if (std::find(group.values.begin(), group.values.end(), &named) != group.values.end()) {
+            return &group;
         }
     }
     return nullptr;
@@ -196,7 +230,7 @@ std::string ValueModel::to_text(bool at_defaults) const {
     }
     std::string text = write(all, at_defaults);
     if (!m_unknown.empty()) {
-        text += "\n# Not known to this version of the game, kept as written\n\n";
+        text += "\n# " + std::string(kUnknownTitle) + "\n\n";
         for (const auto& [key, value] : m_unknown) {
             text += key + " = " + value + "\n";
         }
@@ -225,6 +259,118 @@ std::string ValueModel::write(const std::vector<const NamedValue*>& only, bool a
         }
     }
     return text;
+}
+
+std::string ValueModel::edit_text(std::string_view text, const NamedValue& named) const {
+    const Group* owner = group_of(named);
+    if (owner == nullptr) {
+        return std::string(text);
+    }
+    /* The text cut into lines, each with its own ending, so the ones left
+     * alone go back byte for byte. */
+    std::vector<std::string_view> lines;
+    for (std::string_view rest = text; !rest.empty();) {
+        std::size_t end = rest.find('\n');
+        std::size_t length = end == std::string_view::npos ? rest.size() : end + 1;
+        lines.push_back(rest.substr(0, length));
+        rest.remove_prefix(length);
+    }
+    std::string value = format_value(named);
+    std::size_t found = lines.size();
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+        std::string_view body = line_body(lines[i]);
+        body = body.substr(0, body.find('#'));
+        std::size_t equals = body.find('=');
+        if (equals != std::string_view::npos && trim(body.substr(0, equals)) == named.key) {
+            found = i;
+        }
+    }
+    std::string out;
+    if (found < lines.size()) {
+        /* Only the value is replaced: the key as written, the spaces around
+         * the equals sign, a comment after the value and the line's ending
+         * stay. */
+        std::string_view line = lines[found];
+        std::string_view body = line_body(line);
+        std::size_t start = body.find('=') + 1;
+        while (start < body.size() && (body[start] == ' ' || body[start] == '\t')) {
+            ++start;
+        }
+        std::size_t end = std::min(body.find('#'), body.size());
+        while (end > start && (body[end - 1] == ' ' || body[end - 1] == '\t')) {
+            --end;
+        }
+        /* A line with no value gets spaces of its own. */
+        const bool empty = start == end;
+        std::string edited(line.substr(0, start));
+        if (empty && edited.back() == '=') {
+            edited += ' ';
+        }
+        edited += value;
+        if (empty && end < body.size()) {
+            edited += ' ';
+        }
+        edited += line.substr(end);
+        for (std::size_t i = 0; i < lines.size(); ++i) {
+            out += i == found ? std::string_view(edited) : lines[i];
+        }
+        return out;
+    }
+    /* New lines end as the text's first line does: Notepad may save
+     * \r\n. */
+    const bool crlf = !lines.empty() && lines[0].ends_with("\r\n");
+    auto with_eol = [crlf](std::string_view block) {
+        std::string converted;
+        for (char c : block) {
+            converted += crlf && c == '\n' ? std::string_view("\r\n") : std::string_view(&c, 1);
+        }
+        return converted;
+    };
+    auto heading_title = [](std::string_view line) {
+        std::string_view body = trim(line_body(line));
+        return body.starts_with('#') ? trim(body.substr(1)) : std::string_view();
+    };
+    std::size_t heading = 0;
+    while (heading < lines.size() && heading_title(lines[heading]) != owner->title) {
+        ++heading;
+    }
+    std::string entry = "\n" + describe(named) + format_line(named, named.value);
+    if (heading == lines.size()) {
+        out = std::string(text);
+        if (!out.empty() && out.back() != '\n') {
+            out += with_eol("\n");
+        }
+        return out + with_eol("\n# " + owner->title + "\n" + entry);
+    }
+    /* The group's end: the next heading of another group, or the end. */
+    std::size_t next = heading + 1;
+    for (; next < lines.size(); ++next) {
+        std::string_view title = heading_title(lines[next]);
+        bool group_heading = !title.empty() && title == kUnknownTitle;
+        for (const Group& group : m_groups) {
+            group_heading = group_heading || (!title.empty() && &group != owner &&
+                                                 title == std::string_view(group.title));
+        }
+        if (group_heading) {
+            break;
+        }
+    }
+    /* After the group's last line that is not blank. */
+    std::size_t after = next;
+    while (after > heading + 1 && trim(line_body(lines[after - 1])).empty()) {
+        --after;
+    }
+    for (std::size_t i = 0; i < after; ++i) {
+        out += lines[i];
+    }
+    if (!out.empty() && out.back() != '\n') {
+        out += with_eol("\n");
+    }
+    out += with_eol(entry);
+    for (std::size_t i = after; i < lines.size(); ++i) {
+        out += lines[i];
+    }
+    return out;
 }
 
 TextRead ValueModel::read_text(std::string_view text) {

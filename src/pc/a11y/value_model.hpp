@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* The fork's model of named values, which holds the cue settings (primer
- * docs/a11y/cues.md, "Cue settings"): named values in groups, each with a
- * key, a default, a range, a unit and a one-line description, enough for a
- * front end to draw a switch or a slider for it and for the model's file to
- * explain itself. Features register
- * their own values and read them through typed handles; the model knows
- * nothing about any feature.
+/* The fork's model of named values, which holds the accessibility settings
+ * (primer docs/a11y/cues.md, "Accessibility settings"): named values in
+ * groups, each with a key, a default, a range, a unit and a one-line
+ * description, enough for a front end to draw a switch or a slider for it
+ * and for the model's file to explain itself. A value registered as shown is
+ * a setting, a row of the menus; the rest are tuning values, in the file
+ * alone. Features register their own values and read them through typed
+ * handles; the model knows nothing about any feature.
  *
  * The text format is part of the model, so every front end writing a file
  * writes the same one: `key = value` a line, grouped under `#` headings,
@@ -37,6 +38,22 @@ struct NamedValue {
     float max = 1.0f;
     float step = 1.0f; /* a slider's step; the file takes any value in range */
     float value = 0.0f;
+    bool shown = false; /* a setting, a row of the menus; else a tuning value */
+};
+
+/* A row of the menus that acts rather than holds a value: a button. Never
+ * in the file. */
+struct NamedAction {
+    std::string key;   /* "gap_warning.preview": the group's id, a dot, the name */
+    std::string group; /* the group's id: for a cue's Preview, the cue's id */
+    std::string label; /* "Preview gap warning" */
+    std::string description;
+};
+
+/* One row of the menus, in registration order: a value or an action. */
+struct ShownRow {
+    const NamedValue* value = nullptr;   /* a switch or a slider, by its kind */
+    const NamedAction* action = nullptr; /* a button */
 };
 
 struct SwitchSpec {
@@ -44,6 +61,7 @@ struct SwitchSpec {
     std::string label;
     std::string description;
     bool default_on = true;
+    bool shown = false;
 };
 
 struct NumberSpec {
@@ -55,6 +73,13 @@ struct NumberSpec {
     float min = 0.0f;
     float max = 1.0f;
     float step = 1.0f;
+    bool shown = false;
+};
+
+struct ActionSpec {
+    std::string name; /* the key's last part: "preview" */
+    std::string label;
+    std::string description;
 };
 
 /* Typed handles: read a value without looking up its key. Valid for the
@@ -82,12 +107,15 @@ private:
 class ValueModel;
 
 /* Registers values under one group: its id prefixes their keys, its title
- * heads them in the file and, later, in the port menu. */
+ * heads them in the file. The menus have no headings: each shown row's label
+ * names what it is about. */
 class ValueGroup {
 public:
     ValueGroup(ValueModel& model, std::size_t index) : m_model(&model), m_index(index) {}
     Switch add_switch(const SwitchSpec& spec);
     Number add_number(const NumberSpec& spec);
+    /* A button, always shown. */
+    const NamedAction& add_action(const ActionSpec& spec);
 
 private:
     ValueModel* m_model;
@@ -129,6 +157,10 @@ public:
     ValueGroup group(std::string_view id, std::string_view title);
     const std::vector<Group>& groups() const { return m_groups; }
     const NamedValue* find(std::string_view key) const;
+    /* The menus' rows: the shown values and the actions, in the order they
+     * were registered, which is the file's order too. A front end walks
+     * this list and needs none of its own. */
+    const std::vector<ShownRow>& shown() const { return m_shown; }
 
     /* A front end's change: held to the range. True when the value
      * changed. */
@@ -144,6 +176,13 @@ public:
      * defaults, a line that cannot be read leaves its value as it was,
      * a value out of range is clamped. */
     TextRead read_text(std::string_view text);
+    /* A text with one value changed, as the file is saved after a front
+     * end's change: the value on the key's last line (the one read_text
+     * takes) replaced by its current value, or, with no such line, the line
+     * and its description added at the end of its group, under the group's
+     * heading, or at the text's end with its heading when that is missing
+     * too. Everything else stays as written. */
+    std::string edit_text(std::string_view text, const NamedValue& named) const;
 
     /* Keys a text had that the model does not, with their values as
      * written, kept so a front end that rewrites the file keeps them too. */
@@ -153,10 +192,13 @@ private:
     friend class ValueGroup;
     NamedValue& add(std::size_t group, NamedValue named);
     NamedValue* find_mutable(std::string_view key);
+    const Group* group_of(const NamedValue& named) const;
     std::string write(const std::vector<const NamedValue*>& only, bool at_defaults) const;
 
     std::deque<NamedValue> m_values; /* a deque, so handles stay valid */
+    std::deque<NamedAction> m_actions;
     std::vector<Group> m_groups;
+    std::vector<ShownRow> m_shown;
     std::map<std::string, std::string> m_unknown;
 };
 
