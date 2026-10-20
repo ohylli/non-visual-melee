@@ -24,9 +24,10 @@ public:
     /* Opens the engine, not on first use: opening the stream takes part of a
      * frame (ADR-0005). Then every cue registers its values in the
      * accessibility settings, which are read after it, and the engine gets
-     * their levels at the defaults. Null while cues are off, and when the
-     * output could not open, which is logged and said. master_volume is the
-     * launcher's, kept from before. */
+     * their levels at the defaults. Opened whatever the switches say, which
+     * mute it rather than close it, so they are live. When the output could
+     * not open, which is logged, the cues run unheard and sounding() says
+     * so. master_volume is the launcher's, kept from before. */
     static std::unique_ptr<CueSystem> open(
         const Config& config, Speech& speech, AccessibilitySettings& settings, float master_volume);
     ~CueSystem();
@@ -40,6 +41,10 @@ public:
     /* Values of the accessibility settings changed: the levels they make up
      * go to the engine. */
     void settings_changed(const std::vector<const NamedValue*>& changed);
+    /* The output opened: false when the cues run unheard. */
+    bool sounding() const { return m_output != nullptr; }
+    /* Whether Accessibility lets the cues sound (Switches::cues_allowed). */
+    void set_allowed(bool allowed);
     /* The launcher's master volume with mute applied. */
     void set_master_volume(float volume);
     /* After every simulated tick, not while rollback re-runs ticks: reads

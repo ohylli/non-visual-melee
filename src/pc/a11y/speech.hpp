@@ -14,22 +14,24 @@ namespace a11y {
 enum class Mode { interrupt, queue };
 
 struct Config {
-    bool enabled = true; /* MELEE_A11Y: the accessibility switch */
-    bool log = true;     /* MELEE_A11Y_LOG: the speech log, a developer switch */
+    /* Whether speech is on from init(), until set_on says otherwise: the
+     * game starts it off and the switches turn it on once the accessibility
+     * settings are read (switches.hpp). */
+    bool speech = true;
+    bool log = true; /* MELEE_A11Y_LOG: the speech log, a developer switch */
     /* MELEE_A11Y_SCREEN_READER=0: accessibility stays on, so every feature
      * acts as it does for a player, but the screen reader is never started
      * and announcements are only logged. For agent runs that check what the
      * switch changes (the launcher's line reading) without talking over the
      * maintainer's screen reader. */
     bool screen_reader = true;
-    /* Steering with the D-pad: follows the accessibility switch;
-     * MELEE_A11Y_STEER=1 turns it on by itself, for agent runs with speech
-     * off. */
-    bool steer = true;
-    /* The cue engine (docs/a11y/cues.md): follows the accessibility switch;
-     * MELEE_A11Y_CUES=1 turns it on by itself, for agent runs with speech
-     * off, and MELEE_A11Y_CUES=0 off. Off, the engine never opens. */
-    bool cues = true;
+    /* The switches' overrides for the run (switches.hpp): MELEE_A11Y for
+     * Accessibility, MELEE_A11Y_STEER for Steering and MELEE_A11Y_CUES for
+     * Cues, "0" off and anything else on; unset or empty for none, so the
+     * accessibility settings decide. */
+    std::optional<bool> accessibility;
+    std::optional<bool> steering;
+    std::optional<bool> cues;
     /* MELEE_A11Y_CUE_DUMP and MELEE_A11Y_CUE_TRACE: files for the cue
      * engine's mix and its voices' targets; empty for none. */
     std::string cue_dump;
@@ -41,8 +43,7 @@ struct Config {
     std::optional<std::string> settings_file;
 };
 
-/* The only place the configuration is read from; swap its body when fork
- * settings get their own storage. */
+/* The developer switches and the overrides, from the environment. */
 Config config_from_environment();
 
 /* The speech log switch, read once, for features that log lines of their own
@@ -55,8 +56,9 @@ struct Announcement {
 };
 
 /* Speech: takes announcements from every feature, writes the speech log and
- * honours the accessibility switch. Game thread only: it remembers the thread
- * init ran on and drops calls from any other. */
+ * honours its switch, which the switches set (switches.hpp). Game thread
+ * only: it remembers the thread init ran on and drops calls from any
+ * other. */
 class Speech {
 public:
     Speech(Config config, std::unique_ptr<ScreenReaderBridge> bridge);
@@ -64,14 +66,19 @@ public:
     void init();
     void shutdown();
     /* Speaks exactly what it is given, every time: no duplicate suppression.
-     * text is UTF-8. */
+     * text is UTF-8. Off, it is only logged, marked (off). */
     void announce(std::string_view text, Mode mode);
     /* The most recent announcement, spoken or not. For a later "repeat last"
      * key. */
     const Announcement& last() const { return m_last; }
-    /* The accessibility switch: off, nothing is spoken, and features that
-     * take keys for speech leave them alone. */
-    bool enabled() const { return m_config.enabled; }
+    /* Whether speech is on: off, nothing is spoken, and features that take
+     * keys for speech leave them alone. */
+    bool enabled() const { return m_on; }
+    /* The switches' decision, live. An announcement made before turning it
+     * off has reached the screen reader, which speaks it out: nothing sent
+     * after can cut it off. The screen reader is started the first time
+     * speech is on, so a run that never turns it on never starts it. */
+    void set_on(bool on);
     bool initialized_on_this_thread() const;
 
 private:
@@ -79,8 +86,13 @@ private:
      * off. */
     void log(const char* fmt, ...) const __attribute__((format(printf, 2, 3)));
 
+    /* The screen reader the first time speech is on. */
+    void start_bridge();
+
     Config m_config;
     std::unique_ptr<ScreenReaderBridge> m_bridge;
+    bool m_on;
+    bool m_bridge_started = false; /* start_bridge has run */
     bool m_bridge_initialized = false;
     std::thread::id m_thread;
     Announcement m_last;

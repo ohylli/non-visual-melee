@@ -39,6 +39,9 @@ public:
     /* Whether the D-pad steers the hand, rather than doing what the game
      * or the base port would make of it. */
     bool steers() const { return m_steer; }
+    /* The Steering switch, live: off mid-glide, the glide ends there and
+     * the stick goes back to rest at the next publish. */
+    void set_steering(bool on);
 
 private:
     bool may_steer(const A11yCssState& state) const;

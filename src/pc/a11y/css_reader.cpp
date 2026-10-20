@@ -38,6 +38,13 @@ void CssReader::frame(const A11yCssScreen& screen, int local_port, bool online) 
     m_steerer.reported();
 }
 
+void CssReader::set_steering(bool on) {
+    if (!on && m_steer) {
+        m_steerer.switch_off("steering was switched off");
+    }
+    m_steer = on;
+}
+
 void CssReader::hand(int hand, const A11yCssHandReport& report) {
     m_reports[hand] = report;
     if (m_steer && m_have_state && hand == m_state.local_slot) {

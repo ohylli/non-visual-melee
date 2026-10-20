@@ -51,6 +51,11 @@ public:
     /* Only the levels that these changed values make up. */
     void apply(CueEngine& engine, const std::vector<const NamedValue*>& changed) const;
 
+    /* Whether Accessibility lets the cues sound (Switches::cues_allowed):
+     * off mutes the mix whatever the Cues switch says, which keeps its
+     * value. Call apply afterwards. */
+    void set_allowed(bool allowed) { m_allowed = allowed; }
+
     CueLevel mix_level() const;
     const std::vector<CueValues>& cues() const { return m_cues; }
 
@@ -58,6 +63,7 @@ private:
     ValueModel& m_model;
     Switch m_on;
     Number m_volume;
+    bool m_allowed = true;
     std::vector<CueValues> m_cues;
 };
 

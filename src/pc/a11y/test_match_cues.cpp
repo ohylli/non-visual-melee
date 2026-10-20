@@ -14,6 +14,8 @@
 #include "cue_engine.hpp"
 #include "cue_settings.hpp"
 #include "match_cues.hpp"
+#include "speech.hpp"
+#include "switches.hpp"
 #include "test_match_snapshot.hpp"
 #include "value_model.hpp"
 #include <algorithm>
@@ -163,17 +165,33 @@ void the_gap_warning_registers_after_the_position_cues() {
     assert(f.model.find("gap_warning.on")->description == "Turns the gap warning on or off.");
 }
 
-/* The menus' rows, as the spec's Rows table has them after the switches
- * the cues do not own. */
-void the_cues_rows_are_the_menus_rows() {
-    Fixture f;
+/* A screen reader that hears nothing, for the switches' speech. */
+class NoBridge final : public a11y::ScreenReaderBridge {
+public:
+    std::string init() override { return ""; }
+    void shutdown() override {}
+    std::string output(std::string_view, bool) override { return ""; }
+};
+
+/* The menus' rows, as the spec's Rows table has them, registered as the
+ * game registers them: the switches first, then the cues. */
+void the_menus_rows_are_the_specs_rows() {
+    a11y::Speech speech{a11y::Config{false, false}, std::make_unique<NoBridge>()};
+    a11y::CueEngine engine{a11y::CueEngineOptions{false, "", ""}};
+    a11y::ValueModel model;
+    a11y::Switches switches{model, speech, false};
+    a11y::CueSettings cues{model};
+    a11y::MatchCues match_cues{cues, engine};
     std::vector<std::string> rows;
-    for (const a11y::ShownRow& row : f.model.shown()) {
+    for (const a11y::ShownRow& row : model.shown()) {
         rows.push_back(row.value != nullptr ?
                            row.value->key + " " + row.value->label :
                            "preview " + row.action->group + " " + row.action->label);
     }
     assert((rows == std::vector<std::string>{
+                        "accessibility.on Accessibility",
+                        "speech.on Speech",
+                        "steering.on Steering",
                         "cues.on Cues",
                         "cues.volume Cue volume",
                         "your_position.on Your position cue",
@@ -470,7 +488,7 @@ extern "C" void pc_log_line(const char* fmt, ...) {
 int main() {
     both_cues_register_and_fit();
     the_gap_warning_registers_after_the_position_cues();
-    the_cues_rows_are_the_menus_rows();
+    the_menus_rows_are_the_specs_rows();
     the_gap_warning_starts_holds_and_stops();
     the_gap_tone_loops_without_a_seam();
     the_ledge_warning_registers_last();

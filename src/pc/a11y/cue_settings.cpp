@@ -70,7 +70,7 @@ CueGroup CueSettings::add_cue(
 }
 
 CueLevel CueSettings::mix_level() const {
-    return CueLevel{m_on.on(), m_volume.value() / 100.0f, 1.0f};
+    return CueLevel{m_allowed && m_on.on(), m_volume.value() / 100.0f, 1.0f};
 }
 
 void CueSettings::apply(CueEngine& engine) const {

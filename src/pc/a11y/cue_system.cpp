@@ -20,9 +20,6 @@ CueSystem::~CueSystem() = default;
 
 std::unique_ptr<CueSystem> CueSystem::open(
     const Config& config, Speech& speech, AccessibilitySettings& settings, float master_volume) {
-    if (!config.cues) {
-        return nullptr;
-    }
     std::unique_ptr<CueSystem> system(new CueSystem(speech, settings));
     CueEngineOptions options;
     options.log = config.log;
@@ -32,12 +29,8 @@ std::unique_ptr<CueSystem> CueSystem::open(
     system->m_engine->set_master_volume(master_volume);
     std::string why;
     system->m_output = CueOutput::open(*system->m_engine, config.log, why);
-    if (system->m_output == nullptr) {
-        if (config.log) {
-            pc_log_line("[a11y] cue engine could not start: %s", why.c_str());
-        }
-        speech.announce("Audio cues could not start.", Mode::queue);
-        return nullptr;
+    if (system->m_output == nullptr && config.log) {
+        pc_log_line("[a11y] cue engine could not start: %s", why.c_str());
     }
     system->m_cue_settings = std::make_unique<CueSettings>(settings.model());
     /* Each cue registers its values here, before the file is read, so a
@@ -64,6 +57,11 @@ void CueSystem::scene_entered() {
     /* Before the hook polls the settings file, so an error it finds now
      * counts as said in this scene. */
     m_problems_at_scene = m_settings.problems_spoken();
+}
+
+void CueSystem::set_allowed(bool allowed) {
+    m_cue_settings->set_allowed(allowed);
+    m_engine->set_mix_level(m_cue_settings->mix_level());
 }
 
 void CueSystem::set_master_volume(float volume) {

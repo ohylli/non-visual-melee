@@ -103,9 +103,34 @@ void disabled_never_touches_bridge() {
     speech.announce("hello", a11y::Mode::interrupt);
     speech.shutdown();
     assert(calls.inits == 0 && calls.shutdowns == 0 && calls.outputs.empty());
-    assert(logged("[a11y] speech off (MELEE_A11Y=0)"));
     assert(logged("[a11y] speak interrupt (off): \"hello\""));
     assert(logged("[a11y] speech shutdown"));
+}
+
+/* The switches turn speech on and off while the game runs: the screen
+ * reader starts the first time speech is on, and once only; what was sent
+ * before turning off was sent, and nothing after. */
+void the_switch_is_live() {
+    BridgeCalls calls;
+    a11y::Speech speech = make_speech(calls, a11y::Config{false, true});
+    speech.set_on(true); /* before init: started by init */
+    speech.set_on(false);
+    speech.init();
+    assert(calls.inits == 0 && !speech.enabled());
+    speech.set_on(true);
+    assert(calls.inits == 1 && speech.enabled());
+    assert(logged("[a11y] speech backend: Fake"));
+    speech.announce("Speech off", a11y::Mode::interrupt);
+    speech.set_on(false);
+    speech.announce("Off", a11y::Mode::interrupt);
+    assert(calls.outputs.size() == 1 && calls.outputs[0].text == "Speech off");
+    assert(logged("[a11y] speak interrupt (off): \"Off\""));
+    assert(speech.last().text == "Off");
+    speech.set_on(true);
+    speech.announce("Speech on", a11y::Mode::interrupt);
+    assert(calls.inits == 1 && calls.outputs.size() == 2);
+    speech.shutdown();
+    assert(calls.shutdowns == 1);
 }
 
 /* Accessibility stays on, so features act as for a player, but the screen
@@ -210,6 +235,7 @@ int main() {
     interrupt_and_queue_reach_bridge_in_order();
     log_lines_have_the_documented_format();
     disabled_never_touches_bridge();
+    the_switch_is_live();
     screen_reader_switch_keeps_accessibility_on();
     log_switch_silences_log_only();
     no_backend_still_calls_bridge();

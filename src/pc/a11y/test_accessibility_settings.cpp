@@ -606,6 +606,92 @@ void the_settings_tell_their_listener_every_change() {
     assert(bare.problem().empty() && spoken.empty());
 }
 
+/* An environment variable's override holds its value for the run and is
+ * never written: not when the file is first written, not when a hand edit
+ * is read, not when another value is saved. A hand edit of the overridden
+ * key waits under it; a menu's change lifts it and is saved. */
+void an_override_holds_for_the_run_and_is_never_written() {
+    std::vector<std::string> spoken;
+    a11y::Speech speech{a11y::Config{true, true}, std::make_unique<FakeBridge>(spoken)};
+    speech.init();
+    const fs::path path = s_dir / "override.ini";
+    fs::remove(path);
+    s_lines.clear();
+    a11y::AccessibilitySettings settings(speech, path.string(), true);
+    CueSettings cues(settings.model());
+    std::vector<std::string> heard;
+    settings.listen([&heard](const std::vector<const a11y::NamedValue*>& changed) {
+        for (const a11y::NamedValue* named : changed) {
+            heard.push_back(named->key + " = " + a11y::format_value(*named));
+        }
+    });
+    const a11y::NamedValue& on = *settings.model().find("cues.on");
+    assert(settings.override_value("cues.on", 0.0f, "MELEE_A11Y_CUES=0"));
+    assert(!settings.override_value("cues.nothing", 0.0f, "nothing"));
+    assert(count_logged("[a11y] accessibility settings: cues.on = off for this run "
+                        "(MELEE_A11Y_CUES=0), not saved") == 1);
+    Clock::time_point now = Clock::now();
+    settings.load(now);
+    assert(on.value == 0.0f && on.overridden && heard.empty());
+    assert(read_file(path).find("cues.on = on\n") != std::string::npos);
+    assert(!cues.mix_level().on);
+
+    /* Another value saved: the overridden line stays as the file had it. */
+    assert(settings.set(*settings.model().find("cues.volume"), 40.0f, now));
+    std::string text = read_file(path);
+    assert(text.find("cues.on = on\n") != std::string::npos);
+    assert(text.find("cues.volume = 40\n") != std::string::npos);
+
+    /* A hand edit elsewhere is read; the override holds. */
+    text.replace(text.find("cues.volume = 40"), 16, "cues.volume = 30");
+    edit_file(path, text);
+    now += ValueFile::kPollInterval * 2;
+    settings.poll(now);
+    assert((heard == std::vector<std::string>{"cues.volume = 40", "cues.volume = 30"}));
+    assert(on.value == 0.0f);
+    /* A hand edit of the overridden key waits under it, logged. */
+    text = read_file(path);
+    text.replace(text.find("cues.on = on"), 12, "cues.on = off");
+    edit_file(path, text);
+    now += ValueFile::kPollInterval * 2;
+    settings.poll(now);
+    assert(heard.size() == 2 && on.value == 0.0f && on.saved == 0.0f);
+    text = read_file(path);
+    text.replace(text.find("cues.on = off"), 13, "cues.on = on");
+    edit_file(path, text);
+    now += ValueFile::kPollInterval * 2;
+    settings.poll(now);
+    assert(heard.size() == 2 && on.value == 0.0f && on.saved == 1.0f);
+    assert(count_logged("[a11y] accessibility settings: cues.on = on in the file, held at off "
+                        "for this run") == 1);
+
+    /* A menu's change lifts it, and is saved; the file leads again. */
+    assert(settings.set(on, 1.0f, now));
+    assert(!on.overridden && on.value == 1.0f && heard.back() == "cues.on = on");
+    assert(count_logged("[a11y] accessibility settings: saved cues.on = on") == 1);
+    assert(read_file(path).find("cues.on = on\n") != std::string::npos);
+    text = read_file(path);
+    text.replace(text.find("cues.on = on"), 12, "cues.on = off");
+    edit_file(path, text);
+    now += ValueFile::kPollInterval * 2;
+    settings.poll(now);
+    assert(on.value == 0.0f && heard.back() == "cues.on = off");
+
+    /* An override to the value the file has, then a menu's change back to
+     * it: the file's value differs from neither, so nothing to save. */
+    ValueModel model;
+    a11y::Switch flag = model.group("x", "X").add_switch(a11y::SwitchSpec{"on", "X", "", true});
+    assert(!model.override_value(flag.named(), 1.0f));
+    assert(flag.named().overridden && !model.set(flag.named(), 1.0f));
+    assert(!flag.named().overridden);
+    /* Overridden off over a file at on: setting off keeps the game's value
+     * and still counts as a change, since the file holds on. */
+    model.override_value(flag.named(), 0.0f);
+    assert(model.set(flag.named(), 0.0f) && flag.named().value == 0.0f);
+    assert(model.to_text().find("x.on = off\n") != std::string::npos);
+    assert(spoken.empty());
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -637,6 +723,7 @@ int main(int argc, char** argv) {
     a_hand_edit_not_yet_polled_survives_a_menu_change();
     the_shown_rows_list_in_order_with_each_cues_three();
     the_settings_tell_their_listener_every_change();
+    an_override_holds_for_the_run_and_is_never_written();
     std::cout << "accessibility_settings: all tests passed\n";
     return 0;
 }

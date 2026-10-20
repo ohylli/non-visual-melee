@@ -69,6 +69,7 @@ public:
     }
 
     Rml::ElementDocument& document() { return *m_document; }
+    a11y::Speech& speech() { return m_speech; }
 
     Rml::Element* element(const char* id) {
         Rml::Element* e = m_document->GetElementById(id);
@@ -705,6 +706,44 @@ void speech_off_leaves_the_keys_alone(Rml::Context& context) {
     assert(menu.focused() == menu.element("net-target"));
 }
 
+/* Speech switched off and on again, as the switches do it (switches.hpp):
+ * what the page did meanwhile goes unsaid, and once speech is back the
+ * focused row is announced again, queued behind the switch's own words. */
+void speech_back_on_announces_the_focused_row(Rml::Context& context) {
+    Menu menu(context);
+    menu.open_rows(0);
+    menu.step(1);
+    menu.frame();
+    menu.take();
+    menu.speech().announce("Speech off", a11y::Mode::interrupt);
+    menu.speech().set_on(false);
+    menu.label("sync", "Off");
+    menu.frame();
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt("Speech off")}));
+    menu.speech().set_on(true);
+    menu.speech().announce("Speech on", a11y::Mode::interrupt);
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt("Speech on"),
+                              queue("Vertical sync, Off, Left and right to change")}));
+    menu.frame();
+    assert(menu.take() == none());
+    /* Back on while the menu is closed: its next opening says where it is,
+     * once. */
+    menu.toggle();
+    menu.frame();
+    menu.take();
+    menu.speech().set_on(false);
+    menu.frame();
+    menu.speech().set_on(true);
+    menu.frame();
+    menu.toggle();
+    menu.frame();
+    assert(menu.take().size() == 1);
+    menu.frame();
+    assert(menu.take() == none());
+}
+
 /* Every control in the menu, on every page, has a name. Guards against a
  * base merge adding a row the reader cannot name. */
 void every_control_has_a_name(Rml::Context& context) {
@@ -785,6 +824,7 @@ int main(int argc, char** argv) {
     update_check(*context);
     tab_becomes_down(*context);
     speech_off_leaves_the_keys_alone(*context);
+    speech_back_on_announces_the_focused_row(*context);
     every_control_has_a_name(*context);
     other_documents_are_ignored(*context);
     unloading_stops_the_reader(*context);

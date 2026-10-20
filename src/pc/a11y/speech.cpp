@@ -16,6 +16,15 @@ bool env_switch(const char* name) {
     return value == nullptr || std::strcmp(value, "0") != 0;
 }
 
+/* An override: unset or empty for none, "0" off, anything else on. */
+std::optional<bool> env_override(const char* name) {
+    const char* value = std::getenv(name);
+    if (value == nullptr || value[0] == '\0') {
+        return std::nullopt;
+    }
+    return std::strcmp(value, "0") != 0;
+}
+
 const char* mode_name(Mode mode) {
     return mode == Mode::interrupt ? "interrupt" : "queue";
 }
@@ -28,13 +37,11 @@ int text_length(std::string_view text) {
 
 Config config_from_environment() {
     Config config;
-    config.enabled = env_switch("MELEE_A11Y");
     config.log = env_switch("MELEE_A11Y_LOG");
     config.screen_reader = env_switch("MELEE_A11Y_SCREEN_READER");
-    const char* steer = std::getenv("MELEE_A11Y_STEER");
-    config.steer = config.enabled || (steer != nullptr && std::strcmp(steer, "1") == 0);
-    const char* cues = std::getenv("MELEE_A11Y_CUES");
-    config.cues = cues == nullptr ? config.enabled : std::strcmp(cues, "0") != 0;
+    config.accessibility = env_override("MELEE_A11Y");
+    config.steering = env_override("MELEE_A11Y_STEER");
+    config.cues = env_override("MELEE_A11Y_CUES");
     const char* dump = std::getenv("MELEE_A11Y_CUE_DUMP");
     config.cue_dump = dump != nullptr ? dump : "";
     const char* trace = std::getenv("MELEE_A11Y_CUE_TRACE");
@@ -52,14 +59,30 @@ bool log_enabled() {
 }
 
 Speech::Speech(Config config, std::unique_ptr<ScreenReaderBridge> bridge)
-    : m_config(config), m_bridge(std::move(bridge)) {}
+    : m_config(config), m_bridge(std::move(bridge)), m_on(config.speech) {}
 
 void Speech::init() {
     m_thread = std::this_thread::get_id();
-    if (!m_config.enabled) {
-        log("speech off (MELEE_A11Y=0)");
+    if (m_on) {
+        start_bridge();
+    }
+}
+
+void Speech::set_on(bool on) {
+    if (on == m_on) {
         return;
     }
+    m_on = on;
+    if (on && m_thread != std::thread::id()) {
+        start_bridge();
+    }
+}
+
+void Speech::start_bridge() {
+    if (m_bridge_started) {
+        return;
+    }
+    m_bridge_started = true;
     if (!m_config.screen_reader) {
         log("screen reader off (MELEE_A11Y_SCREEN_READER=0)");
         return;
@@ -94,7 +117,7 @@ void Speech::announce(std::string_view text, Mode mode) {
         return;
     }
     m_last = Announcement{std::string(text), mode};
-    if (!m_config.enabled) {
+    if (!m_on) {
         log("speak %s (off): \"%.*s\"", mode_name(mode), text_length(text), text.data());
         return;
     }

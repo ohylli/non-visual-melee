@@ -219,6 +219,9 @@ def main():
     ap.add_argument("--base-b", metavar="BUILD_DIR",
                     help="run instance b from a base port build directory, such as a worktree's build; "
                          "it uses the maintainer's own settings folder")
+    ap.add_argument("--muted", action="store_true",
+                    help="accessibility on in both, as for a player, with nothing sent to the screen "
+                         "reader, as drive.py --muted")
     ap.add_argument("--disc", default="melee.iso", help="disc image, relative to the repo root")
     ap.add_argument("--all", action="store_true", help="print every game line, not just [a11y] and boot scene")
     ap.add_argument("--timeout", type=float, default=30, help="default wait timeout in seconds")

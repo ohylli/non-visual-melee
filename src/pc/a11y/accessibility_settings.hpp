@@ -12,6 +12,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace a11y {
@@ -38,6 +39,12 @@ public:
     /* Told every value that changes after load, whoever changed it. */
     void listen(SettingsListener listener) { m_listener = std::move(listener); }
 
+    /* An environment variable's override, after the value is registered and
+     * before load(): the value holds for the run whatever the file says, and
+     * the file keeps its own, never written over (ValueModel::override_value).
+     * A front end's change lifts it. why names the variable for the log:
+     * "MELEE_A11Y=0". False for an unknown key. */
+    bool override_value(std::string_view key, float value, const std::string& why);
     /* Once, after every value is registered: writes or completes the file
      * and applies it (ValueFile::load). */
     void load(Clock::time_point now);

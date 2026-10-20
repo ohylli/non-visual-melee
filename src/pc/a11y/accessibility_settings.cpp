@@ -25,6 +25,20 @@ AccessibilitySettings::AccessibilitySettings(Speech& speech, const std::string& 
     }
 }
 
+bool AccessibilitySettings::override_value(
+    std::string_view key, float value, const std::string& why) {
+    const NamedValue* named = m_model.find(key);
+    if (named == nullptr) {
+        return false;
+    }
+    m_model.override_value(*named, value);
+    if (m_log) {
+        pc_log_line("[a11y] accessibility settings: %s = %s for this run (%s), not saved",
+            named->key.c_str(), format_value(*named).c_str(), why.c_str());
+    }
+    return true;
+}
+
 void AccessibilitySettings::load(Clock::time_point now) {
     if (m_file != nullptr) {
         changed(m_file->load(now));

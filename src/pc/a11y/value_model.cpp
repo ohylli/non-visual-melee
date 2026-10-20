@@ -109,6 +109,20 @@ bool read_number(const NamedValue& named, std::string_view text, float& out) {
     return true;
 }
 
+/* A value held to its range and, for a toggle, to 0 or 1. */
+float held(const NamedValue& named, float value) {
+    value = std::clamp(value, named.min, named.max);
+    if (named.kind == ValueKind::toggle) {
+        value = value != 0.0f ? 1.0f : 0.0f;
+    }
+    return value;
+}
+
+/* The value as the file holds it: under an override, the file's own. */
+float file_value(const NamedValue& named) {
+    return named.overridden ? named.saved : named.value;
+}
+
 }  // namespace
 
 std::string format_value(const NamedValue& named) {
@@ -212,15 +226,26 @@ bool ValueModel::set(const NamedValue& named, float value) {
     if (target == nullptr || !std::isfinite(value)) {
         return false;
     }
-    value = std::clamp(value, target->min, target->max);
-    if (target->kind == ValueKind::toggle) {
-        value = value != 0.0f ? 1.0f : 0.0f;
-    }
-    if (value == target->value) {
+    value = held(*target, value);
+    bool changed = value != target->value || value != file_value(*target);
+    target->overridden = false;
+    target->value = value;
+    return changed;
+}
+
+bool ValueModel::override_value(const NamedValue& named, float value) {
+    NamedValue* target = find_mutable(named.key);
+    if (target == nullptr || !std::isfinite(value)) {
         return false;
     }
+    if (!target->overridden) {
+        target->saved = target->value;
+        target->overridden = true;
+    }
+    value = held(*target, value);
+    bool changed = value != target->value;
     target->value = value;
-    return true;
+    return changed;
 }
 
 std::string ValueModel::to_text(bool at_defaults) const {
@@ -275,7 +300,9 @@ std::string ValueModel::edit_text(std::string_view text, const NamedValue& named
         lines.push_back(rest.substr(0, length));
         rest.remove_prefix(length);
     }
-    std::string value = format_value(named);
+    const float saved = file_value(named);
+    std::string value =
+        named.kind == ValueKind::toggle ? format_amount(named, saved) : format_number(saved);
     std::size_t found = lines.size();
     for (std::size_t i = 0; i < lines.size(); ++i) {
         std::string_view body = line_body(lines[i]);
@@ -417,8 +444,8 @@ TextRead ValueModel::read_text(std::string_view text) {
             read.bad_lines.push_back(number);
             read.notes.push_back("line " + std::to_string(number) +
                                  " not understood: " + std::string(trim(raw)) + "; " + named->key +
-                                 " stays " + format_amount(*named, named->value));
-            given.try_emplace(named, named->value);
+                                 " stays " + format_amount(*named, file_value(*named)));
+            given.try_emplace(named, file_value(*named));
             continue;
         }
         float clamped = std::clamp(parsed, named->min, named->max);
@@ -436,6 +463,16 @@ TextRead ValueModel::read_text(std::string_view text) {
             value = found->second;
         } else {
             read.missing.push_back(&named);
+        }
+        if (named.overridden) {
+            /* The file's value waits under the override, unannounced. */
+            if (value != named.saved) {
+                read.notes.push_back(named.key + " = " + format_amount(named, value) +
+                                     " in the file, held at " + format_amount(named, named.value) +
+                                     " for this run");
+            }
+            named.saved = value;
+            continue;
         }
         if (value != named.value) {
             named.value = value;

@@ -228,7 +228,10 @@ protected:
     /* A new control gets its focus announcement, after `prefix`, interrupting,
      * with how to move when `explain`; a new value on the same one gets the
      * value alone. Focus parked off any control keeps the last control, so
-     * returning to it is silent. Either change ends reading the page's lines. */
+     * returning to it is silent. Either change ends reading the page's lines.
+     * Speech back on since the last call (the Speech or Accessibility switch,
+     * switches.hpp) announces the known control again, queued behind the
+     * switch's own announcement (spec open question 5). */
     void follow_focus(Rml::Element* focus, std::string_view prefix, bool explain = false);
     /* Makes `focus` the known control and returns its focus announcement. */
     std::string remember_focus(Rml::Element& focus, bool explain = false);
@@ -283,6 +286,8 @@ private:
     FieldEcho m_field; /* follows the focused control as a text field */
     PageLines m_lines;
     int m_text_line = -1; /* the line read on a page of text alone, -1 when out of it */
+    /* Speech was on when focus was last followed or announced. */
+    bool m_speech_was_on = true;
 };
 
 /* Whether the document was loaded from a file of this name. */

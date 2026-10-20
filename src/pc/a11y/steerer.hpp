@@ -95,6 +95,19 @@ public:
         ended(failed, why);
     }
 
+    /* The Steering switch went off: a glide under way ends where the
+     * cursor is, for why, and nothing more is asked for, so the next pad
+     * the hook publishes has the stick at rest (spec open question 6). The
+     * glide starts afresh, since the frames it misses meanwhile would leave
+     * its count of the sticks on their way wrong. */
+    void switch_off(const char* why) {
+        if (m_glide.active()) {
+            stop(why, false);
+        }
+        m_glide = Glide(*m_rule);
+        m_request_waiting = false;
+    }
+
     /* Once per simulated frame, gliding or not, so the glide keeps count of
      * the sticks still on their way: where the cursor is after this frame's
      * movement, and the stick the game applied, as the pad held it. */

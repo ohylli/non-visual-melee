@@ -18,6 +18,7 @@
 #include "scene_speech.hpp"
 #include "speech.hpp"
 #include "sss_reader.hpp"
+#include "switches.hpp"
 #include "training_speech.hpp"
 #include <SDL3/SDL.h>
 #include <cstdlib>
@@ -39,8 +40,10 @@ std::unique_ptr<a11y::LobbySpeech> s_lobby;
 std::unique_ptr<a11y::TrainingSpeech> s_training;
 /* The accessibility settings and their file, a11y.ini. */
 std::unique_ptr<a11y::AccessibilitySettings> s_settings;
-/* The cue engine, the cues' values and the cues of a match; null while cues
- * are off or their output could not open. */
+/* Accessibility, Speech and Steering, and the hierarchy over Cues. */
+std::unique_ptr<a11y::Switches> s_switches;
+/* The cue engine, the cues' values and the cues of a match, open whatever
+ * the switches say. */
 std::unique_ptr<a11y::CueSystem> s_cue_system;
 /* The launcher's master volume with mute applied, kept from before the
  * engine opens. */
@@ -89,9 +92,31 @@ std::string settings_file_path(const a11y::Config& config) {
     return path;
 }
 
+/* What the switches leave on, to the features that act on it: steering
+ * to the screens that steer, Accessibility's part of the cues to the cue
+ * system. Speech the switches set themselves. */
+void apply_switches(const a11y::SwitchState& state) {
+    s_css->set_steering(state.steering);
+    s_sss->set_steering(state.steering);
+    if (s_cue_system != nullptr) {
+        s_cue_system->set_allowed(s_switches->cues_allowed());
+    }
+}
+
 /* Every change to the accessibility settings, from the file or a menu, to
  * the features that keep a copy. */
 void settings_changed(const std::vector<const a11y::NamedValue*>& changed) {
+    if (s_switches != nullptr) {
+        const bool speech_was_on = s_switches->state().speech;
+        const a11y::SwitchState& now = s_switches->update();
+        apply_switches(now);
+        if (now.speech && !speech_was_on) {
+            /* The RmlUi pages see speech come back by themselves and
+             * announce their focus (PageReader::follow_focus); the main
+             * menu tree says its screen afresh on its next frame. */
+            s_menu_speech->forget();
+        }
+    }
     if (s_cue_system != nullptr) {
         s_cue_system->settings_changed(changed);
     }
@@ -175,24 +200,39 @@ extern "C" void pc_a11y_init(void) {
         return;
     }
     a11y::Config config = a11y::config_from_environment();
+    /* Silent until the switches are read from the accessibility settings:
+     * a player who saved Accessibility off hears nothing, and the screen
+     * reader is never started. */
+    config.speech = false;
     s_speech = std::make_unique<a11y::Speech>(config, a11y::make_screen_reader_bridge());
     s_speech->init();
-    s_speech->announce("Non-Visual Melee ready", a11y::Mode::interrupt);
     s_scene_speech = std::make_unique<a11y::SceneSpeech>(*s_speech);
     a11y::GameTextSource game_text;
     game_text.pal = pc_region_pal;
     game_text.resolve = a11y_game_resolve;
     s_menu_speech = std::make_unique<a11y::MenuSpeech>(*s_speech, game_text);
-    s_css = std::make_unique<a11y::CssReader>(*s_speech, config.steer);
-    s_sss = std::make_unique<a11y::SssReader>(*s_speech, config.steer);
+    s_css = std::make_unique<a11y::CssReader>(*s_speech, false);
+    s_sss = std::make_unique<a11y::SssReader>(*s_speech, false);
     s_lobby = std::make_unique<a11y::LobbySpeech>(*s_speech);
     s_training = std::make_unique<a11y::TrainingSpeech>(*s_speech);
     s_settings = std::make_unique<a11y::AccessibilitySettings>(
         *s_speech, settings_file_path(config), config.log);
-    s_settings->listen(settings_changed);
+    /* The switches first: the first rows and the file's first groups. */
+    s_switches = std::make_unique<a11y::Switches>(s_settings->model(), *s_speech, config.log);
     s_cue_system = a11y::CueSystem::open(config, *s_speech, *s_settings, s_master_volume);
     /* Once every feature has registered its values. */
+    a11y::Switches::override_from(config, *s_settings);
+    s_settings->listen(settings_changed);
     s_settings->load(a11y::Clock::now());
+    apply_switches(s_switches->start());
+    s_speech->announce("Non-Visual Melee ready", a11y::Mode::interrupt);
+    if (!s_cue_system->sounding()) {
+        s_speech->announce("Audio cues could not start.", a11y::Mode::queue);
+    }
+    if (!s_settings->problem().empty()) {
+        /* Found as the file was read, before speech was on. */
+        s_speech->announce(s_settings->problem(), a11y::Mode::queue);
+    }
     a11y::launcher_speech_start(*s_speech);
     a11y::port_menu_speech_start(*s_speech);
 }
@@ -204,6 +244,7 @@ extern "C" void pc_a11y_shutdown(void) {
     a11y::port_menu_speech_stop();
     a11y::launcher_speech_stop();
     s_cue_system.reset();
+    s_switches.reset();
     s_settings.reset();
     s_training.reset();
     s_lobby.reset();

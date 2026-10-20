@@ -45,7 +45,8 @@ Buttons are GameCube names, as in tools/devctl.py: A B X Y Z L R Start,
 Up Down Left Right (main stick), CUp CDown CLeft CRight, DUp DDown DLeft
 DRight. They drive controller port 1, merged with any real controller there.
 Steering is on (MELEE_A11Y_STEER=1), so on character select the D-pad moves
-the hand from target to target.
+the hand from target to target. MELEE_A11Y_STEER in the environment replaces
+it: empty leaves Steering to the run's a11y.ini, 0 turns it off.
 
 key, type and gamepad reach what reacts to SDL events instead: the port
 menu (F1, or Back on a gamepad) and the launcher, which press never reaches.
@@ -76,12 +77,13 @@ the update banner open the browser; Display mode goes fullscreen. Left and
 Right (dpleft, dpright) on Display mode are refused too, since stepping its
 value goes fullscreen as well.
 
-Speech is off by default (MELEE_A11Y=0): every announcement is still
-logged, marked (off), but features that take keys for speech leave them
-alone, as the launcher's line reading does. --muted keeps accessibility on
+Speech is off by default (MELEE_A11Y=0, Accessibility off for the run):
+every announcement is still logged, marked (off), but features that take
+keys for speech leave them alone, as the launcher's line reading does, and
+the cues are muted unless MELEE_A11Y_CUES=1. --muted keeps accessibility on
 as for a player and only keeps speech from the screen reader
-(MELEE_A11Y_SCREEN_READER=0, announcements marked (muted)); the cue engine
-follows the switch and opens too, unless MELEE_A11Y_CUES=0. The launcher's
+(MELEE_A11Y_SCREEN_READER=0, announcements marked (muted)); the cues follow
+the switches and sound too, unless MELEE_A11Y_CUES=0. The launcher's
 scripts run with it. --speech speaks aloud, over the maintainer's screen
 reader.
 
@@ -604,15 +606,18 @@ class Game:
             "MELEE_KEY_FIFO": pipe_name,
             "MELEE_A11Y_EVENT_FIFO": event_pipe_name,
             "MELEE_INPUT_TRACE": "1",
-            # D-pad steering on character select, which speech off would
-            # otherwise switch off.
-            "MELEE_A11Y_STEER": "1",
             "MELEE_BOOT_SCENE": args.scene,
             "MELEE_NO_ATTRACT": "1",
             "MELEE_EXIT_AFTER_FRAMES": str(args.max_frames),
             "MELEE_LOG_FILE": os.path.abspath(out) + ".game.log",
             "MELEE_CACHE_DIR": cache_dir(cache_slot),
         })
+        if "MELEE_A11Y_STEER" not in os.environ:
+            # D-pad steering on character select, which Accessibility off
+            # (MELEE_A11Y=0, below) would otherwise switch off. Set in the
+            # environment it is the caller's: empty leaves Steering to the
+            # run's a11y.ini.
+            full_env["MELEE_A11Y_STEER"] = "1"
         if getattr(args, "muted", False):
             full_env["MELEE_A11Y_SCREEN_READER"] = "0"
         elif not args.speech:

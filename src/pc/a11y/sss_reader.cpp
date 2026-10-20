@@ -61,6 +61,13 @@ void SssReader::cursor(Point at, int stick_x, int stick_y) {
     m_steerer.frame(at, stick_as_held(stick_x, stick_y));
 }
 
+void SssReader::set_steering(bool on) {
+    if (!on && m_steer) {
+        m_steerer.switch_off("steering was switched off");
+    }
+    m_steer = on;
+}
+
 void SssReader::resolved(int stage_tile, int local_pick, int remote_pick) {
     if (m_have_state) {
         m_speech.resolved(m_state, stage_tile, local_pick, remote_pick);

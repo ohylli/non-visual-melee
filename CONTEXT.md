@@ -73,7 +73,7 @@ _Avoid_: TTS log, debug output
 ### How speech is produced
 
 **Speech**:
-The fork's subsystem that takes announcements from every feature, writes the speech log and honours the accessibility switch. The only part of the fork that knows a screen reader exists.
+The fork's subsystem that takes announcements from every feature, writes the speech log and goes quiet while the Speech or Accessibility switch is off. The only part of the fork that knows a screen reader exists.
 _Avoid_: TTS, narrator, announcer (the game has its own announcer voice: "Ready, go!")
 
 **Screen reader bridge**:

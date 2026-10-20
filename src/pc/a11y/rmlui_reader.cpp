@@ -685,6 +685,8 @@ Rml::Element* PageReader::focused_control() const {
 }
 
 void PageReader::follow_focus(Rml::Element* focus, std::string_view prefix, bool explain) {
+    const bool speech_back = m_speech.enabled() && !m_speech_was_on;
+    m_speech_was_on = m_speech.enabled();
     if (focus == nullptr) {
         return;
     }
@@ -694,6 +696,11 @@ void PageReader::follow_focus(Rml::Element* focus, std::string_view prefix, bool
         append_sentence(text, left_field_text());
         append_sentence(text, remember_focus(*focus, explain));
         say(text, Mode::interrupt);
+        return;
+    }
+    if (speech_back) {
+        stop_reading_lines();
+        say(remember_focus(*focus), Mode::queue);
         return;
     }
     follow_value(*focus, describe(*focus));
@@ -741,6 +748,7 @@ void PageReader::follow_value(const Rml::Element& focus, const Control& control)
 
 std::string PageReader::remember_focus(Rml::Element& focus, bool explain) {
     m_focus = focus.GetObserverPtr();
+    m_speech_was_on = m_speech.enabled();
     const Control control = describe(focus);
     m_focus_value = control.value;
     m_focus_detail = control.detail;

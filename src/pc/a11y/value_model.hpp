@@ -36,9 +36,14 @@ struct NamedValue {
     float default_value = 0.0f;
     float min = 0.0f;
     float max = 1.0f;
-    float step = 1.0f; /* a slider's step; the file takes any value in range */
-    float value = 0.0f;
+    float step = 1.0f;  /* a slider's step; the file takes any value in range */
+    float value = 0.0f; /* what the game uses: an override while one holds */
     bool shown = false; /* a setting, a row of the menus; else a tuning value */
+    /* An override from the environment holds value for the run
+     * (ValueModel::override_value); the file's own value waits in saved, read
+     * and written as if no override held. */
+    bool overridden = false;
+    float saved = 0.0f;
 };
 
 /* A row of the menus that acts rather than holds a value: a button. Never
@@ -163,8 +168,15 @@ public:
     const std::vector<ShownRow>& shown() const { return m_shown; }
 
     /* A front end's change: held to the range. True when the value
-     * changed. */
+     * changed. A change to an overridden value lifts the override, so the
+     * value follows the file again from then on; it counts as a change when
+     * the file's value differs too, so the change is saved. */
     bool set(const NamedValue& named, float value);
+    /* Holds the value at value for the run, held to the range, whatever the
+     * file says: an environment variable's override. The file keeps its own
+     * value, which reading a text updates silently and writing the text
+     * writes. True when the value the game uses changed. */
+    bool override_value(const NamedValue& named, float value);
 
     /* The whole model as the file's text, every value at its current value
      * or its default, the keys kept from an earlier read last. */
