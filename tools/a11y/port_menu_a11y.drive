@@ -1,0 +1,154 @@
+# The port menu's Accessibility category from the main menu: every row read
+# in its turn down to Resume, Speech off and on again from its own row, Cue
+# volume a step down and back by the gamepad's D-pad, Your position cue off
+# and on again with Left and Right, Preview your position cue played by the
+# gamepad's A and stopped by Escape to the category, Ledge warning distance
+# a step down and back, and Resume closing the menu, with the run's a11y.ini
+# checked after each change. Waits on each announcement, so a missing or
+# changed line fails the run. Run with accessibility on but muted, and with
+# Steering and Cues left to the run's a11y.ini, so their rows show no
+# "(environment)" (as run_level.py runs it):
+#   MELEE_A11Y_STEER= MELEE_A11Y_CUES= python tools/a11y/drive.py --muted tools/a11y/port_menu_a11y.drive
+# then grep -c -E '"(Saved|Settings save automatically|\w+ settings\.")'
+# build/drive/last.log prints 0: the status line's "Saved." after each
+# change is never spoken, which run_level.py checks itself.
+# The run's a11y.ini starts from the defaults.
+
+# Title screen to the main menu (main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$" 20 0.3
+sleep 1
+
+# F1 opens the menu on Graphics; Up past Quit game and Resume is
+# Accessibility, the last category.
+key F1
+wait '"PC settings\. Graphics\. Up and down to choose, right to enter"$'
+key Up Up Up
+wait '"Accessibility"$'
+
+# Every row, in the model's order, then Resume below the last.
+key Right
+wait '"Accessibility, On, Left and right to change\. Turns everything Non-Visual Melee adds on or off: speech, steering and the cues\."$'
+key Down
+wait '"Speech, On, Left and right to change\. Turns speech through the screen reader on or off\."$'
+key Down
+wait '"Steering, On, Left and right to change\. The D-pad steps the hand on character select and the cursor on stage select\. Off, the D-pad does what the game makes of it, quick chat included\."$'
+key Down
+wait '"Cues, On, Left and right to change\. Turns every cue on or off\."$'
+key Down
+wait "\"Cue volume, slider, 100%\. Left and right to adjust\. The loudness of all cues together, under the master volume; the game's sound effect and music volumes leave cues alone\.\"$"
+key Down
+wait '"Your position cue, On, Left and right to change\. Turns your position cue on or off\."$'
+key Down
+wait '"Your position cue volume, slider, 100%\. Left and right to adjust\. The loudness of your position cue, under the cue volume\."$'
+key Down
+wait '"Preview your position cue: Play, button\. Plays a short sample of your position cue, as it sounds in a match\."$'
+key Down
+wait "\"Opponent's position cue, On, Left and right to change\. Turns the opponent's position cue on or off\.\"$"
+key Down
+wait "\"Opponent's position cue volume, slider, 100%\. Left and right to adjust\. The loudness of the opponent's position cue, under the cue volume\.\"$"
+key Down
+wait "\"Preview opponent's position cue: Play, button\. Plays a short sample of the opponent's position cue, as it sounds in a match\.\"$"
+key Down
+wait '"Position cues follow the camera, On, Left and right to change\. On, the cues pan across what the camera shows; off, across the whole stage to the side blast zones\."$'
+key Down
+wait '"Gap warning, On, Left and right to change\. Turns the gap warning on or off\."$'
+key Down
+wait '"Gap warning volume, slider, 100%\. Left and right to adjust\. The loudness of the gap warning, under the cue volume\."$'
+key Down
+wait '"Preview gap warning: Play, button\. Plays a short sample of the gap warning, as it sounds in a match\."$'
+key Down
+wait '"Ledge warning, On, Left and right to change\. Turns the ledge warning on or off\."$'
+key Down
+wait '"Ledge warning volume, slider, 100%\. Left and right to adjust\. The loudness of the ledge warning, under the cue volume\."$'
+key Down
+wait '"Preview ledge warning: Play, button\. Plays a short sample of the ledge warning, as it sounds in a match\."$'
+key Down
+wait '"Ledge warning distance, slider, 40 units\. Left and right to adjust\. How far from the edge the warning starts, in stage units\. Final Destination is about 170 wide\."$'
+key Down
+wait '"Resume, button\. Close settings and return to the game\."$'
+
+# Back to the category, and into the rows with the gamepad's D-pad.
+key Up
+wait '"Accessibility"$'
+gamepad dpright
+wait '"Accessibility, On, Left and right to change\. '
+
+# Speech off and on again from its own row: "Speech off" is the last thing
+# said, the row's new value logged unheard after it, and the row's press
+# turns it back on, saying "Speech on" and the row again.
+key Down
+wait '"Speech, On, Left and right to change\. '
+key Return
+wait '\[a11y\] accessibility settings: saved speech\.on = off$'
+wait '\[a11y\] speak \w+ \(muted\): "Speech off"$'
+wait '\[a11y\] speak \w+ \(off\): "Off"$'
+ini '^speech\.on = off$'
+key Return
+wait '\[a11y\] accessibility settings: saved speech\.on = on$'
+wait '"Speech on"$'
+wait '\[a11y\] speak queue \(muted\): "Speech, On, Left and right to change\. '
+ini '^speech\.on = on$'
+
+# Cue volume a step down and back up by the D-pad.
+gamepad dpdown dpdown dpdown
+wait '"Cue volume, slider, 100%\. '
+gamepad dpleft
+wait '\[a11y\] accessibility settings: saved cues\.volume = 95$'
+wait '"95%"$'
+ini '^cues\.volume = 95$'
+gamepad dpright
+wait '\[a11y\] accessibility settings: saved cues\.volume = 100$'
+wait '"100%"$'
+ini '^cues\.volume = 100$'
+
+# Your position cue off with Left and on again with Right.
+key Down
+wait '"Your position cue, On, Left and right to change\. '
+key Left
+wait '\[a11y\] accessibility settings: saved your_position\.on = off$'
+wait '"Off"$'
+ini '^your_position\.on = off$'
+key Right
+wait '\[a11y\] accessibility settings: saved your_position\.on = on$'
+wait '"On"$'
+ini '^your_position\.on = on$'
+
+# Preview your position cue: A plays it, and Escape to the category stops
+# it.
+key Down Down
+wait '"Preview your position cue: Play, button\. '
+gamepad a
+wait '\[a11y\] cue preview: your_position$'
+wait '\[a11y\] cue your position preview start '
+key Escape
+wait '\[a11y\] cue your position preview stop '
+wait '"Accessibility"$'
+
+# Ledge warning distance, the last row, a step down and back up.
+key Right
+wait '"Accessibility, On, Left and right to change\. '
+key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
+wait '"Ledge warning distance, slider, 40 units\. '
+key Left
+wait '\[a11y\] accessibility settings: saved ledge_warning\.distance = 39$'
+wait '"39 units"$'
+ini '^ledge_warning\.distance = 39$'
+key Right
+wait '\[a11y\] accessibility settings: saved ledge_warning\.distance = 40$'
+wait '"40 units"$'
+ini '^ledge_warning\.distance = 40$'
+
+# The file keeps its comments and every other line as written.
+ini '^# A change in the game.s menus edits only its own line here\.$'
+ini '^# Turns your position cue on or off\. On or off, default on\.$'
+ini '^opponent_position\.on = on$'
+
+# Down to Resume, which closes the menu, and the game runs again.
+key Down
+wait '"Resume, button\. '
+key Return
+wait '"Back to game"$'
+press Down
+wait '"VS\. Mode\. Multiplayer battles!"$'

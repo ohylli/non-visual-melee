@@ -14,8 +14,8 @@ the failure lines of each run that failed. Exits 1 if any run failed.
 Arguments are groups or script names, run in that order, a group's runs
 side by side:
 
-  menus   the menu drive scripts (MENUS), the launcher's two and the port
-          menu's among them
+  menus   the menu drive scripts (MENUS), the launcher's three and the
+          port menu's two among them
   online  css_net.drive at delay 0, delay 10 and over a 100 ms slow link,
           and lan_lobby.drive (--lan)
   NAME    an online run by its name (css_net-delay0, css_net-delay10,
@@ -45,14 +45,19 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens", "sss_steps",
          "sss_skipped", "sss_glide_pick", "leaf_screens", "sss_hover", "css_classic", "css_training",
          "css_slots", "css_portraits", "css_steps", "results", "training_menu", "launcher_home",
-         "launcher_settings", "port_menu"]
+         "launcher_settings", "launcher_a11y", "port_menu", "port_menu_a11y"]
 # drive.py options a script needs: the launcher's scripts open the launcher,
 # with accessibility on but muted, since its line reading needs the switch on,
 # as the port menu's does.
 ARGS = {"launcher_home": ["--launcher", "--muted"], "launcher_settings": ["--launcher", "--muted"],
-        "port_menu": ["--muted"], "match_port_menu": ["--muted"]}
-# Settings a script needs from the environment.
-ENV = {"results": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE_DEBUG_VS_STAGE": "31"},
+        "launcher_a11y": ["--launcher", "--muted"], "port_menu": ["--muted"], "port_menu_a11y": ["--muted"],
+        "match_port_menu": ["--muted"]}
+# Settings a script needs from the environment. The Accessibility
+# category's scripts leave Steering and Cues to the run's a11y.ini, so their
+# rows show no "(environment)" whatever the caller exports.
+A11Y_ROWS = {"MELEE_A11Y_STEER": "", "MELEE_A11Y_CUES": ""}
+ENV = {"launcher_a11y": A11Y_ROWS, "port_menu_a11y": A11Y_ROWS,
+       "results": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE_DEBUG_VS_STAGE": "31"},
        "match_opponent": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
        "match_gap": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
        "match_gap_battlefield": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2",
@@ -61,15 +66,16 @@ ENV = {"results": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE
        "match_ledge_battlefield": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2",
                                    "MELEE_DEBUG_VS_STAGE": "31"},
        "match_port_menu": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2", "MELEE_A11Y_CUES": "1"}}
+# The port menu's status line says "Saved." after every change,
+# "Settings save automatically." as the menu first opens, and each focus's
+# description, which the focus announcement has said (a category's only
+# repeats its name); none of them is ever spoken.
+PORT_MENU_STATUS = re.compile(r'"(Saved|Settings save automatically|\w+ settings\.")')
 # Lines a passing run must not log; drive.py cannot fail on an absent line.
 ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           # The Training menu's hidden row, or a value the reader cannot name.
           "training_menu": re.compile(r"\[a11y\] training menu row "),
-          # The port menu's status line says "Saved." after every change,
-          # "Settings save automatically." as the menu first opens, and each
-          # focus's description, which the focus announcement has said (a
-          # category's only repeats its name); none of them is ever spoken.
-          "port_menu": re.compile(r'"(Saved|Settings save automatically|\w+ settings\.")')}
+          "port_menu": PORT_MENU_STATUS, "port_menu_a11y": PORT_MENU_STATUS}
 # Lines a passing run must not log between an opening line and the closing
 # line after it: no cue starts or stops while the port menu is open, since
 # the game stands still then and the stops come just before the opening.

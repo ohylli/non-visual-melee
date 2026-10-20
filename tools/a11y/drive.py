@@ -30,6 +30,9 @@ Script steps, one per line (or ';'-separated with -c), '#' starts a comment:
   type TEXT                      type TEXT, one SDL text event a character
   gamepad BUTTON [BUTTON...]     press and release each gamepad button in turn
                                  as an SDL gamepad event, likewise
+  ini RE [SECONDS]               wait until a line of the run's accessibility
+                                 settings file (a11y.ini, below) matches RE
+                                 (default 5)
   sleep SECONDS
   shot PATH                      save the game window as a PNG
   quit                           close the window and wait for a clean exit
@@ -94,7 +97,11 @@ the accessibility settings (a11y.ini, which MELEE_A11Y_SETTINGS names to the
 game) and everything else the game keeps in its settings folder land there,
 never in the maintainer's %APPDATA%\melee-pc. A non-empty
 MELEE_A11Y_SETTINGS in the environment names another accessibility
-settings file instead, kept as it is.
+settings file instead, kept as it is. The ini step reads whichever file
+the run has: the game saves a menu's change before it logs "accessibility
+settings: saved <key> = <value>", so after a wait for that line
+  ini '^cues\.volume = 95$'
+finds the new line at once.
 
 The shader caches come from build/drive/cache/SLOT (--cache-slot, default
 1), first copied from the player's own: games running at once each need a
@@ -135,6 +142,7 @@ DEFAULT_SHOW = ("[a11y]", "boot scene")
 # more for the first request (the game waits up to 30 for SDL to start).
 EVENT_TIMEOUT_EACH = 11
 EVENT_TIMEOUT_START = 30
+INI_TIMEOUT = 5  # seconds an ini step waits for its line, by default
 UNTIL_SETTLE = 1.5  # seconds a "press ... until" waits for its text before pressing again, by default
 SPEECH = "] speak "  # in every announcement's log line
 PAD_RE = re.compile(r"pad: btn ([0-9a-f]+) stick (-?\d+),(-?\d+) sub (-?\d+),(-?\d+) trig (\d+),(\d+)")
@@ -640,6 +648,9 @@ class Game:
             # The accessibility settings in the run's folder too, named
             # outright: empty would mean no file at all.
             full_env["MELEE_A11Y_SETTINGS"] = os.path.join(self.settings_dir, "a11y.ini")
+        # The file the ini step reads; a relative name is the game's, from
+        # its working directory.
+        self.a11y_ini = os.path.join(REPO, full_env["MELEE_A11Y_SETTINGS"])
         if self.launcher:
             write_launcher_cfg(self.settings_dir, disc)
         self.pipe = Pipe(pipe_name, "key pipe")
@@ -704,6 +715,26 @@ class Game:
             raise ScriptError(f"{cmd} {name} refused: it would press the control focused by {spoken[-1]!r}, "
                               "which leaves the game's window (see REFUSED_FOCUS in drive.py)")
 
+    def ini_line(self, rx, timeout):
+        """Wait until a line of the run's a11y.ini matches rx and return it;
+        raises ScriptError once timeout passes without one. A read that
+        meets the save's rename is tried again."""
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                with open(self.a11y_ini, encoding="utf-8") as f:
+                    lines = f.read().splitlines()
+            except OSError as e:
+                lines, why = [], f"cannot read {self.a11y_ini}: {e.strerror}"
+            else:
+                why = f"no line of {self.a11y_ini} matched"
+            for line in lines:
+                if rx.search(line):
+                    return line
+            if time.monotonic() >= deadline:
+                raise ScriptError(f"{why} {rx.pattern!r} in {timeout:g} s")
+            time.sleep(0.1)
+
     def matched(self, rx, i):
         """Line i matched rx: keeps its named groups."""
         self.captured.update(rx.search(self.output.lines[i]).groupdict())
@@ -761,6 +792,11 @@ class Game:
         elif cmd == "type" and len(rest) == 1:
             self.cursor = output.mark()
             self.push(f"text {rest[0]}", len(rest[0]))  # one event a character
+        elif cmd == "ini" and len(rest) in (1, 2):
+            rx = pattern(rest[0], captured)
+            line = self.ini_line(rx, float(rest[1]) if len(rest) == 2 else INI_TIMEOUT)
+            self.captured.update(rx.search(line).groupdict())
+            self.note(f"a11y.ini: {line}")
         elif cmd == "sleep" and len(rest) == 1:
             time.sleep(float(rest[0]))
         elif cmd == "shot" and len(rest) == 1:
