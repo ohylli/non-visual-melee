@@ -8,7 +8,7 @@ Use the vocabulary in `CONTEXT.md` (base port, decomp layer, port layer, hook, a
 
 - `origin` is this fork (`ohylli/non-visual-melee`). `upstream` is the base port, fetch-only: its push URL is disabled on purpose.
 - `master` is the fork's own branch. Topic branches hold uncertain work. A `dev` branch gets added once a first alpha is released from `master`.
-- A base merge is `git fetch upstream` then `git merge upstream/master` on `master`, conflicts resolved locally; the `/base-merge` skill runs it and writes the digest of upstream changes. `upstream/master` is the base port's only live branch; `upstream/main` and `upstream/testing` are stale.
+- A base merge is `git fetch upstream` then `git merge upstream/master` on `master`, conflicts resolved locally; the `/base-merge` skill runs it and writes the digest of upstream changes. `upstream/master` is the base port's main line, the one the fork merges; a release can be cut from a `release/*` branch before it reaches `master` (v0.4.1 from `upstream/release/0.4-beta`), and fork builds pair online only with the release the merged `master` names. `upstream/main` and `upstream/testing` are stale.
 - All GitHub activity targets this fork. Pull requests, issues and pushes toward the base port happen only when the maintainer asks for that one explicitly. GitHub's "Sync fork" button stays unused: it can discard the fork's commits.
 - Fixes unrelated to accessibility are welcome on `master`, kept in their own commits.
 - CI is the fork-owned `.github/workflows/a11y-windows.yml`: each push to `master` cross-builds the Windows package with the base port's `tools/package_windows.sh` and republishes it as the rolling prerelease `ci-latest`. The base port's workflows stay in the tree but are disabled in the fork's GitHub settings (`gh workflow disable`); a base merge that adds a workflow file disables it the same way before pushing.
@@ -36,7 +36,7 @@ Base merges conflict wherever the fork edits a base port file, so the fork's foo
 
 Fork builds are meant to play online against fork builds and base port builds of the same release; the `verify` skill's online level checks both over loopback (primer `docs/a11y/netplay.md`).
 
-- Two copies pair when their protocol version, app version string and disc image id match. The fork keeps the base port's version string (`MELEE_APP_VERSION`, `src/pc/version.cpp`), including in fork releases.
+- Two copies pair when their protocol version, app version string and disc image id match. The fork keeps the base port's version string (`MELEE_APP_VERSION`, which CMake sets from the root `VERSION` file for `src/pc/version.cpp`), including in fork releases.
 - Rollback (online netcode that re-runs recent frames when a late input arrives) needs both machines to simulate identical frames, so fork code reads game state and leaves the simulation untouched.
 - The one place the fork writes is the pad hook, `pc_a11y_pad` in `publish_locked` (`src/pc/keyboard.c`): steering adds its stick to port 1's virtual pad there, before the game and the netplay code sample it, so the peer receives it as a player's input (ADR-0004). Nothing else the fork does may change game state or input.
 - Floor tests call the game's own raycast, `mpCheckFloor`, from the tick hook only: it sets temporary marks on the stage's collision data and clears them before returning, so between ticks it leaves nothing changed (ADR-0006).
