@@ -5,6 +5,7 @@
 #include "cue_settings.hpp"
 #include "game_access.h"
 #include "match_cues.hpp"
+#include "pc/paths.h"
 #include "pc/pc.h"
 #include "speech.hpp"
 #include "value_file.hpp"
@@ -18,7 +19,7 @@ namespace a11y {
 namespace {
 
 /* MELEE_A11Y_CUE_SETTINGS, or a11y-cues.ini in the base port's settings
- * folder (pc_user_dir, which MELEE_USER_DIR moves); empty for no file: no
+ * folder (pc_get_pref_path, which MELEE_USER_DIR moves); empty for no file: no
  * such folder, or the variable set but empty. UTF-8. */
 std::string cue_settings_path(const Config& config) {
     if (config.cue_settings.has_value()) {
@@ -28,7 +29,7 @@ std::string cue_settings_path(const Config& config) {
         }
         return *config.cue_settings;
     }
-    char* folder = pc_user_dir();
+    char* folder = pc_get_pref_path();
     if (folder == nullptr) {
         if (config.log) {
             pc_log_line(

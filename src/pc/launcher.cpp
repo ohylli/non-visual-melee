@@ -10,6 +10,7 @@
 #include "net_match.h"
 #include "net.h"
 #include "pc.h"
+#include "android_hooks.h"
 #include <RmlUi/Core/Elements/ElementFormControl.h>
 #include <aurora/dvd.h>
 #include <aurora/event.h>
@@ -148,29 +149,43 @@ const char* backend_name(int mode) {
 #endif
 }
 
+bool load_menu_fonts(const std::filesystem::path& resources) {
+    if (!Rml::LoadFontFace((resources / "font.ttf").string(), true)) {
+        SDL_Log("Menus: could not load font from %s", resources.c_str());
+        return false;
+    }
+    Rml::LoadFontFace((resources / "font-bold.ttf").string());
+    /* The menus' face (Noto Sans SemiCondensed, cut to Latin), with its
+     * ExtraBold for the plates' names. Liberation covers what it lacks. */
+    for (const char* face : {"menu.ttf", "menu-bold.ttf"})
+        if (!Rml::LoadFontFace((resources / face).string()))
+            SDL_Log("Menus: could not load %s", face);
+    if (!Rml::LoadFontFace((resources / "menu-heavy.ttf").string(), false,
+            static_cast<Rml::Style::FontWeight>(800)))
+        SDL_Log("Menus: could not load menu-heavy.ttf");
+    return true;
+}
+
 /* The two Direct3D entries only exist on Windows, so elsewhere the cycle goes
  * straight from Auto to Vulkan: offering a backend that can only ever fail
  * over leaves the button showing a label for something the run is not using.
  * ponytail: indices stay identical on every platform so the prefs file and
  * the BACKEND_* mapping below need no per-platform cases. */
-int backend_next(int mode) {
+int backend_next(int mode, int direction = 1) {
 #if defined(_WIN32)
-    return (mode + 1) % 4;
+    return (mode + direction + 4) % 4;
 #else
     return mode == 0 ? 2 : 0;
 #endif
 }
 
 constexpr const char* tab_ids[] = {
-    "tab-graphics", "tab-audio", "tab-cheats", "tab-controls", "tab-online"};
-constexpr const char* page_ids[] = {
-    "page-graphics", "page-audio", "page-cheats", "page-controls", "page-online"};
-constexpr int tab_count = 5;
-int tab_index(const Rml::String& id) {
-    for (int i = 0; i < tab_count; ++i)
-        if (id == tab_ids[i])
-            return i;
-    return -1;
+    "tab-graphics", "tab-audio", "tab-cheats", "tab-controls", "tab-online", "tab-launcher"};
+
+template <size_t N>
+int index_of(const char* const (&ids)[N], const Rml::String& id) {
+    const auto it = std::find(std::begin(ids), std::end(ids), id);
+    return it == std::end(ids) ? -1 : static_cast<int>(it - std::begin(ids));
 }
 std::string resolution_name(float scale) {
     return scale == 0 ? std::string("Auto") : std::to_string(int(scale)) + "x";
@@ -228,6 +243,24 @@ static uint32_t pending_pipelines() {
     return aurora_wait_pipelines(0);
 }
 
+/* The platform, as a class on the launcher's <body>: launcher.rcss hides
+ * what it has no use for (.no-mobile: the window mode, the keyboard). */
+#if defined(__ANDROID__) || (defined(__APPLE__) && TARGET_OS_IPHONE)
+constexpr bool is_mobile = true;
+#else
+constexpr bool is_mobile = false;
+#endif
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+constexpr const char* disc_note =
+    "Use Choose Disc, or place a disc image in Files > On My iPhone > Melee.";
+#elif defined(__ANDROID__)
+constexpr const char* disc_note = "Use Choose Disc to pick a disc image.";
+#else
+constexpr const char* disc_note = "Drop a disc image here, or use Choose Disc.";
+#endif
+/* Melee colours the menu frame after the entry under the cursor. */
+constexpr const char* main_ids[] = {"play", "choose", "verify", "settings", "discord", "quit"};
+
 class Launcher final : public Rml::EventListener {
     SDL_Window* window;
     Rml::ElementDocument* document;
@@ -250,6 +283,10 @@ class Launcher final : public Rml::EventListener {
     // press starts it immediately.
     bool shaders_waited = false;
     uint32_t last_pending = 0;
+    // The settings row holding the focus, lit as Melee lights its options.
+    Rml::Element* current_row = nullptr;
+    // Where the pointer last moved, so only a real move steers the cursor.
+    int pointer_x = -1, pointer_y = -1;
 
     Rml::Element* element(const char* id) {
         if (std::strcmp(id, "fullscreen") == 0) {
@@ -293,6 +330,9 @@ class Launcher final : public Rml::EventListener {
         auto* e = element("status");
         if (e)
             e->SetClass("error", error);
+        // The disc panel is hidden behind the settings; say it there too.
+        if (settings)
+            note(value);
     }
     void save() {
         std::string error;
@@ -303,17 +343,104 @@ class Launcher final : public Rml::EventListener {
         switch (tab) {
         case 0:
             return {"display", "sync", "resolution", "aspect", "hud-mode", "aa", "filter",
-                "filter-mode", "custom-textures", "backend", "performance"};
+                "filter-mode", "fps", "custom-textures", "backend", "performance"};
         case 1:
-            return {"volume", "music-volume", "sfx-volume", "mute", "reverb", "fps", "scale",
-                "check-updates", "check-now", "settings-discord"};
+            return {"volume", "music-volume", "sfx-volume", "mute", "reverb"};
         case 2:
             return {"unlock-all", "frozen-stadium", "free-camera", "ucf"};
         case 4:
             return {"net-name", "net-target", "net-delay"};
+        case 5:
+            return {"scale", "check-updates", "check-now", "settings-discord", "export-logs"};
         default:
             return {};
         }
+    }
+    static bool shown(Rml::Element* e) { return e && e->IsVisible(true); }
+    static bool typing(Rml::Element* e) {
+        return e && e->GetTagName() == "input" && !is_slider(e->GetId());
+    }
+    bool within(Rml::Element* e, const char* id) const {
+        for (; e && e != document; e = e->GetParentNode())
+            if (e->GetId() == id)
+                return true;
+        return false;
+    }
+    bool in_rows(Rml::Element* e) const { return within(e, "settings-content"); }
+    /* What Up and Down walk through: the main menu's plates, or in the
+     * settings whichever column holds the focus, the categories or the rows
+     * of the open page. */
+    std::vector<std::string> column() {
+        if (!settings)
+            return focus_ids;
+        if (in_rows(document->GetContext()->GetFocusElement()))
+            return page_focus();
+        std::vector<std::string> ids(std::begin(tab_ids), std::end(tab_ids));
+        ids.push_back("back");
+        return ids;
+    }
+    void set_theme(const char* name) {
+        for (const char* t : main_ids)
+            document->SetClass(std::string("theme-") + t, std::strcmp(t, name) == 0);
+    }
+    /* The description bar says what the focused thing does, as Melee's does,
+     * and its row lights up. */
+    void describe(Rml::Element* e) {
+        Rml::Element* row = nullptr;
+        Rml::String desc;
+        for (auto* p = e; p && p != document; p = p->GetParentNode()) {
+            if (!row && p->IsClassSet("row"))
+                row = p;
+            if (desc.empty())
+                desc = p->GetAttribute<Rml::String>("data-desc", "");
+        }
+        if (row != current_row) {
+            if (current_row)
+                current_row->SetClass("current", false);
+            if (row)
+                row->SetClass("current", true);
+            current_row = row;
+        }
+        if (!desc.empty())
+            text("desc", desc);
+        if (!e)
+            return;
+        // Only one plate lit: the open page's gives way to Back's.
+        document->SetClass("on-back", e->GetId() == "back");
+        if (!settings) {
+            for (const char* t : main_ids)
+                if (e->GetId() == t)
+                    set_theme(t);
+        } else if (const int i = index_of(tab_ids, e->GetId()); i >= 0 && i != tab)
+            select_tab(i);  // the cursor on a category opens it, as Melee previews
+    }
+    /* A pointer moving onto a control moves the cursor there, so the mouse,
+     * the Quest's laser and the pad share one highlight. Only a move: when the
+     * layout shifts under a resting pointer (a fullscreen toggle, a page
+     * change) RmlUi hovers whatever is now beneath it, and taking that as
+     * pointing pulled the focus away from the keys. Not while a text field
+     * holds the focus either: that would pull it out from under the typing.
+     * Not onto the settings categories: focusing one opens its page, so the
+     * pointer crossing them on its way to the rows flipped pages. They only
+     * light up under it (launcher.rcss), and a click opens one. */
+    void hover(Rml::Event& event) {
+        const int x = event.GetParameter<int>("mouse_x", -1);
+        const int y = event.GetParameter<int>("mouse_y", -1);
+        if (x == pointer_x && y == pointer_y)
+            return;
+        pointer_x = x;
+        pointer_y = y;
+        auto* e = event.GetTargetElement();
+        while (e && e != document && e->GetTagName() != "button" &&
+               !(e->GetTagName() == "input" && is_slider(e->GetId())))
+            e = e->GetParentNode();
+        if (!e || e == document || e->IsPseudoClassSet("disabled"))
+            return;
+        if (settings && within(e, "categories"))
+            return;
+        auto* focus = document->GetContext()->GetFocusElement();
+        if (e != focus && !typing(focus))
+            e->Focus();
     }
     void controls() {
         enabled("play", supported && !busy());
@@ -321,53 +448,75 @@ class Launcher final : public Rml::EventListener {
         enabled("verify", verification.valid() || (supported && !busy()));
         enabled("settings", !busy());
         enabled("discord", !busy());
-        text("verify", verification.valid() ? "Cancel verification" : "Verify disc");
-        if (!settings) {
-            focus_ids = {"play", "choose", "verify", "settings", "discord", "quit"};
-            auto ustate = pc::updater::get_state();
-            if ((ustate.status == pc::updater::Status::UpdateAvailable ||
-                    ustate.status == pc::updater::Status::Downloaded) &&
-                !update_card_dismissed)
-            {
-                focus_ids.insert(
-                    focus_ids.begin(), {"update-action", "update-browser", "update-later"});
-            }
-            return;
+        text("verify-label", verification.valid() ? "Cancel Verify" : "Verify Disc");
+        focus_ids.assign(std::begin(main_ids), std::end(main_ids));
+        auto ustate = pc::updater::get_state();
+        if ((ustate.status == pc::updater::Status::UpdateAvailable ||
+                ustate.status == pc::updater::Status::Downloaded) &&
+            !update_card_dismissed)
+        {
+            focus_ids.insert(
+                focus_ids.begin(), {"update-action", "update-browser", "update-later"});
         }
-        // The strip itself is one stop in the vertical order; left/right on it
-        // changes page, so every control stays reachable without extra keys.
-        focus_ids = {tab_ids[tab]};
-        for (const auto& id : page_focus())
-            focus_ids.push_back(id);
-        focus_ids.push_back("back");
     }
-    void show_tab(int next) {
-        tab = (next + tab_count) % tab_count;
-        for (int i = 0; i < tab_count; ++i) {
+    // Opens a page without moving the focus (describe() calls it whenever a
+    // category takes the focus, by keys or by pointer).
+    void select_tab(int next) {
+        const int count = std::size(tab_ids);
+        tab = (next + count) % count;
+        for (int i = 0; i < count; ++i) {
             if (auto* e = element(tab_ids[i]))
                 e->SetClass("selected", i == tab);
-            if (auto* e = element(page_ids[i]))
+            const auto page_id = "page-" + Rml::String(tab_ids[i]).substr(4);
+            if (auto* e = element(page_id.c_str()))
                 e->SetClass("selected", i == tab);
         }
-        controls();
+        if (auto* e = element("settings-content"))
+            e->SetScrollTop(0);
+    }
+    void show_tab(int next) {
+        select_tab(next);
         if (auto* e = element(tab_ids[tab])) {
             e->Focus();
             e->ScrollIntoView();
         }
     }
+    // Into the open page's first row (Right or A on a category).
+    void enter_rows() {
+        document->UpdateDocument();  // the page's display just changed
+        for (const auto& id : page_focus()) {
+            auto* e = element(id.c_str());
+            if (shown(e) && !e->IsPseudoClassSet("disabled")) {
+                e->Focus();
+                e->ScrollIntoView();
+                return;
+            }
+        }
+    }
+    // B or Escape: rows to categories, categories to the main menu.
+    void back() {
+        if (!settings) {
+            if (verification.valid())
+                cancel = true;
+        } else if (in_rows(document->GetContext()->GetFocusElement()))
+            show_tab(tab);
+        else
+            show_settings(false);
+    }
     void focus_step(int direction) {
         if (pc_a11y_launcher_step(direction))
             return;
         auto* focus = document->GetContext()->GetFocusElement();
+        const auto ids = column();
+        const int count = static_cast<int>(ids.size());
         int index = direction > 0 ? -1 : 0;
-        for (size_t i = 0; i < focus_ids.size(); ++i)
-            if (element(focus_ids[i].c_str()) == focus)
-                index = static_cast<int>(i);
-        for (size_t i = 0; i < focus_ids.size(); ++i) {
-            index = (index + direction + static_cast<int>(focus_ids.size())) %
-                    static_cast<int>(focus_ids.size());
-            auto* e = element(focus_ids[index].c_str());
-            if (e && !e->IsPseudoClassSet("disabled")) {
+        for (int i = 0; i < count; ++i)
+            if (element(ids[i].c_str()) == focus)
+                index = i;
+        for (int i = 0; i < count; ++i) {
+            index = (index + direction + count) % count;
+            auto* e = element(ids[index].c_str());
+            if (shown(e) && !e->IsPseudoClassSet("disabled")) {
                 e->Focus();
                 e->ScrollIntoView();
                 break;
@@ -376,14 +525,56 @@ class Launcher final : public Rml::EventListener {
     }
     void activate_focus() {
         auto* e = document->GetContext()->GetFocusElement();
-        if (!e)
+        if (!e || e == document || e->IsPseudoClassSet("disabled"))
             return;
-        for (auto& id : focus_ids)
-            if (e == element(id.c_str())) {
-                if (!e->IsPseudoClassSet("disabled"))
-                    action(id);
-                break;
-            }
+        const auto id = e->GetId();
+        if (settings && index_of(tab_ids, id) >= 0) {
+            show_tab(index_of(tab_ids, id));
+            enter_rows();
+        } else if (e->GetTagName() == "button" || is_slider(id))
+            action(id);
+    }
+    /* Left and Right: Melee's arrows. They step a value either way, move a
+     * slider, or cross between the categories and the rows. */
+    void horizontal(int direction) {
+        auto* focus = document->GetContext()->GetFocusElement();
+        if (!focus || focus->IsPseudoClassSet("disabled"))
+            return;
+        const auto id = focus->GetId();
+        if (settings && index_of(tab_ids, id) >= 0) {
+            if (direction > 0)
+                enter_rows();
+        } else if (is_slider(id))
+            step_slider(direction);
+        else if (focus->IsClassSet("value") && !focus->IsClassSet("action")) {
+            if (!cycle(id, direction))
+                action(id);  // two states: either arrow flips it
+        } else if (settings && direction < 0)
+            show_tab(tab);
+    }
+    /* The settings with more than two values, stepped either way. */
+    bool cycle(const std::string& id, int direction) {
+        auto wrap = [](int value, int count) { return (value % count + count) % count; };
+        if (id == "backend") {
+            action(id, direction);
+            return true;
+        } else if (id == "aspect")
+            prefs.widescreen = wrap(prefs.widescreen + direction, 3);
+        else if (id == "filter") {
+            int power = 0;
+            while (power < 4 && (1 << power) < prefs.anisotropy)
+                ++power;
+            prefs.anisotropy = 1 << wrap(power + direction, 5);
+        } else if (id == "filter-mode") {
+            prefs.filter_mode = wrap(prefs.filter_mode + direction, 4);
+            aurora_set_resampler(static_cast<AuroraSampler>(prefs.filter_mode));
+        } else if (id == "net-delay")
+            prefs.net_delay = wrap(prefs.net_delay + 1 + direction, 6) - 1;  // Auto, 0-4
+        else
+            return false;
+        save();
+        refresh_settings();
+        return true;
     }
     void slider(const char* id, float value) {
         auto* e = document->GetElementById(id);
@@ -446,35 +637,37 @@ class Launcher final : public Rml::EventListener {
         notice();
         quiet = false;
     }
+    // The line under the settings rows, shown only while it has something
+    // to say (settings save as they change, so that goes without saying).
+    void note(const std::string& value) {
+        text("settings-status", value);
+        if (auto* e = element("settings-status"))
+            e->SetProperty("display", value.empty() ? "none" : "block");
+    }
     void notice() {
-        text("settings-status",
-            prefs.render_scale >= 6 ?
-                resolution_name(prefs.render_scale) +
-                    " native needs a lot of video memory; drop it if the game stutters." :
-                std::string("Saved automatically."));
+        note(prefs.render_scale >= 6 ?
+                 resolution_name(prefs.render_scale) +
+                     " native needs a lot of video memory; drop it if the game stutters." :
+                 std::string());
     }
     void show_settings(bool show) {
         settings = show;
-        element("home")->SetProperty("display", show ? "none" : "block");
-        element("preferences")->SetProperty("display", show ? "block" : "none");
+        document->SetClass("in-settings", show);
         refresh_settings();
         if (show) {
+            set_theme("settings");
             show_tab(tab);
             return;
         }
         controls();
         element("settings")->Focus();
     }
-    // Left/right: adjusts the focused slider, or pages the tab strip.
+    // Left/right on a slider.
     void step_slider(int direction) {
         auto* focus = document->GetContext()->GetFocusElement();
         if (!focus)
             return;
         auto id = focus->GetId();
-        if (tab_index(id) >= 0) {
-            show_tab(tab + direction);
-            return;
-        }
         if (id == "volume")
             prefs.volume = std::clamp(prefs.volume + direction * 0.05f, 0.0f, 1.0f);
         else if (id == "music-volume")
@@ -519,11 +712,13 @@ class Launcher final : public Rml::EventListener {
             std::async(std::launch::async, [path] { return launcher::inspect_disc(path); });
         controls();
     }
-    void action(const std::string& id) {
-        if (id == "net-delay") {
-            prefs.net_delay = prefs.net_delay == 4 ? -1 : prefs.net_delay + 1;
-            save();
-            refresh_settings();
+    void action(const std::string& id, int direction = 1) {
+        if (id == "export-logs") {
+            pc_android_export_logs();
+            return;
+        }
+        if (id == "net-delay" || id == "aspect" || id == "filter" || id == "filter-mode") {
+            cycle(id, 1);
             return;
         }
         if (id == "quit") {
@@ -536,8 +731,8 @@ class Launcher final : public Rml::EventListener {
             SDL_OpenURL("https://discord.gg/aurt34svq");
             return;
         }
-        if (tab_index(id) >= 0) {
-            show_tab(tab_index(id));
+        if (index_of(tab_ids, id) >= 0) {
+            show_tab(index_of(tab_ids, id));
             return;
         }
         if (id == "verify" && verification.valid()) {
@@ -592,41 +787,25 @@ class Launcher final : public Rml::EventListener {
             refresh_settings();
             element("display")->Focus();
         } else if (id == "sync" || id == "vsync") {
-            if (std::getenv("MELEE_VSYNC"))
-                status("VSync is controlled by the MELEE_VSYNC environment setting.");
-            else {
+            if (!std::getenv("MELEE_VSYNC")) {
                 prefs.vsync = !prefs.vsync;
                 aurora_enable_vsync(prefs.vsync);
                 save();
             }
             refresh_settings();
+            if (std::getenv("MELEE_VSYNC"))
+                status("VSync is controlled by the MELEE_VSYNC environment setting.");
             element("sync")->Focus();
         } else if (id == "resolution") {
             prefs.render_scale = prefs.render_scale >= 10 ? 0 : int(prefs.render_scale) + 1;
             save();
             refresh_settings();
             element("resolution")->Focus();
-        } else if (id == "aspect") {
-            prefs.widescreen = (prefs.widescreen + 1) % 3;
-            save();
-            refresh_settings();
-            element("aspect")->Focus();
         } else if (id == "aa") {
             prefs.msaa = prefs.msaa == 1 ? 4 : 1;
             save();
             refresh_settings();
             element("aa")->Focus();
-        } else if (id == "filter") {
-            prefs.anisotropy = prefs.anisotropy >= 16 ? 1 : prefs.anisotropy * 2;
-            save();
-            refresh_settings();
-            element("filter")->Focus();
-        } else if (id == "filter-mode") {
-            prefs.filter_mode = (prefs.filter_mode + 1) % 4;
-            aurora_set_resampler(static_cast<AuroraSampler>(prefs.filter_mode));
-            save();
-            refresh_settings();
-            element("filter-mode")->Focus();
         } else if (id == "backend") {
 #if defined(__APPLE__)
             status("Graphics backend is Metal (hardware accelerated).");
@@ -634,7 +813,7 @@ class Launcher final : public Rml::EventListener {
             if (std::getenv("MELEE_BACKEND")) {
                 status("Backend is controlled by the MELEE_BACKEND environment setting.");
             } else {
-                prefs.backend = backend_next(prefs.backend);
+                prefs.backend = backend_next(prefs.backend, direction);
                 save();
                 refresh_settings();
                 status("Graphics backend set to " + std::string(backend_name(prefs.backend)) +
@@ -708,9 +887,8 @@ class Launcher final : public Rml::EventListener {
             prefs.reverb = false;
             save();
             refresh_settings();
-            text("settings-status",
-                "Performance preset: internal resolution 1x, anti-aliasing off, filtering 1x "
-                "and reverb off. Anti-aliasing and filtering apply after a restart.");
+            note("Performance preset: internal resolution 1x, anti-aliasing off, filtering 1x "
+                 "and reverb off. Anti-aliasing and filtering apply after a restart.");
             element("performance")->Focus();
         } else if (id == "fps") {
             prefs.fps = !prefs.fps;
@@ -762,9 +940,22 @@ public:
         document->AddEventListener(Rml::EventId::Blur, this, true);
         // Capture phase: the field's own listener stops the event.
         document->AddEventListener(Rml::EventId::Textinput, this, true);
+        // Focus does not bubble; the capture pass still reaches the document.
+        document->AddEventListener(Rml::EventId::Focus, this, true);
+        document->AddEventListener(Rml::EventId::Mousemove, this);
+        /* MELEE_LAUNCHER_PLATFORM=mobile lays the launcher out as
+         * another platform does, to check a phone's from a desktop. Only the
+         * layout follows it. */
+        const char* platform = std::getenv("MELEE_LAUNCHER_PLATFORM");
+        if (is_mobile || (platform && std::strcmp(platform, "mobile") == 0))
+            document->SetClass("mobile", true);
+#if defined(__ANDROID__)
+        document->SetClass("android", true);
+#endif
         document->Show();
         text("app-version", pc::get_app_version());
         text("check-status", "Current version: " + pc::get_app_version());
+        text("disc-note", disc_note);
         if (prefs.check_updates) {
             pc::updater::check_for_updates_async(true);
         }
@@ -783,6 +974,8 @@ public:
         document->RemoveEventListener(Rml::EventId::Change, this);
         document->RemoveEventListener(Rml::EventId::Blur, this, true);
         document->RemoveEventListener(Rml::EventId::Textinput, this, true);
+        document->RemoveEventListener(Rml::EventId::Focus, this, true);
+        document->RemoveEventListener(Rml::EventId::Mousemove, this);
         auto* context = document->GetContext();
         document->Close();
         context->Update();
@@ -790,6 +983,10 @@ public:
     void ProcessEvent(Rml::Event& event) override {
         if (event.GetId() == Rml::EventId::Textinput) {
             type_online(event);
+        } else if (event.GetId() == Rml::EventId::Focus) {
+            describe(event.GetTargetElement());
+        } else if (event.GetId() == Rml::EventId::Mousemove) {
+            hover(event);
         } else if (event.GetId() == Rml::EventId::Click) {
             auto* target = event.GetTargetElement();
             while (target && target != document) {
@@ -850,23 +1047,22 @@ public:
                 focus_step(key == Rml::Input::KI_UP ? -1 : 1);
                 event.StopPropagation();
             } else if (key == Rml::Input::KI_RETURN) {
+                // Stopping it here also stops RmlUi's own click on Enter.
                 auto* focus = document->GetContext()->GetFocusElement();
-                if (focus && is_slider(focus->GetId())) {
-                    action(focus->GetId());
+                if (focus && (is_slider(focus->GetId()) ||
+                                 (settings && index_of(tab_ids, focus->GetId()) >= 0)))
+                {
+                    activate_focus();
                     event.StopPropagation();
                 }
             } else if (key == Rml::Input::KI_LEFT || key == Rml::Input::KI_RIGHT) {
-                auto* focus = document->GetContext()->GetFocusElement();
-                if (focus && (is_slider(focus->GetId()) || tab_index(focus->GetId()) >= 0)) {
-                    step_slider(key == Rml::Input::KI_LEFT ? -1 : 1);
+                // A text field keeps its arrows for the caret.
+                if (!typing(document->GetContext()->GetFocusElement())) {
+                    horizontal(key == Rml::Input::KI_LEFT ? -1 : 1);
                     event.StopPropagation();
                 }
             } else if (key == Rml::Input::KI_ESCAPE) {
-                if (settings)
-                    show_settings(false);
-                else if (verification.valid()) {
-                    cancel = true;
-                }
+                back();
                 event.StopPropagation();
             }
         }
@@ -897,18 +1093,14 @@ public:
                     else if (button == SDL_GAMEPAD_BUTTON_DPAD_UP)
                         focus_step(-1);
                     else if (button == SDL_GAMEPAD_BUTTON_DPAD_LEFT)
-                        step_slider(-1);
+                        horizontal(-1);
                     else if (button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT)
-                        step_slider(1);
+                        horizontal(1);
                     else if (button == SDL_GAMEPAD_BUTTON_SOUTH ||
                              button == SDL_GAMEPAD_BUTTON_START)
                         activate_focus();
-                    else if (button == SDL_GAMEPAD_BUTTON_EAST) {
-                        if (settings)
-                            show_settings(false);
-                        else if (verification.valid())
-                            cancel = true;
-                    }
+                    else if (button == SDL_GAMEPAD_BUTTON_EAST)
+                        back();
                 } else if (e->sdl.type == SDL_EVENT_GAMEPAD_AXIS_MOTION) {
                     if (e->sdl.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTY) {
                         auto value = e->sdl.gaxis.value;
@@ -921,7 +1113,7 @@ public:
                         auto value = e->sdl.gaxis.value;
                         auto now = SDL_GetTicks();
                         if (std::abs(value) > 18000 && now - last_axis_x > 150) {
-                            step_slider(value > 0 ? 1 : -1);
+                            horizontal(value > 0 ? 1 : -1);
                             last_axis_x = now;
                         }
                     }
@@ -1023,7 +1215,7 @@ public:
                     if (ustate.status == pc::updater::Status::UpdateAvailable &&
                         !update_card_dismissed && !settings)
                     {
-                        card->SetProperty("display", "flex");
+                        card->SetProperty("display", "block");
                         text("update-tag", ustate.latest_release.tag_name);
                         text("update-title", ustate.latest_release.name.empty() ?
                                                  ustate.latest_release.tag_name :
@@ -1045,7 +1237,7 @@ public:
                             prog->SetProperty("display", "none");
                         controls();
                     } else if (ustate.status == pc::updater::Status::Downloading) {
-                        card->SetProperty("display", "flex");
+                        card->SetProperty("display", "block");
                         text("update-title", "Downloading Update...");
                         int pct = static_cast<int>(ustate.download_progress * 100.0f + 0.5f);
                         text("update-desc", "Downloading " + ustate.target_asset_name + " (" +
@@ -1058,7 +1250,7 @@ public:
                             fill->SetProperty("width", std::to_string(pct) + "%");
                         text("update-progress-text", std::to_string(pct) + "%");
                     } else if (ustate.status == pc::updater::Status::Downloaded) {
-                        card->SetProperty("display", "flex");
+                        card->SetProperty("display", "block");
                         text("update-title", "Update Ready!");
                         text("update-desc", ustate.restart_supported ?
                                                 "Downloaded successfully. Click Restart to apply." :
@@ -1266,11 +1458,8 @@ extern "C" int pc_launcher_run(const char* command_line_disc, SDL_Window* window
             return -1;
         }
         auto resources = pc_resources_path();
-        if (!Rml::LoadFontFace((resources / "font.ttf").string())) {
-            SDL_Log("Launcher: could not load font from %s", resources.c_str());
+        if (!load_menu_fonts(resources))
             return -1;
-        }
-        Rml::LoadFontFace((resources / "font-bold.ttf").string());
         aurora::rmlui::set_ui_scale(prefs.scale);
         aurora_set_resampler(static_cast<AuroraSampler>(prefs.filter_mode));
         auto* document = context->LoadDocument((resources / "launcher.rml").string());
@@ -1317,11 +1506,15 @@ public:
     // that selected the row binds itself immediately.
     bool binding_armed = false;
     std::vector<std::string> focus_ids;
+    Rml::Element* current_row = nullptr;
     // Resizing the framebuffer allocates a fresh, empty texture. While the
     // overlay pauses the game nothing redraws it, so the frozen frame behind
     // the menu would go black: hold the change until the menu closes.
     bool resize_pending = false;
 
+    static bool is_sidebar(const Rml::String& id) {
+        return index_of(tab_ids, id) >= 0 || id == "resume" || id == "quit-game";
+    }
     static bool is_slider(const Rml::String& id) {
         return id == "volume" || id == "resolution" || id == "scale" || id == "music-volume" ||
                id == "sfx-volume";
@@ -1357,22 +1550,27 @@ public:
             for (int i = 0; i < PAD_AXIS_COUNT; ++i)
                 ids.push_back("axis-" + std::to_string(i));
             ids.push_back("bind-reset");
+            ids.push_back("menu-binding");
             return ids;
         }
         }
     }
     void show_tab(int next) {
-        tab = (next + tab_count) % tab_count;
-        for (int i = 0; i < tab_count; ++i) {
+        // The Launcher category only exists before starting the game.
+        const int count = std::size(tab_ids) - 1;
+        tab = (next + count) % count;
+        for (int i = 0; i < count; ++i) {
             if (auto* e = document->GetElementById(tab_ids[i]))
                 e->SetClass("selected", i == tab);
-            if (auto* e = document->GetElementById(page_ids[i]))
+            const auto page_id = "page-" + Rml::String(tab_ids[i]).substr(4);
+            if (auto* e = document->GetElementById(page_id))
                 e->SetClass("selected", i == tab);
         }
         focus_ids = {tab_ids[tab]};
         for (const auto& id : page_focus())
             focus_ids.push_back(id);
         focus_ids.push_back("resume");
+        focus_ids.push_back("quit-game");
         quiet = true;
         if (auto* e = document->GetElementById(tab_ids[tab])) {
             e->Focus();
@@ -1380,10 +1578,39 @@ public:
         }
         quiet = false;
     }
+    void enter_rows() {
+        document->UpdateDocument();
+        for (const auto& id : page_focus()) {
+            auto* e = document->GetElementById(id);
+            if (e && e->IsVisible(true)) {
+                e->Focus();
+                e->ScrollIntoView();
+                return;
+            }
+        }
+    }
+    void back() {
+        auto* focus = document->GetContext()->GetFocusElement();
+        if (focus && !is_sidebar(focus->GetId()))
+            show_tab(tab);
+        else
+            toggle();
+    }
     void focus_step(int direction) {
         if (pc_a11y_port_menu_step(direction))
             return;
         auto* focus = document->GetContext()->GetFocusElement();
+        const auto id = focus ? focus->GetId() : Rml::String();
+        if (is_sidebar(id)) {
+            const int count = std::size(tab_ids) - 1;
+            const int current = id == "quit-game" ? count + 1 : id == "resume" ? count : tab;
+            const int next = (current + direction + count + 2) % (count + 2);
+            if (next < count)
+                show_tab(next);
+            else if (auto* e = document->GetElementById(next == count ? "resume" : "quit-game"))
+                e->Focus();
+            return;
+        }
         int index = direction > 0 ? -1 : 0;
         for (size_t i = 0; i < focus_ids.size(); ++i)
             if (document->GetElementById(focus_ids[i]) == focus)
@@ -1397,7 +1624,9 @@ public:
     }
     void activate_focus() {
         auto* focus = document->GetContext()->GetFocusElement();
-        if (focus)
+        if (focus && index_of(tab_ids, focus->GetId()) >= 0)
+            enter_rows();
+        else if (focus)
             apply(focus->GetId());
     }
     bool is_back_bound() const {
@@ -1417,7 +1646,34 @@ public:
         }
         return false;
     }
+    static constexpr u16 key_buttons[] = {PAD_BUTTON_A, PAD_BUTTON_B, PAD_BUTTON_X, PAD_BUTTON_Y,
+        PAD_BUTTON_START, PAD_TRIGGER_Z, PAD_TRIGGER_L, PAD_TRIGGER_R, PAD_BUTTON_UP,
+        PAD_BUTTON_DOWN, PAD_BUTTON_LEFT, PAD_BUTTON_RIGHT};
+    void refresh_keyboard() {
+        label("pad-port", "Keyboard");
+        label("pad-name", "Player 1 · Escape cancels · Delete clears a binding");
+        for (int i = 0; i < int(prefs.keys.size()); ++i) {
+            const bool axis = i >= PAD_BUTTON_COUNT;
+            const int slot = axis ? i - PAD_BUTTON_COUNT : i;
+            const std::string prefix = axis ? "axis-" : "bind-";
+            const char* name = axis ? PADGetAxisName(slot) : PADGetButtonName(key_buttons[i]);
+            label((prefix + "name-" + std::to_string(slot)).c_str(), name ? name : "-");
+            const char* key =
+                prefs.keys[i] ? SDL_GetScancodeName(SDL_Scancode(prefs.keys[i])) : "Unbound";
+            label((prefix + std::to_string(slot)).c_str(),
+                binding == slot && binding_axis == axis ? "Press a key..." : key);
+        }
+    }
     void refresh_bindings() {
+        label("menu-binding",
+            pad_port == 4 ? "F1 (keyboard)" :
+            binding == PAD_BUTTON_COUNT && !binding_axis ?
+                            "Press a button..." :
+                            SDL_GetGamepadStringForButton(SDL_GamepadButton(prefs.menu_button)));
+        if (pad_port == 4) {
+            refresh_keyboard();
+            return;
+        }
         label("pad-port", "Port " + std::to_string(pad_port + 1));
         const char* name = PADGetName(pad_port);
         label("pad-name", name && *name ? name : "No controller in this port.");
@@ -1546,34 +1802,41 @@ public:
     }
     void start_binding(int slot, bool axis) {
         u32 count = 0;
-        if (!PADGetButtonMappings(pad_port, &count) || count == 0) {
+        if (pad_port != 4 && (!PADGetButtonMappings(pad_port, &count) || count == 0)) {
             label("menu-status", "No controller in port " + std::to_string(pad_port + 1) + ".");
             return;
         }
         binding = slot;
         binding_axis = axis;
         binding_armed = false;
-        label("menu-status", axis ? "Move a stick or press a button. Escape cancels." :
-                                    "Press a button on the controller. Escape cancels.");
+        label("menu-status",
+            pad_port == 4 ? "Press a key. Escape cancels; Delete clears." :
+            axis          ? "Move a stick or press a button. Escape cancels; Delete clears." :
+                            "Press a button on the controller. Escape cancels; Delete clears.");
         refresh_bindings();
     }
     // Runs once a frame while a bind prompt is up.
     void poll_binding() {
-        if (binding < 0)
+        if (binding < 0 || pad_port == 4)
             return;
         constexpr uint32_t kNativeButtonAxisBit = 0x40000000u;
         const int native = PADGetNativeButtonPressed(pad_port);
-        const PADSignedNativeAxis pulled = PADGetNativeAxisPulled(pad_port);
-        const bool triggerPulled = pulled.nativeAxis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ||
-                                   pulled.nativeAxis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER;
-        const PADSignedNativeAxis axis =
-            (binding_axis || triggerPulled) ? pulled : PADSignedNativeAxis{-1, AXIS_SIGN_POSITIVE};
+        const PADSignedNativeAxis axis = PADGetNativeAxisPulled(pad_port);
         if (!binding_armed) {
             binding_armed = native < 0 && axis.nativeAxis < 0;
             return;
         }
         if (native < 0 && axis.nativeAxis < 0)
             return;
+        if (binding == PAD_BUTTON_COUNT && !binding_axis) {
+            if (native < 0)
+                return;
+            prefs.menu_button = native;
+            binding = -1;
+            saved();
+            refresh_bindings();
+            return;
+        }
         u32 count = 0;
         if (binding_axis) {
             const PADAxisMapping* map = PADGetAxisMappings(pad_port, &count);
@@ -1593,7 +1856,8 @@ public:
             if (map && u32(binding) < count) {
                 const u32 encoded =
                     native >= 0 ? u32(native) :
-                                  (kNativeButtonAxisBit | static_cast<uint32_t>(axis.nativeAxis));
+                                  (kNativeButtonAxisBit | static_cast<uint32_t>(axis.nativeAxis) |
+                                      (axis.sign == AXIS_SIGN_NEGATIVE ? 0x20000000u : 0));
                 PADSetButtonMapping(pad_port, {encoded, map[binding].padButton});
                 if (native < 0 && axis.nativeAxis >= 0 &&
                     (map[binding].padButton == PAD_TRIGGER_L ||
@@ -1621,31 +1885,83 @@ public:
         label("menu-status", "Canceled.");
         refresh_bindings();
     }
-    void apply(const Rml::String& id) {
+    void clear_binding() {
+        if (binding < 0 || pad_port == 4)
+            return;
+        if (binding == PAD_BUTTON_COUNT && !binding_axis) {
+            label("menu-status", "The menu button must remain bound. Escape cancels.");
+            return;
+        }
+        u32 count = 0;
+        if (binding_axis) {
+            const auto* map = PADGetAxisMappings(pad_port, &count);
+            if (map && u32(binding) < count)
+                PADSetAxisMapping(pad_port,
+                    {{-1, AXIS_SIGN_POSITIVE}, SDL_GAMEPAD_BUTTON_INVALID, map[binding].padAxis});
+        } else {
+            const auto* map = PADGetButtonMappings(pad_port, &count);
+            if (map && u32(binding) < count) {
+                const auto button = map[binding].padButton;
+                PADSetButtonMapping(pad_port, {PAD_NATIVE_BUTTON_INVALID, button});
+                if (button == PAD_TRIGGER_L || button == PAD_TRIGGER_R)
+                    PADSetAxisMapping(pad_port,
+                        {{-1, AXIS_SIGN_POSITIVE}, SDL_GAMEPAD_BUTTON_INVALID,
+                            static_cast<PADAxis>(button == PAD_TRIGGER_L ? PAD_AXIS_TRIGGER_L :
+                                                                           PAD_AXIS_TRIGGER_R)});
+            }
+        }
+        PADSerializeMappings();
+        binding = -1;
+        label("menu-status", "Binding cleared.");
+        refresh_bindings();
+    }
+    void apply(const Rml::String& id, int direction = 1) {
         if (id == "net-delay") {
-            prefs.net_delay = prefs.net_delay == 4 ? -1 : prefs.net_delay + 1;
+            prefs.net_delay = (prefs.net_delay + 1 + direction + 6) % 6 - 1;
             saved();
             refresh();
+            return;
+        }
+        if (id == "quit-game") {
+            // Leave through the same shutdown path as a normal window close.
+            pc_exit_requested = true;
+            toggle();
             return;
         }
         if (id == "resume") {
             toggle();
             return;
         }
-        if (tab_index(id) >= 0) {
+        if (index_of(tab_ids, id) >= 0) {
             lbAudioAx_80024030(SFX_CONFIRM);
-            show_tab(tab_index(id));
+            show_tab(index_of(tab_ids, id));
+            return;
+        }
+        if (id == "menu-binding") {
+            if (pad_port == 4)
+                label("menu-status", "F1 opens settings on the keyboard.");
+            else
+                start_binding(PAD_BUTTON_COUNT, false);
             return;
         }
         if (id == "pad-port") {
-            pad_port = (pad_port + 1) % 4;
+            pad_port = (pad_port + direction + 5) % 5;
             binding = -1;
             lbAudioAx_80024030(SFX_CONFIRM);
             refresh_bindings();
             return;
         }
         if (id == "bind-reset") {
+            if (pad_port == 4) {
+                prefs.keys = launcher::default_keys;
+                saved();
+                binding = -1;
+                refresh_bindings();
+                return;
+            }
             PADRestoreDefaultMapping(pad_port);
+            prefs.menu_button = SDL_GAMEPAD_BUTTON_BACK;
+            saved();
             PADSerializeMappings();
             binding = -1;
             lbAudioAx_80024030(SFX_CONFIRM);
@@ -1659,11 +1975,13 @@ public:
             return;
         }
         if (id == "display") {
-            if (!SDL_SetWindowFullscreen(window, !VIGetWindowFullscreen())) {
+            const bool fullscreen = !VIGetWindowFullscreen();
+            if (!SDL_SetWindowFullscreen(window, fullscreen)) {
                 label("menu-status", SDL_GetError());
                 return;
             }
-            prefs.fullscreen = VIGetWindowFullscreen();
+            // SDL applies the window change asynchronously; save the requested mode.
+            prefs.fullscreen = fullscreen;
         } else if (id == "sync" && !std::getenv("MELEE_VSYNC")) {
             prefs.vsync = !prefs.vsync;
             aurora_enable_vsync(prefs.vsync);
@@ -1671,14 +1989,15 @@ public:
             prefs.render_scale = prefs.render_scale >= 10 ? 0 : int(prefs.render_scale) + 1;
             resize_pending = true;
         } else if (id == "aspect") {
-            prefs.widescreen = (prefs.widescreen + 1) % 3;
+            prefs.widescreen = (prefs.widescreen + direction + 3) % 3;
             resize_pending = true;
         } else if (id == "aa")
             prefs.msaa = prefs.msaa == 1 ? 4 : 1;
         else if (id == "filter")
-            prefs.anisotropy = prefs.anisotropy >= 16 ? 1 : prefs.anisotropy * 2;
+            prefs.anisotropy = direction > 0 ? (prefs.anisotropy >= 16 ? 1 : prefs.anisotropy * 2) :
+                                               (prefs.anisotropy <= 1 ? 16 : prefs.anisotropy / 2);
         else if (id == "filter-mode") {
-            prefs.filter_mode = (prefs.filter_mode + 1) % 4;
+            prefs.filter_mode = (prefs.filter_mode + direction + 4) % 4;
             aurora_set_resampler(static_cast<AuroraSampler>(prefs.filter_mode));
         } else if (id == "custom-textures") {
             prefs.custom_textures = !prefs.custom_textures;
@@ -1700,7 +2019,7 @@ public:
             if (std::getenv("MELEE_BACKEND")) {
                 label("menu-status", "Backend set by MELEE_BACKEND environment.");
             } else {
-                prefs.backend = backend_next(prefs.backend);
+                prefs.backend = backend_next(prefs.backend, direction);
                 label("menu-status", "Backend set to " + std::string(backend_name(prefs.backend)) +
                                          " (restart required).");
             }
@@ -1759,14 +2078,21 @@ public:
         lbAudioAx_80024030(SFX_MOVE);
         saved();
     }
-    // Left/right: pages the tab strip, otherwise nudges the focused slider.
+    // Right enters a category; within a page, the arrows adjust its values.
     void step(int direction) {
         auto* focus = document->GetContext()->GetFocusElement();
         if (!focus)
             return;
         const auto id = focus->GetId();
-        if (tab_index(id) >= 0) {
-            show_tab(tab + direction);
+        if (index_of(tab_ids, id) >= 0) {
+            if (direction > 0)
+                enter_rows();
+            return;
+        }
+        if (focus->GetTagName() == "input" && !is_slider(id))
+            return;  // Leave the caret's arrow keys to the text field.
+        if (focus->IsClassSet("value") && !focus->IsClassSet("action")) {
+            apply(id, direction);
             return;
         }
         if (id == "volume")
@@ -1781,8 +2107,11 @@ public:
         } else if (id == "scale") {
             prefs.scale = std::clamp(prefs.scale + direction * 0.25f, 0.75f, 1.5f);
             aurora::rmlui::set_ui_scale(prefs.scale);
-        } else
+        } else {
+            if (direction < 0)
+                show_tab(tab);
             return;
+        }
         pc_audio_set_volume(prefs.mute ? 0 : prefs.volume);
         pc_audio_set_music_volume(prefs.music_volume);
         pc_audio_set_sfx_volume(prefs.sfx_volume);
@@ -1794,11 +2123,41 @@ public:
     void gamepad(const SDL_Event& e) {
         if (!document)
             return;
+        if (open && binding >= 0 && pad_port != 4 && e.type == SDL_EVENT_KEY_DOWN &&
+            e.key.scancode == SDL_SCANCODE_DELETE)
+        {
+            clear_binding();
+            return;
+        }
+        if (pad_port == 4 && open && binding >= 0 &&
+            (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP))
+        {
+            if (e.type == SDL_EVENT_KEY_UP) {
+                binding_armed = true;
+                return;
+            }
+            if (!binding_armed || e.key.repeat || e.key.scancode == SDL_SCANCODE_ESCAPE ||
+                e.key.scancode == SDL_SCANCODE_F1)
+                return;
+            const int slot = binding + (binding_axis ? PAD_BUTTON_COUNT : 0);
+            const int code = e.key.scancode == SDL_SCANCODE_DELETE ? 0 : e.key.scancode;
+            prefs.keys[slot] = code;
+            // Digital and analog trigger rows describe the same keyboard key.
+            if (slot == 6 || slot == 7)
+                prefs.keys[slot + 14] = code;
+            if (slot == 20 || slot == 21)
+                prefs.keys[slot - 14] = code;
+            binding = -1;
+            saved();
+            refresh_bindings();
+            return;
+        }
         if (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
             const auto button = e.gbutton.button;
-            if (binding < 0 &&
-                (button == SDL_GAMEPAD_BUTTON_GUIDE ||
-                    (button == SDL_GAMEPAD_BUTTON_BACK && (open || !is_back_bound()))))
+            if (binding < 0 && (button == SDL_GAMEPAD_BUTTON_GUIDE ||
+                                   (button == prefs.menu_button &&
+                                       (open || prefs.menu_button != SDL_GAMEPAD_BUTTON_BACK ||
+                                           !is_back_bound()))))
             {
                 toggle();
                 return;
@@ -1828,6 +2187,8 @@ public:
                 activate_focus();
                 break;
             case SDL_GAMEPAD_BUTTON_EAST:
+                back();
+                break;
             case SDL_GAMEPAD_BUTTON_START:
                 toggle();
                 break;
@@ -1861,6 +2222,24 @@ public:
             return;
         }
         if (event.GetId() == Rml::EventId::Focus) {
+            auto* target = event.GetTargetElement();
+            Rml::Element* row = nullptr;
+            Rml::String description;
+            for (auto* e = target; e && e != document; e = e->GetParentNode()) {
+                if (!row && e->IsClassSet("row"))
+                    row = e;
+                if (description.empty())
+                    description = e->GetAttribute<Rml::String>("data-desc", "");
+            }
+            if (current_row)
+                current_row->SetClass("current", false);
+            current_row = row;
+            if (current_row)
+                current_row->SetClass("current", true);
+            document->SetClass("on-back",
+                target && (target->GetId() == "resume" || target->GetId() == "quit-game"));
+            if (!description.empty())
+                label("menu-status", description);
             if (!quiet)
                 lbAudioAx_80024030(SFX_MOVE);
             return;
@@ -1871,7 +2250,8 @@ public:
                 if (binding >= 0)
                     cancel_binding();
                 else
-                    toggle();
+                    back();
+                event.StopPropagation();
                 return;
             }
             if (binding >= 0)
@@ -1881,13 +2261,15 @@ public:
             if (key == Rml::Input::KI_UP || key == Rml::Input::KI_DOWN) {
                 focus_step(key == Rml::Input::KI_UP ? -1 : 1);
                 event.StopPropagation();
-            } else if (key == Rml::Input::KI_RETURN && focus && is_slider(id)) {
-                apply(id);
-                event.StopPropagation();
-            } else if ((key == Rml::Input::KI_LEFT || key == Rml::Input::KI_RIGHT) &&
-                       tab_index(id) >= 0)
+            } else if (key == Rml::Input::KI_RETURN && focus &&
+                       (is_slider(id) || index_of(tab_ids, id) >= 0))
             {
-                show_tab(tab + (key == Rml::Input::KI_LEFT ? -1 : 1));
+                activate_focus();
+                event.StopPropagation();
+            } else if ((key == Rml::Input::KI_LEFT || key == Rml::Input::KI_RIGHT) && focus &&
+                       (index_of(tab_ids, id) >= 0 || is_slider(id) || focus->IsClassSet("value")))
+            {
+                step(key == Rml::Input::KI_LEFT ? -1 : 1);
                 event.StopPropagation();
             }
             return;
@@ -1931,8 +2313,8 @@ extern "C" void pc_menu_init(SDL_Window* window) {
         return;
     }
     auto resources = pc_resources_path();
-    Rml::LoadFontFace((resources / "font.ttf").string());
-    Rml::LoadFontFace((resources / "font-bold.ttf").string());
+    if (!load_menu_fonts(resources))
+        return;
     aurora::rmlui::set_ui_scale(prefs.scale);
     port_menu.window = window;
     port_menu.document = context->LoadDocument((resources / "port-menu.rml").string());
@@ -2066,4 +2448,8 @@ extern "C" int pc_get_net_port(void) {
 }
 extern "C" int pc_get_net_delay(void) {
     return prefs.net_delay;
+}
+
+extern "C" int pc_get_key_binding(int slot) {
+    return slot >= 0 && slot < int(prefs.keys.size()) ? prefs.keys[slot] : 0;
 }

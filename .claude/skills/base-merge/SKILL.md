@@ -28,7 +28,7 @@ List the environment variables the drop adds, including new values of existing o
 git diff master...upstream/master -- src tools | grep -E '^\+.*(getenv|MELEE_[A-Z0-9_]+=)'
 ```
 
-A new `SDL_GetPrefPath` call in the port layer (other than for the shader caches, which keep `MELEE_CACHE_DIR`) bypasses `MELEE_USER_DIR`, the fork's base port fix that gives every driven run a settings folder of its own (`pc_user_dir` in `src/pc/main.c`). Route it through `pc_user_dir` in the merge, in the fix's own style, or driven runs reach the maintainer's settings folder again; if the base port has taken the switch, drop the fork's version and say so:
+A new `SDL_GetPrefPath` call in the port layer (other than for the shader caches, which keep `MELEE_CACHE_DIR`) bypasses `MELEE_USER_DIR`, the fork's base port fix that gives every driven run a settings folder of its own (`pc_get_pref_path` in `src/pc/paths.c`, the base port's own funnel for the settings folder, which the fix extends). Route it through `pc_get_pref_path` in the merge, or driven runs reach the maintainer's settings folder again; if the base port has taken the switch, drop the fork's version and say so:
 
 ```
 git diff master...upstream/master -- src/pc | grep -E '^\+.*SDL_GetPrefPath'

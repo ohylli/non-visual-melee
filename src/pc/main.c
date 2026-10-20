@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "paths.h"
 #include <aurora/aurora.h>
 #include <aurora/dvd.h>
 #include <aurora/main.h>
@@ -118,6 +119,15 @@ static FILE* log_file(void) {
     if (!tried) {
         tried = true;
         const char* path = getenv("MELEE_LOG_FILE");
+        static char portable_log[4096];
+        if (path == NULL && pc_is_portable()) {
+            char* directory = pc_get_pref_path();
+            if (directory != NULL) {
+                snprintf(portable_log, sizeof portable_log, "%smelee-pc.log", directory);
+                SDL_free(directory);
+                path = portable_log;
+            }
+        }
 #if defined(_WIN32)
         if (path == NULL) {
             path = "melee-pc.log";
@@ -401,39 +411,6 @@ static AuroraBackend backend_from_env(void) {
     return BACKEND_AUTO;
 }
 
-/* MELEE_USER_DIR: a test run, or two instances on one machine, each with a
- * settings folder of its own (declared in pc.h). The shader caches keep
- * their own switch, MELEE_CACHE_DIR. */
-char* pc_user_dir(void) {
-    const char* env = getenv("MELEE_USER_DIR");
-    if (env == NULL || env[0] == '\0') {
-        return SDL_GetPrefPath(NULL, "melee-pc");
-    }
-#if defined(_WIN32)
-    const char sep = '\\';
-#else
-    const char sep = '/';
-#endif
-    size_t n = strlen(env);
-    char* dir = SDL_malloc(n + 2);
-    if (dir == NULL) {
-        return NULL;
-    }
-    memcpy(dir, env, n);
-    if (env[n - 1] != '/' && env[n - 1] != sep) {
-        dir[n++] = sep; /* callers append file names as SDL_GetPrefPath's */
-    }
-    dir[n] = '\0';
-    if (!SDL_CreateDirectory(dir)) {
-        /* Callers then fall back or go without; say so, since a test run
-         * meant to leave the player's settings alone may not. */
-        pc_log_line("MELEE_USER_DIR: cannot make %s: %s", dir, SDL_GetError());
-        SDL_free(dir);
-        return NULL;
-    }
-    return dir;
-}
-
 /* Android has no way to hand a process an environment: `am start` passes
  * extras, not env, so every MELEE_* knob -- the netplay fixtures, the heap
  * check, the log file -- is unreachable on a phone, which is exactly where
@@ -558,7 +535,7 @@ MELEE_EXPORT int main(int argc, char* argv[]) {
         }
     }
 
-    /* RmlUi resolves a document's relative assets (launcher.rml's discord.png)
+    /* RmlUi resolves a document's relative assets (the launcher's art under launcher/)
      * against this. Aurora otherwise defaults it to the executable's own
      * directory, where those files are not: they ship under resources/. The
      * trailing separator matters, the path is concatenated as-is. */
@@ -571,16 +548,20 @@ MELEE_EXPORT int main(int argc, char* argv[]) {
         resources_path, sizeof resources_path, "%sresources/", base_path != NULL ? base_path : "");
 #endif
 
+    char* user_path = pc_get_pref_path();
+    if (user_path == NULL) {
+        fprintf(stderr, "Could not create game data directory: %s\n", SDL_GetError());
+        return 1;
+    }
     AuroraConfig config = {
         /* appName doubles as the window title; the save/cache dirs stay
          * pinned so a renamed test window still uses the same memory card. */
         .appName = getenv("MELEE_WINDOW_TITLE") ? getenv("MELEE_WINDOW_TITLE") : "melee-pc",
-        .userPath = pc_user_dir(),
+        .userPath = user_path,
         .resourcesPath = resources_path[0] != '\0' ? resources_path : NULL,
         /* MELEE_CACHE_DIR: two instances on one machine (netplay testing)
          * must not share the pipeline-cache SQLite file. */
-        .cachePath = getenv("MELEE_CACHE_DIR") ? getenv("MELEE_CACHE_DIR") :
-                                                 SDL_GetPrefPath(NULL, "melee-pc"),
+        .cachePath = getenv("MELEE_CACHE_DIR") ? getenv("MELEE_CACHE_DIR") : user_path,
         .msaa = 1,
         .maxTextureAnisotropy = 16,
         /* MELEE_VSYNC=0 picks Mailbox/Immediate instead of FifoRelaxed; some

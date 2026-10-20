@@ -98,7 +98,7 @@ const char* pc_app_rev(void) {
 const char* pc_lan_disc_id(void) {
     return "test-disc";
 }
-char* pc_user_dir(void) {
+char* pc_get_pref_path(void) {
     return strdup(getenv("MATCH_DIR"));
 }
 void SDL_free(void* p) {

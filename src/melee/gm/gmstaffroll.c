@@ -1338,8 +1338,6 @@ void gm_Scene_StaffRoll_OnEnter(void* unused)
         lbAudioAx_80023F28(lbAudioAx_8002305C(gm_801BEFB0(), !-r));
         lbBgFlash_800209F4();
         gm_804D6804.x0 = gm_804D6804.x4 = 0.0F;
-        /* The original clears 0x948 bytes, the whole table only while a
-           pointer is 4 bytes. */
         memzero(staffInfo, 198 * sizeof(*staffInfo));
         for (i = 0; i < 6; i++) {
             gm_80480D58[i] = 0;
