@@ -261,6 +261,9 @@ extern "C" void pc_a11y_launcher_frame(void) {
         /* A hand edit shows in an open menu. */
         s_settings->poll(a11y::Clock::now());
     }
+    if (s_cue_system != nullptr) {
+        s_cue_system->preview_frame(a11y::Clock::now());
+    }
     a11y::launcher_speech_frame(a11y::Clock::now());
 }
 
@@ -286,6 +289,11 @@ extern "C" void pc_a11y_port_menu_frame(bool open) {
         /* Before the gate: stopping cues is never wrong, and before the
          * menu's opening is spoken. */
         s_cue_system->silence_for_port_menu();
+    }
+    if (s_cue_system != nullptr) {
+        /* At every frame boundary, the menu open or not, outside the
+         * simulation: a preview never touches the game. */
+        s_cue_system->preview_frame(a11y::Clock::now());
     }
     if (!game_hook_may_speak()) {
         return;

@@ -255,8 +255,8 @@ void CueEngine::AtomicLevel::store(const CueLevel& level) {
     boost.store(clamped(level.boost, 0.0f, kMostBoost, 1.0f), std::memory_order_relaxed);
 }
 
-float CueEngine::AtomicLevel::gain() const {
-    if (!on.load(std::memory_order_relaxed)) {
+float CueEngine::AtomicLevel::gain(bool ignore_switch) const {
+    if (!ignore_switch && !on.load(std::memory_order_relaxed)) {
         return 0.0f;
     }
     return volume.load(std::memory_order_relaxed) * boost.load(std::memory_order_relaxed);
@@ -293,11 +293,14 @@ void CueEngine::trace_tick(int tick) {
 
 void CueEngine::render(float* out, int frames) {
     std::fill_n(out, frames * 2, 0.0f);
-    const float mix = m_master.load(std::memory_order_relaxed) * m_mix.gain();
+    const float master = m_master.load(std::memory_order_relaxed);
     const int count = m_voice_count.load(std::memory_order_acquire);
     for (int i = 0; i < count; i++) {
         Voice& v = m_voices[static_cast<size_t>(i)];
-        render_voice(v, mix * m_cues[static_cast<size_t>(v.spec.cue)].gain(), out, frames);
+        const bool ignore = v.spec.ignores_switches;
+        const float chain =
+            master * m_mix.gain(ignore) * m_cues[static_cast<size_t>(v.spec.cue)].gain(ignore);
+        render_voice(v, chain, out, frames);
     }
     for (int i = 0; i < frames * 2; i++) {
         out[i] = soft_limit(out[i] * kHeadroom);

@@ -80,4 +80,13 @@ std::optional<VoiceTargets> your_position(const A11yMatchState& match, const You
 std::optional<VoiceTargets> opponent_position(
     const A11yMatchState& match, const OpponentMapping& mapping);
 
+/* The position cues' previews (cue_preview.hpp), for the seconds since the
+ * preview began, none once it has ended: the fighter at the centre at
+ * middle height, so centred at the cue's own pitch, and the opponent far
+ * off, so your cue pulses at its slow interval and the opponent's at its
+ * own, for about kPreviewSeconds. */
+std::optional<VoiceTargets> your_position_preview(double seconds, const YourMapping& mapping);
+std::optional<VoiceTargets> opponent_position_preview(
+    double seconds, const OpponentMapping& mapping);
+
 }  // namespace a11y

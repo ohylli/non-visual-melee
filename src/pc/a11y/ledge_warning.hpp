@@ -26,6 +26,9 @@ constexpr float kLedgeInterval = 0.2f;
  * floor's. */
 constexpr float kEdgeOffset = 5.0f;
 
+/* How many pulses the ledge warning's preview plays on each side. */
+constexpr int kLedgePreviewPulses = 4;
+
 /* The ledge warning's mapping, as its settings hold it. */
 struct LedgeMapping {
     /* World units from a deadly end at which its voice starts. */
@@ -47,5 +50,12 @@ struct LedgeTargets {
  * while paused, before GO, while you are out, and with no floor below
  * you. */
 LedgeTargets ledge_warning(const A11yMatchState& match, const LedgeMapping& mapping);
+
+/* The ledge warning's preview (cue_preview.hpp), for the seconds since the
+ * preview began, none once it has ended: a deadly end halfway into the
+ * warning distance, kLedgePreviewPulses pulses on the left, a pulse's
+ * pause, then as many on the right, at the pan and level the mapping gives
+ * there. */
+std::optional<LedgeTargets> ledge_warning_preview(double seconds, const LedgeMapping& mapping);
 
 }  // namespace a11y

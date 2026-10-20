@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "gap_warning.hpp"
+#include "cue_preview.hpp"
 #include "match_state.hpp"
+#include <algorithm>
 
 namespace a11y {
 
@@ -24,6 +26,17 @@ std::optional<VoiceTargets> GapWarning::tick(
     /* Centred, at its own pitch and full gain: the tone says only that
      * there is a gap. */
     return VoiceTargets{};
+}
+
+std::optional<VoiceTargets> gap_warning_preview(double seconds) {
+    if (seconds >= kPreviewSeconds) {
+        return std::nullopt;
+    }
+    VoiceTargets targets;
+    const double rise = seconds / kGapPreviewRamp;
+    const double fall = (kPreviewSeconds - seconds) / kGapPreviewRamp;
+    targets.gain = static_cast<float>(std::min({1.0, rise, fall}));
+    return targets;
 }
 
 }  // namespace a11y

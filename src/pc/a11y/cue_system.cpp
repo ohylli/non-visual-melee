@@ -12,6 +12,30 @@
 #include <vector>
 
 namespace a11y {
+namespace {
+
+/* The pause between the previews of MELEE_A11Y_CUE_PREVIEW's list, so the
+ * dump shows each apart. */
+constexpr std::chrono::milliseconds kListPause{700};
+
+/* "your_position,gap_warning": the ids, spaces and empty items dropped. */
+std::vector<std::string> split_ids(const std::string& text) {
+    std::vector<std::string> ids;
+    std::string id;
+    for (char c : text + ",") {
+        if (c == ',') {
+            if (!id.empty()) {
+                ids.push_back(id);
+            }
+            id.clear();
+        } else if (c != ' ') {
+            id += c;
+        }
+    }
+    return ids;
+}
+
+}  // namespace
 
 CueSystem::CueSystem(Speech& speech, AccessibilitySettings& settings)
     : m_speech(speech), m_settings(settings) {}
@@ -21,6 +45,8 @@ CueSystem::~CueSystem() = default;
 std::unique_ptr<CueSystem> CueSystem::open(
     const Config& config, Speech& speech, AccessibilitySettings& settings, float master_volume) {
     std::unique_ptr<CueSystem> system(new CueSystem(speech, settings));
+    system->m_log = config.log;
+    system->m_preview_list = split_ids(config.cue_preview);
     CueEngineOptions options;
     options.log = config.log;
     options.dump = config.cue_dump;
@@ -53,7 +79,7 @@ void CueSystem::poll_settings() {
 
 void CueSystem::scene_entered() {
     m_match_running = false;
-    m_engine->stop_all();
+    m_match_cues->silence();
     /* Before the hook polls the settings file, so an error it finds now
      * counts as said in this scene. */
     m_problems_at_scene = m_settings.problems_spoken();
@@ -70,6 +96,43 @@ void CueSystem::set_master_volume(float volume) {
 
 void CueSystem::silence_for_port_menu() {
     m_match_cues->silence();
+}
+
+bool CueSystem::preview(std::string_view id, Clock::time_point now) {
+    const std::string name(id);
+    const bool known = MatchCues::has_preview(id);
+    if (m_log) {
+        /* Before the voices' start lines. */
+        pc_log_line(
+            known ? "[a11y] cue preview: %s" : "[a11y] cue preview: no cue %s", name.c_str());
+    }
+    return known && m_match_cues->preview(id, now);
+}
+
+void CueSystem::stop_preview(Clock::time_point now) {
+    m_match_cues->stop_preview(now);
+}
+
+bool CueSystem::previewing() const {
+    return m_match_cues->previewing();
+}
+
+void CueSystem::preview_frame(Clock::time_point now) {
+    m_match_cues->preview_frame(now);
+    if (m_preview_next >= m_preview_list.size()) {
+        return;
+    }
+    if (m_list_previewing) {
+        if (m_match_cues->previewing()) {
+            return;
+        }
+        m_list_previewing = false;
+        m_preview_list_at = now + kListPause;
+    }
+    if (now < m_preview_list_at) {
+        return;
+    }
+    m_list_previewing = preview(m_preview_list[m_preview_next++], now);
 }
 
 void CueSystem::tick(int local_port, bool online, uint64_t held_mask) {

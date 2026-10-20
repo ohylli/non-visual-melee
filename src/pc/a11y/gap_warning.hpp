@@ -17,6 +17,10 @@ struct GapMapping {
     int hold_ticks = 10;
 };
 
+/* How long the gap warning's preview takes to rise to full and to fall
+ * away again. */
+constexpr double kGapPreviewRamp = 0.3;
+
 /* The snapshot's gap: you are in the air and it found no floor below you.
  * Whether you are in play is the driver's (you_in_play). */
 bool over_gap(const A11yMatchState& match);
@@ -34,5 +38,11 @@ public:
 private:
     int m_hold = 0; /* ticks left to sound with no gap */
 };
+
+/* The gap warning's preview (cue_preview.hpp), for the seconds since the
+ * preview began, none once it has ended: the hum, centred at its own
+ * pitch, rising to full over kGapPreviewRamp, held, and falling away again
+ * by kPreviewSeconds. */
+std::optional<VoiceTargets> gap_warning_preview(double seconds);
 
 }  // namespace a11y

@@ -9,8 +9,11 @@
  * last, with the snapshot's edge offset, starts on each side near a deadly
  * end and stops away from it or over a gap, and pulses 5 times a second on
  * its side; silenced for the port menu, every voice stops and the next tick
- * starts the cues afresh. This file supplies the pc_log_line that main.c
- * normally provides. */
+ * starts the cues afresh. Each cue's preview sounds with every switch off
+ * and is silent at a volume of 0, pulses as its moment says, restarts,
+ * stops with a ramp, and plays on through the port menu's silence, which
+ * still stops the match's voices. This file supplies the pc_log_line that
+ * main.c normally provides. */
 #include "cue_engine.hpp"
 #include "cue_settings.hpp"
 #include "match_cues.hpp"
@@ -474,6 +477,225 @@ void silence_stops_every_voice_and_the_next_tick_starts_afresh() {
     assert(!at.empty() && at[0] < 0.02);
 }
 
+/* The preview's frames, 10 ms apart, each followed by its audio, from
+ * `now`, which moves on; with menu_open, the port menu's silence comes
+ * first on each frame, as pc_a11y_port_menu_frame calls them. */
+std::vector<float> preview_frames(
+    Fixture& f, a11y::Clock::time_point& now, double seconds, bool menu_open = false) {
+    constexpr int kFrames = a11y::kCueRate / 100;
+    std::vector<float> out;
+    for (double done = 0.0; done < seconds - 1e-9; done += 0.01) {
+        if (menu_open) {
+            f.match_cues.silence();
+        }
+        f.match_cues.preview_frame(now);
+        std::vector<float> block(static_cast<std::size_t>(kFrames) * 2);
+        f.engine.render(block.data(), kFrames);
+        out.insert(out.end(), block.begin(), block.end());
+        now += std::chrono::milliseconds(10);
+    }
+    return out;
+}
+
+/* Every switch off: Accessibility (through set_allowed), Cues and each
+ * cue's own. */
+void every_switch_off(Fixture& f) {
+    for (const char* key : {"cues.on", "your_position.on", "opponent_position.on", "gap_warning.on",
+             "ledge_warning.on"})
+    {
+        f.model.set(*f.model.find(key), 0.0f);
+    }
+    f.cues.set_allowed(false);
+    f.cues.apply(f.engine);
+}
+
+bool onsets_near(const std::vector<double>& found, const std::vector<double>& expected) {
+    if (found.size() != expected.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < found.size(); ++i) {
+        if (std::fabs(found[i] - expected[i]) > 0.02) {
+            return false;
+        }
+    }
+    return true;
+}
+
+double peak_of(const std::vector<float>& stereo, double from, double to) {
+    double largest = 0.0;
+    const std::size_t end =
+        std::min(stereo.size() / 2, static_cast<std::size_t>(to * a11y::kCueRate));
+    for (std::size_t frame = static_cast<std::size_t>(from * a11y::kCueRate); frame < end; ++frame)
+    {
+        largest = std::max(largest, static_cast<double>(std::fabs(stereo[frame * 2])));
+        largest = std::max(largest, static_cast<double>(std::fabs(stereo[frame * 2 + 1])));
+    }
+    return largest;
+}
+
+void a_preview_sounds_with_every_switch_off() {
+    Fixture f;
+    const a11y::MatchCues::PreviewVoices& v = f.match_cues.preview_voices();
+    assert(v.your >= 0 && v.opponent >= 0 && v.gap >= 0 && v.ledge_left >= 0 && v.ledge_right >= 0);
+    every_switch_off(f);
+    a11y::Clock::time_point now{};
+    /* The tick for your cue's ramp: its 12 ms of lead-in. */
+    constexpr double kLead = 0.012;
+
+    /* Your position cue: centred, at its slow interval, three pulses. */
+    assert(f.match_cues.preview("your_position", now));
+    assert(count_logged_starting("[a11y] cue your position preview start pan 0.00 pitch 1.00 "
+                                 "gain 1.00 interval 0.800") == 1);
+    std::vector<float> out = preview_frames(f, now, 3.0);
+    assert(onsets_near(onsets(out), {kLead, 0.8 + kLead, 1.6 + kLead}));
+    double left = 0.0;
+    double right = 0.0;
+    energy(out, 0.0, left, right);
+    assert(left > 0.0 && std::fabs(left - right) < left * 1e-3);
+    assert(!f.match_cues.previewing() && !f.engine.playing(v.your));
+    assert(count_logged_starting("[a11y] cue your position preview stop") == 1);
+    /* No match voice was touched. */
+    assert(count_logged_starting("[a11y] cue your position start") == 0);
+
+    /* The opponent's: five pulses at its own interval. */
+    now += std::chrono::seconds(1);
+    assert(f.match_cues.preview("opponent_position", now));
+    out = preview_frames(f, now, 2.5);
+    assert(onsets_near(onsets(out), {kLead, 0.4 + kLead, 0.8 + kLead, 1.2 + kLead, 1.6 + kLead}));
+    assert(!f.match_cues.previewing());
+
+    /* The gap warning: the hum rising, held, falling away by two seconds. */
+    now += std::chrono::seconds(1);
+    assert(f.match_cues.preview("gap_warning", now));
+    out = preview_frames(f, now, 2.5);
+    const double held = peak_of(out, 0.5, 1.5);
+    assert(held > 0.05);
+    assert(peak_of(out, 0.0, 0.05) < held * 0.3);
+    assert(peak_of(out, 1.95, 2.0) < held * 0.3);
+    assert(peak_of(out, 2.05, 2.5) == 0.0);
+    assert(!f.match_cues.previewing());
+
+    /* The ledge warning: four pulses on the left, then four on the right. */
+    now += std::chrono::seconds(1);
+    assert(f.match_cues.preview("ledge_warning", now));
+    out = preview_frames(f, now, 2.5);
+    std::vector<double> at = onsets(out);
+    assert(at.size() == 8);
+    assert(
+        onsets_near({at.begin(), at.begin() + 4}, {kLead, 0.2 + kLead, 0.4 + kLead, 0.6 + kLead}));
+    assert(onsets_near(
+        {at.begin() + 4, at.end()}, {1.0 + kLead, 1.2 + kLead, 1.4 + kLead, 1.6 + kLead}));
+    const std::vector<float> first(out.begin(), out.begin() + a11y::kCueRate * 2 * 9 / 10);
+    energy(first, 0.0, left, right);
+    assert(left > right * 2.0);
+    energy(out, 0.95, left, right);
+    assert(right > left * 2.0);
+    assert(!f.match_cues.previewing());
+
+    /* An id with no preview. */
+    assert(!f.match_cues.preview("no_such_cue", now));
+}
+
+void a_preview_is_silent_at_a_volume_of_0() {
+    for (const char* key : {"cues.volume", "gap_warning.volume", ""}) {
+        Fixture f;
+        if (key[0] != '\0') {
+            f.model.set(*f.model.find(key), 0.0f);
+            f.cues.apply(f.engine);
+        } else {
+            /* The master volume, as mute leaves it. */
+            f.engine.set_master_volume(0.0f);
+        }
+        a11y::Clock::time_point now{};
+        assert(f.match_cues.preview("gap_warning", now));
+        std::vector<float> out = preview_frames(f, now, 1.0);
+        assert(f.engine.playing(f.match_cues.preview_voices().gap));
+        assert(peak_of(out, 0.0, 1.0) == 0.0);
+    }
+}
+
+void a_second_preview_restarts_it() {
+    Fixture f;
+    a11y::Clock::time_point now{};
+    constexpr double kLead = 0.012;
+    assert(f.match_cues.preview("your_position", now));
+    std::vector<float> out = preview_frames(f, now, 1.0);
+    /* Pressed again a second in, between its second pulse and its third:
+     * it stops, waits out the restart, and starts from its beginning. */
+    assert(f.match_cues.preview("your_position", now));
+    assert(f.match_cues.previewing());
+    assert(count_logged_starting("[a11y] cue your position preview stop") == 1);
+    std::vector<float> more = preview_frames(f, now, 3.0);
+    out.insert(out.end(), more.begin(), more.end());
+    assert(count_logged_starting("[a11y] cue your position preview start") == 2);
+    const double restart = 1.0 + 0.1;
+    assert(onsets_near(onsets(out),
+        {kLead, 0.8 + kLead, restart + kLead, restart + 0.8 + kLead, restart + 1.6 + kLead}));
+    assert(!f.match_cues.previewing());
+
+    /* Another cue's preview stops the one playing. */
+    assert(f.match_cues.preview("gap_warning", now));
+    preview_frames(f, now, 0.5);
+    assert(f.match_cues.preview("ledge_warning", now));
+    assert(!f.engine.playing(f.match_cues.preview_voices().gap));
+    preview_frames(f, now, 0.2);
+    assert(f.engine.playing(f.match_cues.preview_voices().ledge_left));
+}
+
+void a_stopped_preview_ramps_out() {
+    Fixture f;
+    a11y::Clock::time_point now{};
+    assert(f.match_cues.preview("gap_warning", now));
+    std::vector<float> out = preview_frames(f, now, 1.0);
+    const float before = out[out.size() - 2];
+    const double loudest = peak_of(out, 0.5, 1.0);
+    f.match_cues.stop_preview(now);
+    assert(!f.match_cues.previewing());
+    assert(!f.engine.playing(f.match_cues.preview_voices().gap));
+    assert(count_logged_starting("[a11y] cue gap preview stop") == 1);
+    std::vector<float> after = preview_frames(f, now, 0.1);
+    /* No step past the tone's own at the stop, and silence past the ramp.
+     * The hum moves about 0.15 of its peak in a sample at its steepest. */
+    float steepest = std::fabs(after[0] - before);
+    for (std::size_t frame = 1; frame < after.size() / 2; ++frame) {
+        steepest = std::max(steepest, std::fabs(after[frame * 2] - after[(frame - 1) * 2]));
+    }
+    assert(steepest < loudest * 0.2);
+    assert(peak_of(after, 0.01, 0.1) == 0.0);
+    /* Stopping again, with nothing playing, does nothing. */
+    s_lines.clear();
+    f.match_cues.stop_preview(now);
+    assert(s_lines.empty());
+}
+
+void a_preview_plays_on_through_the_port_menus_silence() {
+    Fixture f;
+    /* The gap warning sounding in a match as the port menu opens. */
+    f.match_cues.tick(over_the_gap());
+    assert(f.engine.playing(f.match_cues.gap_voice()));
+    render(f.engine, 0.1f);
+    a11y::Clock::time_point now{};
+    assert(f.match_cues.preview("ledge_warning", now));
+    std::vector<float> out = preview_frames(f, now, 2.0, true);
+    /* The match's voices are silenced, the preview's play on to the end. */
+    assert(!f.engine.playing(f.match_cues.gap_voice()));
+    assert(!f.engine.playing(f.match_cues.your_voice()));
+    assert(count_logged_starting("[a11y] cue gap stop") == 1);
+    /* Past the match's last sound, the pulses after the preview's first:
+     * three more on the left, four on the right. */
+    std::vector<double> at = onsets(out);
+    assert(std::count_if(at.begin(), at.end(), [](double s) { return s > 0.1; }) == 7);
+    assert(!f.match_cues.previewing());
+    assert(count_logged_starting("[a11y] cue ledge left preview stop") == 1);
+    assert(count_logged_starting("[a11y] cue ledge right preview stop") == 1);
+    /* A scene's entry silences the match alone too (CueSystem::scene_entered
+     * calls silence): a preview started there plays. */
+    assert(f.match_cues.preview("gap_warning", now));
+    f.match_cues.silence();
+    preview_frames(f, now, 0.2);
+    assert(f.engine.playing(f.match_cues.preview_voices().gap));
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -498,6 +720,11 @@ int main() {
     the_opponent_cue_stops_while_knocked_out_and_comes_back();
     one_switch_frames_both_pans();
     silence_stops_every_voice_and_the_next_tick_starts_afresh();
+    a_preview_sounds_with_every_switch_off();
+    a_preview_is_silent_at_a_volume_of_0();
+    a_second_preview_restarts_it();
+    a_stopped_preview_ramps_out();
+    a_preview_plays_on_through_the_port_menus_silence();
     std::cout << "match_cues: all tests passed\n";
     return 0;
 }

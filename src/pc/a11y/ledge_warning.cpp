@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "ledge_warning.hpp"
+#include "cue_preview.hpp"
 #include "match_state.hpp"
 #include <algorithm>
 
@@ -37,6 +38,22 @@ LedgeTargets ledge_warning(const A11yMatchState& match, const LedgeMapping& mapp
     }
     if (below.right.deadly) {
         targets.right = ledge_side(below.right.x - x, 1, mapping);
+    }
+    return targets;
+}
+
+std::optional<LedgeTargets> ledge_warning_preview(double seconds, const LedgeMapping& mapping) {
+    const double side = pulses_seconds(kLedgeInterval, kLedgePreviewPulses);
+    const double right_from = (kLedgePreviewPulses + 1) * static_cast<double>(kLedgeInterval);
+    if (seconds >= right_from + side) {
+        return std::nullopt;
+    }
+    const float distance = mapping.distance / 2.0f;
+    LedgeTargets targets;
+    if (seconds < side) {
+        targets.left = ledge_side(distance, -1, mapping);
+    } else if (seconds >= right_from) {
+        targets.right = ledge_side(distance, 1, mapping);
     }
     return targets;
 }

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "position_cue.hpp"
+#include "cue_preview.hpp"
 #include "match_state.hpp"
 #include <algorithm>
 #include <cmath>
@@ -15,6 +16,17 @@ float progress(float v, float from, float to) {
         return 0.5f;
     }
     return std::clamp((v - from) / (to - from), 0.0f, 1.0f);
+}
+
+/* A position cue's preview: centred, at the cue's own pitch, pulsing at
+ * the interval. */
+std::optional<VoiceTargets> centred_pulses(double seconds, float interval) {
+    if (seconds >= pulses_seconds(interval, preview_pulses(interval))) {
+        return std::nullopt;
+    }
+    VoiceTargets targets;
+    targets.interval = interval;
+    return targets;
 }
 
 }  // namespace
@@ -81,6 +93,15 @@ std::optional<VoiceTargets> opponent_position(
     VoiceTargets targets = stage_targets(match.stage, opponent, mapping.stage);
     targets.interval = mapping.interval;
     return targets;
+}
+
+std::optional<VoiceTargets> your_position_preview(double seconds, const YourMapping& mapping) {
+    return centred_pulses(seconds, mapping.slow_interval);
+}
+
+std::optional<VoiceTargets> opponent_position_preview(
+    double seconds, const OpponentMapping& mapping) {
+    return centred_pulses(seconds, mapping.interval);
 }
 
 }  // namespace a11y

@@ -36,6 +36,10 @@ struct Config {
      * engine's mix and its voices' targets; empty for none. */
     std::string cue_dump;
     std::string cue_trace;
+    /* MELEE_A11Y_CUE_PREVIEW: cues' ids, comma-separated, whose previews
+     * play in turn from the first frame (CueSystem::preview_frame); empty
+     * for none. */
+    std::string cue_preview;
     /* MELEE_A11Y_SETTINGS: the accessibility settings file; unset for
      * a11y.ini in the folder where the base port keeps its settings. Set but
      * empty, as a shell slip leaves it, means no file at all: an agent run

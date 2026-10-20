@@ -2,12 +2,20 @@
 #include "match_cues.hpp"
 #include "cue_sounds.hpp"
 #include "miniaudio.h"
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 #include <utility>
 
 namespace a11y {
 namespace {
+
+/* The cues' ids, as add_cue takes them and the menus' Preview rows hold
+ * them. */
+constexpr std::string_view kYourId = "your_position";
+constexpr std::string_view kOpponentId = "opponent_position";
+constexpr std::string_view kGapId = "gap_warning";
+constexpr std::string_view kLedgeId = "ledge_warning";
 
 /* A short click lifted under its volume to sit level with held tones. */
 constexpr float kYourBoost = 2.0f;
@@ -160,6 +168,16 @@ VoiceSpec position_voice(const char* name, int cue, Sound sound, float fastest_i
     return voice;
 }
 
+/* A voice's twin for the preview: the same sound and limits, named apart
+ * in the log, sounding past the switches, and alone: the preview's two
+ * ledge voices never sound together. */
+VoiceSpec preview_of(VoiceSpec spec) {
+    spec.name += " preview";
+    spec.ignores_switches = true;
+    spec.alternates_with = -1;
+    return spec;
+}
+
 }  // namespace
 
 StageMapping MatchCues::StageValues::mapping(bool pan_to_camera) const {
@@ -261,33 +279,41 @@ MatchCues::LedgeValues MatchCues::add_ledge_values(ValueGroup group) {
 
 MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
     : m_engine(engine),
-      m_your_cue(settings.add_cue("your_position", "Your position cue", kYourBoost)),
+      m_your_cue(settings.add_cue(std::string(kYourId), "Your position cue", kYourBoost)),
       m_your(add_your_values(m_your_cue.group)),
       m_opponent_cue(
-          settings.add_cue("opponent_position", "Opponent's position cue", kOpponentBoost)),
+          settings.add_cue(std::string(kOpponentId), "Opponent's position cue", kOpponentBoost)),
       m_opponent(add_opponent_values(m_opponent_cue.group)),
       m_pan_to_camera(settings.add_shared("position_cues", "Position cues")
               .add_switch(SwitchSpec{"pan_to_camera", "Position cues follow the camera",
                   "On, the cues pan across what the camera shows; off, across the whole stage to "
                   "the side blast zones.",
                   StageMapping{}.pan_to_camera, true})),
-      m_gap_cue(settings.add_cue("gap_warning", "Gap warning", kGapBoost)),
+      m_gap_cue(settings.add_cue(std::string(kGapId), "Gap warning", kGapBoost)),
       m_gap(add_gap_values(m_gap_cue.group)),
-      m_ledge_cue(settings.add_cue("ledge_warning", "Ledge warning", kLedgeBoost)),
+      m_ledge_cue(settings.add_cue(std::string(kLedgeId), "Ledge warning", kLedgeBoost)),
       m_ledge(add_ledge_values(m_ledge_cue.group)) {
-    m_your_voice = m_engine.add_voice(
-        position_voice("your position", m_your_cue.values.cue, tick_sound(), kFastestInterval));
-    m_opponent_voice = m_engine.add_voice(position_voice(
-        "opponent position", m_opponent_cue.values.cue, pulse_sound(), kOpponentFastestInterval));
+    VoiceSpec your =
+        position_voice("your position", m_your_cue.values.cue, tick_sound(), kFastestInterval);
+    VoiceSpec opponent = position_voice(
+        "opponent position", m_opponent_cue.values.cue, pulse_sound(), kOpponentFastestInterval);
     VoiceSpec gap;
     gap.name = "gap";
     gap.cue = m_gap_cue.values.cue;
     gap.sound = hum_sound();
     gap.mode = VoiceMode::looped;
-    m_gap_voice = m_engine.add_voice(std::move(gap));
-    m_ledge_left_voice = m_engine.add_voice(ledge_voice("ledge left", m_ledge_cue.values.cue));
-    m_ledge_right_voice =
-        m_engine.add_voice(ledge_voice("ledge right", m_ledge_cue.values.cue, m_ledge_left_voice));
+    VoiceSpec ledge_left = ledge_voice("ledge left", m_ledge_cue.values.cue);
+    m_your_voice = m_engine.add_voice(your);
+    m_opponent_voice = m_engine.add_voice(opponent);
+    m_gap_voice = m_engine.add_voice(gap);
+    m_ledge_left_voice = m_engine.add_voice(ledge_left);
+    VoiceSpec ledge_right = ledge_voice("ledge right", m_ledge_cue.values.cue, m_ledge_left_voice);
+    m_ledge_right_voice = m_engine.add_voice(ledge_right);
+    m_preview_voices.your = m_engine.add_voice(preview_of(std::move(your)));
+    m_preview_voices.opponent = m_engine.add_voice(preview_of(std::move(opponent)));
+    m_preview_voices.gap = m_engine.add_voice(preview_of(std::move(gap)));
+    m_preview_voices.ledge_left = m_engine.add_voice(preview_of(std::move(ledge_left)));
+    m_preview_voices.ledge_right = m_engine.add_voice(preview_of(std::move(ledge_right)));
 }
 
 void MatchCues::play(int voice, const std::optional<VoiceTargets>& targets) {
@@ -302,8 +328,102 @@ void MatchCues::play(int voice, const std::optional<VoiceTargets>& targets) {
 }
 
 void MatchCues::silence() {
-    m_engine.stop_all();
+    /* The match's voices alone: a preview plays on over a silent match. */
+    for (int voice :
+        {m_your_voice, m_opponent_voice, m_gap_voice, m_ledge_left_voice, m_ledge_right_voice})
+    {
+        play(voice, std::nullopt);
+    }
     m_gap_warning.forget();
+}
+
+MatchCues::Preview MatchCues::preview_named(std::string_view id) {
+    if (id == kYourId) {
+        return Preview::your;
+    }
+    if (id == kOpponentId) {
+        return Preview::opponent;
+    }
+    if (id == kGapId) {
+        return Preview::gap;
+    }
+    if (id == kLedgeId) {
+        return Preview::ledge;
+    }
+    return Preview::none;
+}
+
+bool MatchCues::preview(std::string_view id, Clock::time_point now) {
+    const Preview which = preview_named(id);
+    if (which == Preview::none) {
+        return false;
+    }
+    stop_preview(now);
+    m_preview = which;
+    m_preview_start = std::max(now, m_preview_quiet);
+    preview_frame(now);
+    return true;
+}
+
+void MatchCues::stop_preview(Clock::time_point now) {
+    const PreviewVoices& v = m_preview_voices;
+    bool stopped = false;
+    for (int voice : {v.your, v.opponent, v.gap, v.ledge_left, v.ledge_right}) {
+        if (voice >= 0 && m_engine.playing(voice)) {
+            m_engine.stop(voice);
+            stopped = true;
+        }
+    }
+    if (stopped) {
+        m_preview_quiet = now + kPreviewRestart;
+    }
+    m_preview = Preview::none;
+}
+
+void MatchCues::preview_frame(Clock::time_point now) {
+    if (m_preview == Preview::none || now < m_preview_start) {
+        return;
+    }
+    const double seconds = std::chrono::duration<double>(now - m_preview_start).count();
+    const PreviewVoices& v = m_preview_voices;
+    /* The fighter sits at the centre, where the pan's frame changes
+     * nothing. */
+    const bool pan_to_camera = m_pan_to_camera.on();
+    std::optional<VoiceTargets> targets;
+    switch (m_preview) {
+    case Preview::your:
+        targets = your_position_preview(seconds, m_your.mapping(pan_to_camera));
+        if (targets.has_value()) {
+            play(v.your, targets);
+            return;
+        }
+        break;
+    case Preview::opponent:
+        targets = opponent_position_preview(seconds, m_opponent.mapping(pan_to_camera));
+        if (targets.has_value()) {
+            play(v.opponent, targets);
+            return;
+        }
+        break;
+    case Preview::gap:
+        targets = gap_warning_preview(seconds);
+        if (targets.has_value()) {
+            play(v.gap, targets);
+            return;
+        }
+        break;
+    case Preview::ledge:
+        if (std::optional<LedgeTargets> ledge = ledge_warning_preview(seconds, m_ledge.mapping())) {
+            play(v.ledge_left, ledge->left);
+            play(v.ledge_right, ledge->right);
+            return;
+        }
+        break;
+    case Preview::none:
+        return;
+    }
+    /* Its end: the voices stop, and wait before they may start again. */
+    stop_preview(now);
 }
 
 void MatchCues::tick(const A11yMatchState& match) {

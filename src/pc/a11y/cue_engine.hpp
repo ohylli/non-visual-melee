@@ -61,11 +61,16 @@ struct VoiceSpec {
      * later added one waits half an interval, unless an audio block falls
      * between the two starts. -1 for none. */
     int alternates_with = -1;
+    /* Sounds whatever the mix's and its cue's switches say, at their
+     * volumes and boost and under the master volume: a cue's preview, which
+     * plays with the cues turned off. */
+    bool ignores_switches = false;
 };
 
 /* One input of the volume chain: the cue mix as a whole (cue volume and the
  * all-cues switch), or one cue (its switch, volume and boost). Off is
- * silence, reached with a glide, the voices still running underneath. */
+ * silence, reached with a glide, the voices still running underneath; a
+ * voice that ignores the switches takes the volume and boost alone. */
 struct CueLevel {
     bool on = true;
     float volume = 1.0f; /* 0 to 1 */
@@ -125,7 +130,8 @@ private:
         std::atomic<float> boost{1.0f};
 
         void store(const CueLevel& level);
-        float gain() const;
+        /* Volume × boost, or 0 while off unless the switch is ignored. */
+        float gain(bool ignore_switch) const;
     };
     struct Voice {
         /* Fixed once published. */

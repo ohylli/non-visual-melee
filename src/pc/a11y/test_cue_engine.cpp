@@ -335,6 +335,43 @@ void the_volume_chain_multiplies() {
     assert(near(out[out.size() - 2], 0.6 * kCentredFull, 1e-4));
 }
 
+void a_voice_past_the_switches_keeps_every_volume() {
+    CueEngine engine;
+    VoiceSpec spec = looped("preview", constant(1.0f, 4800));
+    spec.ignores_switches = true;
+    int preview = engine.add_voice(spec);
+    int match = engine.add_voice(looped("match", constant(1.0f, 4800)));
+    engine.set_mix_level(CueLevel{false, 0.8f, 1.0f});
+    engine.set_cue_level(0, CueLevel{false, 0.5f, 2.0f});
+    engine.start(preview, at(0.0f));
+    engine.start(match, at(0.0f));
+    /* Both switches off: the voice past them is heard at its volumes, the
+     * other is not. */
+    std::vector<float> out = render(engine, kCueRate / 10);
+    assert(near(out[out.size() - 2], 0.8 * 0.5 * 2.0 * kCentredFull, 1e-4));
+    engine.stop(preview);
+    render(engine, kCueRate / 10);
+    out = render(engine, kCueRate / 10);
+    assert(peak(out) == 0.0f);
+    engine.start(preview, at(0.0f));
+    /* The master volume, and a volume of 0 at either level, still hold,
+     * once the gain has glided down. */
+    engine.set_master_volume(0.5f);
+    out = render(engine, kCueRate / 10);
+    assert(near(out[out.size() - 2], 0.5 * 0.8 * 0.5 * 2.0 * kCentredFull, 1e-4));
+    engine.set_master_volume(0.0f);
+    render(engine, kCueRate / 10);
+    assert(peak(render(engine, kCueRate / 10)) < 1e-4f);
+    engine.set_master_volume(1.0f);
+    engine.set_mix_level(CueLevel{false, 0.0f, 1.0f});
+    render(engine, kCueRate / 10);
+    assert(peak(render(engine, kCueRate / 10)) < 1e-4f);
+    engine.set_mix_level(CueLevel{false, 1.0f, 1.0f});
+    engine.set_cue_level(0, CueLevel{false, 0.0f, 2.0f});
+    render(engine, kCueRate / 10);
+    assert(peak(render(engine, kCueRate / 10)) < 1e-4f);
+}
+
 void five_voices_stay_under_full_scale() {
     for (float pan : {0.0f, -1.0f}) {
         CueEngine engine;
@@ -436,6 +473,7 @@ int main(int argc, char** argv) {
     pulses_follow_their_interval();
     alternating_voices_pulse_between_each_other();
     the_volume_chain_multiplies();
+    a_voice_past_the_switches_keeps_every_volume();
     five_voices_stay_under_full_scale();
     a_pulse_that_does_not_fit_is_refused();
     starts_and_stops_are_logged_once();

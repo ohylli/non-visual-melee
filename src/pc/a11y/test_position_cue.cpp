@@ -6,8 +6,11 @@
  * the bottom blast zone; a frame with no width; the interval at, between and beyond the near and
  * far distances; no opponent; and when the cue is silent. The opponent's cue: the same mapping on
  * the opponent's position with its own values, its fixed interval, no opponent, the opponent
- * knocked out and a change of opponent. */
+ * knocked out and a change of opponent. Both previews: centred at the
+ * cue's own pitch, at the cue's interval, for about two seconds and at
+ * least two pulses. */
 #include "position_cue.hpp"
+#include "cue_preview.hpp"
 #include "test_match_snapshot.hpp"
 #include <cassert>
 #include <cmath>
@@ -286,6 +289,28 @@ void the_opponent_cue_follows_a_change_of_opponent() {
 
 }  // namespace
 
+void the_previews_pulse_at_the_centre_for_about_two_seconds() {
+    YourMapping yours;
+    std::optional<VoiceTargets> t = a11y::your_position_preview(0.0, yours);
+    assert(t.has_value() && t->pan == 0.0f && t->pitch == 1.0f && t->gain == 1.0f);
+    assert(near(t->interval, yours.slow_interval));
+    /* Three pulses at the slow 0.8 s, ending 0.6 of an interval after the
+     * last. */
+    assert(a11y::preview_pulses(yours.slow_interval) == 3);
+    assert(a11y::your_position_preview(2.07, yours).has_value());
+    assert(!a11y::your_position_preview(2.09, yours).has_value());
+    OpponentMapping theirs;
+    t = a11y::opponent_position_preview(1.0, theirs);
+    assert(t.has_value() && t->pan == 0.0f && near(t->interval, theirs.interval));
+    assert(a11y::preview_pulses(theirs.interval) == 5);
+    assert(!a11y::opponent_position_preview(1.85, theirs).has_value());
+    /* A slow interval past two seconds still plays two pulses. */
+    yours.slow_interval = 3.0f;
+    assert(a11y::preview_pulses(yours.slow_interval) == 2);
+    assert(a11y::your_position_preview(4.7, yours).has_value());
+    assert(!a11y::your_position_preview(4.85, yours).has_value());
+}
+
 int main() {
     pan_follows_x();
     pan_to_the_camera_follows_x();
@@ -298,6 +323,7 @@ int main() {
     the_opponent_cue_keeps_its_interval();
     the_opponent_cue_is_silent_when_it_should_be();
     the_opponent_cue_follows_a_change_of_opponent();
+    the_previews_pulse_at_the_centre_for_about_two_seconds();
     std::cout << "position_cue: all tests passed\n";
     return 0;
 }

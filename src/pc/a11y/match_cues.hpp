@@ -2,7 +2,9 @@
 /* The cues of a match (primer docs/a11y/cues.md, "The match cues"): each
  * registers its values with the cue settings and its voices with the cue
  * engine once, then turns every tick's match snapshot into its voices'
- * targets through its driver. Game thread only. */
+ * targets through its driver. Each also has a preview, a short sample
+ * played outside any match on voices of its own ("Preview"). Game thread
+ * only. */
 #pragma once
 #include "cue_engine.hpp"
 #include "cue_settings.hpp"
@@ -10,9 +12,13 @@
 #include "game_access.h"
 #include "ledge_warning.hpp"
 #include "position_cue.hpp"
+#include <chrono>
 #include <optional>
+#include <string_view>
 
 namespace a11y {
+
+using Clock = std::chrono::steady_clock;
 
 class MatchCues {
 public:
@@ -24,6 +30,21 @@ public:
     /* The shortest interval the opponent's cue allows, which its longer
      * pulse fits the same way. */
     static constexpr float kOpponentFastestInterval = 0.2f;
+    /* How long a preview's voices, once stopped, wait before they start
+     * again: past the stop ramp and an audio block, so a restarted preview
+     * starts from silence, its first pulse at once, rather than carrying on
+     * the old rhythm, and the restart is heard as one. */
+    static constexpr std::chrono::milliseconds kPreviewRestart{100};
+
+    /* The preview's voices in the engine, apart from the match's, each -1
+     * when refused. */
+    struct PreviewVoices {
+        int your = -1;
+        int opponent = -1;
+        int gap = -1;
+        int ledge_left = -1;
+        int ledge_right = -1;
+    };
 
     /* Before the accessibility settings file is read, so the file gains
      * these values. */
@@ -38,6 +59,23 @@ public:
      * frame the port menu is open, while no tick runs. */
     void silence();
 
+    /* Starts the preview of the cue with this id, the one add_cue took
+     * ("gap_warning"), from its beginning: about two seconds of the cue at
+     * a fixed, typical moment of a match, at its current values. Its voices
+     * ignore the switches and keep every volume, and neither silence nor a
+     * tick touches them. Again restarts it; another cue's stops the one
+     * playing first. False for an id with no preview. */
+    bool preview(std::string_view id, Clock::time_point now);
+    static bool has_preview(std::string_view id) { return preview_named(id) != Preview::none; }
+    /* The preview stops, with the engine's ramp; nothing when none plays. */
+    void stop_preview(Clock::time_point now);
+    /* A preview plays, or waits kPreviewRestart to start. */
+    bool previewing() const { return m_preview != Preview::none; }
+    /* Each frame, wherever the game is: the preview's voices follow its
+     * moment, and stop at its end. */
+    void preview_frame(Clock::time_point now);
+    const PreviewVoices& preview_voices() const { return m_preview_voices; }
+
     /* The voices' numbers in the engine, -1 for one it refused. */
     int your_voice() const { return m_your_voice; }
     int opponent_voice() const { return m_opponent_voice; }
@@ -50,6 +88,8 @@ public:
     float edge_offset() const { return m_ledge.edge_offset.value(); }
 
 private:
+    enum class Preview { none, your, opponent, gap, ledge };
+
     struct StageValues {
         Number pitch_range;
 
@@ -89,6 +129,8 @@ private:
     static OpponentValues add_opponent_values(ValueGroup group);
     static GapValues add_gap_values(ValueGroup group);
     static LedgeValues add_ledge_values(ValueGroup group);
+    /* The preview of the cue with this id, none for an unknown one. */
+    static Preview preview_named(std::string_view id);
     /* A voice with targets starts, or only moves when it plays; one without
      * stops. */
     void play(int voice, const std::optional<VoiceTargets>& targets);
@@ -114,6 +156,13 @@ private:
     int m_ledge_left_voice;
     int m_ledge_right_voice;
     int m_tick = 0;
+    PreviewVoices m_preview_voices;
+    Preview m_preview = Preview::none;
+    /* When the preview's moment begins: later than its start call while its
+     * voices wait out kPreviewRestart. */
+    Clock::time_point m_preview_start;
+    /* Until when stopped preview voices wait. */
+    Clock::time_point m_preview_quiet;
 };
 
 }  // namespace a11y
