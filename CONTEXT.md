@@ -50,9 +50,9 @@ _Avoid_: Beep, sound effect, SFX, earcon
 The fork's own sound player for cues, with its own output beside the game's audio. Cues that are game sounds go through the game's audio instead.
 _Avoid_: Mixer, audio backend, sound system
 
-**Cue settings**:
-The values that switch, set the loudness of and tune the cues, as one model of named values with a file behind it now and the port menu later. Each value has a key, a default, a range, a unit and a one-line description.
-_Avoid_: Cue config, cue options, tuning file (that is only the model's file), setting (that is the port's)
+**Cue volume**:
+The loudness of all cues together, set under the port's master volume, which the cues follow like every other sound.
+_Avoid_: Master volume (that is the port's), cue master
 
 **Position cue**:
 A pulsed cue whose pan and pitch say where a fighter is on the stage: pan across it, pitch how high. There are two: **your position cue**, whose pulse also quickens as the opponent comes near, and **the opponent's position cue**, a lower pulse at a steady pace.
@@ -97,8 +97,16 @@ The window the port shows before the game starts: choosing and checking the disc
 _Avoid_: Startup menu, front end
 
 **Setting**:
-One named option of the port that the player can change, with a current value and a line of help text. The same setting can appear in both the launcher and the port menu. What the game itself lets the player change on a leaf screen is a row and its value.
+One named option the player can change in the launcher or the port menu, with a current value and a line of help text, whether the base port's or the fork's. The same setting can appear in both. What the game itself lets the player change on a leaf screen is a row and its value.
 _Avoid_: Option, preference, config entry
+
+**Accessibility settings**:
+The fork's own model of named values: the switches for accessibility, speech, steering and the cues, the volumes, and the tuning behind them, kept in a file of the fork's. Each value has a key, a default, a range, a unit and a one-line description; some are shown as settings, the rest are tuning values.
+_Avoid_: Cue settings, a11y config, options, the ini (that is only the model's file)
+
+**Tuning value**:
+A value of the accessibility settings that no menu shows, changed only by editing the file; meant for developers setting the cues by ear.
+_Avoid_: Hidden setting, developer setting, advanced option
 
 ### Native menus
 
