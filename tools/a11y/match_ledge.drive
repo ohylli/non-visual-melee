@@ -46,10 +46,12 @@ wait 'cue ledge right stop pan 0\.1\d pitch 1\.00 gain (0\.9\d|1\.00) '
 
 # The midair jump back towards the stage and drifting left onto it: the
 # right warning starts again near the edge, the gap warning stops, and the
-# run left takes Link out of the warning distance.
+# run left takes Link out of the warning distance with room to spare: the
+# jump back lands a frame or two apart from run to run, a few units of the
+# run's length.
 press X+Left 200
 sleep 0.2
-press Left 800
+press Left 1100
 wait 'cue ledge right start pan 0\.(1[5-9]|[2-6]\d) pitch 1\.00 '
 wait 'cue gap stop pan 0\.00 pitch 1\.00 gain 1\.00$'
 wait 'cue ledge right stop pan (0\.9\d|1\.00) '
