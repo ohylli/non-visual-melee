@@ -16,21 +16,25 @@ English (UK) text.
 
 ## Highlights
 
-- Launcher improvements: version display, portable installs, keyboard remapping
-  and settings available before starting the game.
-- Release checks now include the browser build, both macOS architectures and
-  renderer FIFO, texture-cache, worker and recording tests.
+- Fixed the Adventure mode Mushroom Kingdom crash when blocks are hit (#144).
+- Fixed macOS bundles missing transitive `@rpath` libraries, including
+  `libbrotlicommon.1.dylib`, which could prevent the app from launching (#145).
+- Fixed coloured bars at the top left of widescreen fights when off-screen
+  fighter magnifiers are drawn. Verified on Linux/Vulkan in Kongo Jungle and
+  Onett; Windows/Direct3D hardware verification is still pending.
 
 ## Fixes
 
-- Fixed uninitialized credits text pointers on 64-bit platforms by clearing the
-  entire allocated staff table (#140).
-- Fixed browser linking after the launcher changes and restored browser default
-  keyboard bindings and the persistent save-directory path.
-- Fixed missing browser rendering on GPUs using the two-pass alpha fallback:
-  the alpha prepass now remains paired with the asynchronously compiled colour pass.
-- Added a credits boot smoke test and regression checks for the credits table,
-  browser platform stubs and alpha-pipeline scheduling.
+- Replaced GameCube byte-offset overlays with native field access for
+  Mushroom Kingdom block objects, Multi-Man Melee record initialization, and
+  Super Scope charge resets. This avoids invalid pointers, missing records,
+  and writes into unrelated CPU state on 64-bit hosts (#144).
+- macOS packaging now resolves and bundles transitive `@rpath` dependencies
+  and rejects bundles with missing libraries before publishing (#145).
+- Magnifier capture cameras now copy and clear their whole temporary viewport,
+  preserving fighter proportions and preventing leftover depth from hiding
+  parts of the stage. Added a regression test for original, widescreen and
+  ultrawide framebuffer aspects.
 
 ## Known issues
 
@@ -169,6 +173,7 @@ settings overlay.
 ## Contributors
 
 ### Project Contributors
+- **@forkyfoo** — Mushroom Kingdom, Multi-Man Melee and Super Scope 64-bit fixes (#144), and macOS library bundling fix (#145).
 - **@999sian** — Project Lead, Phase 1 features, multi-core optimizations, file cache, Android & Windows porting, and stability fixes.
 - **@theofficialgman** — Linux aarch64 (ARM64) support, Nod aarch64 prebuilts, 4-core & ARM scheduling optimizations (#44, #47).
 - **@alexscott2718-gif** — Graphics backend selection, command line overrides, and engine logging.
