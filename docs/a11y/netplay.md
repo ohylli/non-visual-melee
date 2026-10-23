@@ -39,6 +39,27 @@ The LAN lobby (VS. Mode, Online, LAN play) finds other copies by mDNS, multicast
 - Windows Firewall blocks incoming traffic on a Public network unless a rule allows the program, and asks the first time a program listens, which takes focus. Rules are per program path, so each build directory's `melee.exe` needs its own, allowing UDP and TCP in. A new build directory means a new prompt, best answered by the maintainer before an agent runs it.
 - `MELEE_NET_RECORD` starts writing at boot and runs on into the session without a new header, so two copies' recordings share no frame numbers and are not compared. Desyncs are still logged.
 
+## Direct Connect over the internet
+
+Direct Connect (VS. Mode, Online) pairs two players by connect code, with no server of the project's own (`src/pc/net_match.c` on `src/pc/net_dht.c`, design in `docs/netcode-plan.md`, section 7).
+
+- Rendezvous: each copy joins the public BitTorrent DHT and announces itself under a topic made from a code. A DHT node stores the announcing socket's address and port as it saw them, so a lookup of the friend's topic returns their router's public mapping.
+- Hole punch: both copies then send to each other's public mapping from the same UDP socket. Each router lets the other's packets in because it has just sent to that address. The rollback session runs on over that socket.
+- What it needs: a router that keeps one public port for a socket whatever it sends to (endpoint-independent mapping), on at least one side and usually both. A router that gives each destination a port of its own (symmetric NAT: some phone carriers, workplace and school networks) cannot be reached this way, and there is no relay and no port mapping (UPnP) to fall back on.
+- Gaps the code shows: IPv4 only; candidates on private addresses are dropped, so two machines behind one router meet only if it loops traffic to its own public address back in (LAN play is the way there); a mesh VPN's addresses are private too. The game's port is left to the system by default, so port forwarding needs a fixed one first, which no settings row offers: `MELEE_NET_PORT` or the `net_port` line of `launcher.cfg`.
+- The base port has not tried two home networks against each other.
+
+## The connection checker
+
+`melee-netcheck.exe` (`src/pc/a11y/netcheck.cpp`, its pure parts in `netcheck_logic.cpp`) is a console program beside `melee.exe`, built by `a11y.cmake` and added to the CI package, for a player to try before a session with a friend. It links statically, so it runs alone, and prints plain lines for a screen reader.
+
+- The check asks DHT nodes on several networks how they see the program's socket (the "ip" field of BEP 42 that the game's DHT also reads) and judges the router: no answer at all means UDP is blocked; one address and port everywhere is good; ports that differ mean symmetric NAT.
+- The test with a friend: both run it and each types the other's printed address. Each sends probes to the other and answers every probe at once, also while its player is still typing, so a reply proves both directions and times the round trip. A side that hears probes but gets no replies reports one way only.
+- Many nodes the DHT names never answer, so when every named node has been asked, one that answered is asked again for others; without that a run could end with too few answers for a verdict.
+- The address holds only while the program runs: its port is the system's choice, like the game's, and a refresh query keeps the router's mapping while the player types.
+- Everything it says but the prompts also goes to `melee-netcheck-result.txt` beside the program (the current folder if that one is not writable), rewritten each run and dated, so a friend can send their results back.
+- Developer test: `--loopback` binds to 127.0.0.1 and skips the check, so two copies on one machine try the friend test without a firewall prompt; `--port` fixes the port. Two copies started from one folder share the result file, so the second copy runs from a folder of its own. Without `--loopback` the program listens on every network, which can raise the Windows firewall prompt on its first run (a new program path gets a new prompt); on the maintainer's machine the internet check ran without one.
+
 ## How the LAN lobby is read
 
 The lobby (scene `GS_ONLINE_LOBBY`, the first state of the online game mode, flow in `src/melee/gm/gmonlinemode.c`) fills an `OnlineLobbyView` each frame and draws it; the fork's hook hands that view over once it is drawn, and `lobby_speech.cpp` compares it with the last frame. The view has everything the screen shows: the machines listed (row 0 is this one), a phase and a status line. Only LAN play's list speaks; direct connect, which `MELEE_LAN_DIRECT` also routes through this path, and the internet layouts keep the scene announcement.

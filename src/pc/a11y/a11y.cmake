@@ -153,7 +153,29 @@ target_compile_definitions(a11y_miniaudio PUBLIC MA_NO_DEVICE_IO MA_NO_ENCODING)
 target_compile_options(a11y_miniaudio PRIVATE -w)
 target_link_libraries(melee PRIVATE a11y_miniaudio)
 
+# melee-netcheck, the connection checker: a console program of its own beside
+# melee.exe that says whether a network suits Direct Connect, and tests two
+# players' networks against each other (netcheck.cpp). Linked statically, so
+# it is one file that runs without the game's DLLs.
+add_executable(melee-netcheck
+        ${CMAKE_CURRENT_LIST_DIR}/netcheck.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/netcheck_logic.cpp)
+if (WIN32)
+    target_link_libraries(melee-netcheck PRIVATE ws2_32)
+    target_link_options(melee-netcheck PRIVATE -static)
+endif ()
+
 if (TARGET unit_tests)
+    # The checker's parsing, verdict and probe packets, with no sockets.
+    add_executable(netcheck_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_netcheck.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/netcheck_logic.cpp)
+    target_include_directories(netcheck_test PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(netcheck_test PRIVATE -UNDEBUG)
+    add_test(NAME netcheck COMMAND netcheck_test)
+    set_tests_properties(netcheck PROPERTIES LABELS melee)
+    add_dependencies(unit_tests netcheck_test)
+
     # Speech against a fake bridge; the test defines its own pc_log_line.
     add_executable(speech_test EXCLUDE_FROM_ALL
             ${CMAKE_CURRENT_LIST_DIR}/test_speech.cpp

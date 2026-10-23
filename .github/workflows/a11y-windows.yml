@@ -49,6 +49,17 @@ jobs:
           TARGET_ARCH: x86_64
         run: tools/package_windows.sh
 
+      # The connection checker (src/pc/a11y/netcheck.cpp), beside melee.exe,
+      # so a friend testing their network has it in the same download.
+      # package_windows.sh builds the melee target alone, so it is built here
+      # in the same build directory.
+      - name: Add the connection checker
+        run: |
+          ninja -C build-win melee-netcheck
+          cp build-win/melee-netcheck.exe dist/melee-windows-x86_64/
+          cd dist
+          zip -q Melee-Windows-x86_64.zip melee-windows-x86_64/melee-netcheck.exe
+
       # package_windows.sh ships prism.dll; Prism's licences (its own and
       # those of the libraries inside it) are added here, beside the game.
       - name: Add Prism licences
