@@ -77,12 +77,13 @@ bool skip_value(Cursor& c, int depth) {
     return read_string(c).has_value();
 }
 
+uint32_t get32(const uint8_t* b) {
+    return static_cast<uint32_t>(b[0]) << 24 | static_cast<uint32_t>(b[1]) << 16 |
+           static_cast<uint32_t>(b[2]) << 8 | b[3];
+}
+
 Endpoint compact_endpoint(const uint8_t* b) {
-    Endpoint e;
-    e.address = static_cast<uint32_t>(b[0]) << 24 | static_cast<uint32_t>(b[1]) << 16 |
-                static_cast<uint32_t>(b[2]) << 8 | b[3];
-    e.port = static_cast<uint16_t>(b[4] << 8 | b[5]);
-    return e;
+    return Endpoint{get32(b), static_cast<uint16_t>(b[4] << 8 | b[5])};
 }
 
 /* The "r" dictionary: only its compact node list matters here. */
@@ -126,11 +127,6 @@ void put64(uint8_t* b, uint64_t v) {
     put32(b + 4, static_cast<uint32_t>(v));
 }
 
-uint32_t get32(const uint8_t* b) {
-    return static_cast<uint32_t>(b[0]) << 24 | static_cast<uint32_t>(b[1]) << 16 |
-           static_cast<uint32_t>(b[2]) << 8 | b[3];
-}
-
 uint64_t get64(const uint8_t* b) {
     return static_cast<uint64_t>(get32(b)) << 32 | get32(b + 4);
 }
@@ -151,6 +147,9 @@ std::optional<Endpoint> parse_endpoint(std::string_view text) {
     while (!text.empty() && (text.back() == ' ' || text.back() == '\t' || text.back() == '\r' ||
                                 text.back() == '\n'))
     {
+        text.remove_suffix(1);
+    }
+    if (!text.empty() && text.back() == '.') {
         text.remove_suffix(1);
     }
     uint32_t parts[5] = {};
@@ -184,6 +183,10 @@ std::optional<Endpoint> parse_endpoint(std::string_view text) {
     }
     e.port = static_cast<uint16_t>(parts[4]);
     return e;
+}
+
+uint32_t network_of(Endpoint e) {
+    return e.address & 0xFFFFFF00u;
 }
 
 bool is_public(uint32_t ip) {
@@ -256,28 +259,30 @@ Verdict judge(const std::vector<Observation>& observations, int replies, Endpoin
     if (replies == 0) {
         return v;
     }
-    /* One voice per network, as the game's own vote counts them
-     * (pc_dht_external_endpoint): several nodes behind one address would
-     * otherwise outvote the rest. */
+    /* The rules of the game's own vote (observe and pc_dht_external_endpoint
+     * in net_dht.c): a "seen as" with port 0 or an address that is not
+     * public is a node's mistake and left out, and each network has one
+     * voice, so several nodes behind one address cannot outvote the rest. */
     std::set<uint32_t> networks;
-    std::map<std::pair<uint32_t, uint16_t>, int> votes;
     std::set<uint16_t> ports;
     std::set<uint32_t> addresses;
     for (const Observation& o : observations) {
-        if (!networks.insert(o.observer.address & 0xFFFFFF00u).second) {
+        if (o.seen_as.port == 0 || !is_public(o.seen_as.address) ||
+            !networks.insert(network_of(o.observer)).second)
+        {
             continue;
         }
-        ++votes[{o.seen_as.address, o.seen_as.port}];
+        ++v.votes[o.seen_as];
         ports.insert(o.seen_as.port);
         addresses.insert(o.seen_as.address);
     }
     v.observers = static_cast<int>(networks.size());
     v.seen_ports = static_cast<int>(ports.size());
     v.seen_addresses = static_cast<int>(addresses.size());
-    if (!votes.empty()) {
-        auto best = std::max_element(votes.begin(), votes.end(),
+    if (!v.votes.empty()) {
+        auto best = std::max_element(v.votes.begin(), v.votes.end(),
             [](const auto& a, const auto& b) { return a.second < b.second; });
-        v.public_endpoint = Endpoint{best->first.first, best->first.second};
+        v.public_endpoint = best->first;
         v.no_nat = local.address != 0 && v.public_endpoint->address == local.address;
     }
     if (v.observers < kMinObservers) {

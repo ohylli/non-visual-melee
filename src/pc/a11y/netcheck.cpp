@@ -114,10 +114,6 @@ Endpoint from_sockaddr(const sockaddr_in& a) {
     return Endpoint{ntohl(a.sin_addr.s_addr), ntohs(a.sin_port)};
 }
 
-uint32_t network_of(Endpoint e) {
-    return e.address & 0xFFFFFF00u;
-}
-
 /* One UDP socket for the whole run: the check and the test with a friend
  * must go out through the same router mapping, so the address the check
  * prints is the one the friend sends to. */
@@ -286,12 +282,14 @@ bool copy_to_clipboard(const std::string& text) {
     HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, (text.size() + 1) * sizeof(wchar_t));
     if (memory != nullptr) {
         auto* wide = static_cast<wchar_t*>(GlobalLock(memory));
-        for (std::size_t i = 0; i < text.size(); ++i) {
-            wide[i] = static_cast<wchar_t>(static_cast<unsigned char>(text[i]));
+        if (wide != nullptr) {
+            for (std::size_t i = 0; i < text.size(); ++i) {
+                wide[i] = static_cast<wchar_t>(static_cast<unsigned char>(text[i]));
+            }
+            wide[text.size()] = 0;
+            GlobalUnlock(memory);
+            ok = SetClipboardData(CF_UNICODETEXT, memory) != nullptr;
         }
-        wide[text.size()] = 0;
-        GlobalUnlock(memory);
-        ok = SetClipboardData(CF_UNICODETEXT, memory) != nullptr;
         if (!ok) {
             GlobalFree(memory);
         }
@@ -366,7 +364,7 @@ void say(const char* text) {
 }
 
 /* A prompt: the console alone, since it means nothing in the file. */
-void ask(const char* text) {
+void prompt(const char* text) {
     std::printf("%s\n", text);
     std::fflush(stdout);
 }
@@ -402,7 +400,7 @@ public:
             const auto now = Clock::now();
             if (m_replies == 0 && now >= next_bootstrap) {
                 for (Endpoint b : bootstraps) {
-                    ask(b);
+                    query(b);
                 }
                 next_bootstrap = now + kBootstrapRetry;
             }
@@ -424,8 +422,8 @@ public:
 
     /* A query to a node that answered, so the router keeps the mapping. */
     void keep_alive() {
-        if (!m_observations.empty()) {
-            ask(m_observations.front().observer);
+        if (!m_responders.empty()) {
+            query(m_responders.front());
         }
     }
 
@@ -433,20 +431,20 @@ private:
     int observers() const {
         std::set<uint32_t> networks;
         for (const netcheck::Observation& o : m_observations) {
-            networks.insert(network_of(o.observer));
+            networks.insert(netcheck::network_of(o.observer));
         }
         return static_cast<int>(networks.size());
     }
 
-    void ask(Endpoint node) {
+    void query(Endpoint node) {
         netcheck::NodeId target;
         for (uint8_t& b : target) {
             b = static_cast<uint8_t>(m_random());
         }
         const uint16_t transaction = ++m_transaction;
         m_pending[transaction] = node;
-        const std::string query = netcheck::find_node_query(m_id, target, transaction);
-        m_socket.send(node, query.data(), query.size());
+        const std::string message = netcheck::find_node_query(m_id, target, transaction);
+        m_socket.send(node, message.data(), message.size());
     }
 
     /* The next node from the replies so far, from a network not asked yet,
@@ -456,9 +454,9 @@ private:
             const Endpoint node = m_queue.front();
             m_queue.pop_front();
             if (node.port != 0 && netcheck::is_public(node.address) &&
-                m_asked_networks.insert(network_of(node)).second)
+                m_asked_networks.insert(netcheck::network_of(node)).second)
             {
-                ask(node);
+                query(node);
                 return;
             }
         }
@@ -468,7 +466,7 @@ private:
          * ran dry with too few answers for a verdict. */
         const auto now = Clock::now();
         if (!m_responders.empty() && now >= m_next_refill) {
-            ask(m_responders[m_refills++ % m_responders.size()]);
+            query(m_responders[m_refills++ % m_responders.size()]);
             m_next_refill = now + kRefillEvery;
         }
     }
@@ -540,16 +538,8 @@ private:
               "they see it: %d.\n",
             netcheck::to_string(m_local).c_str(), m_replies, v.observers);
         if (v.mapping == netcheck::Mapping::Varies) {
-            std::map<std::pair<uint32_t, uint16_t>, int> seen;
-            std::set<uint32_t> counted;
-            for (const netcheck::Observation& o : m_observations) {
-                if (counted.insert(network_of(o.observer)).second) {
-                    ++seen[{o.seen_as.address, o.seen_as.port}];
-                }
-            }
-            for (const auto& [endpoint, count] : seen) {
-                print("Seen as %s by %d.\n",
-                    netcheck::to_string(Endpoint{endpoint.first, endpoint.second}).c_str(), count);
+            for (const auto& [endpoint, count] : v.votes) {
+                print("Seen as %s by %d.\n", netcheck::to_string(endpoint).c_str(), count);
             }
         } else if (v.public_endpoint) {
             print("Seen as %s.\n", netcheck::to_string(*v.public_endpoint).c_str());
@@ -634,7 +624,9 @@ void punch(
         const int n = socket.receive(milliseconds{20}, buffer, sizeof buffer, from);
         const auto p =
             n > 0 ? netcheck::decode_probe(buffer, static_cast<std::size_t>(n)) : std::nullopt;
-        if (!p) {
+        /* Only the friend's address counts, on any port: an earlier friend's
+         * program still probing would otherwise pass for this one. */
+        if (!p || from.address != friend_endpoint.address) {
             continue;
         }
         if (answer_probe(socket, *p, own_nonce, from)) {
@@ -648,7 +640,9 @@ void punch(
                         netcheck::to_string(from).c_str());
                 }
             }
-        } else if (p->kind == netcheck::ProbeKind::Reply && p->echo_nonce == own_nonce) {
+        } else if (p->kind == netcheck::ProbeKind::Reply && p->echo_nonce == own_nonce &&
+                   p->echo_ms <= now_ms(epoch))
+        {
             round_trips.push_back(now_ms(epoch) - p->echo_ms);
             if (!contact) {
                 contact = Clock::now();
@@ -692,8 +686,9 @@ Options parse_options(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--port" && i + 1 < argc) {
-            const int port = std::atoi(argv[++i]);
-            o.ok = o.ok && port > 0 && port < 65536;
+            char* end = nullptr;
+            const auto port = std::strtoll(argv[++i], &end, 10);
+            o.ok = o.ok && *end == '\0' && port > 0 && port < 65536;
             o.port = static_cast<uint16_t>(port);
         } else if (arg == "--loopback") {
             /* Developer test: two copies on one machine, bound to 127.0.0.1
@@ -715,18 +710,18 @@ Options parse_options(int argc, char** argv) {
 /* Says where the results are saved, on the console alone. */
 void tell_result_file(const std::filesystem::path& place) {
     if (place.empty()) {
-        ask("The results could not be saved to a file.");
+        prompt("The results could not be saved to a file.");
     } else if (!place.has_parent_path()) {
-        ask("The results are also saved in melee-netcheck-result.txt, in the folder this was "
-            "started from.");
+        prompt("The results are also saved in melee-netcheck-result.txt, in the folder this was "
+               "started from.");
     } else {
-        ask("The results are also saved in melee-netcheck-result.txt, beside this program.");
+        prompt("The results are also saved in melee-netcheck-result.txt, beside this program.");
     }
 }
 
 int finish(int code) {
     if (console_is_ours()) {
-        ask("Press Enter to close.");
+        prompt("Press Enter to close.");
         std::string line;
         std::getline(std::cin, line);
     }
@@ -777,6 +772,8 @@ int main(int argc, char** argv) {
             return finish(1);
         }
         own_public = v.public_endpoint;
+    } else {
+        tell_result_file(result_file);
     }
     say("");
 
@@ -796,7 +793,7 @@ int main(int argc, char** argv) {
     }
     ConsoleInput input;
     while (true) {
-        ask("Type your friend's address and press Enter, or press Enter alone to close.");
+        prompt("Type your friend's address and press Enter, or press Enter alone to close.");
         std::optional<Endpoint> target;
         auto next_keep_alive = Clock::now() + kKeepAlive;
         while (!target) {
@@ -811,10 +808,10 @@ int main(int argc, char** argv) {
                 }
                 target = netcheck::parse_endpoint(*line);
                 if (!target) {
-                    ask("That is not an address like 203.0.113.5:51234. Type it again, or press "
-                        "Enter alone to close.");
+                    prompt("That is not an address like 203.0.113.5:51234. Type it again, or press "
+                           "Enter alone to close.");
                 } else if (own_public && *target == *own_public) {
-                    ask("That is your own address. Type your friend's.");
+                    prompt("That is your own address. Type your friend's.");
                     target.reset();
                 }
             }

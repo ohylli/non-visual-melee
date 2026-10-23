@@ -1,6 +1,6 @@
 # Netplay on Windows
 
-What running the base port's online play on one Windows machine takes, learned while checking that steering holds up online and that two copies meet in the LAN lobby. The base port's own netplay harness (`tools/net_test.py`) runs on Linux only; the fork's is `tools/a11y/drive_net.py`.
+What running the base port's online play on one Windows machine takes, learned while checking that steering holds up online and that two copies meet in the LAN lobby; then how Direct Connect meets a friend over the internet, and the fork's connection checker that tests a network for it. The base port's own netplay harness (`tools/net_test.py`) runs on Linux only; the fork's is `tools/a11y/drive_net.py`.
 
 ## Mental model
 
@@ -47,18 +47,16 @@ Direct Connect (VS. Mode, Online) pairs two players by connect code, with no ser
 - Hole punch: both copies then send to each other's public mapping from the same UDP socket. Each router lets the other's packets in because it has just sent to that address. The rollback session runs on over that socket.
 - What it needs: a router that keeps one public port for a socket whatever it sends to (endpoint-independent mapping), on at least one side and usually both. A router that gives each destination a port of its own (symmetric NAT: some phone carriers, workplace and school networks) cannot be reached this way, and there is no relay and no port mapping (UPnP) to fall back on.
 - Gaps the code shows: IPv4 only; candidates on private addresses are dropped, so two machines behind one router meet only if it loops traffic to its own public address back in (LAN play is the way there); a mesh VPN's addresses are private too. The game's port is left to the system by default, so port forwarding needs a fixed one first, which no settings row offers: `MELEE_NET_PORT` or the `net_port` line of `launcher.cfg`.
-- The base port has not tried two home networks against each other.
 
 ## The connection checker
 
 `melee-netcheck.exe` (`src/pc/a11y/netcheck.cpp`, its pure parts in `netcheck_logic.cpp`) is a console program beside `melee.exe`, built by `a11y.cmake` and added to the CI package, for a player to try before a session with a friend. It links statically, so it runs alone, and prints plain lines for a screen reader.
 
-- The check asks DHT nodes on several networks how they see the program's socket (the "ip" field of BEP 42 that the game's DHT also reads) and judges the router: no answer at all means UDP is blocked; one address and port everywhere is good; ports that differ mean symmetric NAT.
+- The check asks DHT nodes on several networks how they see the program's socket (the "ip" field of BEP 42 that the game's DHT also reads) and judges the router by the same rules as the game's own vote; the verdicts are `Mapping` in `netcheck_logic.hpp`.
 - The test with a friend: both run it and each types the other's printed address. Each sends probes to the other and answers every probe at once, also while its player is still typing, so a reply proves both directions and times the round trip. A side that hears probes but gets no replies reports one way only.
-- Many nodes the DHT names never answer, so when every named node has been asked, one that answered is asked again for others; without that a run could end with too few answers for a verdict.
 - The address holds only while the program runs: its port is the system's choice, like the game's, and a refresh query keeps the router's mapping while the player types.
-- Everything it says but the prompts also goes to `melee-netcheck-result.txt` beside the program (the current folder if that one is not writable), rewritten each run and dated, so a friend can send their results back.
-- Developer test: `--loopback` binds to 127.0.0.1 and skips the check, so two copies on one machine try the friend test without a firewall prompt; `--port` fixes the port. Two copies started from one folder share the result file, so the second copy runs from a folder of its own. Without `--loopback` the program listens on every network, which can raise the Windows firewall prompt on its first run (a new program path gets a new prompt); on the maintainer's machine the internet check ran without one.
+- Everything it says but the prompts also goes to `melee-netcheck-result.txt` beside the program, so a friend can send their results back.
+- Developer test: `--loopback` (the usage line lists the options) binds to 127.0.0.1 and skips the check, so two copies on one machine try the friend test without a firewall prompt. Two copies run from one `.exe` share the result file beside it, so the second copy is a copy of the program in a folder of its own. Without `--loopback` the program listens on every network, so the firewall rule of "Two copies in the LAN lobby" applies to its path too.
 
 ## How the LAN lobby is read
 

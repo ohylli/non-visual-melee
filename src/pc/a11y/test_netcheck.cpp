@@ -43,6 +43,8 @@ std::optional<netcheck::KrpcReply> parse(const std::string& s) {
 void addresses_parse_as_typed() {
     assert(netcheck::parse_endpoint("203.0.113.5:51234") == ep(203, 0, 113, 5, 51234));
     assert(netcheck::parse_endpoint("  203.0.113.5:51234 \r\n") == ep(203, 0, 113, 5, 51234));
+    assert(netcheck::parse_endpoint("203.0.113.5:51234.") == ep(203, 0, 113, 5, 51234));
+    assert(!netcheck::parse_endpoint("203.0.113.5:51234.."));
     assert(!netcheck::parse_endpoint("203.0.113.5"));
     assert(!netcheck::parse_endpoint("203.0.113:51234"));
     assert(!netcheck::parse_endpoint("203.0.113.256:51234"));
@@ -111,10 +113,9 @@ void queries_errors_and_junk_are_refused() {
     assert(!parse("d1:t2:ab1:y99:re")); /* a length past the end */
     assert(!parse(""));
     assert(!parse("MNC1"));
+    /* Well formed, but nested past the depth limit. */
     std::string deep = "d1:t2:ab1:y1:r1:x";
-    for (int i = 0; i < 64; ++i) {
-        deep += 'l';
-    }
+    deep += std::string(64, 'l') + std::string(64, 'e') + "e";
     assert(!parse(deep));
 }
 
@@ -141,6 +142,9 @@ void ports_that_differ_vary() {
     assert(v.seen_ports == 2);
     assert(v.seen_addresses == 1);
     assert(v.public_endpoint == ep(198, 51, 100, 7, 40000));
+    assert(v.votes.size() == 2);
+    assert(v.votes.at(ep(198, 51, 100, 7, 40000)) == 2);
+    assert(v.votes.at(ep(198, 51, 100, 7, 40001)) == 1);
 }
 
 void addresses_that_differ_vary() {
@@ -162,6 +166,17 @@ void one_network_has_one_voice() {
     assert(v.observers == 2);
     assert(v.mapping == Mapping::Unknown);
     assert(v.public_endpoint == pub);
+}
+
+void a_nodes_mistake_is_left_out() {
+    /* A "seen as" with port 0 or a private address is a node's error, as the
+     * game's DHT treats it: it neither votes nor makes the verdict vary. */
+    const Endpoint pub = ep(198, 51, 100, 7, 40000);
+    const std::vector<Observation> obs = {seen_by(1, pub), seen_by(2, pub), seen_by(3, pub),
+        seen_by(4, ep(198, 51, 100, 7, 0)), seen_by(5, ep(192, 168, 1, 5, 40000))};
+    const auto v = netcheck::judge(obs, 5, {});
+    assert(v.mapping == Mapping::Consistent);
+    assert(v.observers == 3);
 }
 
 void silence_and_too_few() {
@@ -214,6 +229,7 @@ int main() {
     ports_that_differ_vary();
     addresses_that_differ_vary();
     one_network_has_one_voice();
+    a_nodes_mistake_is_left_out();
     silence_and_too_few();
     own_public_address_means_no_nat();
     probes_round_trip();

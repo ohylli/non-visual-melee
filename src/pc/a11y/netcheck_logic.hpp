@@ -7,8 +7,10 @@
  * them with hand-made bytes. netcheck.cpp holds the program around them. */
 
 #include <array>
+#include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -21,12 +23,15 @@ struct Endpoint {
     uint32_t address = 0;
     uint16_t port = 0;
 
-    bool operator==(const Endpoint&) const = default;
+    auto operator<=>(const Endpoint&) const = default;
 };
 
 std::string to_string(Endpoint e);
-/* "a.b.c.d:port", spaces around it allowed; nothing else. */
+/* "a.b.c.d:port", spaces around it allowed, and a full stop after it, as
+ * when the sentence that printed it is copied whole; nothing else. */
 std::optional<Endpoint> parse_endpoint(std::string_view text);
+/* The /24 an address belongs to: answers from one network count once. */
+uint32_t network_of(Endpoint e);
 /* Not one of the private, loopback, link-local, shared (carrier-grade NAT)
  * or multicast ranges: the same test as the game's DHT (public_ip in
  * net_dht.c), so a node the game would not talk to is not asked here. */
@@ -64,8 +69,10 @@ enum class Mapping {
 
 struct Verdict {
     Mapping mapping = Mapping::Unreachable;
-    /* The address and port most nodes saw; set unless Unreachable. */
+    /* The address and port most nodes saw; set once any node said. */
     std::optional<Endpoint> public_endpoint;
+    /* Each address and port seen, with how many networks saw it. */
+    std::map<Endpoint, int> votes;
     int observers = 0;  /* distinct networks that said how they saw us */
     int seen_ports = 0; /* distinct ports among them */
     int seen_addresses = 0;
