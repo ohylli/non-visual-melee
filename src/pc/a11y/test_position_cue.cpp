@@ -6,9 +6,13 @@
  * the bottom blast zone; a frame with no width; the interval at, between and beyond the near and
  * far distances; no opponent; and when the cue is silent. The opponent's cue: the same mapping on
  * the opponent's position with its own values, its fixed interval, no opponent, the opponent
- * knocked out and a change of opponent. Both previews: centred at the
- * cue's own pitch, at the cue's interval, for about two seconds and at
- * least two pulses. */
+ * knocked out and a change of opponent. Relative to you: the pan from the
+ * floor level with you to full at the side distance, the side kept within
+ * the crossing margin and taken afresh for a new opponent or after a
+ * silence, the pitch above and below you, and silent while you are out.
+ * Both previews: centred at the cue's own pitch, at the cue's interval, for
+ * about two seconds and at least two pulses; relative to you, the
+ * opponent's on the left, then the right. */
 #include "position_cue.hpp"
 #include "cue_preview.hpp"
 #include "test_match_snapshot.hpp"
@@ -195,33 +199,38 @@ A11yMatchState opponent_at(float x, float y) {
     return match;
 }
 
+/* The opponent's driver on one snapshot, with no side kept. */
+std::optional<VoiceTargets> opponent_position(
+    const A11yMatchState& match, const OpponentMapping& mapping) {
+    return a11y::OpponentPosition{}.tick(match, mapping);
+}
+
 void the_opponent_cue_maps_the_opponents_position() {
     const OpponentMapping mapping;
-    std::optional<VoiceTargets> targets =
-        a11y::opponent_position(opponent_at(85.0f, 114.0f), mapping);
+    std::optional<VoiceTargets> targets = opponent_position(opponent_at(85.0f, 114.0f), mapping);
     assert(targets.has_value());
     assert(near(targets->pan, 0.5f));
     assert(near(targets->pitch, 2.0f));
     assert(near(targets->gain, 1.0f));
-    targets = a11y::opponent_position(opponent_at(-246.0f, -140.0f), mapping);
+    targets = opponent_position(opponent_at(-246.0f, -140.0f), mapping);
     assert(targets.has_value() && near(targets->pan, -1.0f) && near(targets->pitch, 0.5f));
     /* The same mapping as yours, where you stand makes no difference. */
     A11yMatchState moved = opponent_at(42.8f, 57.0f);
     moved.you = fighter(0, -70.0f, 30.0f);
-    targets = a11y::opponent_position(moved, mapping);
+    targets = opponent_position(moved, mapping);
     std::optional<VoiceTargets> yours = a11y::your_position(match_at(42.8f, 57.0f), YourMapping{});
     assert(targets.has_value() && yours.has_value());
     assert(near(targets->pan, yours->pan) && near(targets->pitch, yours->pitch));
     /* Its own copy of the values. */
     OpponentMapping narrow = mapping;
     narrow.stage.pitch_range = 1.0f;
-    targets = a11y::opponent_position(opponent_at(123.0f, 114.0f), narrow);
+    targets = opponent_position(opponent_at(123.0f, 114.0f), narrow);
     assert(targets.has_value() && near(targets->pitch, std::sqrt(2.0f)));
     /* The pan frame is the mapping's: the camera box's by default, else
      * the blast zones'. */
     OpponentMapping blast = mapping;
     blast.stage.pan_to_camera = false;
-    targets = a11y::opponent_position(opponent_at(85.0f, 0.0f), blast);
+    targets = opponent_position(opponent_at(85.0f, 0.0f), blast);
     assert(targets.has_value() && near(targets->pan, 85.0f / 246.0f));
     YourMapping your_blast;
     your_blast.stage.pan_to_camera = false;
@@ -232,59 +241,173 @@ void the_opponent_cue_maps_the_opponents_position() {
 void the_opponent_cue_keeps_its_interval() {
     OpponentMapping mapping;
     for (float x : {2.0f, 30.0f, 85.6f, 200.0f}) {
-        std::optional<VoiceTargets> targets =
-            a11y::opponent_position(opponent_at(x, 0.0f), mapping);
+        std::optional<VoiceTargets> targets = opponent_position(opponent_at(x, 0.0f), mapping);
         assert(targets.has_value() && near(targets->interval, 0.4f));
     }
     mapping.interval = 0.65f;
-    std::optional<VoiceTargets> targets = a11y::opponent_position(opponent_at(5.0f, 0.0f), mapping);
+    std::optional<VoiceTargets> targets = opponent_position(opponent_at(5.0f, 0.0f), mapping);
     assert(targets.has_value() && near(targets->interval, 0.65f));
 }
 
 void the_opponent_cue_is_silent_when_it_should_be() {
     const OpponentMapping mapping;
     A11yMatchState match = opponent_at(30.0f, 0.0f);
-    assert(a11y::opponent_position(match, mapping).has_value());
+    assert(opponent_position(match, mapping).has_value());
 
     A11yMatchState alone = match;
     alone.opponent_count = 0;
-    assert(!a11y::opponent_position(alone, mapping).has_value());
+    assert(!opponent_position(alone, mapping).has_value());
 
     A11yMatchState knocked_out = match;
     knocked_out.opponents[0].out = true;
-    assert(!a11y::opponent_position(knocked_out, mapping).has_value());
+    assert(!opponent_position(knocked_out, mapping).has_value());
 
     A11yMatchState paused = match;
     paused.paused = true;
-    assert(!a11y::opponent_position(paused, mapping).has_value());
+    assert(!opponent_position(paused, mapping).has_value());
 
     /* Before GO. */
     A11yMatchState ready = match;
     ready.you.can_move = false;
-    assert(!a11y::opponent_position(ready, mapping).has_value());
+    assert(!opponent_position(ready, mapping).has_value());
 
     /* While you are knocked out, the opponent can still be heard. */
     A11yMatchState you_out = match;
     you_out.you.out = true;
-    assert(a11y::opponent_position(you_out, mapping).has_value());
+    assert(opponent_position(you_out, mapping).has_value());
 
     A11yMatchState slow_motion = match;
     slow_motion.fighters_held = true;
-    assert(a11y::opponent_position(slow_motion, mapping).has_value());
+    assert(opponent_position(slow_motion, mapping).has_value());
 
-    assert(!a11y::opponent_position(A11yMatchState{}, mapping).has_value());
+    assert(!opponent_position(A11yMatchState{}, mapping).has_value());
 }
 
 void the_opponent_cue_follows_a_change_of_opponent() {
     const OpponentMapping mapping;
     A11yMatchState match = opponent_at(-40.0f, 0.0f);
-    std::optional<VoiceTargets> before = a11y::opponent_position(match, mapping);
+    std::optional<VoiceTargets> before = opponent_position(match, mapping);
     /* Another fighter comes nearer: the snapshot's choice moves the cue. */
     match.opponents[0] = fighter(2, 60.0f, 50.0f);
-    std::optional<VoiceTargets> after = a11y::opponent_position(match, mapping);
+    std::optional<VoiceTargets> after = opponent_position(match, mapping);
     assert(before.has_value() && after.has_value());
     assert(before->pan < 0.0f && after->pan > 0.0f && after->pitch > before->pitch);
     assert(near(after->interval, before->interval));
+}
+
+OpponentMapping relative() {
+    OpponentMapping mapping;
+    mapping.relative = true;
+    return mapping;
+}
+
+void the_relative_pan_says_your_side() {
+    const OpponentMapping mapping = relative();
+    const float floor = mapping.pan_floor;
+    /* Level with you, at the floor on the side the distance's sign gives;
+     * exactly level counts as the right. */
+    assert(near(opponent_position(opponent_at(-0.5f, 0.0f), mapping)->pan, -floor, 0.01f));
+    assert(near(opponent_position(opponent_at(0.0f, 0.0f), mapping)->pan, floor));
+    /* Linear to full at the side distance, held beyond it. */
+    const float half = mapping.side_distance / 2.0f;
+    std::optional<VoiceTargets> targets = opponent_position(opponent_at(half, 0.0f), mapping);
+    assert(targets.has_value() && near(targets->pan, floor + (1.0f - floor) / 2.0f));
+    assert(near(opponent_position(opponent_at(-mapping.side_distance, 0.0f), mapping)->pan, -1.0f));
+    assert(near(opponent_position(opponent_at(-200.0f, 0.0f), mapping)->pan, -1.0f));
+    /* From you, not from the stage: you off to the left, the opponent at
+     * the centre is on your right. */
+    A11yMatchState moved = match_at(-60.0f, 0.0f);
+    targets = opponent_position(moved, mapping);
+    assert(targets.has_value());
+    assert(near(targets->pan, floor + (1.0f - floor) * 60.0f / mapping.side_distance));
+    /* The camera switch leaves it alone. */
+    OpponentMapping blast = mapping;
+    blast.stage.pan_to_camera = false;
+    assert(near(opponent_position(moved, blast)->pan, targets->pan));
+    /* No floor: the centre level with you. */
+    OpponentMapping no_floor = mapping;
+    no_floor.pan_floor = 0.0f;
+    assert(near(opponent_position(opponent_at(0.0f, 0.0f), no_floor)->pan, 0.0f));
+    assert(near(a11y::relative_pan(10.0f, 1, no_floor), 10.0f / mapping.side_distance));
+}
+
+void the_relative_side_holds_through_a_crossing() {
+    const float margin = 4.0f;
+    /* Kept within the margin past you, changed beyond it, either way. */
+    assert(a11y::opponent_side(-3.9f, 1, margin) == 1);
+    assert(a11y::opponent_side(-4.1f, 1, margin) == -1);
+    assert(a11y::opponent_side(3.9f, -1, margin) == -1);
+    assert(a11y::opponent_side(4.1f, -1, margin) == 1);
+    assert(a11y::opponent_side(-0.1f, 0, margin) == -1);
+    assert(a11y::opponent_side(0.0f, 0, margin) == 1);
+
+    OpponentMapping mapping = relative();
+    mapping.crossing_margin = margin;
+    a11y::OpponentPosition cue;
+    /* The opponent walks through you from your right: still on your right
+     * 3 units past, near the floor; on your left past the margin. */
+    for (float x : {20.0f, 2.0f, -3.0f}) {
+        std::optional<VoiceTargets> targets = cue.tick(opponent_at(x, 0.0f), mapping);
+        assert(targets.has_value() && targets->pan > 0.0f);
+    }
+    std::optional<VoiceTargets> targets = cue.tick(opponent_at(-3.0f, 0.0f), mapping);
+    assert(near(targets->pan,
+        mapping.pan_floor + (1.0f - mapping.pan_floor) * 3.0f / mapping.side_distance));
+    assert(cue.tick(opponent_at(-5.0f, 0.0f), mapping)->pan < 0.0f);
+    /* Back within the margin: the left holds. */
+    assert(cue.tick(opponent_at(3.0f, 0.0f), mapping)->pan < 0.0f);
+
+    /* A new opponent takes their side afresh. */
+    A11yMatchState other = opponent_at(1.0f, 0.0f);
+    other.opponents[0] = fighter(2, 1.0f, 0.0f);
+    assert(cue.tick(other, mapping)->pan > 0.0f);
+
+    /* So does one back from a silence. */
+    assert(cue.tick(opponent_at(-5.0f, 0.0f), mapping)->pan < 0.0f);
+    assert(cue.tick(opponent_at(3.0f, 0.0f), mapping)->pan < 0.0f);
+    A11yMatchState knocked_out = opponent_at(3.0f, 0.0f);
+    knocked_out.opponents[0].out = true;
+    assert(!cue.tick(knocked_out, mapping).has_value());
+    assert(cue.tick(opponent_at(3.0f, 0.0f), mapping)->pan > 0.0f);
+
+    /* And after forget, as when the port menu silences the cues. */
+    assert(cue.tick(opponent_at(-5.0f, 0.0f), mapping)->pan < 0.0f);
+    cue.forget();
+    assert(cue.tick(opponent_at(3.0f, 0.0f), mapping)->pan > 0.0f);
+}
+
+void the_relative_pitch_says_above_or_below() {
+    const OpponentMapping mapping = relative();
+    const float h = mapping.height_distance;
+    /* Level with you the cue's own pitch, wherever you both are. */
+    A11yMatchState level = match_at(-50.0f, 80.0f);
+    level.opponents[0] = fighter(1, 30.0f, 80.0f);
+    assert(near(opponent_position(level, mapping)->pitch, 1.0f));
+    /* Half the range up at the height distance above, held beyond; as far
+     * down below. */
+    assert(near(opponent_position(opponent_at(10.0f, h), mapping)->pitch, 2.0f));
+    assert(near(opponent_position(opponent_at(10.0f, 3.0f * h), mapping)->pitch, 2.0f));
+    assert(near(opponent_position(opponent_at(10.0f, -h), mapping)->pitch, 0.5f));
+    assert(near(opponent_position(opponent_at(10.0f, h / 2.0f), mapping)->pitch, std::sqrt(2.0f)));
+    /* The cue's own pitch range. */
+    OpponentMapping narrow = mapping;
+    narrow.stage.pitch_range = 1.0f;
+    assert(near(opponent_position(opponent_at(10.0f, h), narrow)->pitch, std::sqrt(2.0f)));
+}
+
+void the_relative_cue_is_silent_while_you_are_out() {
+    const OpponentMapping mapping = relative();
+    A11yMatchState you_out = opponent_at(30.0f, 0.0f);
+    you_out.you.out = true;
+    assert(!opponent_position(you_out, mapping).has_value());
+    A11yMatchState paused = opponent_at(30.0f, 0.0f);
+    paused.paused = true;
+    assert(!opponent_position(paused, mapping).has_value());
+    A11yMatchState alone = opponent_at(30.0f, 0.0f);
+    alone.opponent_count = 0;
+    assert(!opponent_position(alone, mapping).has_value());
+    std::optional<VoiceTargets> targets = opponent_position(opponent_at(30.0f, 0.0f), mapping);
+    assert(targets.has_value() && near(targets->interval, 0.4f));
 }
 
 }  // namespace
@@ -311,6 +434,21 @@ void the_previews_pulse_at_the_centre_for_about_two_seconds() {
     assert(!a11y::your_position_preview(4.85, yours).has_value());
 }
 
+void the_relative_preview_plays_left_then_right() {
+    OpponentMapping theirs = relative();
+    /* Five pulses at 0.4 s: two on the left, the side changing midway to
+     * the third, then three on the right, all level with you. */
+    for (double seconds : {0.0, 0.4, 0.55}) {
+        std::optional<VoiceTargets> t = a11y::opponent_position_preview(seconds, theirs);
+        assert(t.has_value() && near(t->pan, -theirs.pan_floor) && t->pitch == 1.0f);
+    }
+    for (double seconds : {0.65, 0.8, 1.6}) {
+        std::optional<VoiceTargets> t = a11y::opponent_position_preview(seconds, theirs);
+        assert(t.has_value() && near(t->pan, theirs.pan_floor));
+    }
+    assert(!a11y::opponent_position_preview(1.85, theirs).has_value());
+}
+
 int main() {
     pan_follows_x();
     pan_to_the_camera_follows_x();
@@ -323,7 +461,12 @@ int main() {
     the_opponent_cue_keeps_its_interval();
     the_opponent_cue_is_silent_when_it_should_be();
     the_opponent_cue_follows_a_change_of_opponent();
+    the_relative_pan_says_your_side();
+    the_relative_side_holds_through_a_crossing();
+    the_relative_pitch_says_above_or_below();
+    the_relative_cue_is_silent_while_you_are_out();
     the_previews_pulse_at_the_centre_for_about_two_seconds();
+    the_relative_preview_plays_left_then_right();
     std::cout << "position_cue: all tests passed\n";
     return 0;
 }

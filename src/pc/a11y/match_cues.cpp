@@ -190,7 +190,8 @@ YourMapping MatchCues::YourValues::mapping(bool pan_to_camera) const {
 }
 
 OpponentMapping MatchCues::OpponentValues::mapping(bool pan_to_camera) const {
-    return OpponentMapping{stage.mapping(pan_to_camera), interval.value()};
+    return OpponentMapping{stage.mapping(pan_to_camera), interval.value(), relative.on(),
+        side_distance.value(), pan_floor.value(), crossing_margin.value(), height_distance.value()};
 }
 
 GapMapping MatchCues::GapValues::mapping() const {
@@ -242,6 +243,26 @@ MatchCues::OpponentValues MatchCues::add_opponent_values(ValueGroup group) {
         group.add_number(NumberSpec{"interval", "Interval",
             "Time between the opponent's pulses, the same however near they are.", "s",
             defaults.interval, kOpponentFastestInterval, 3.0f, 0.05f}),
+        group.add_switch(SwitchSpec{"relative", "Opponent's position cue relative to you",
+            "On, the opponent's position cue sounds where the opponent is from you: on your left "
+            "or right, above or below you; off, where they are on the stage.",
+            defaults.relative, true}),
+        group.add_number(NumberSpec{"side_distance", "Side distance",
+            "Relative to you: how far to your side the opponent sounds fully to that side.",
+            "units", defaults.side_distance, 10.0f, 300.0f, 5.0f}),
+        group.add_number(NumberSpec{"pan_floor", "Pan floor",
+            "Relative to you: how far to the side the opponent sounds when level with you, so "
+            "their side is always heard; at the side distance it is fully to that side.",
+            "", defaults.pan_floor, 0.0f, 1.0f, 0.05f}),
+        group.add_number(NumberSpec{"crossing_margin", "Crossing margin",
+            "Relative to you: how far past you the opponent goes before their pulse changes "
+            "sides, so it does not flicker while you overlap.",
+            "units", defaults.crossing_margin, 0.0f, 30.0f, 0.5f}),
+        group.add_number(NumberSpec{"height_distance", "Height distance",
+            "Relative to you: how far above or below you the pitch reaches the top or bottom of "
+            "the pitch range; level with you it is the cue's own pitch. Battlefield's top "
+            "platform is about 54 units above its main floor.",
+            "units", defaults.height_distance, 10.0f, 300.0f, 5.0f}),
     };
 }
 
@@ -287,7 +308,8 @@ MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
       m_pan_to_camera(settings.add_shared("position_cues", "Position cues")
               .add_switch(SwitchSpec{"pan_to_camera", "Position cues follow the camera",
                   "On, the cues pan across what the camera shows; off, across the whole stage to "
-                  "the side blast zones.",
+                  "the side blast zones. With the opponent's position cue relative to you, it "
+                  "changes only your position cue.",
                   StageMapping{}.pan_to_camera, true})),
       m_gap_cue(settings.add_cue(std::string(kGapId), "Gap warning", kGapBoost)),
       m_gap(add_gap_values(m_gap_cue.group)),
@@ -334,6 +356,7 @@ void MatchCues::silence() {
     {
         play(voice, std::nullopt);
     }
+    m_opponent_position.forget();
     m_gap_warning.forget();
 }
 
@@ -387,7 +410,7 @@ void MatchCues::preview_frame(Clock::time_point now) {
     const double seconds = std::chrono::duration<double>(now - m_preview_start).count();
     const PreviewVoices& v = m_preview_voices;
     /* The fighter sits at the centre, where the pan's frame changes
-     * nothing. */
+     * nothing; the opponent relative to you sits level with you. */
     const bool pan_to_camera = m_pan_to_camera.on();
     std::optional<VoiceTargets> targets;
     switch (m_preview) {
@@ -429,7 +452,7 @@ void MatchCues::preview_frame(Clock::time_point now) {
 void MatchCues::tick(const A11yMatchState& match) {
     const bool pan_to_camera = m_pan_to_camera.on();
     play(m_your_voice, your_position(match, m_your.mapping(pan_to_camera)));
-    play(m_opponent_voice, opponent_position(match, m_opponent.mapping(pan_to_camera)));
+    play(m_opponent_voice, m_opponent_position.tick(match, m_opponent.mapping(pan_to_camera)));
     play(m_gap_voice, m_gap_warning.tick(match, m_gap.mapping()));
     const LedgeTargets ledge = ledge_warning(match, m_ledge.mapping());
     play(m_ledge_left_voice, ledge.left);

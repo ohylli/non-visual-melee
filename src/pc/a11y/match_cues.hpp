@@ -54,9 +54,10 @@ public:
      * updates or stops each voice. */
     void tick(const A11yMatchState& match);
     /* Every voice stops with its ramp, and what the drivers keep between
-     * ticks (the gap warning's hold) is forgotten, so the next tick starts
-     * the cues afresh from its snapshot, as after any silence. Called each
-     * frame the port menu is open, while no tick runs. */
+     * ticks (the opponent's side, the gap warning's hold) is forgotten, so
+     * the next tick starts the cues afresh from its snapshot, as after any
+     * silence. Called each frame the port menu is open, while no tick
+     * runs. */
     void silence();
 
     /* Starts the preview of the cue with this id, the one add_cue took
@@ -107,6 +108,11 @@ private:
     struct OpponentValues {
         StageValues stage;
         Number interval;
+        Switch relative;
+        Number side_distance;
+        Number pan_floor;
+        Number crossing_margin;
+        Number height_distance;
 
         OpponentMapping mapping(bool pan_to_camera) const;
     };
@@ -144,6 +150,7 @@ private:
     YourValues m_your;
     CueGroup m_opponent_cue;
     OpponentValues m_opponent;
+    OpponentPosition m_opponent_position;
     Switch m_pan_to_camera;
     CueGroup m_gap_cue;
     GapValues m_gap;

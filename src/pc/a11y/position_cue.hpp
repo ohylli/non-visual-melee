@@ -3,7 +3,8 @@
  * pure functions from the match snapshot and a cue's mapping values to its
  * voice's targets. Pan says where across the stage and pitch how high, the
  * same way for both cues; your cue's pulse speed says how near the opponent
- * is, and the opponent's pulse is steady. */
+ * is, and the opponent's pulse is steady. The opponent's cue can instead
+ * say where the opponent is from you. */
 #pragma once
 #include "cue_engine.hpp"
 #include "game_access.h"
@@ -42,6 +43,18 @@ struct OpponentMapping {
     /* Seconds between pulses, whatever the distance: your cue already says
      * how near. */
     float interval = 0.4f;
+    /* Where the opponent is from you rather than on the stage: pan from
+     * the horizontal distance, pitch from the vertical, the stage mapping's
+     * pitch range kept and its pan frame left aside. */
+    bool relative = false;
+    /* Relative only. World units from you to the opponent's side where the
+     * pan is full, the pan level with you, so the side is always heard,
+     * how far past you the opponent goes before the pulse changes sides,
+     * and how far above or below you the pitch reaches the range's ends. */
+    float side_distance = 80.0f;
+    float pan_floor = 0.3f;
+    float crossing_margin = 4.0f;
+    float height_distance = 60.0f;
 };
 
 /* Pan for an x, linear from the left blast zone, -1 and beyond, to the
@@ -73,18 +86,51 @@ float nearness_interval(std::optional<float> distance, const YourMapping& mappin
  * respawn. */
 std::optional<VoiceTargets> your_position(const A11yMatchState& match, const YourMapping& mapping);
 
-/* The opponent's position cue's targets, or none while it is silent:
- * outside a match, paused, before GO, with no opponent and while the
- * opponent is knocked out or waiting to respawn. Each tick follows the
- * opponent the snapshot chose, so a change of opponent only moves it. */
-std::optional<VoiceTargets> opponent_position(
-    const A11yMatchState& match, const OpponentMapping& mapping);
+/* The opponent's side of you for a horizontal distance (opponent minus
+ * you): -1 left, 1 right. The last side, 0 for none, holds until the
+ * opponent is more than the margin past you the other way; with none, the
+ * distance's sign decides, level with you counting as the right. */
+int opponent_side(float dx, int last_side, float margin);
+
+/* The relative pan for a horizontal distance on a side: the floor level
+ * with you, linear in the distance to full at the side distance and
+ * beyond. */
+float relative_pan(float dx, int side, const OpponentMapping& mapping);
+
+/* The relative pitch as playback rate for a vertical distance (opponent
+ * minus you): linear in octaves, the cue's own pitch level with you,
+ * pitch_range/2 octaves up at the height distance above and beyond, as
+ * many down as far below. */
+float relative_pitch(float dy, const OpponentMapping& mapping);
+
+/* The opponent's position cue's driver: in the stage mode a function of
+ * the snapshot alone; relative to you it keeps the opponent's side, its
+ * only state, so that a crossing flips the pulse once. */
+class OpponentPosition {
+public:
+    /* Once a tick: the voice's targets, or none while it is silent:
+     * outside a match, paused, before GO, with no opponent and while the
+     * opponent is knocked out or waiting to respawn; relative to you, also
+     * while you are, since your place is then where you were knocked out.
+     * Each tick follows the opponent the snapshot chose, so a change of
+     * opponent only moves it; relative to you a new opponent, or one back
+     * from a silence, takes their side afresh. */
+    std::optional<VoiceTargets> tick(const A11yMatchState& match, const OpponentMapping& mapping);
+    /* The side forgotten: the next tick decides from its snapshot alone. */
+    void forget() { m_side = 0; }
+
+private:
+    int m_side = 0;  /* -1 left, 1 right, 0 none yet */
+    int m_slot = -1; /* whose side it is */
+};
 
 /* The position cues' previews (cue_preview.hpp), for the seconds since the
  * preview began, none once it has ended: the fighter at the centre at
  * middle height, so centred at the cue's own pitch, and the opponent far
  * off, so your cue pulses at its slow interval and the opponent's at its
- * own, for about kPreviewSeconds. */
+ * own, for about kPreviewSeconds. Relative to you the opponent is level
+ * with you instead, half the pulses on your left and the rest on your
+ * right, so both sides of the pan floor are heard. */
 std::optional<VoiceTargets> your_position_preview(double seconds, const YourMapping& mapping);
 std::optional<VoiceTargets> opponent_position_preview(
     double seconds, const OpponentMapping& mapping);

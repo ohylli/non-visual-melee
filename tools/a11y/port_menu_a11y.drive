@@ -51,7 +51,9 @@ wait "\"Opponent's position cue volume, slider, 100%\. Left and right to adjust\
 key Down
 wait "\"Preview opponent's position cue: Play, button\. Plays a short sample of the opponent's position cue, as it sounds in a match\.\"$"
 key Down
-wait '"Position cues follow the camera, On, Left and right to change\. On, the cues pan across what the camera shows; off, across the whole stage to the side blast zones\."$'
+wait "\"Opponent's position cue relative to you, Off, Left and right to change\. On, the opponent's position cue sounds where the opponent is from you: on your left or right, above or below you; off, where they are on the stage\.\"$"
+key Down
+wait "\"Position cues follow the camera, On, Left and right to change\. On, the cues pan across what the camera shows; off, across the whole stage to the side blast zones\. With the opponent's position cue relative to you, it changes only your position cue\.\"$"
 key Down
 wait '"Gap warning, On, Left and right to change\. Turns the gap warning on or off\."$'
 key Down
@@ -129,7 +131,7 @@ wait '"Accessibility"$'
 # Ledge warning distance, the last row, a step down and back up.
 key Right
 wait '"Accessibility, On, Left and right to change\. '
-key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
+key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
 wait '"Ledge warning distance, slider, 40 units\. '
 key Left
 wait '\[a11y\] accessibility settings: saved ledge_warning\.distance = 39$'

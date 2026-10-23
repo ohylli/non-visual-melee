@@ -80,17 +80,62 @@ std::optional<VoiceTargets> your_position(const A11yMatchState& match, const You
     return targets;
 }
 
-std::optional<VoiceTargets> opponent_position(
+int opponent_side(float dx, int last_side, float margin) {
+    if (last_side < 0) {
+        return dx > margin ? 1 : -1;
+    }
+    if (last_side > 0) {
+        return dx < -margin ? -1 : 1;
+    }
+    return dx < 0.0f ? -1 : 1;
+}
+
+float relative_pan(float dx, int side, const OpponentMapping& mapping) {
+    /* 0 level with you, 1 at the side distance. Within the crossing margin
+     * past you the distance still counts, on the side kept. */
+    const float t = mapping.side_distance > 0.0f ?
+                        std::clamp(std::fabs(dx) / mapping.side_distance, 0.0f, 1.0f) :
+                        1.0f;
+    return static_cast<float>(side) * (mapping.pan_floor + (1.0f - mapping.pan_floor) * t);
+}
+
+float relative_pitch(float dy, const OpponentMapping& mapping) {
+    float t; /* -1 at the height distance below, 1 above */
+    if (mapping.height_distance > 0.0f) {
+        t = std::clamp(dy / mapping.height_distance, -1.0f, 1.0f);
+    } else {
+        t = dy > 0.0f ? 1.0f : (dy < 0.0f ? -1.0f : 0.0f);
+    }
+    return std::exp2(mapping.stage.pitch_range * 0.5f * t);
+}
+
+std::optional<VoiceTargets> OpponentPosition::tick(
     const A11yMatchState& match, const OpponentMapping& mapping) {
     /* Both position cues start at GO, when your input comes on. */
-    if (!match.running || match.paused || !match.you.can_move || match.opponent_count == 0) {
+    const bool silent = !match.running || match.paused || !match.you.can_move ||
+                        match.opponent_count == 0 || match.opponents[0].out ||
+                        (mapping.relative && match.you.out);
+    if (silent) {
+        forget();
         return std::nullopt;
     }
     const A11yMatchFighter& opponent = match.opponents[0];
-    if (opponent.out) {
-        return std::nullopt;
+    if (!mapping.relative) {
+        forget();
+        VoiceTargets targets = stage_targets(match.stage, opponent, mapping.stage);
+        targets.interval = mapping.interval;
+        return targets;
     }
-    VoiceTargets targets = stage_targets(match.stage, opponent, mapping.stage);
+    if (opponent.slot != m_slot) {
+        forget();
+        m_slot = opponent.slot;
+    }
+    const float dx = opponent.x - match.you.x;
+    m_side = opponent_side(dx, m_side, mapping.crossing_margin);
+    VoiceTargets targets;
+    targets.pan = relative_pan(dx, m_side, mapping);
+    targets.pitch = relative_pitch(opponent.y - match.you.y, mapping);
+    targets.gain = 1.0f;
     targets.interval = mapping.interval;
     return targets;
 }
@@ -101,7 +146,15 @@ std::optional<VoiceTargets> your_position_preview(double seconds, const YourMapp
 
 std::optional<VoiceTargets> opponent_position_preview(
     double seconds, const OpponentMapping& mapping) {
-    return centred_pulses(seconds, mapping.interval);
+    std::optional<VoiceTargets> targets = centred_pulses(seconds, mapping.interval);
+    if (targets.has_value() && mapping.relative) {
+        /* The side changes midway between pulses, so neither moves while
+         * it sounds. */
+        const int left_pulses = preview_pulses(mapping.interval) / 2;
+        const double change = (left_pulses - 0.5) * static_cast<double>(mapping.interval);
+        targets->pan = seconds < change ? -mapping.pan_floor : mapping.pan_floor;
+    }
+    return targets;
 }
 
 }  // namespace a11y

@@ -136,7 +136,15 @@ void both_cues_register_and_fit() {
     }
     assert((keys == std::vector<std::string>{"opponent_position.on", "opponent_position.volume",
                         "opponent_position.boost", "opponent_position.pitch_range",
-                        "opponent_position.interval"}));
+                        "opponent_position.interval", "opponent_position.relative",
+                        "opponent_position.side_distance", "opponent_position.pan_floor",
+                        "opponent_position.crossing_margin", "opponent_position.height_distance"}));
+    /* Relative to you is a setting, off so the stage mapping stays the
+     * default; the rest of its values are tuning values. */
+    const a11y::NamedValue* relative = f.model.find("opponent_position.relative");
+    assert(relative->kind == a11y::ValueKind::toggle && relative->shown);
+    assert(relative->default_value == 0.0f);
+    assert(!f.model.find("opponent_position.pan_floor")->shown);
     /* Your cue's pitch range default, a value of its own. */
     const a11y::NamedValue* yours = f.model.find("your_position.pitch_range");
     const a11y::NamedValue* theirs = f.model.find("opponent_position.pitch_range");
@@ -203,6 +211,7 @@ void the_menus_rows_are_the_specs_rows() {
                         "opponent_position.on Opponent's position cue",
                         "opponent_position.volume Opponent's position cue volume",
                         "preview opponent_position Preview opponent's position cue",
+                        "opponent_position.relative Opponent's position cue relative to you",
                         "position_cues.pan_to_camera Position cues follow the camera",
                         "gap_warning.on Gap warning",
                         "gap_warning.volume Gap warning volume",
@@ -403,6 +412,29 @@ void one_switch_frames_both_pans() {
             assert(count_logged_starting("[a11y] cue your position start pan -0.35") == 1);
             assert(count_logged_starting("[a11y] cue opponent position start pan 0.35") == 1);
         }
+    }
+}
+
+/* Relative to you, from the values the settings hold: you far left, the
+ * opponent at the centre, on your right and above you; the camera switch
+ * moves only your cue. */
+void the_opponent_cue_follows_you_when_relative() {
+    for (const bool to_camera : {true, false}) {
+        Fixture f;
+        f.model.set(*f.model.find("opponent_position.relative"), 1.0f);
+        f.model.set(*f.model.find("opponent_position.side_distance"), 100.0f);
+        f.model.set(*f.model.find("opponent_position.pan_floor"), 0.2f);
+        f.model.set(*f.model.find("opponent_position.height_distance"), 40.0f);
+        f.model.set(*f.model.find("position_cues.pan_to_camera"), to_camera ? 1.0f : 0.0f);
+        A11yMatchState match = match_with(1, 0.0f);
+        match.you.x = -85.0f;
+        match.opponents[0].y = 20.0f;
+        f.match_cues.tick(match);
+        /* 0.2 + 0.8 * 85 / 100, and half an octave up. */
+        assert(
+            count_logged_starting("[a11y] cue opponent position start pan 0.88 pitch 1.41") == 1);
+        assert(count_logged_starting(to_camera ? "[a11y] cue your position start pan -0.50" :
+                                                 "[a11y] cue your position start pan -0.35") == 1);
     }
 }
 
@@ -719,6 +751,7 @@ int main() {
     a_change_of_opponent_moves_the_voice_without_restarting_it();
     the_opponent_cue_stops_while_knocked_out_and_comes_back();
     one_switch_frames_both_pans();
+    the_opponent_cue_follows_you_when_relative();
     silence_stops_every_voice_and_the_next_tick_starts_afresh();
     a_preview_sounds_with_every_switch_off();
     a_preview_is_silent_at_a_volume_of_0();
