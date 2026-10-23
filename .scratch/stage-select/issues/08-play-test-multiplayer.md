@@ -12,3 +12,9 @@ The maintainer plays stage select with NVDA and listens for:
 - Offline, the VS stage selection rule Turns or Loser with a player other than controller 1 choosing: whether the opening ("Player 3 chooses. Steering needs controller 1.") makes clear who chooses and why the D-pad does nothing, and whether the hover speech helps while that player moves the stage cursor with their own stick. Reaching it may take more than one match (under Turns the first turn may fall to player 1; under Loser someone must lose first), and the Rules screen where the rule is set has no speech yet.
 
 Findings become new issues here.
+
+## Comments
+
+### 2026-10-23: online part play-tested
+
+The maintainer played LAN with NVDA against a sighted friend on a base port build, and the online part worked, with no findings. The offline part, the Turns or Loser rule with another player choosing, is still to test, so the issue stays open.

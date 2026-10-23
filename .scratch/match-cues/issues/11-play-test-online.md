@@ -1,6 +1,6 @@
 # 11 Play test online by ear: the four cues
 
-Status: ready-for-human
+Status: resolved (2026-10-23)
 Type: task
 Blocked by: 10
 
@@ -15,3 +15,9 @@ The maintainer plays online matches with NVDA against a friend, or against a sec
 - Against a base port build too, if the friend plays one: the cues are the fork's own, so the base port side hears nothing and the session stays in sync.
 
 Findings become new issues here. When it passes, CLAUDE.md's status line for match cues says the cues were play-tested online.
+
+## Comments
+
+### 2026-10-23: play-tested on LAN with a friend
+
+The maintainer played LAN matches with NVDA against a sighted friend on a base port build and noticed no issues. The connection was good, so a stalled session and rollback corrections had little chance to show; if lag brings either up later, it becomes a new issue. No new issues.
