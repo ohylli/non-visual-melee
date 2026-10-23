@@ -279,15 +279,23 @@ Verdict judge(const std::vector<Observation>& observations, int replies, Endpoin
     v.observers = static_cast<int>(networks.size());
     v.seen_ports = static_cast<int>(ports.size());
     v.seen_addresses = static_cast<int>(addresses.size());
+    int agreeing = 0;
     if (!v.votes.empty()) {
         auto best = std::max_element(v.votes.begin(), v.votes.end(),
             [](const auto& a, const auto& b) { return a.second < b.second; });
         v.public_endpoint = best->first;
         v.no_nat = local.address != 0 && v.public_endpoint->address == local.address;
+        agreeing = best->second;
     }
+    /* One node with a stale or wrong answer must not make a sound router
+     * look bad, so the most common answer stands when enough networks give
+     * it; a router that gives each destination a port of its own disagrees
+     * almost everywhere. */
     if (v.observers < kMinObservers) {
         v.mapping = Mapping::Unknown;
-    } else if (v.seen_ports == 1 && v.seen_addresses == 1) {
+    } else if (agreeing >= kMinObservers &&
+               agreeing * kAgreeShare.out_of >= v.observers * kAgreeShare.agree)
+    {
         v.mapping = Mapping::Consistent;
     } else {
         v.mapping = Mapping::Varies;

@@ -155,6 +155,29 @@ void addresses_that_differ_vary() {
     assert(v.seen_addresses == 2);
 }
 
+void one_odd_answer_is_outvoted() {
+    /* Seven networks agree and one disagrees: a sound router with one stale
+     * node among the observers. The odd answer still has its vote. */
+    const Endpoint pub = ep(198, 51, 100, 7, 40000);
+    std::vector<Observation> obs;
+    for (uint8_t n = 1; n <= 7; ++n) {
+        obs.push_back(seen_by(n, pub));
+    }
+    obs.push_back(seen_by(8, ep(198, 51, 100, 7, 40001)));
+    const auto v = netcheck::judge(obs, 8, {});
+    assert(v.mapping == Mapping::Consistent);
+    assert(v.public_endpoint == pub);
+    assert(v.votes.size() == 2);
+}
+
+void a_bare_majority_still_varies() {
+    /* Three of five agree: enough networks, but too many disagree. */
+    const Endpoint pub = ep(198, 51, 100, 7, 40000);
+    const std::vector<Observation> obs = {seen_by(1, pub), seen_by(2, pub), seen_by(3, pub),
+        seen_by(4, ep(198, 51, 100, 7, 40001)), seen_by(5, ep(198, 51, 100, 7, 40002))};
+    assert(netcheck::judge(obs, 5, {}).mapping == Mapping::Varies);
+}
+
 void one_network_has_one_voice() {
     /* Three answers from one network and a disagreeing one from another are
      * two observers, too few for a verdict. */
@@ -228,6 +251,8 @@ int main() {
     one_port_everywhere_is_consistent();
     ports_that_differ_vary();
     addresses_that_differ_vary();
+    one_odd_answer_is_outvoted();
+    a_bare_majority_still_varies();
     one_network_has_one_voice();
     a_nodes_mistake_is_left_out();
     silence_and_too_few();

@@ -52,7 +52,7 @@ Direct Connect (VS. Mode, Online) pairs two players by connect code, with no ser
 
 `melee-netcheck.exe` (`src/pc/a11y/netcheck.cpp`, its pure parts in `netcheck_logic.cpp`) is a console program beside `melee.exe`, built by `a11y.cmake` and added to the CI package, for a player to try before a session with a friend. It links statically, so it runs alone, and prints plain lines for a screen reader.
 
-- The check asks DHT nodes on several networks how they see the program's socket (the "ip" field of BEP 42 that the game's DHT also reads) and judges the router by the same rules as the game's own vote; the verdicts are `Mapping` in `netcheck_logic.hpp`.
+- The check asks DHT nodes on several networks how they see the program's socket (the "ip" field of BEP 42 that the game's DHT also reads) and judges the router (`judge` in `netcheck_logic.cpp`, its verdicts `Mapping`). An answer the game's own vote would leave out is left out, and the most common answer stands over a few odd ones, which DHT nodes give now and then.
 - The test with a friend: both run it and each types the other's printed address. Each sends probes to the other and answers every probe at once, also while its player is still typing, so a reply proves both directions and times the round trip. A side that hears probes but gets no replies reports one way only.
 - The address holds only while the program runs: its port is the system's choice, like the game's, and a refresh query keeps the router's mapping while the player types.
 - Everything it says but the prompts also goes to `melee-netcheck-result.txt` beside the program, so a friend can send their results back.

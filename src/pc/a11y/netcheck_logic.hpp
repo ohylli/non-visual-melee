@@ -63,7 +63,7 @@ struct Observation {
 enum class Mapping {
     Unreachable, /* no DHT node answered at all */
     Unknown,     /* answers, but too few said how they saw us */
-    Consistent,  /* every node saw one address and port */
+    Consistent,  /* nearly every node saw one address and port */
     Varies,      /* the port, or the address, differed between nodes */
 };
 
@@ -79,8 +79,15 @@ struct Verdict {
     bool no_nat = false; /* the public address is this machine's own */
 };
 
-/* Fewest observers, each from its own network, that a verdict trusts. */
+/* Fewest observers, each from its own network, that a verdict trusts; as
+ * many must agree on one answer for Consistent, and at least this share of
+ * all of them. */
 constexpr int kMinObservers = 3;
+struct Share {
+    int agree;
+    int out_of;
+};
+constexpr Share kAgreeShare{3, 4};
 
 /* replies counts every answer, with or without a "seen as"; local is the
  * socket's own address and port, its address 0 when it is not known. */

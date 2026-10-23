@@ -510,9 +510,11 @@ private:
             break;
         case netcheck::Mapping::Consistent:
             say("Result: good.");
-            say("Every server saw this computer at the same address and port, so your router "
-                "keeps one port for everyone the game talks to. Direct Connect should work "
-                "between you and a friend whose result is also good.");
+            print("%s saw this computer at the same address and port, so your router keeps one "
+                  "port for everyone the game talks to. Direct Connect should work between you "
+                  "and a friend whose result is also good.\n",
+                v.votes.size() == 1 ? "Every server" :
+                                      "Nearly every server (the odd answers are in the details)");
             break;
         case netcheck::Mapping::Varies:
             say("Result: likely trouble.");
@@ -537,7 +539,7 @@ private:
         print("Details: this computer is %s. Servers that answered: %d. Networks that said how "
               "they see it: %d.\n",
             netcheck::to_string(m_local).c_str(), m_replies, v.observers);
-        if (v.mapping == netcheck::Mapping::Varies) {
+        if (v.votes.size() > 1) {
             for (const auto& [endpoint, count] : v.votes) {
                 print("Seen as %s by %d.\n", netcheck::to_string(endpoint).c_str(), count);
             }
@@ -777,24 +779,31 @@ int main(int argc, char** argv) {
     }
     say("");
 
-    if (options.friend_endpoint) {
-        punch(socket, *options.friend_endpoint, own_nonce, epoch);
-        return finish(0);
-    }
-
-    say("Test with a friend: you both run this program, then each types the other's address.");
-    if (own_public) {
-        const std::string text = netcheck::to_string(*own_public);
-        print("Your address is %s.%s Keep this window open: the address only holds while "
-              "the program runs.\n",
-            text.c_str(), copy_to_clipboard(text) ? " It is copied to the clipboard." : "");
-    } else {
-        print("This computer listens on port %u.\n", socket.port());
+    /* A friend's address given at start is tried at once; after it, as after
+     * every test, the program waits for the next address and answers probes
+     * meanwhile, so a friend still testing is not left without replies. */
+    std::optional<Endpoint> target = options.friend_endpoint;
+    if (!target) {
+        say("Test with a friend: you both run this program, then each types the other's "
+            "address.");
+        if (own_public) {
+            const std::string text = netcheck::to_string(*own_public);
+            print("Your address is %s.%s Keep this window open: the address only holds while "
+                  "the program runs.\n",
+                text.c_str(), copy_to_clipboard(text) ? " It is copied to the clipboard." : "");
+        } else if (options.check) {
+            say("The check could not learn your address on the internet, so there is none to "
+                "give your friend. Close this and run the program again for one, or type your "
+                "friend's address: the test still shows whether you reach them.");
+        } else {
+            print("This computer listens on port %u.\n", socket.port());
+        }
     }
     ConsoleInput input;
     while (true) {
-        prompt("Type your friend's address and press Enter, or press Enter alone to close.");
-        std::optional<Endpoint> target;
+        if (!target) {
+            prompt("Type your friend's address and press Enter, or press Enter alone to close.");
+        }
         auto next_keep_alive = Clock::now() + kKeepAlive;
         while (!target) {
             bool closed = false;
@@ -829,7 +838,9 @@ int main(int argc, char** argv) {
             }
         }
         punch(socket, *target, own_nonce, epoch);
+        target.reset();
         say("");
-        say("To try again, both of you type the address again.");
+        say("Keep this window open until your friend's test ends too: it answers their packets "
+            "while it waits. To try again, both of you type the address again.");
     }
 }
