@@ -232,6 +232,26 @@ _Avoid_: Question mark, hidden stage (some locked stages are not drawn at all)
 The native screen where players find each other before an online session starts, and where both return when it ends. LAN play, direct connect and internet play each have their own layout of it.
 _Avoid_: Online menu, matchmaking, waiting room
 
+**Connect code**:
+A player's identity for Direct Connect, written as a name, a "#" and eight characters ("RYAN#K3X-Q2M-7A"). Only the eight characters identify the player; the name is a label they choose and can change.
+_Avoid_: Friend code, player ID, address
+
+**Direct Connect hub**:
+Direct Connect's first screen: a list of whom to play (a code found on the clipboard, the recent opponents), a way into the code keyboard, and waiting for a friend to call.
+_Avoid_: Hub (alone), Direct Connect menu, contact list
+
+**Recent opponent**:
+Someone this player has finished connecting to over Direct Connect, listed on the Direct Connect hub with how long ago they played.
+_Avoid_: Contact (the base port's code word), friend, history
+
+**Code keyboard**:
+The grid of letters and digits on which a player types the eight characters of a friend's connect code.
+_Avoid_: On-screen keyboard, keypad, code wheel
+
+**Call**:
+Trying to reach a friend by their connect code. The other way to meet is **waiting** for a friend to call; both players may call each other at once, and they still meet.
+_Avoid_: Dial, connect (that is the session starting), invite
+
 **Quick chat**:
 The base port's set of fixed phrases a player sends to the other player online with two D-pad presses.
 _Avoid_: Chat messages, emotes
