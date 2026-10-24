@@ -1,0 +1,84 @@
+# Direct Connect's call, one instance: from the main menu through DIRECT
+# CONNECT's hub to the code keyboard, a made-up code typed with a delete,
+# the call to it with its opening, the status line changing as the online
+# network is joined, the reminders at 0:15 and 0:30, the base port's change
+# at 0:45, and B stopping the call for the Online screen.
+#   python tools/a11y/drive.py --muted tools/a11y/direct_call.drive
+# It joins the public BitTorrent DHT, so it needs internet access; nobody
+# answers the code. No step presses Y: Y copies the code to the maintainer's
+# real clipboard. The hub reads the clipboard, so a connect code there adds a
+# row on top; Up from the top row wraps to the last, "Wait for a friend to
+# call me", whatever rows the clipboard and recent opponents add above.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until '"Main Menu\. 1-P Mode\. ' 20 0.3
+sleep 1
+
+# VS. Mode, Online (the last entry: Up wraps to it), Direct connect (the
+# second).
+press Down
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press Up
+wait '"Online\. Play against'
+press A
+wait '"Online\. LAN play\. '
+sleep 0.3
+press Down
+wait '"Direct connect\. '
+press A
+wait '"DIRECT CONNECT\. YOU '
+sleep 0.3
+
+# "Enter a friend's code", the row above the last.
+press DUp
+wait '"Wait for a friend to call me"'
+press DUp
+wait '"Enter a friend.s code"'
+press A
+wait '"Type the 8 characters after the #\. '
+
+# Eight A's, the keyboard's first key, one deleted and typed again.
+press A
+wait '"A, 1 of 8"'
+press A
+wait '"A, 2 of 8"'
+press A
+wait '"A, 3 of 8"'
+press A
+wait '"A, 4 of 8"'
+press A
+wait '"A, 5 of 8"'
+press A
+wait '"A, 6 of 8"'
+press A
+wait '"A, 7 of 8"'
+press A
+wait '"A, 8 of 8"'
+press B
+wait '"Deleted A"'
+press A
+wait '"A, 8 of 8"'
+
+# Start calls #AAAAAAAA, shown as "#AAA-AAA-AA". The opening: the status
+# line with its clock and the buttons; then the network joined.
+press Start
+wait "lobby: direct connect calling '#AAAAAAAA'"
+wait '\[a11y\] speak interrupt.*: "Joining the online network\.\.\. 0:00\. Y: copy my code B: stop"$' 5
+wait '\[a11y\] speak queue.*: "Calling #AAA-AAA-AA 0:\d\d"$' 30
+
+# The reminders, queued, and the change at 0:45.
+wait '\[a11y\] speak queue.*: "Calling #AAA-AAA-AA 0:15"$' 20
+wait '\[a11y\] speak queue.*: "Calling #AAA-AAA-AA 0:30"$' 20
+wait '\[a11y\] speak queue.*: "#AAA-AAA-AA isn.t answering yet\. Still calling 0:45"$' 20
+sleep 0.5
+
+# B stops the call and leaves for the Online screen.
+press B
+wait "boot scene: state 0 scene 1$"
+wait '"Online\. '
+sleep 1

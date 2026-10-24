@@ -11,13 +11,16 @@
  * press or a code on the clipboard moved it, and each new line under the
  * list. The keyboard opens with its line, its layout, the buttons and the
  * hovered key, then says each key moved to, each character typed with the
- * count, each one deleted and the error. Back on the hub from the keyboard or
- * a failed call it says the title and the hovered row. The call's own screen
- * is read by the call's reader, not here. It compares each snapshot with the
+ * count, each one deleted and the error. The call opens with its status
+ * line and its buttons, then says each new status line, its clock left out of
+ * the comparison, with reminders while it waits (wait_status.hpp), and the
+ * countdown as it starts. Back on the hub from the keyboard or a failed call
+ * it says the title and the hovered row. It compares each snapshot with the
  * previous one and touches no game state itself. */
 #pragma once
 #include "game_access.h"
 #include "lobby_speech.hpp"
+#include "wait_status.hpp"
 #include <string>
 #include <vector>
 
@@ -58,6 +61,10 @@ private:
         std::string layout;
         std::string message;
         std::string hint;
+        /* CALL: the countdown line as it starts, and the wait's clock, 0
+         * when it is not waiting. */
+        std::string countdown;
+        unsigned wait_ms = 0;
     };
 
     static Shown shown(const A11yLobbyState& state);
@@ -66,11 +73,14 @@ private:
     void hub_changes(const Shown& now);
     void keys_changes(const Shown& now);
     std::string keys_opening(const Shown& now) const;
+    void call_opening(const Shown& now);
+    void call_changes(const Shown& now);
 
     Speech& m_speech;
     LobbyArrival m_arrival = LobbyArrival::from_menu;
     bool m_seen = false;
     Shown m_last;
+    WaitStatus m_status;
 };
 
 }  // namespace a11y

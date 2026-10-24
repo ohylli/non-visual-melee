@@ -17,10 +17,15 @@ side by side:
   menus   the menu drive scripts (MENUS), the launcher's three and the
           port menu's two among them
   online  css_net.drive at delay 0, delay 10 and over a 100 ms slow link,
-          and lan_lobby.drive (--lan)
+          lan_lobby.drive (--lan), direct_call.drive, and direct_back.drive
+          and direct_lost.drive (--direct), the last two one after the other
+          since both use the ports the router forwards; with --base-b the
+          two are left out, since the base port build would write the
+          maintainer's recent opponents
   NAME    an online run by its name (css_net-delay0, css_net-delay10,
-          css_net-slow, lan_lobby), else tools/a11y/NAME.drive through
-          drive.py; the names given in a row run side by side
+          css_net-slow, lan_lobby, direct_back, direct_lost), else
+          tools/a11y/NAME.drive through drive.py; the names given in a row
+          run side by side
 
   python tools/a11y/run_level.py lan_lobby --base-b ../melee-pc-base/build
 
@@ -51,7 +56,7 @@ MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens
 # as the port menu's does.
 ARGS = {"launcher_home": ["--launcher", "--muted"], "launcher_settings": ["--launcher", "--muted"],
         "launcher_a11y": ["--launcher", "--muted"], "port_menu": ["--muted"], "port_menu_a11y": ["--muted"],
-        "match_port_menu": ["--muted"]}
+        "match_port_menu": ["--muted"], "direct_call": ["--muted"]}
 # Settings a script needs from the environment. The Accessibility
 # category's scripts leave Steering and Cues to the run's a11y.ini, so their
 # rows show no "(environment)" whatever the caller exports.
@@ -71,13 +76,14 @@ ENV = {"launcher_a11y": A11Y_ROWS, "port_menu_a11y": A11Y_ROWS,
 # description, which the focus announcement has said (a category's only
 # repeats its name); none of them is ever spoken.
 PORT_MENU_STATUS = re.compile(r'"(Saved|Settings save automatically|\w+ settings\.")')
+NO_LOBBY_SPEECH = re.compile(r'"Online lobby\. No speech yet\.')
 # Lines a passing run must not log; drive.py cannot fail on an absent line.
 ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           # The Training menu's hidden row, or a value the reader cannot name.
           "training_menu": re.compile(r"\[a11y\] training menu row "),
           "port_menu": PORT_MENU_STATUS, "port_menu_a11y": PORT_MENU_STATUS,
           # The scene's placeholder, which DIRECT CONNECT's own opening replaces.
-          "direct_hub": re.compile(r'"Online lobby\. No speech yet\.')}
+          "direct_hub": NO_LOBBY_SPEECH, "direct_call": NO_LOBBY_SPEECH}
 # Lines a passing run must not log between an opening line and the closing
 # line after it: no cue starts or stops while the port menu is open, since
 # the game stands still then and the stops come just before the opening.
@@ -106,7 +112,13 @@ COUNT = {"match_gap": GAP_ONCE, "match_gap_battlefield": GAP_ONCE, "match_ledge"
          "match_ledge_battlefield": LEDGE_BATTLEFIELD, "training_menu": TRAINING_NUMBERS}
 NET = [("css_net-delay0", ["--delay", "0"]), ("css_net-delay10", ["--delay", "10"]),
        ("css_net-slow", ["--sim-delay-ms", "100"])]
-ONLINE = [name for name, _ in NET] + ["lan_lobby"]
+# Direct Connect's two-copy runs meet over the internet through the router's
+# forward of UDP 42050 and 42051 to this machine (docs/a11y/netplay.md, "Two
+# copies on one machine"), so both take those ports and run one at a time.
+DIRECT = ["direct_back", "direct_lost"]
+FORWARDED_PORTS = threading.Lock()
+NET_RUNS = [name for name, _ in NET] + ["lan_lobby"] + DIRECT
+ONLINE = NET_RUNS + ["direct_call"]
 # Failure lines worth repeating in the report.
 FAILURE = re.compile(r">> .*(FAILED|warning: no pad change)")
 
@@ -115,8 +127,10 @@ class Run:
     """One drive.py or drive_net.py run: its command, its transcript (a
     file or a directory) and how many cache slots it takes, one a game."""
 
-    def __init__(self, name, cmd, out, slots, env=None):
+    def __init__(self, name, cmd, out, slots, env=None, ports=None):
         self.name, self.cmd, self.out, self.slots, self.env = name, cmd, out, slots, env or {}
+        # A lock for ports no other run may use at the same time, or None.
+        self.ports = ports
         self.seconds = 0.0
         self.code = None
         self.failures = []
@@ -137,9 +151,15 @@ def net_run(name, out_dir, base_b):
     out = os.path.join(out_dir, name)
     if name == "lan_lobby":
         # The LAN lobby finds only copies in a LAN lobby, so the sessions
-        # started at boot beside it go unseen.
+        # started at boot beside it go unseen. Its ports are its own, the
+        # drivers' default being the Direct Connect runs'.
         return Run(name, [sys.executable, os.path.join(HERE, "drive_net.py"), "--lan", *extra,
-                          "--out-dir", out, os.path.join(HERE, "lan_lobby.drive")], out, 2)
+                          "--port", "42150", "--out-dir", out, os.path.join(HERE, "lan_lobby.drive")],
+                   out, 2)
+    if name in DIRECT:
+        return Run(name, [sys.executable, os.path.join(HERE, "drive_net.py"), "--direct", "--muted", *extra,
+                          "--out-dir", out, os.path.join(HERE, name + ".drive")], out, 2,
+                   ports=FORWARDED_PORTS)
     i = [n for n, _ in NET].index(name)
     return Run(name, [sys.executable, os.path.join(HERE, "drive_net.py"), *NET[i][1], *extra,
                       "--port", str(42110 + 10 * i), "--key", f"a11ylevel{i}", "--out-dir", out,
@@ -147,7 +167,7 @@ def net_run(name, out_dir, base_b):
 
 
 def named_run(name, out_dir, base_b):
-    if name in ONLINE:
+    if name in NET_RUNS:
         return net_run(name, out_dir, base_b)
     if name == "css_net":
         sys.exit("css_net takes two games; name one of its runs: " + ", ".join(n for n, _ in NET))
@@ -174,6 +194,14 @@ class Slots:
 
 
 def execute(run, slots, lock):
+    if run.ports:
+        with run.ports:
+            execute_now(run, slots, lock)
+    else:
+        execute_now(run, slots, lock)
+
+
+def execute_now(run, slots, lock):
     taken = slots.take(run.slots)
     cmd = run.cmd + (["--cache-slots", ",".join(taken)] if run.slots == 2 else ["--cache-slot", taken[0]])
     env = dict(os.environ, **run.env)
@@ -256,8 +284,14 @@ def main():
             if names:
                 sets.append([named_run(n, args.out_dir, args.base_b) for n in names])
                 names = []
-            sets.append([drive_run(n, args.out_dir) for n in MENUS] if what == "menus"
-                        else [net_run(n, args.out_dir, args.base_b) for n in ONLINE])
+            if what == "menus":
+                sets.append([drive_run(n, args.out_dir) for n in MENUS])
+            else:
+                online = [n for n in ONLINE if not (args.base_b and n in DIRECT)]
+                if args.base_b:
+                    print(f"left out with --base-b: {', '.join(DIRECT)} (the base port build would write "
+                          "the maintainer's recent opponents)", flush=True)
+                sets.append([named_run(n, args.out_dir, args.base_b) for n in online])
         else:
             names.append(what)
     if names:

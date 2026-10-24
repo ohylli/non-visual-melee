@@ -500,6 +500,9 @@ typedef struct A11yDirectState {
     /* CALL: milliseconds since the call began searching, 0 before and once
      * it stops (pc_net_match_progress). */
     unsigned call_ms;
+    /* CALL, starting: the countdown line above the status line, "Starting
+     * in 1...", as drawn; "" otherwise. */
+    char countdown[A11Y_DIRECT_TITLE_LEN];
 } A11yDirectState;
 
 typedef struct A11yLobbyState {

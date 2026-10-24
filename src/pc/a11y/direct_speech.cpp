@@ -89,6 +89,18 @@ DirectSpeech::Shown DirectSpeech::shown(const A11yLobbyState& state) {
         out.rows.push_back(collapsed(direct.rows[i]));
     }
     out.cursor = direct.cursor;
+    if (direct.screen == A11Y_DIRECT_CALL) {
+        /* The status line is said with its clock as shown (wait_status.cpp),
+         * so it keeps its spaces here. The buttons the call shows while it
+         * searches are its own; the frame a hub row starts a call that fails
+         * at once still carries the hub's. */
+        out.message = state.message;
+        if (state.phase != A11Y_LOBBY_SEARCHING) {
+            out.hint.clear();
+        }
+        out.countdown = collapsed(direct.countdown);
+        out.wait_ms = state.phase == A11Y_LOBBY_SEARCHING ? direct.call_ms : 0;
+    }
     if (direct.screen == A11Y_DIRECT_KEYS) {
         std::string_view keys(direct.keys);
         if (direct.key_cursor >= 0 && static_cast<size_t>(direct.key_cursor) < keys.size()) {
@@ -127,6 +139,8 @@ void DirectSpeech::frame(const A11yLobbyState& state) {
         hub_changes(now);
     } else if (now.screen == A11Y_DIRECT_KEYS) {
         keys_changes(now);
+    } else {
+        call_changes(now);
     }
     m_last = std::move(now);
 }
@@ -165,6 +179,7 @@ void DirectSpeech::opening(const Shown& now) {
         m_speech.announce(keys_opening(now), Mode::interrupt);
         break;
     case A11Y_DIRECT_CALL:
+        call_opening(now);
         break;
     }
 }
@@ -179,6 +194,7 @@ void DirectSpeech::screen_changed(const Shown& now) {
         m_speech.announce(keys_opening(now), Mode::interrupt);
         break;
     case A11Y_DIRECT_CALL:
+        call_opening(now);
         break;
     }
 }
@@ -220,6 +236,25 @@ void DirectSpeech::keys_changes(const Shown& now) {
     }
     if (now.message != m_last.message) {
         m_speech.announce(now.message, moved ? Mode::queue : Mode::interrupt);
+    }
+}
+
+void DirectSpeech::call_opening(const Shown& now) {
+    std::string line = m_status.open(now.message, now.wait_ms);
+    m_speech.announce(joined({line, now.countdown, now.hint}), Mode::interrupt);
+}
+
+void DirectSpeech::call_changes(const Shown& now) {
+    /* Queued, as LAN play's lobby says its changes: a new line soon after
+     * the opening leaves the buttons heard, and a reminder never cuts in.
+     * The status line before the countdown, the order a call reaches them
+     * in, also when both come on one frame. */
+    std::string line = m_status.frame(now.message, now.wait_ms);
+    if (!line.empty()) {
+        m_speech.announce(line, Mode::queue);
+    }
+    if (!now.countdown.empty() && now.countdown != m_last.countdown) {
+        m_speech.announce(now.countdown, Mode::queue);
     }
 }
 

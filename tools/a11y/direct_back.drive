@@ -1,0 +1,64 @@
+# Two instances meet by Direct Connect, and a back-out from character select
+# returns both to DIRECT CONNECT's hub, for tools/a11y/drive_net.py --direct:
+# each boots into the hub with a fresh code, a waits for a call and b dials
+# a's code. They meet only through the router's public address, so the
+# router must loop its own address back in (NAT loopback); the maintainer's
+# does that for ports it forwards, so UDP 42050 and 42051 are forwarded to
+# this machine.
+#   python tools/a11y/drive_net.py --direct --muted tools/a11y/direct_back.drive
+# No second call follows: a session after a back-out ends within two frames,
+# a known failure of the base port's netcode (docs/a11y/netplay.md, "A
+# session after a back-out"). tools/a11y/direct_lost.drive checks the other
+# return. Instance b may be a base port build (--base-b): only the fork
+# speaks, so b's speech waits are b-fork steps and its b-base steps wait on
+# the scene instead. No step presses Y or chooses the clipboard row: both use
+# the real clipboard. Up from the hub's top row wraps to its last, "Wait for a
+# friend to call me", whatever rows the clipboard and recent opponents add
+# above.
+
+a wait "lobby: direct connect hub" 60
+b wait "lobby: direct connect hub" 60
+sleep 1
+
+# a waits: the call's opening, its status line with its clock and buttons.
+a press DUp
+a press A
+a wait "lobby: direct connect waiting as '"
+a wait '\[a11y\] speak interrupt.*: "(Joining the online network\.\.\.|Waiting for a friend to call you) 0:00\. Y: copy my code B: stop"$' 5
+
+# b goes to "Enter a friend's code", the row above the last, and types a's
+# code on the code keyboard.
+b press DUp
+b press DUp
+b press A
+sleep 0.5
+b dial a
+b-fork wait '\[a11y\] speak interrupt.*: "(Joining the online network\.\.\.|Calling #[A-Z2-7]{3}-[A-Z2-7]{3}-[A-Z2-7]{2}) 0:00\. Y: copy my code B: stop"$' 5
+
+# Each finds the other on the DHT and says hello to its public address; the
+# router has to send those packets back in. Then the session: connecting
+# shows the base port's line for a call with no reason, starting its
+# countdown, and both enter character select.
+a wait "match: recv valid MatchHello" 180
+b wait "match: recv valid MatchHello" 60
+a wait "net: rollback with" 60
+b wait "net: rollback with" 60
+a wait '\[a11y\] speak queue.*: "Searching for an opponent\.\.\."$' 5
+b-fork wait '\[a11y\] speak queue.*: "Searching for an opponent\.\.\."$' 5
+a wait '\[a11y\] speak queue.*: "Starting in 1\.\.\."$' 5
+b-fork wait '\[a11y\] speak queue.*: "Starting in 1\.\.\."$' 5
+a wait "lobby: entering CSS" 60
+b wait "lobby: entering CSS" 60
+a wait '"Character select\. Player 1, no character\.'
+b-fork wait '"Character select\. Player 2, no character\.'
+b-base wait 'boot scene: state \d+ scene 8$'
+sleep 2
+
+# Holding B on character select backs out: both return to the hub, its top
+# row now the other as a recent opponent.
+a press B 1500
+a wait "lobby: direct connect hub, 1 recent" 30
+b wait "lobby: direct connect hub, 1 recent, clipboard -$" 30
+a wait '\[a11y\] speak interrupt.*: "Back to DIRECT CONNECT\. PLAYER#[A-Z2-7-]+ played 0m ago"$' 5
+b-fork wait '\[a11y\] speak interrupt.*: "Back to DIRECT CONNECT\. PLAYER#[A-Z2-7-]+ played 0m ago"$' 5
+sleep 1

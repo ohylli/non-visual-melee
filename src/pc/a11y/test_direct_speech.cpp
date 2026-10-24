@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Direct Connect's speech against hand-written snapshots of the hub and the
- * code keyboard, over a fake screen reader bridge. Links direct_speech.cpp
- * and speech.cpp only, so this file supplies the pc_log_line that main.c
- * normally provides. The lines are the base port's
- * own (directEntryFrame in src/melee/gm/gmonlinemode.c). */
+/* Direct Connect's speech against hand-written snapshots of the hub, the
+ * code keyboard and the call, over a fake screen reader bridge. Links
+ * direct_speech.cpp, wait_status.cpp and speech.cpp only, so this file
+ * supplies the pc_log_line that main.c normally provides. The lines are the
+ * base port's own (directEntryFrame and the internet branch of
+ * gm_Scene_OnlineLobby_OnFrame in src/melee/gm/gmonlinemode.c, and
+ * src/pc/net_match.c). */
 #include "direct_speech.hpp"
 #include "speech.hpp"
 #include <cassert>
@@ -236,12 +238,181 @@ void each_entry_opens_again() {
     assert(f.frame(fresh_hub()).size() == 1);
 }
 
-void the_call_is_not_read_here() {
+constexpr const char* kCallHint = "Y: copy my code   B: stop";
+
+/* The call's screen with its status line, ms into the call; the hint shows
+ * while it searches. */
+A11yLobbyState call(const char* message, unsigned ms, A11yLobbyPhase phase = A11Y_LOBBY_SEARCHING) {
+    A11yLobbyState state = direct_screen(A11Y_DIRECT_CALL, phase);
+    set(state.message, sizeof(state.message), message);
+    state.direct.call_ms = ms;
+    if (phase == A11Y_LOBBY_SEARCHING) {
+        set(state.direct.hint, sizeof(state.direct.hint), kCallHint);
+    }
+    return state;
+}
+
+/* "Calling SAM#ABC-DEF-GH  0:12" at seconds, as the base port prints it,
+ * with its change at 0:45. */
+A11yLobbyState calling(unsigned seconds) {
+    char line[96];
+    std::snprintf(line, sizeof(line),
+        seconds < 45 ? "Calling SAM#ABC-DEF-GH  %u:%02u" :
+                       "SAM#ABC-DEF-GH isn't answering yet. Still calling  %u:%02u",
+        seconds / 60, seconds % 60);
+    return call(line, seconds * 1000 + 300);
+}
+
+std::vector<Output> queued(const char* text) {
+    return {{text, false}};
+}
+
+void call_opening() {
+    Fixture f;
+    f.frame(fresh_hub());
+    assert(f.frame(call("Joining the online network...  0:00", 16)) ==
+           said("Joining the online network... 0:00. Y: copy my code B: stop"));
+}
+
+void the_clock_alone_is_no_change() {
+    Fixture f;
+    f.frame(fresh_hub());
+    f.frame(call("Joining the online network...  0:00", 16));
+    assert(f.frame(call("Joining the online network...  0:01", 1016)).empty());
+    assert(f.frame(call("Joining the online network...  0:02", 2016)).empty());
+    /* The DHT reached: a new line, queued behind the opening. */
+    assert(f.frame(calling(3)) == queued("Calling SAM#ABC-DEF-GH 0:03"));
+    assert(f.frame(calling(4)).empty());
+}
+
+void reminders_on_a_rhythm() {
+    Fixture f;
+    f.frame(fresh_hub());
+    f.frame(calling(0));
+    assert(f.frame(calling(14)).empty());
+    assert(f.frame(calling(15)) == queued("Calling SAM#ABC-DEF-GH 0:15"));
+    assert(f.frame(calling(16)).empty());
+    assert(f.frame(calling(29)).empty());
+    assert(f.frame(calling(30)) == queued("Calling SAM#ABC-DEF-GH 0:30"));
+    /* The base port's own change, with no reminder of its own. */
+    assert(f.frame(calling(44)).empty());
+    assert(
+        f.frame(calling(45)) == queued("SAM#ABC-DEF-GH isn't answering yet. Still calling 0:45"));
+    assert(f.frame(calling(60)).empty());
+    assert(f.frame(calling(74)).empty());
+    assert(
+        f.frame(calling(75)) == queued("SAM#ABC-DEF-GH isn't answering yet. Still calling 1:15"));
+    assert(f.frame(calling(104)).empty());
+    assert(
+        f.frame(calling(105)) == queued("SAM#ABC-DEF-GH isn't answering yet. Still calling 1:45"));
+    /* A frame skipped past a moment still reminds, once. */
+    assert(
+        f.frame(calling(137)) == queued("SAM#ABC-DEF-GH isn't answering yet. Still calling 2:17"));
+    assert(f.frame(calling(138)).empty());
+}
+
+void a_reminder_follows_the_line_shown() {
+    /* The clock drawn can lag the call's own by a frame; the reminder waits
+     * for the line to show its moment. */
+    Fixture f;
+    f.frame(fresh_hub());
+    f.frame(call("Waiting for a friend to call you  0:00", 0));
+    assert(f.frame(call("Waiting for a friend to call you  0:14", 15004)).empty());
+    assert(f.frame(call("Waiting for a friend to call you  0:15", 15020)) ==
+           queued("Waiting for a friend to call you 0:15"));
+}
+
+void a_line_without_a_clock_repeats_at_the_moments() {
+    Fixture f;
+    f.frame(fresh_hub());
+    f.frame(calling(0));
+    f.frame(calling(16));
+    const char* trying = "Found them but couldn't connect. Still trying...";
+    assert(f.frame(call(trying, 20000)) == queued(trying));
+    assert(f.frame(call(trying, 29990)).empty());
+    assert(f.frame(call(trying, 30010)) == queued(trying));
+    assert(f.frame(call(trying, 74990)).empty());
+    assert(f.frame(call(trying, 75010)) == queued(trying));
+    /* Back to calling: the line changed. */
+    assert(
+        f.frame(calling(80)) == queued("SAM#ABC-DEF-GH isn't answering yet. Still calling 1:20"));
+}
+
+void connecting_and_starting() {
+    Fixture f;
+    f.frame(fresh_hub());
+    f.frame(calling(0));
+    /* Connecting shows the base port's line for a call with no reason. */
+    const char* line = "Searching for an opponent...";
+    assert(f.frame(call(line, 0, A11Y_LOBBY_CONNECTING)) == queued(line));
+    /* No clock and no wait: no reminders, however long it takes. */
+    for (int i = 0; i < 3; i++) {
+        assert(f.frame(call(line, 0, A11Y_LOBBY_CONNECTING)).empty());
+    }
+    A11yLobbyState starting = call(line, 0, A11Y_LOBBY_STARTING);
+    set(starting.direct.countdown, sizeof(starting.direct.countdown), "Starting in 1...");
+    assert(f.frame(starting) == queued("Starting in 1..."));
+    assert(f.frame(starting).empty());
+
+    /* Both on one frame: in the order the call reaches them. */
+    Fixture g;
+    g.frame(fresh_hub());
+    g.frame(calling(0));
+    assert(g.frame(starting) == (std::vector<Output>{{line, false}, {"Starting in 1...", false}}));
+}
+
+void a_failure_and_back_to_the_hub() {
+    Fixture f;
+    f.frame(fresh_hub());
+    f.frame(calling(0));
+    f.frame(calling(12));
+    const char* failed = "Peer left - START: search";
+    assert(f.frame(call(failed, 0, A11Y_LOBBY_FAILED)) == queued(failed));
+    assert(f.frame(call(failed, 0, A11Y_LOBBY_FAILED)).empty());
+    /* Start goes back to the hub without a session. */
+    assert(f.frame(hub({kRecent, kEnter, kWait})) ==
+           said("DIRECT CONNECT. RYAN#K3X-Q2M-7A played 5m ago"));
+}
+
+void a_call_that_fails_at_once() {
+    /* Start on the keyboard with your own code: the call's first frame has
+     * failed and shows no buttons of its own. */
+    Fixture f;
+    f.frame(fresh_hub());
+    f.frame(keys("K3XQ2M7A"));
+    assert(f.frame(call("that is your own code", 0, A11Y_LOBBY_FAILED)) ==
+           said("that is your own code"));
+}
+
+void the_opening_leaves_out_a_hint_the_call_does_not_own() {
+    /* The frame a hub row starts a call that fails at once still carries
+     * the hub's buttons. */
     Fixture f;
     f.frame(fresh_hub(1));
-    A11yLobbyState call = direct_screen(A11Y_DIRECT_CALL, A11Y_LOBBY_SEARCHING);
-    set(call.message, sizeof(call.message), "Joining the online network...  0:00");
-    assert(f.frame(call).empty());
+    A11yLobbyState failed = call("DHT unavailable", 0, A11Y_LOBBY_FAILED);
+    set(failed.direct.hint, sizeof(failed.direct.hint), kHubHint);
+    assert(f.frame(failed) == said("DHT unavailable"));
+}
+
+void each_call_starts_its_own_rhythm() {
+    Fixture f;
+    f.frame(fresh_hub());
+    f.frame(calling(0));
+    f.frame(calling(40));
+    f.frame(call("Peer left - START: search", 0, A11Y_LOBBY_FAILED));
+    f.frame(fresh_hub());
+    assert(f.frame(calling(0)) == said("Calling SAM#ABC-DEF-GH 0:00. Y: copy my code B: stop"));
+    assert(f.frame(calling(15)) == queued("Calling SAM#ABC-DEF-GH 0:15"));
+}
+
+void a_moment_is_said_once() {
+    /* While rollback re-runs frames the hook hands none over, and the next
+     * frame handed over may show the same moment again. */
+    Fixture f;
+    f.frame(fresh_hub());
+    f.frame(calling(0));
+    assert(f.frame(calling(15)).size() == 1);
+    assert(f.frame(calling(15)).empty());
 }
 
 void other_lobbies_are_silent() {
@@ -282,7 +453,17 @@ int main() {
     back_to_the_hub_without_a_session();
     returns_from_a_session();
     each_entry_opens_again();
-    the_call_is_not_read_here();
+    call_opening();
+    the_clock_alone_is_no_change();
+    reminders_on_a_rhythm();
+    a_reminder_follows_the_line_shown();
+    a_line_without_a_clock_repeats_at_the_moments();
+    connecting_and_starting();
+    a_failure_and_back_to_the_hub();
+    a_call_that_fails_at_once();
+    the_opening_leaves_out_a_hint_the_call_does_not_own();
+    each_call_starts_its_own_rhythm();
+    a_moment_is_said_once();
     other_lobbies_are_silent();
     frames_not_handed_over_repeat_nothing();
     std::cout << "direct_speech: all tests passed\n";

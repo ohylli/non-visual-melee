@@ -674,6 +674,11 @@ static bool direct_state(const OnlineLobbyView* view, A11yLobbyState* out) {
         PcNetMatchProgress progress;
         pc_net_match_progress(&progress);
         direct->call_ms = (unsigned)progress.elapsed_ms;
+        /* As mnOnlineLobby_Update draws it. */
+        if (view->phase == LOBBY_PHASE_STARTING) {
+            snprintf(direct->countdown, sizeof(direct->countdown), "Starting in %d...",
+                view->countdown_frames / 60 + 1);
+        }
         return true;
     }
     int rows = view->menu_count;

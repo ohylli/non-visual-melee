@@ -50,6 +50,7 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/css_reader.cpp
         ${CMAKE_CURRENT_LIST_DIR}/lobby_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/direct_speech.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/wait_status.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sss_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sss_names.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sss_reader.cpp
@@ -321,11 +322,12 @@ if (TARGET unit_tests)
     set_tests_properties(lobby_speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests lobby_speech_test)
 
-    # Direct Connect's speech against hand-written snapshots of the hub and
-    # the code keyboard; a fake bridge and its own pc_log_line.
+    # Direct Connect's speech against hand-written snapshots of the hub, the
+    # code keyboard and the call; a fake bridge and its own pc_log_line.
     add_executable(direct_speech_test EXCLUDE_FROM_ALL
             ${CMAKE_CURRENT_LIST_DIR}/test_direct_speech.cpp
             ${CMAKE_CURRENT_LIST_DIR}/direct_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/wait_status.cpp
             ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
     target_include_directories(direct_speech_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
     target_compile_options(direct_speech_test PRIVATE -UNDEBUG)
