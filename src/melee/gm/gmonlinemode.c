@@ -827,8 +827,11 @@ void gm_Scene_OnlineLobby_OnFrame(void)
             view.phase = LOBBY_PHASE_FOUND;
             snprintf(view.message, sizeof view.message, "%s", profile_message);
         } else if (direct_screen != DIRECT_OFF && directEntryFrame(&view, input)) {
-            /* the hub or the keyboard drew the screen and took the input */
-            input &= ~(u64) (HSD_PAD_B | PAD_CANCEL);
+            /* the hub or the keyboard drew the screen and took the input;
+             * B on the hub is left to go back, as its hint says */
+            if (view.screen != LOBBY_SCREEN_MENU) {
+                input &= ~(u64) (HSD_PAD_B | PAD_CANCEL);
+            }
         } else if (awaiting_rank_result && pc_net_match_publication(NULL) == 0) {
             pc_net_poll();
             pc_rank_session_poll();
