@@ -15,11 +15,9 @@
 
 namespace a11y {
 
-/* The latest reminder moment at or before seconds into a wait, 0 before the
- * first: 15 and 30, then every 30 seconds from 75. The base port changes
- * "Calling" to "isn't answering yet" at 45, which the change says, so the
- * rhythm leaves that moment out. */
-unsigned reminder_moment(unsigned seconds);
+/* The line with runs of spaces, the lobby screens' padding and spacing, made
+ * one, and none at either end. */
+std::string spaces_collapsed(std::string_view line);
 
 /* A status line split: its words, runs of spaces made one, and the clock at
  * its end ("0:12"), empty for a line without one. */

@@ -10,22 +10,8 @@ namespace {
 /* Wording is a first proposal for the play test to judge. */
 constexpr std::string_view kBackTo = "Back to ";
 constexpr std::string_view kConnectionLost = "Connection lost";
-
-/* The line with runs of spaces, the screen's padding and spacing, made one,
- * and none at either end. */
-std::string collapsed(std::string_view line) {
-    std::string out;
-    for (char c : line) {
-        if (c == ' ' && (out.empty() || out.back() == ' ')) {
-            continue;
-        }
-        out += c;
-    }
-    if (!out.empty() && out.back() == ' ') {
-        out.pop_back();
-    }
-    return out;
-}
+/* The buttons mnOnlineLobby_Update draws on a call whose view names none. */
+constexpr std::string_view kBackHint = "B: back";
 
 /* The parts as one announcement, each ended with a full stop unless it ends
  * with its own; the last left as it is. */
@@ -80,25 +66,25 @@ DirectSpeech::Shown DirectSpeech::shown(const A11yLobbyState& state) {
     const A11yDirectState& direct = state.direct;
     Shown out;
     out.screen = direct.screen;
-    out.title = collapsed(direct.title);
-    out.subtitle = collapsed(direct.subtitle);
-    out.message = collapsed(state.message);
-    out.hint = collapsed(direct.hint);
+    out.title = spaces_collapsed(direct.title);
+    out.subtitle = spaces_collapsed(direct.subtitle);
+    out.message = spaces_collapsed(state.message);
+    out.hint = spaces_collapsed(direct.hint);
     int rows = std::clamp(direct.row_count, 0, static_cast<int>(A11Y_DIRECT_ROWS));
     for (int i = 0; i < rows; i++) {
-        out.rows.push_back(collapsed(direct.rows[i]));
+        out.rows.push_back(spaces_collapsed(direct.rows[i]));
     }
     out.cursor = direct.cursor;
     if (direct.screen == A11Y_DIRECT_CALL) {
-        /* The status line is said with its clock as shown (wait_status.cpp),
-         * so it keeps its spaces here. The buttons the call shows while it
-         * searches are its own; the frame a hub row starts a call that fails
-         * at once still carries the hub's. */
-        out.message = state.message;
-        if (state.phase != A11Y_LOBBY_SEARCHING) {
-            out.hint.clear();
+        /* The call names its own buttons, "Y: copy my code   B: stop", only
+         * beside a line with its clock (the internet branch of
+         * gm_Scene_OnlineLobby_OnFrame); beside any other line the screen
+         * draws "B: back". The frame a hub row starts the call still carries
+         * the hub's buttons, which the call never shows. */
+        if (status_line(out.message).clock.empty()) {
+            out.hint = kBackHint;
         }
-        out.countdown = collapsed(direct.countdown);
+        out.countdown = spaces_collapsed(direct.countdown);
         out.wait_ms = state.phase == A11Y_LOBBY_SEARCHING ? direct.call_ms : 0;
     }
     if (direct.screen == A11Y_DIRECT_KEYS) {
@@ -157,31 +143,25 @@ std::string_view hovered_row(const std::vector<std::string>& rows, int cursor) {
 }  // namespace
 
 void DirectSpeech::opening(const Shown& now) {
-    switch (now.screen) {
-    case A11Y_DIRECT_HUB: {
-        std::string_view row = hovered_row(now.rows, now.cursor);
-        std::string text;
-        switch (m_arrival) {
-        case LobbyArrival::from_menu:
-            text = joined({now.title, now.subtitle, row, now.message, now.hint});
-            break;
-        case LobbyArrival::backed_out:
-            text = joined({std::string(kBackTo) + now.title, row});
-            break;
-        case LobbyArrival::connection_lost:
-            text = joined({kConnectionLost, now.title, row});
-            break;
-        }
-        m_speech.announce(text, Mode::interrupt);
+    if (now.screen != A11Y_DIRECT_HUB) {
+        /* The keyboard and the call open as on a move to them. */
+        screen_changed(now);
+        return;
+    }
+    std::string_view row = hovered_row(now.rows, now.cursor);
+    std::string text;
+    switch (m_arrival) {
+    case LobbyArrival::from_menu:
+        text = joined({now.title, now.subtitle, row, now.message, now.hint});
+        break;
+    case LobbyArrival::backed_out:
+        text = joined({std::string(kBackTo) + now.title, row});
+        break;
+    case LobbyArrival::connection_lost:
+        text = joined({kConnectionLost, now.title, row});
         break;
     }
-    case A11Y_DIRECT_KEYS:
-        m_speech.announce(keys_opening(now), Mode::interrupt);
-        break;
-    case A11Y_DIRECT_CALL:
-        call_opening(now);
-        break;
-    }
+    m_speech.announce(text, Mode::interrupt);
 }
 
 void DirectSpeech::screen_changed(const Shown& now) {

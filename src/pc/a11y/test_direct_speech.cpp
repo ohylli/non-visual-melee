@@ -338,6 +338,21 @@ void a_line_without_a_clock_repeats_at_the_moments() {
         f.frame(calling(80)) == queued("SAM#ABC-DEF-GH isn't answering yet. Still calling 1:20"));
 }
 
+void a_moment_reminded_is_not_reminded_again() {
+    /* The call's clock reminds behind a line without one; a clocked line
+     * arriving on the moment's edge, drawn a moment before, still shows the
+     * second before it. */
+    Fixture f;
+    f.frame(fresh_hub());
+    f.frame(call("Waiting for a friend to call you  0:00", 0));
+    const char* trying = "Found them but couldn't connect. Still trying...";
+    assert(f.frame(call(trying, 20000)) == queued(trying));
+    assert(f.frame(call(trying, 30000)) == queued(trying));
+    assert(f.frame(call("Waiting for a friend to call you  0:29", 30001)) ==
+           queued("Waiting for a friend to call you 0:29"));
+    assert(f.frame(call("Waiting for a friend to call you  0:30", 30017)).empty());
+}
+
 void connecting_and_starting() {
     Fixture f;
     f.frame(fresh_hub());
@@ -376,22 +391,28 @@ void a_failure_and_back_to_the_hub() {
 
 void a_call_that_fails_at_once() {
     /* Start on the keyboard with your own code: the call's first frame has
-     * failed and shows no buttons of its own. */
+     * failed, its view names no buttons, and the screen draws "B: back". */
     Fixture f;
     f.frame(fresh_hub());
     f.frame(keys("K3XQ2M7A"));
     assert(f.frame(call("that is your own code", 0, A11Y_LOBBY_FAILED)) ==
-           said("that is your own code"));
+           said("that is your own code. B: back"));
 }
 
 void the_opening_leaves_out_a_hint_the_call_does_not_own() {
     /* The frame a hub row starts a call that fails at once still carries
-     * the hub's buttons. */
+     * the hub's buttons; the screen draws the call's "B: back". */
     Fixture f;
     f.frame(fresh_hub(1));
     A11yLobbyState failed = call("DHT unavailable", 0, A11Y_LOBBY_FAILED);
     set(failed.direct.hint, sizeof(failed.direct.hint), kHubHint);
-    assert(f.frame(failed) == said("DHT unavailable"));
+    assert(f.frame(failed) == said("DHT unavailable. B: back"));
+    /* A search behind a line without a clock names no buttons either. */
+    Fixture g;
+    g.frame(fresh_hub(1));
+    A11yLobbyState found = call("Found them but couldn't connect. Still trying...", 20000);
+    set(found.direct.hint, sizeof(found.direct.hint), kHubHint);
+    assert(g.frame(found) == said("Found them but couldn't connect. Still trying... B: back"));
 }
 
 void each_call_starts_its_own_rhythm() {
@@ -458,6 +479,7 @@ int main() {
     reminders_on_a_rhythm();
     a_reminder_follows_the_line_shown();
     a_line_without_a_clock_repeats_at_the_moments();
+    a_moment_reminded_is_not_reminded_again();
     connecting_and_starting();
     a_failure_and_back_to_the_hub();
     a_call_that_fails_at_once();

@@ -49,8 +49,10 @@ a wait '\[a11y\] speak queue.*: "Starting in 1\.\.\."$' 5
 b-fork wait '\[a11y\] speak queue.*: "Starting in 1\.\.\."$' 5
 a wait "lobby: entering CSS" 60
 b wait "lobby: entering CSS" 60
-a wait '"Character select\. Player 1, no character\.'
-b-fork wait '"Character select\. Player 2, no character\.'
+# Either copy can be player 1: the one with the smaller key hosts
+# (net_match.c), and each run's keys are fresh.
+a wait '"Character select\. Player [12], no character\.'
+b-fork wait '"Character select\. Player [12], no character\.'
 b-base wait 'boot scene: state \d+ scene 8$'
 sleep 2
 

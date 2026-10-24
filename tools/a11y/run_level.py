@@ -37,6 +37,7 @@ Transcripts go to build/drive/level: NAME.log for drive.py, a directory
 NAME for drive_net.py.
 """
 import argparse
+import contextlib
 import os
 import re
 import subprocess
@@ -194,14 +195,12 @@ class Slots:
 
 
 def execute(run, slots, lock):
-    if run.ports:
-        with run.ports:
-            execute_now(run, slots, lock)
-    else:
-        execute_now(run, slots, lock)
+    # The ports before the slots, so a run waiting for them holds no slots.
+    with run.ports or contextlib.nullcontext():
+        execute_held(run, slots, lock)
 
 
-def execute_now(run, slots, lock):
+def execute_held(run, slots, lock):
     taken = slots.take(run.slots)
     cmd = run.cmd + (["--cache-slots", ",".join(taken)] if run.slots == 2 else ["--cache-slot", taken[0]])
     env = dict(os.environ, **run.env)

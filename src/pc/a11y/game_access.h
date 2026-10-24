@@ -495,7 +495,8 @@ typedef struct A11yDirectState {
      * hovered one. */
     char keys[A11Y_DIRECT_KEYS_LEN + 1];
     int key_cursor;
-    /* The button line, "" where none is shown. */
+    /* The button line the view names, "" where it names none (the screen
+     * then draws its own, mnOnlineLobby_Update). */
     char hint[A11Y_LOBBY_MESSAGE_LEN];
     /* CALL: milliseconds since the call began searching, 0 before and once
      * it stops (pc_net_match_progress). */
@@ -514,7 +515,8 @@ typedef struct A11yLobbyState {
      * developer fixture that routes Direct Connect through LAN play's path
      * and stays unread. */
     bool direct_connect;
-    /* The hub and the code keyboard are found. */
+    /* The lobby's phase; Direct Connect's hub and code keyboard always
+     * show the found one. */
     A11yLobbyPhase phase;
     /* The other machines, this one left out, in the order shown. */
     int row_count;

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "wait_status.hpp"
+#include <algorithm>
 #include <cctype>
 
 namespace a11y {
@@ -15,10 +16,16 @@ bool is_digit(char c) {
     return std::isdigit(static_cast<unsigned char>(c)) != 0;
 }
 
+/* Minute digits past which a word is no clock: the minutes still fit an
+ * int counted in seconds. */
+constexpr size_t kMaxMinuteDigits = 4;
+
 /* "m:ss", as the base port prints the clock. */
 bool is_clock(std::string_view word) {
     size_t colon = word.find(':');
-    if (colon == std::string_view::npos || colon == 0 || word.size() - colon != 3) {
+    if (colon == std::string_view::npos || colon == 0 || colon > kMaxMinuteDigits ||
+        word.size() - colon != 3)
+    {
         return false;
     }
     for (size_t i = 0; i < word.size(); i++) {
@@ -29,8 +36,10 @@ bool is_clock(std::string_view word) {
     return true;
 }
 
-}  // namespace
-
+/* The latest reminder moment at or before seconds into a wait, 0 before the
+ * first: 15 and 30, then every 30 seconds from 75. The base port changes
+ * "Calling" to "isn't answering yet" at 45, which the change says, so the
+ * rhythm leaves that moment out. */
 unsigned reminder_moment(unsigned seconds) {
     if (seconds < kFirstMoment) {
         return 0;
@@ -42,6 +51,22 @@ unsigned reminder_moment(unsigned seconds) {
         return kSecondMoment;
     }
     return kRhythmStart + (seconds - kRhythmStart) / kRhythm * kRhythm;
+}
+
+}  // namespace
+
+std::string spaces_collapsed(std::string_view line) {
+    std::string out;
+    for (char c : line) {
+        if (c == ' ' && (out.empty() || out.back() == ' ')) {
+            continue;
+        }
+        out += c;
+    }
+    if (!out.empty() && out.back() == ' ') {
+        out.pop_back();
+    }
+    return out;
 }
 
 std::string StatusLine::shown() const {
@@ -61,15 +86,7 @@ int StatusLine::seconds() const {
 
 StatusLine status_line(std::string_view line) {
     StatusLine out;
-    for (char c : line) {
-        if (c == ' ' && (out.words.empty() || out.words.back() == ' ')) {
-            continue;
-        }
-        out.words += c;
-    }
-    if (!out.words.empty() && out.words.back() == ' ') {
-        out.words.pop_back();
-    }
+    out.words = spaces_collapsed(line);
     size_t space = out.words.rfind(' ');
     size_t start = space == std::string::npos ? 0 : space + 1;
     if (is_clock(std::string_view(out.words).substr(start))) {
@@ -103,9 +120,12 @@ std::string WaitStatus::frame(std::string_view line, unsigned wait_ms) {
     bool reminder = reached > m_moment;
     m_words = now.words;
     /* A change says the line, which serves for a moment on the same frame.
-     * Frames that do not wait leave the count where the wait left it. */
+     * Frames that do not wait leave the count where the wait left it, and it
+     * never goes back: the call's clock is read a moment after the line's is
+     * drawn, so a line arriving on a moment's edge can show the second
+     * before a moment the call's clock has just reminded. */
     if (wait_ms > 0) {
-        m_moment = reached;
+        m_moment = std::max(m_moment, reached);
     }
     return changed || reminder ? now.shown() : std::string();
 }
