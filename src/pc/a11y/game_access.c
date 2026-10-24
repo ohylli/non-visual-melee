@@ -5,6 +5,7 @@
 #include "game_access.h"
 #include "item_kinds.h"
 #include "menu_kinds.h"
+#include "pc/net_match.h"
 #include "pc/pc.h"
 #include "pc/region.h"
 #include "scene_kinds.h"
@@ -32,6 +33,8 @@
 #include <melee/mp/mplib.h>
 #include <melee/pl/forward.h>
 #include <melee/pl/player.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sysdolphin/baselib/controller.h>
 #include <sysdolphin/baselib/gobj.h>
@@ -618,30 +621,90 @@ _Static_assert(
 _Static_assert(
     A11Y_LOBBY_MESSAGE_LEN == ONLINE_LOBBY_MSG_LEN, "the lobby's status line has another length");
 
+_Static_assert(A11Y_DIRECT_ROWS == ONLINE_LOBBY_MENU_ROWS, "the hub has another number of rows");
+_Static_assert(
+    A11Y_DIRECT_KEY_COLS == ONLINE_LOBBY_KEY_COLS, "the code keyboard has another width");
+_Static_assert(A11Y_DIRECT_KEYS_LEN == ONLINE_LOBBY_KEY_ROWS * ONLINE_LOBBY_KEY_COLS,
+    "the code keyboard has another number of keys");
+
+static A11yLobbyPhase lobby_phase(OnlineLobbyPhase phase) {
+    switch (phase) {
+    case LOBBY_PHASE_SEARCHING:
+        return A11Y_LOBBY_SEARCHING;
+    case LOBBY_PHASE_FOUND:
+        return A11Y_LOBBY_FOUND;
+    case LOBBY_PHASE_CONNECTING:
+        return A11Y_LOBBY_CONNECTING;
+    case LOBBY_PHASE_STARTING:
+        return A11Y_LOBBY_STARTING;
+    case LOBBY_PHASE_ERROR:
+    default:
+        return A11Y_LOBBY_FAILED;
+    }
+}
+
+static void copy_line(char* out, size_t size, const char* line) {
+    snprintf(out, size, "%s", line != NULL ? line : "");
+}
+
+/* Direct Connect's screens by the view (directEntryFrame and the internet
+ * branch of gm_Scene_OnlineLobby_OnFrame in gmonlinemode.c). The hub and the
+ * keyboard always show the found phase, which a call never does; the frame a
+ * choice starts the call keeps the hub's screen with the call's phase, and
+ * the frame B leaves the empty keyboard for the hub shows nothing at all. */
+static bool direct_state(const OnlineLobbyView* view, A11yLobbyState* out) {
+    A11yDirectState* direct = &out->direct;
+    if (view->phase != LOBBY_PHASE_FOUND) {
+        direct->screen = A11Y_DIRECT_CALL;
+    } else if (view->screen == LOBBY_SCREEN_MENU) {
+        direct->screen = A11Y_DIRECT_HUB;
+    } else if (view->screen == LOBBY_SCREEN_KEYS && view->keys != NULL &&
+               strlen(view->keys) == A11Y_DIRECT_KEYS_LEN)
+    {
+        direct->screen = A11Y_DIRECT_KEYS;
+    } else {
+        return false;
+    }
+    out->phase = lobby_phase(view->phase);
+    copy_line(out->message, sizeof(out->message), view->message);
+    copy_line(direct->title, sizeof(direct->title), view->title);
+    copy_line(direct->subtitle, sizeof(direct->subtitle), view->subtitle);
+    copy_line(direct->hint, sizeof(direct->hint), view->hint);
+    if (direct->screen == A11Y_DIRECT_CALL) {
+        PcNetMatchProgress progress;
+        pc_net_match_progress(&progress);
+        direct->call_ms = (unsigned)progress.elapsed_ms;
+        return true;
+    }
+    int rows = view->menu_count;
+    if (rows < 0) {
+        rows = 0;
+    } else if (rows > A11Y_DIRECT_ROWS) {
+        rows = A11Y_DIRECT_ROWS;
+    }
+    direct->row_count = rows;
+    for (int i = 0; i < rows; i++) {
+        copy_line(direct->rows[i], sizeof(direct->rows[i]), view->menu[i]);
+    }
+    direct->cursor = view->cursor;
+    if (direct->screen == A11Y_DIRECT_KEYS) {
+        copy_line(direct->keys, sizeof(direct->keys), view->keys);
+        direct->key_cursor = view->key_cursor;
+    }
+    return true;
+}
+
 void a11y_game_lobby_state(const OnlineLobbyView* view, A11yLobbyState* out) {
     memset(out, 0, sizeof(*out));
+    if (a11y_game_direct_connect()) {
+        out->direct_connect = direct_state(view, out);
+        return;
+    }
     out->lan = gmOnline_GetKind() == ONLINE_KIND_LAN && view->screen == LOBBY_SCREEN_PLAYERS;
     if (!out->lan) {
         return;
     }
-    switch (view->phase) {
-    case LOBBY_PHASE_SEARCHING:
-        out->phase = A11Y_LOBBY_SEARCHING;
-        break;
-    case LOBBY_PHASE_FOUND:
-        out->phase = A11Y_LOBBY_FOUND;
-        break;
-    case LOBBY_PHASE_CONNECTING:
-        out->phase = A11Y_LOBBY_CONNECTING;
-        break;
-    case LOBBY_PHASE_STARTING:
-        out->phase = A11Y_LOBBY_STARTING;
-        break;
-    case LOBBY_PHASE_ERROR:
-    default:
-        out->phase = A11Y_LOBBY_FAILED;
-        break;
-    }
+    out->phase = lobby_phase(view->phase);
     /* Row 0 is this machine. */
     for (int i = 1; i < view->player_count && i < ONLINE_LOBBY_MAX_PLAYERS; i++) {
         A11yLobbyRow* row = &out->rows[out->row_count++];
@@ -655,6 +718,11 @@ void a11y_game_lobby_state(const OnlineLobbyView* view, A11yLobbyState* out) {
 
 bool a11y_game_lan_play(void) {
     return gmOnline_GetKind() == ONLINE_KIND_LAN;
+}
+
+bool a11y_game_direct_connect(void) {
+    /* As internetLobby in gmonlinemode.c decides. */
+    return gmOnline_GetKind() == ONLINE_KIND_DIRECT && getenv("MELEE_LAN_DIRECT") == NULL;
 }
 
 _Static_assert(A11Y_TRAINING_VALUE_SLOTS == ARRAY_SIZE(gm_80473814.menu_values),

@@ -159,10 +159,11 @@ void pc_a11y_sss_resolved(int stage_tile, int local_pick, int remote_pick);
  * here. */
 void pc_a11y_sss_cursor(float x, float y, int stick_x, int stick_y);
 
-/* Once a frame of the online lobby's LAN path (gm_Scene_OnlineLobby_OnFrame
- * in src/melee/gm/gmonlinemode.c), after the view is drawn: the view the
- * scene filled this frame (OnlineLobbyView, gmonlinemode.h). Lobby speech
- * compares it with the last frame here. */
+/* Once a frame of the online lobby (gm_Scene_OnlineLobby_OnFrame in
+ * src/melee/gm/gmonlinemode.c), after the view is drawn, on LAN play's path
+ * and on the internet lobbies' (Direct Connect, Unranked, Ranked, Profile):
+ * the view the scene filled this frame (OnlineLobbyView, gmonlinemode.h).
+ * Lobby speech compares it with the last frame here. */
 struct OnlineLobbyView;
 void pc_a11y_lobby_frame(const struct OnlineLobbyView* view);
 

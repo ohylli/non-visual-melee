@@ -70,14 +70,29 @@ The base port's netcode keeps the last controller sample it read (`s_raw_last` i
 - Everything it says but the prompts also goes to `melee-netcheck-result.txt` beside the program, so a friend can send their results back.
 - Developer test: `--loopback` (the usage line lists the options) binds to 127.0.0.1 and skips the check, so two copies on one machine try the friend test without a firewall prompt. Two copies run from one `.exe` share the result file beside it, so the second copy is a copy of the program in a folder of its own. Without `--loopback` the program listens on every network, so the firewall rule of "Two copies in the LAN lobby" applies to its path too.
 
-## How the LAN lobby is read
+## How the online lobby is read
 
-The lobby (scene `GS_ONLINE_LOBBY`, the first state of the online game mode, flow in `src/melee/gm/gmonlinemode.c`) fills an `OnlineLobbyView` each frame and draws it; the fork's hook hands that view over once it is drawn, and `lobby_speech.cpp` compares it with the last frame. The view has everything the screen shows: the machines listed (row 0 is this one), a phase and a status line. Only LAN play's list speaks; direct connect, which `MELEE_LAN_DIRECT` also routes through this path, and the internet layouts keep the scene announcement.
+The lobby (scene `GS_ONLINE_LOBBY`, the first state of the online game mode, flow in `src/melee/gm/gmonlinemode.c`) fills an `OnlineLobbyView` each frame and draws it; the fork's hook, `pc_a11y_lobby_frame`, hands that view over once it is drawn, and the readers compare it with the last frame. The scene has two paths, each with the hook: LAN play's, and the internet lobbies' (Direct Connect, Unranked, Ranked, Profile). `a11y_game_lobby_state` in `game_access.c` reads the view into a snapshot by the online kind the menu picked: LAN play's list of machines for `lobby_speech.cpp`, Direct Connect's screens for `direct_speech.cpp`. Unranked, Ranked and Profile, and Direct Connect routed through LAN play's path by `MELEE_LAN_DIRECT` (a developer fixture), are not read and keep the scene announcement's "No speech yet".
+
+### LAN play
+
+The view has everything the screen shows: the machines listed (row 0 is this one), a phase and a status line.
 
 - What pairs two machines: the protocol version, the version string and the disc image. A machine that differs in any of them is listed as another version and never paired.
 - Machines are listed by hostname, cut to 15 characters, and rows can reorder, so the fork matches them by name, counting a repeated name: two copies on one computer share it.
 - The phase does not tell every status apart: waiting for the host and connecting share one, and so do searching and a network that hides players. The fork tells them by the start of the status line, the base port's literal strings.
 - Every way out of a session lands in a fresh, searching lobby, and by then the reason is gone: the lobby's entry disconnects, and a disconnect marks every ended session as "peer left", a clean back-out included. So the fork tells "Back to LAN play." from "Connection lost." by the scene the session left. Character select returns to the lobby when someone held B (its pending exit says so on its last frame) or when the other machine was lost; stage select, the match and results return only when it was lost. The pending exit is recorded even on frames rollback re-runs, since the frame that shows a back-out by the other player may be one.
+
+### Direct Connect
+
+Direct Connect's hub and code keyboard (`directEntryFrame`) and its call (the rest of the internet path) fill the same view: the hub as a list of rows with a cursor, the keyboard as 32 keys in rows of 8 with the entry line as its one row, the call as a phase and a status line. Each line is read as the screen shows it, with runs of spaces, the screen's padding, made one.
+
+- The phase tells the screens apart where the view's screen does not. The hub and the keyboard always show the found phase, which a call never does. The frame a hub row starts a call still carries the hub's screen and rows with the call's phase, so any other phase is the call. The frame B leaves an empty keyboard for the hub shows nothing (a zeroed screen with the found phase), and the snapshot skips it.
+- The hub reads the system clipboard every 30 frames and offers a code found there as its top row; when the row count changes the cursor jumps to the top without a press. A recent opponent's row ends with how long ago they played ("played 5m ago"), which changes as the clock runs, so the hovered row is compared without it.
+- The keyboard's count typed comes from the entry line, "Friend's code   # K3X-Q2_-__": a '_' is a slot still to type.
+- The keyboard's error stays on the hub after B leaves it (the base port does not clear it), so the hub's line under the list can show "A code has 8 characters after the #". The fork says only the title and the hovered row on that return.
+- The base port swallowed B on the hub along with the keyboard's, so its "B: back" did nothing; the fork's fix in the scene's frame function leaves B to the hub.
+- Y on the hub, and on the call while it searches, copies your code to the system clipboard, and the clipboard row calls the code found there: driven runs never use either, since both reach the maintainer's real clipboard.
 
 ## Quick chat and steering share the D-pad
 

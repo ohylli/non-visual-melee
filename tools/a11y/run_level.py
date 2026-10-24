@@ -45,7 +45,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens", "sss_steps",
          "sss_skipped", "sss_glide_pick", "leaf_screens", "sss_hover", "css_classic", "css_training",
          "css_slots", "css_portraits", "css_steps", "results", "training_menu", "launcher_home",
-         "launcher_settings", "launcher_a11y", "port_menu", "port_menu_a11y"]
+         "launcher_settings", "launcher_a11y", "port_menu", "port_menu_a11y", "direct_hub"]
 # drive.py options a script needs: the launcher's scripts open the launcher,
 # with accessibility on but muted, since its line reading needs the switch on,
 # as the port menu's does.
@@ -75,7 +75,9 @@ PORT_MENU_STATUS = re.compile(r'"(Saved|Settings save automatically|\w+ settings
 ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           # The Training menu's hidden row, or a value the reader cannot name.
           "training_menu": re.compile(r"\[a11y\] training menu row "),
-          "port_menu": PORT_MENU_STATUS, "port_menu_a11y": PORT_MENU_STATUS}
+          "port_menu": PORT_MENU_STATUS, "port_menu_a11y": PORT_MENU_STATUS,
+          # The scene's placeholder, which DIRECT CONNECT's own opening replaces.
+          "direct_hub": re.compile(r'"Online lobby\. No speech yet\.')}
 # Lines a passing run must not log between an opening line and the closing
 # line after it: no cue starts or stops while the port menu is open, since
 # the game stands still then and the stops come just before the opening.

@@ -49,6 +49,7 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/css_targets.cpp
         ${CMAKE_CURRENT_LIST_DIR}/css_reader.cpp
         ${CMAKE_CURRENT_LIST_DIR}/lobby_speech.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/direct_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sss_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sss_names.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sss_reader.cpp
@@ -319,6 +320,18 @@ if (TARGET unit_tests)
     add_test(NAME lobby_speech COMMAND lobby_speech_test)
     set_tests_properties(lobby_speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests lobby_speech_test)
+
+    # Direct Connect's speech against hand-written snapshots of the hub and
+    # the code keyboard; a fake bridge and its own pc_log_line.
+    add_executable(direct_speech_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_direct_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/direct_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
+    target_include_directories(direct_speech_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(direct_speech_test PRIVATE -UNDEBUG)
+    add_test(NAME direct_speech COMMAND direct_speech_test)
+    set_tests_properties(direct_speech PROPERTIES LABELS melee)
+    add_dependencies(unit_tests direct_speech_test)
 
     # The glide against simulated cursors that move as the game's do.
     add_executable(steering_test EXCLUDE_FROM_ALL

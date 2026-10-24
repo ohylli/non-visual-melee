@@ -7,6 +7,7 @@
 #include "game_access.h"
 #include "game_text.hpp"
 #include "launcher_speech.hpp"
+#include "direct_speech.hpp"
 #include "lobby_speech.hpp"
 #include "menu_speech.hpp"
 #include "menu_text.hpp"
@@ -43,6 +44,7 @@ std::unique_ptr<a11y::MenuSpeech> s_menu_speech;
 std::unique_ptr<a11y::CssReader> s_css;
 std::unique_ptr<a11y::SssReader> s_sss;
 std::unique_ptr<a11y::LobbySpeech> s_lobby;
+std::unique_ptr<a11y::DirectSpeech> s_direct;
 std::unique_ptr<a11y::TrainingSpeech> s_training;
 /* The accessibility settings and their file, a11y.ini. */
 std::unique_ptr<a11y::AccessibilitySettings> s_settings;
@@ -189,10 +191,18 @@ void announce_scene(int previous_scene, int css_exit, int scene_kind) {
     s_menu_speech->forget();
     s_css->forget();
     s_sss->forget();
-    if (scene_kind == static_cast<int>(a11y::SceneKind::GS_ONLINE_LOBBY) && a11y_game_lan_play()) {
-        /* LAN play's lobby speaks its own opening on its first frame. */
-        s_lobby->entered(a11y::lobby_arrival(previous_scene, css_exit));
-        return;
+    if (scene_kind == static_cast<int>(a11y::SceneKind::GS_ONLINE_LOBBY)) {
+        /* LAN play's lobby and Direct Connect speak their own openings on
+         * their first frames. */
+        a11y::LobbyArrival arrival = a11y::lobby_arrival(previous_scene, css_exit);
+        if (a11y_game_lan_play()) {
+            s_lobby->entered(arrival);
+            return;
+        }
+        if (a11y_game_direct_connect()) {
+            s_direct->entered(arrival);
+            return;
+        }
     }
     s_scene_speech->entered(scene_kind, pc_net_active());
 }
@@ -220,6 +230,7 @@ extern "C" void pc_a11y_init(void) {
     s_css = std::make_unique<a11y::CssReader>(*s_speech, false);
     s_sss = std::make_unique<a11y::SssReader>(*s_speech, false);
     s_lobby = std::make_unique<a11y::LobbySpeech>(*s_speech);
+    s_direct = std::make_unique<a11y::DirectSpeech>(*s_speech);
     s_training = std::make_unique<a11y::TrainingSpeech>(*s_speech);
     s_settings = std::make_unique<a11y::AccessibilitySettings>(
         *s_speech, settings_file_path(config), config.log);
@@ -273,6 +284,7 @@ extern "C" void pc_a11y_shutdown(void) {
     s_settings.reset();
     s_training.reset();
     s_lobby.reset();
+    s_direct.reset();
     s_sss.reset();
     s_css.reset();
     s_menu_speech.reset();
@@ -479,6 +491,7 @@ extern "C" void pc_a11y_lobby_frame(const OnlineLobbyView* view) {
     A11yLobbyState state;
     a11y_game_lobby_state(view, &state);
     s_lobby->frame(state);
+    s_direct->frame(state);
 }
 
 extern "C" void pc_a11y_match_tick(uint64_t held_mask) {

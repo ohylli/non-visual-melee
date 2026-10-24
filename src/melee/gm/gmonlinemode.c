@@ -941,6 +941,7 @@ void gm_Scene_OnlineLobby_OnFrame(void)
             }
         }
         mnOnlineLobby_Update(&view);
+        pc_a11y_lobby_frame(&view);
         if (input & (HSD_PAD_B | PAD_CANCEL)) {
             sfxBack();
             pc_net_peer_status_clear();

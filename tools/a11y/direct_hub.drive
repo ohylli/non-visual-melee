@@ -1,0 +1,96 @@
+# DIRECT CONNECT's hub and code keyboard, one instance: from the main menu to
+# the hub's opening, moves over its rows, the code keyboard's opening, moves
+# that wrap, typing, the error, deleting, back to the hub on an empty code,
+# and B on the hub back to the Online screen. Nothing calls, so no network is
+# needed.
+#   python tools/a11y/drive.py --muted tools/a11y/direct_hub.drive
+# No step presses Y: Y copies the code to the maintainer's real clipboard.
+# The hub reads the clipboard, so a connect code there adds a row on top; Up
+# from the top row wraps to the last, "Wait for a friend to call me",
+# whatever rows the clipboard and recent opponents add above.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until '"Main Menu\. 1-P Mode\. ' 20 0.3
+sleep 1
+
+# VS. Mode, Online (the last entry: Up wraps to it), Direct connect (the
+# second).
+press Down
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press Up
+wait '"Online\. Play against'
+press A
+wait '"Online\. LAN play\. '
+sleep 0.3
+press Down
+wait '"Direct connect\. '
+press A
+
+# The opening: the title, your code, the hovered row, the line under the
+# list and the buttons, in place of the scene's "No speech yet".
+wait "lobby: direct connect hub"
+wait '"DIRECT CONNECT\. YOU [^"#]*#[A-Z2-7]{3}-[A-Z2-7]{3}-[A-Z2-7]{2}\. [^"]+\. Pick who to play\. Both of you can call each other\. A: select Y: copy my code B: back"'
+sleep 0.3
+
+# Moves say the hovered row alone.
+press DUp
+wait '"Wait for a friend to call me"'
+press DUp
+wait '"Enter a friend.s code"'
+press DDown
+wait '"Wait for a friend to call me"'
+press DUp
+wait '"Enter a friend.s code"'
+
+# The code keyboard: its line, its layout, the buttons and the hovered key.
+press A
+wait '"Type the 8 characters after the #\. A to Z, then 2 to 7, 8 to a row, edges wrap\. A: type B: delete START: call\. A"'
+
+# Moves say the key; every edge wraps. The last row is Y, Z, then 2 to 7.
+press DLeft
+wait '"H"'
+press DUp
+wait '"7"'
+press DRight
+wait '"Y"'
+press DDown
+wait '"A"'
+press DRight
+wait '"B"'
+press DDown
+wait '"J"'
+
+# Typing says the character and the count; Start short of eight says the
+# error; the next character clears it.
+press A
+wait '"J, 1 of 8"'
+press DLeft
+wait '"I"'
+press A
+wait '"I, 2 of 8"'
+press Start
+wait '"A code has 8 characters after the #"'
+press A
+wait '"I, 3 of 8"'
+
+# B deletes the last character, and on an empty code goes back to the hub.
+press B
+wait '"Deleted I"'
+press B
+wait '"Deleted I"'
+press B
+wait '"Deleted J"'
+press B
+wait '"DIRECT CONNECT\. Enter a friend.s code"'
+sleep 0.3
+
+# B on the hub goes back to the Online screen.
+press B
+wait "boot scene: state 0 scene 1$"
+wait '"Online\. '
+sleep 1

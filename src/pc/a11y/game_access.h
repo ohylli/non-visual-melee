@@ -463,22 +463,74 @@ typedef struct A11yLobbyRow {
     bool other_version;
 } A11yLobbyRow;
 
+/* Direct Connect's screens, by what the view shows. */
+typedef enum A11yDirectScreen {
+    /* The hub: a list of choices with a cursor. */
+    A11Y_DIRECT_HUB,
+    /* The code keyboard. */
+    A11Y_DIRECT_KEYS,
+    /* The call: a status line, searching, connecting, starting or failed. */
+    A11Y_DIRECT_CALL,
+} A11yDirectScreen;
+
+enum {
+    A11Y_DIRECT_ROWS = 8,
+    A11Y_DIRECT_KEYS_LEN = 32,
+    A11Y_DIRECT_KEY_COLS = 8,
+    A11Y_DIRECT_TITLE_LEN = 32,
+};
+
+/* Direct Connect's view, its lines as shown. */
+typedef struct A11yDirectState {
+    A11yDirectScreen screen;
+    char title[A11Y_DIRECT_TITLE_LEN];
+    /* "YOU RYAN#K3X-Q2M-7A": your own connect code. */
+    char subtitle[A11Y_LOBBY_MESSAGE_LEN];
+    /* HUB: the rows and the hovered one. KEYS: rows[0] is the entry line,
+     * "Friend's code   # K3X-Q2_-__", and row_count 1. CALL: none. */
+    int row_count;
+    char rows[A11Y_DIRECT_ROWS][A11Y_LOBBY_MESSAGE_LEN];
+    int cursor;
+    /* KEYS: the keys row-major, A11Y_DIRECT_KEY_COLS to a row, and the
+     * hovered one. */
+    char keys[A11Y_DIRECT_KEYS_LEN + 1];
+    int key_cursor;
+    /* The button line, "" where none is shown. */
+    char hint[A11Y_LOBBY_MESSAGE_LEN];
+    /* CALL: milliseconds since the call began searching, 0 before and once
+     * it stops (pc_net_match_progress). */
+    unsigned call_ms;
+} A11yDirectState;
+
 typedef struct A11yLobbyState {
-    /* LAN play's list of machines. Direct connect, which can also arrive
-     * here, and every other layout are false and not read further. */
+    /* LAN play's list of machines. Every other layout is false and not read
+     * further here. */
     bool lan;
+    /* Direct Connect's hub, code keyboard or call, read into direct. False
+     * on a frame whose view shows none of them, and for MELEE_LAN_DIRECT, a
+     * developer fixture that routes Direct Connect through LAN play's path
+     * and stays unread. */
+    bool direct_connect;
+    /* The hub and the code keyboard are found. */
     A11yLobbyPhase phase;
     /* The other machines, this one left out, in the order shown. */
     int row_count;
     A11yLobbyRow rows[A11Y_LOBBY_ROWS];
     /* The status line, as shown. */
     char message[A11Y_LOBBY_MESSAGE_LEN];
+    A11yDirectState direct;
 } A11yLobbyState;
 
+/* From the frame's view; reached from LAN play's path and from the internet
+ * lobbies' (Direct Connect, Unranked, Ranked, Profile). */
 void a11y_game_lobby_state(const struct OnlineLobbyView* view, A11yLobbyState* out);
 
 /* True when the online mode was entered for LAN play. */
 bool a11y_game_lan_play(void);
+
+/* True when the online mode was entered for Direct Connect over the
+ * internet, MELEE_LAN_DIRECT's LAN route left out. */
+bool a11y_game_direct_connect(void);
 
 /* The Training menu's rows, by the cursor's numbers: Speed to Camera hold a
  * value, Reset and Finish none, and the hidden row is never reached (the
