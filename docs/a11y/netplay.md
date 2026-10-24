@@ -48,6 +48,18 @@ Direct Connect (VS. Mode, Online) pairs two players by connect code, with no ser
 - What it needs: a router that keeps one public port for a socket whatever it sends to (endpoint-independent mapping), on at least one side and usually both. A router that gives each destination a port of its own (symmetric NAT: some phone carriers, workplace and school networks) cannot be reached this way, and there is no relay and no port mapping (UPnP) to fall back on.
 - Gaps the code shows: IPv4 only; candidates on private addresses are dropped, so two machines behind one router meet only if it loops traffic to its own public address back in (LAN play is the way there); a mesh VPN's addresses are private too. The game's port is left to the system by default, so port forwarding needs a fixed one first, which no settings row offers: `MELEE_NET_PORT` or the `net_port` line of `launcher.cfg`.
 
+### Two copies on one machine
+
+Two copies on one machine meet by Direct Connect only if the router sends traffic for its own public address back in (NAT loopback, also called hairpinning): `net_dht.c` drops candidates on private addresses, so each copy finds the other only at the router's public address. `drive_net.py --direct` runs two copies that way, each on its own port with a fresh code, and its `dial` step types one copy's code on the other's code keyboard.
+
+- The maintainer's router, a TP-Link Archer AX73, has no loopback setting and loops nothing back by default: both copies reached the DHT within seconds, found each other at the router's public address, each on its own port (the router keeps a socket's port), and sent hellos for three minutes, none of which arrived.
+- It does loop back ports it forwards. With UDP 42050 and 42051, the drivers' ports, forwarded to this machine, the two copies meet within about fifteen seconds and reach character select, a fork build against a base port build too. That forward is the one setup Direct Connect's scripted runs need here.
+- DHT nodes also hand out strangers' addresses as candidates. Their hellos go unanswered, which is harmless.
+
+### A session after a back-out
+
+The base port's netcode keeps the last controller sample it read (`s_raw_last` in `net.c`) from one session to the next: `session_reset` leaves it, and the new session's first frames are filled from it before a fresh one is read. A back-out from character select holds B until the scene ends, so the next Direct Connect session opens with B pressed on the player who backed out, and the call screen takes that B as "stop": the session ends within two frames and that player lands on the Online screen. The LAN lobby ignores B while starting, so LAN play does not show it.
+
 ## The connection checker
 
 `melee-netcheck.exe` (`src/pc/a11y/netcheck.cpp`, its pure parts in `netcheck_logic.cpp`) is a console program beside `melee.exe`, built by `a11y.cmake` and added to the CI package, for a player to try before a session with a friend. It links statically, so it runs alone, and prints plain lines for a screen reader.

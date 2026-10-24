@@ -59,6 +59,21 @@ boot and run on into the session without a new header, so the two share no
 frame numbers: --lan records nothing and leaves desyncs to net: DESYNC.
 Windows Firewall must let melee.exe take UDP in, or the first run prompts
 and steals focus.
+
+With --direct, the two also start with no session, and boot straight into
+DIRECT CONNECT's hub (MELEE_BOOT_SCENE=direct), each on its own UDP port and
+with a fresh settings folder, so a fresh connect code. They meet over the
+internet: each joins the public BitTorrent DHT, and a copy reaches the
+other only through the router's public address, so the router must loop
+it back in (NAT loopback). One waits ("Wait for a friend to call me") and
+logs its code; the other, on the code keyboard, takes a dial step:
+
+  b dial a
+
+which types the eight characters of the code a logged as waiting, by
+D-pad presses and A from the keyboard's first key, then presses Start and
+waits for b's log to name that code as the one called. Recording is left
+out as with --lan.
 """
 import argparse
 import os
@@ -82,6 +97,13 @@ HEADER = 8
 RECORD = 76
 PADS = 64
 DISCONNECTED = re.compile(r"net: disconnected at frame (\d+)")
+# The code keyboard of Direct Connect (gmonlinemode.c directEntryFrame): the
+# code alphabet in rows of eight, every edge wrapping, the cursor on its
+# first key when the keyboard opens.
+CODE_KEYS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+CODE_COLS = 8
+CODE_ROWS = len(CODE_KEYS) // CODE_COLS
+WAITING = re.compile(r"lobby: direct connect waiting as '[^']*#([A-Z2-7]{8})'")
 
 
 def records(path):
@@ -110,6 +132,37 @@ def compare_recordings(path_a, path_b, end):
             return [f"checksum, seed or scene differ from frame {f} of {both}"]
     print(f">> recordings agree over {both} frames (a {len(rec_a)}, b {len(rec_b)})", flush=True)
     return [] if both else ["the recordings hold no frames"]
+
+
+def code_presses(code):
+    """The D-pad presses and A presses that type code on the code keyboard
+    from its first key, the shorter way round each wrapping row and column."""
+    presses, at = [], 0
+    for ch in code:
+        to = CODE_KEYS.index(ch)
+        for axis, size, near, far in ((at % CODE_COLS, CODE_COLS, "DRight", "DLeft"),
+                                      (at // CODE_COLS, CODE_ROWS, "DDown", "DUp")):
+            target = to % CODE_COLS if size == CODE_COLS else to // CODE_COLS
+            steps = (target - axis) % size
+            presses += [near] * steps if steps <= size // 2 else [far] * (size - steps)
+        presses.append("A")
+        at = to
+    return presses
+
+
+def dial(caller, callee):
+    """Type on caller's code keyboard the code callee logged as waiting,
+    call it, and check that caller called that code."""
+    with callee.output.cond:
+        found = [m.group(1) for line in callee.output.lines if (m := WAITING.search(line))]
+    if not found:
+        raise ScriptError(f"{callee.name} has logged no code it waits as")
+    code = found[-1]
+    caller.note(f"dial {code}")
+    for button in code_presses(code):
+        caller.step(["press", button])
+    caller.step(["press", "Start"])
+    caller.step(["wait", re.escape(f"lobby: direct connect calling '#{code}'"), "5"])
 
 
 def session_end(games):
@@ -145,7 +198,7 @@ def check_logs(games):
 
 def run(args, steps):
     common = {"MELEE_SEED": args.seed, "MELEE_NET_DELAY": args.delay}
-    if not args.lan:
+    if not args.lan and not args.direct:
         common["MELEE_NET_KEY"] = args.key
     if args.sim_delay_ms:
         common["MELEE_NET_SIM_DELAY_MS"] = str(args.sim_delay_ms)
@@ -162,7 +215,7 @@ def run(args, steps):
     try:
         for player, name in enumerate(NAMES):
             env = dict(common, MELEE_NET_PORT=str(args.port + player))
-            if not args.lan:
+            if not args.lan and not args.direct:
                 env["MELEE_NET"] = f"127.0.0.1:{args.port + 1 - player}"
                 env["MELEE_NET_PLAYER"] = str(player)
                 env["MELEE_NET_RECORD"] = out[name] + ".rec"
@@ -179,6 +232,9 @@ def run(args, steps):
                 if ONLY[words[0]] != bool(args.base_b):
                     continue
                 words = ["b"] + words[1:]
+            if len(words) == 3 and words[1].lower() == "dial":
+                dial(games[words[0]], games[words[2]])
+                continue
             if len(words) == 2 and words[1].lower() == "quit":
                 games[words[0]].note("quit")
                 drive.quit_game(games[words[0]].proc)
@@ -192,7 +248,7 @@ def run(args, steps):
     problems = [f"{name} exited with code {code}" for name, code in codes.items() if code != 0]
     try:
         problems += check_logs(games)
-        if not args.lan:
+        if not args.lan and not args.direct:
             problems += compare_recordings(out["a"] + ".rec", out["b"] + ".rec", session_end(games))
     except (OSError, ScriptError) as e:
         problems.append(str(e))
@@ -215,6 +271,9 @@ def main():
     ap.add_argument("--key", default="a11ytest", help="MELEE_NET_KEY, shared by both")
     ap.add_argument("--lan", action="store_true",
                     help="no session at boot: the two meet in the LAN lobby")
+    ap.add_argument("--direct", action="store_true",
+                    help="no session at boot: the two start in DIRECT CONNECT's hub and meet over the "
+                         "internet, which needs a router with NAT loopback")
     ap.add_argument("--seed", default="7", help="MELEE_SEED, shared by both")
     ap.add_argument("--base-b", metavar="BUILD_DIR",
                     help="run instance b from a base port build directory, such as a worktree's build; "
@@ -232,7 +291,8 @@ def main():
     args = ap.parse_args()
     # What Game reads from drive.py's options: both runs start at the title
     # screen, silent, in the background and without speech.
-    args.scene, args.speech, args.sound, args.focus = "title", False, False, False
+    args.scene = "direct" if args.direct else "title"
+    args.speech, args.sound, args.focus = False, False, False
     sys.stdout.reconfigure(errors="replace")
     if sys.platform != "win32":
         ap.error("Windows only; on Linux use tools/net_test.py")
@@ -251,6 +311,11 @@ def main():
             ap.error(f"bad step: {' '.join(words)}")
         if cmd not in ("sleep", "quit") and (words[0] not in NAMES + tuple(ONLY) or len(words) < 2):
             ap.error(f"a step begins with a, b, b-fork or b-base: {' '.join(words)}")
+        if len(words) > 1 and words[1].lower() == "dial" and (
+                len(words) != 3 or words[2] not in NAMES or words[0] in (words[2], "b-" + words[2])):
+            ap.error(f"dial names the other instance: {' '.join(words)}")
+    if args.lan and args.direct:
+        ap.error("--lan and --direct are two ways to meet; choose one")
     if args.base_b and not os.path.isfile(os.path.join(args.base_b, "melee.exe")):
         ap.error(f"no melee.exe in {args.base_b}")
     sys.exit(run(args, steps))
