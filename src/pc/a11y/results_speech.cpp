@@ -219,13 +219,7 @@ std::string ResultsSpeech::match_type(const A11yResults& results) {
             "[a11y] results: match type " + std::to_string(results.match_kind) + ": no game text");
         return "";
     }
-    DecodedText decoded = decode_game_text(results.match_type_text, m_text);
-    if (decoded.unknown_glyphs > 0 || decoded.malformed) {
-        log_once("[a11y] results: match type \"" + one_line(decoded.text) + "\"" +
-                 (decoded.unknown_glyphs > 0 ? ", unknown glyphs left out" : "") +
-                 (decoded.malformed ? ", malformed" : ""));
-    }
-    return spoken_text(decoded.text);
+    return game_words(results.match_type_text, "match type");
 }
 
 void ResultsSpeech::visit_started() {

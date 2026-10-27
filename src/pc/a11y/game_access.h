@@ -709,9 +709,6 @@ typedef struct A11yResults {
     /* The scene has its MatchEnd; nothing below is filled otherwise. */
     bool valid;
     A11yResultsState state;
-    /* State 3's sub-phase (x0_23): 0 while the stats panels slide open, 2
-     * once they take input (1 lasts only within the tick they finish). */
-    int phase;
     A11yResultsMatchKind match_kind;
     bool teams;
     /* No Contest or Retry: no places, no Bonuses page. */
@@ -728,9 +725,6 @@ typedef struct A11yResults {
     bool online;
     /* The match type's title as game text (SdRst), or NULL. */
     const uint8_t* match_type_text;
-    /* The stats panel's pages: 3, or 2 on a cancelled match, which has no
-     * Bonuses page. */
-    int page_count;
     /* The KOs and falls page's headings as game text (SdRst), or NULL:
      * "KOs", "Falls" and "SDs". */
     const uint8_t* kos_heading;
@@ -755,10 +749,6 @@ typedef struct A11yResults {
  * scene, where lbl_8046DBE8 keeps whatever the last visit left. Reads
  * only. */
 void a11y_game_results(int local_port, A11yResults* out);
-
-/* A string of results' table (SdRst, font slot 0) by the number the game's
- * code uses, or NULL while slot 0 holds another table. */
-const uint8_t* a11y_game_results_string(int number);
 
 /* A match, read once a tick by the match cues (docs/a11y/cues.md, "The
  * match snapshot"), in world units: x grows to the right, y upwards. */

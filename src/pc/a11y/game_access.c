@@ -760,7 +760,9 @@ enum { A11Y_RESULTS_FONT = 0 };
 /* SdRst's titles of the match types, by MatchKind (fn_80175DC8). */
 static const int k_results_match_type_strings[] = {2, 3, 4, 5};
 
-const uint8_t* a11y_game_results_string(int number) {
+/* A string of results' table (SdRst, font slot 0) by the number the game's
+ * code uses, or NULL while slot 0 holds another table. */
+static const uint8_t* results_string(int number) {
     const char* symbol = a11y_game_font_symbol(A11Y_RESULTS_FONT);
     if (number < 0 || symbol == NULL || strcmp(symbol, "SIS_ResultData") != 0) {
         return NULL;
@@ -862,6 +864,8 @@ enum {
 
 /* The name tag slot that means none: the row shows the port (fn_8017BB94). */
 enum { A11Y_RESULTS_NO_TAG = 0x78 };
+/* The memory card's name tag slots (GetPersistentNameData). */
+enum { A11Y_RESULTS_TAG_SLOTS = GM_NAMETAG_BANK_COUNT * GM_NAMETAG_BANK_SIZE };
 
 /* The KOs and falls page's rows for one panel (lbl_803D6488): a row per other
  * player, shown where the game's own test (fn_801743C4, fn_8017AE70 and its
@@ -877,13 +881,18 @@ static void results_opponents(const MatchEnd* me, int slot, A11yResultsPlayer* r
         opponent->port = i;
         opponent->kos = results_clamp(self->kills[i], 999999);
         opponent->falls = results_clamp(other->kills[slot], 999999);
-        if (other->x4 != A11Y_RESULTS_NO_TAG) {
+        if (other->x4 != A11Y_RESULTS_NO_TAG && other->x4 < A11Y_RESULTS_TAG_SLOTS) {
             const char* name = GetPersistentNameData(other->x4)->namedata;
             memcpy(opponent->tag, name, sizeof(opponent->tag) - 1);
         }
     }
     row->page_sds = fn_8017B21C(slot);
 }
+
+/* The bonus table's kinds (MatchEnd.x44C's flags), and where the bonus names
+ * start in SdRst: fn_80174468 adds this to fn_8016F280's number, the bonus's
+ * text id less 2. */
+enum { A11Y_RESULTS_BONUS_KINDS = 0x100, A11Y_RESULTS_BONUS_NAMES = 60 };
 
 /* The Bonuses page's rows for one panel, as fn_80174468 draws them: each
  * bonus the player earned, in the table's order. The count the page uses
@@ -894,15 +903,17 @@ static void results_bonuses(const MatchEnd* me, int slot, A11yResultsPlayer* row
         return;
     }
     const struct UnkResultPlayerData* earned = &me->x44C[slot];
-    for (int i = 0; i < 0x100 && row->bonus_count < A11Y_RESULTS_MAX_BONUSES; i++) {
+    for (int i = 0; i < A11Y_RESULTS_BONUS_KINDS && row->bonus_count < A11Y_RESULTS_MAX_BONUSES;
+        i++)
+    {
         if (earned->x0[i] == 0) {
             continue;
         }
         A11yResultsBonus* bonus = &row->bonuses[row->bonus_count++];
         bonus->kind = fn_8016F1F0(i);
         int text = gm_8016F208(bonus->kind);
-        if (text != 0) {
-            bonus->name = a11y_game_results_string((u16)(text - 2) + 60);
+        if (text >= 2) {
+            bonus->name = results_string(text - 2 + A11Y_RESULTS_BONUS_NAMES);
         }
         bonus->points = earned->x104[i];
     }
@@ -929,7 +940,6 @@ void a11y_game_results(int local_port, A11yResults* out) {
     }
     out->valid = true;
     out->state = (A11yResultsState)data->x1;
-    out->phase = data->x0_23;
     out->match_kind = (A11yResultsMatchKind)me->match_kind;
     out->teams = me->is_teams == 1;
     out->cancelled = gm_WasMatchCanceled(me->outcome);
@@ -937,16 +947,14 @@ void a11y_game_results(int local_port, A11yResults* out) {
     out->winning_team = data->x5;
     out->local_port = local_port;
     if (me->match_kind < ARRAY_SIZE(k_results_match_type_strings)) {
-        out->match_type_text =
-            a11y_game_results_string(k_results_match_type_strings[me->match_kind]);
+        out->match_type_text = results_string(k_results_match_type_strings[me->match_kind]);
     }
-    out->page_count = data->num_pages;
-    out->kos_heading = a11y_game_results_string(A11Y_RESULTS_KOS_HEADING);
-    out->falls_heading = a11y_game_results_string(A11Y_RESULTS_FALLS_HEADING);
-    out->sds_heading = a11y_game_results_string(A11Y_RESULTS_SDS_HEADING);
+    out->kos_heading = results_string(A11Y_RESULTS_KOS_HEADING);
+    out->falls_heading = results_string(A11Y_RESULTS_FALLS_HEADING);
+    out->sds_heading = results_string(A11Y_RESULTS_SDS_HEADING);
     for (int i = 0; i < A11Y_RESULTS_STAT_COUNT; i++) {
-        out->stat_labels[i][0] = a11y_game_results_string(k_results_stat_rows[i].label);
-        out->stat_labels[i][1] = a11y_game_results_string(k_results_stat_rows[i].label + 1);
+        out->stat_labels[i][0] = results_string(k_results_stat_rows[i].label);
+        out->stat_labels[i][1] = results_string(k_results_stat_rows[i].label + 1);
     }
     if (local_port >= 0 && local_port < A11Y_RESULTS_PORTS) {
         u32 pressed = HSD_PadCopyStatus[local_port].trigger;

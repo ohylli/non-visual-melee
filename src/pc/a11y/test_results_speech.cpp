@@ -474,7 +474,6 @@ void add_bonus(A11yResultsPlayer& player, int kind, const Bytes& name, int point
  * times a KO'd b. */
 A11yResults panels_example() {
     A11yResults results = stock_example();
-    results.page_count = 3;
     results.kos_heading = kKosHeading.data();
     results.falls_heading = kFallsHeading.data();
     results.sds_heading = kSdsHeading.data();
