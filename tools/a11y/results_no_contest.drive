@@ -1,0 +1,57 @@
+# Results after a cancelled match, offline: the debug match without stocks
+# (Link, player 1, against a CPU Mario on Battlefield) is a Time match with
+# no clock, which player 1 ends from the pause with L+R+A+Start. Start skips
+# the announcer's wait at once on a cancelled match, and the opening says
+# "No contest." with no winner and the players in port order with no place,
+# each with Time's last row, the total. The stats panels have two pages: A
+# on Stats, the last, is silent. Z's line has no place either. Start makes
+# player 1 ready, and with no other human the debug match starts again.
+# Run from Git Bash with the debug match switches:
+#   MELEE_DEBUG_VS=cpu MELEE_DEBUG_VS_STAGE=31 \
+#     python tools/a11y/drive.py tools/a11y/results_no_contest.drive
+# run_level.py fails it on any line saying a place, the Bonuses page or a
+# ready.
+
+# Start on the title screen goes straight into the debug match.
+wait "state 0 scene 0$"
+press Start until "boot scene: state \d+ scene 2$"
+
+# Past GO, Start pauses and L+R+A+Start ends the match.
+sleep 6
+press Start
+sleep 1
+press L+R+A+Start 1000
+wait 'boot scene: state \d+ scene 5$' 15
+
+# Start skips the announcer's wait; the opening comes once presses count.
+# Mario's numbers are the CPU's to choose; Link stood still.
+press Start until '"Time Battle\. No contest\. Link, P1, you, 0 KOs, 0 falls, 0 SDs, total 0\. Mario, P2, \d+ KOs?, \d+ falls?, \d+ SDs?, total [-+]?\d+\. Any button shows the stats\. Start when ready\."$' 5 2
+
+# The first press only opens the panels.
+press DDown
+wait '"KOs and falls\. KOs\. A and B change page\. D-pad up and down read the rows, left and right switch player\. Z the player.s summary\. Start when ready\."$'
+
+# The reading cursor to Mario's row, then Mario, and his line without a place.
+press DDown
+wait '"P2 Mario, 0"$'
+press DRight
+wait '"Mario, P2, P1 Link, you, 0"$'
+press Z
+wait '"Mario, P2, \d+ KOs?, \d+ falls?, \d+ SDs?, total [-+]?\d+\."$'
+
+# A to Stats, the last page: A again is silent, and the cursor stays there.
+press A
+wait '"Stats\. KOs, 0\."$'
+press A
+sleep 0.5
+press DDown
+wait '"Falls, \d+"$'
+press DLeft
+wait '"Link, P1, you, 0"$'
+press DLeft
+wait '"Link, P1, you"$'
+press B
+wait '"KOs and falls\. KOs\."$'
+
+press Start
+wait 'boot scene: state \d+ scene 2$'

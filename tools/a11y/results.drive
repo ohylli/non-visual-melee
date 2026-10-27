@@ -46,7 +46,7 @@ wait '"Falls, 0"$'
 press DLeft
 wait '"Link, P1, you, 0"$'
 press A
-wait '"Bonuses\. ([^,"]+, -?\d+|No bonuses)\."$'
+wait '"Bonuses\. ([^"]+, -?\d+|No bonuses)\."$'
 press B
 wait '"Stats\. KOs, 0\."$'
 press B

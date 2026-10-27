@@ -1,0 +1,110 @@
+# Results after a team match through the menus, offline: VS mode with
+# Teams on, player 1 (Pichu, red team) against a CPU moved to the blue
+# team, one stock each on Princess Peach's Castle, where Pichu walks off at
+# once. The opening names the winning team and each player's team after
+# the port; the reading cursor switches to the CPU, and Z says each line
+# with the team after the place. Start makes player 1 ready, and with no
+# other human results leaves for character select. The match is a Stock
+# one and ends in seconds; the CPU's character is random.
+# Run with the default --scene title:
+#   python tools/a11y/drive.py tools/a11y/results_teams.drive
+# drive.py turns steering on (MELEE_A11Y_STEER=1). run_level.py fails it on
+# any ready line.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$" 20 0.3
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# VS. Mode, Melee.
+press Down
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press A
+wait '"Character select\. Player 1, no character\."'
+sleep 1
+
+# Pichu for player 1, which leaves the hand free.
+press DUp
+wait ': "Player 1: closed"$'
+press DUp
+wait ': "Pichu"$'
+wait 'glide to "Pichu" ended after \d+ frames: arrived'
+press A
+sleep 1
+
+# Teams on, then player 2 made a CPU, which joins the red team, and its
+# team button turned to blue.
+search ': "Teams: off"$' DUp*6 DLeft*4
+wait 'glide to "Teams: off" ended after \d+ frames: arrived'
+press A
+wait ': "Teams: on'
+sleep 1
+search ': "Player 2: closed"$' DDown*6 DRight*2
+wait 'glide to "Player 2: closed" ended after \d+ frames: arrived'
+press A until ': "Player 2: CPU, '
+sleep 0.5
+press DRight
+wait ': "Player 2 team: red"$'
+wait 'glide to "Player 2 team: red" ended after \d+ frames: arrived'
+press A
+wait ': "Blue team'
+sleep 1
+
+# Up to the rules header and into Custom Rules: Stock, one stock.
+search ': "Rules: 2-minute KO fest!"$' DUp*6 DRight*4
+wait 'glide to "Rules: 2-minute KO fest!" ended after \d+ frames: arrived'
+press A
+wait ': "Custom Rules\. Rules: Time\. '
+sleep 1
+press Right
+wait ': "Stock\. '
+press Down
+wait ': "Stock: 3\. '
+press Left
+wait ': "2"$'
+press Left
+wait ': "1"$'
+press B
+wait '"Character select\. '
+sleep 1
+
+# Stage select: Princess Peach's Castle.
+press Start
+wait '"Stage select\. '
+sleep 1
+press DDown
+wait ': "Icicle Mountain\. '
+wait 'glide to "Icicle Mountain" ended after \d+ frames: arrived'
+press DRight
+wait ': "Princess Peach.s Castle\. '
+wait 'glide to "Princess Peach.s Castle" ended after \d+ frames: arrived'
+press A
+wait 'boot scene: state \d+ scene 2$'
+sleep 3
+
+# Pichu walks left off the castle and falls out of the match.
+press Left 8000
+wait '"Stock Battle\. Winner: Blue team\. 1st (?P<cpu>[^,"]+), P2, Blue team, 0 KOs, 0 falls, 0 SDs, not KO.d\. 2nd Pichu, P1, you, Red team, 0 KOs, 0 falls, 1 SD, KO.d at \d+:\d\d\. Any button shows the stats\. Start when ready\."$' 60
+
+# The panels, the CPU's row and the CPU, each line with its team.
+press DDown
+wait '"KOs and falls\. KOs\. A and B change page\. D-pad up and down read the rows, left and right switch player\. Z the player.s summary\. Start when ready\."$'
+press DDown
+wait '"P2 %cpu%, 0"$'
+press DRight
+wait '"%cpu%, P2, P1 Pichu, you, 0"$'
+press Z
+wait '"%cpu%, P2, 1st, Blue team, 0 KOs, 0 falls, 0 SDs, not KO.d\."$'
+press DLeft
+wait '"Pichu, P1, you, P2 %cpu%, 0"$'
+press Z
+wait '"Pichu, P1, you, 2nd, Red team, 0 KOs, 0 falls, 1 SD, KO.d at \d+:\d\d\."$'
+
+# Start readies the only human, and results leaves.
+press Start
+wait '"Character select\. Player 1, Pichu\."'

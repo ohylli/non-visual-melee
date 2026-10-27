@@ -52,7 +52,8 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 
 MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens", "sss_steps",
          "sss_skipped", "sss_glide_pick", "leaf_screens", "sss_hover", "css_classic", "css_training",
-         "css_slots", "css_portraits", "css_steps", "results", "training_menu", "launcher_home",
+         "css_slots", "css_portraits", "css_steps", "results", "results_no_contest", "results_cpu4",
+         "results_teams", "training_menu", "launcher_home",
          "launcher_settings", "launcher_a11y", "port_menu", "port_menu_a11y", "direct_hub"]
 # drive.py options a script needs: the launcher's scripts open the launcher,
 # with accessibility on but muted, since its line reading needs the switch on,
@@ -66,6 +67,9 @@ ARGS = {"launcher_home": ["--launcher", "--muted"], "launcher_settings": ["--lau
 A11Y_ROWS = {"MELEE_A11Y_STEER": "", "MELEE_A11Y_CUES": ""}
 ENV = {"launcher_a11y": A11Y_ROWS, "port_menu_a11y": A11Y_ROWS,
        "results": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE_DEBUG_VS_STAGE": "31"},
+       "results_no_contest": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STAGE": "31"},
+       # Poke Floats, where three of the four CPUs fall out within half a minute.
+       "results_cpu4": {"MELEE_DEBUG_VS": "cpu4", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE_DEBUG_VS_STAGE": "23"},
        "match_opponent": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
        "match_gap": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
        "match_gap_battlefield": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2",
@@ -80,6 +84,9 @@ ENV = {"launcher_a11y": A11Y_ROWS, "port_menu_a11y": A11Y_ROWS,
 # repeats its name); none of them is ever spoken.
 PORT_MENU_STATUS = re.compile(r'"(Saved|Settings save automatically|\w+ settings\.")')
 NO_LOBBY_SPEECH = re.compile(r'"Online lobby\. No speech yet\.')
+# Results' ready lines: with one human, or none, readying ends results and
+# says nothing.
+READY = r'"(Ready, waiting|Not ready\.|P\d (not )?ready\.)'
 # Lines a passing run must not log; drive.py cannot fail on an absent line.
 ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           # The Training menu's hidden row, or a value the reader cannot name.
@@ -87,8 +94,11 @@ ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           "port_menu": PORT_MENU_STATUS, "port_menu_a11y": PORT_MENU_STATUS,
           # The scene's placeholder, which DIRECT CONNECT's own opening replaces.
           "direct_hub": NO_LOBBY_SPEECH, "direct_call": NO_LOBBY_SPEECH,
-          # With one human, readying ends results and says nothing.
-          "results": re.compile(r'"(Ready, waiting|Not ready\.|P\d (not )?ready\.)')}
+          "results": re.compile(READY), "results_teams": re.compile(READY),
+          # A cancelled match has no places and no Bonuses page.
+          "results_no_contest": re.compile(r'\[a11y\] speak .*("Bonuses\.|\b[1-4](st|nd|rd|th)\b)|' + READY),
+          # Four CPUs: nobody is "you".
+          "results_cpu4": re.compile(r'\[a11y\] speak .*, you\b|' + READY)}
 # Lines a passing run must not log between an opening line and the closing
 # line after it: no cue starts or stops while the port menu is open, since
 # the game stands still then and the stops come just before the opening.

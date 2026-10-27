@@ -1,0 +1,66 @@
+# Results with nobody "you", offline: the debug match with four CPUs (Link,
+# Mario, Fox and DK, one stock each) on Poke Floats, where all but one fall
+# out within half a minute, often several on one frame. The CPUs fight on their
+# own, so who wins and the numbers vary from run to run, and ties for a
+# place are common. The opening names the winner and all four by place
+# with no "you"; controller 1, plugged into P1's CPU port, opens the stats
+# panels and pages P1's panel, the one the reading cursor follows, starting
+# on P1. The cursor steps, switches over all four players and their edges,
+# says Z's line, and pages each way. With no human, Start from controller 1
+# leaves results, and the debug match starts again.
+# Run from Git Bash with the debug match switches:
+#   MELEE_DEBUG_VS=cpu4 MELEE_DEBUG_VS_STOCKS=1 MELEE_DEBUG_VS_STAGE=23 \
+#     python tools/a11y/drive.py tools/a11y/results_cpu4.drive
+# run_level.py fails it on any line saying "you" or a ready.
+
+# Start on the title screen goes straight into the debug match, which the
+# CPUs end on their own.
+wait "state 0 scene 0$"
+press Start until "boot scene: state \d+ scene 2$"
+wait '"Stock Battle\. Winner: (?P<winner>Link|Mario|Fox|DK)\. 1st (?P=winner), P[1-4], [^."]+\.( (1st|2nd|3rd|4th) (Link|Mario|Fox|DK), P[1-4], [^."]+\.){3} Any button shows the stats\. Start when ready\."$' 120
+
+# Controller 1's press opens the panels, on P1's.
+press DUp
+wait '"KOs and falls\. KOs\. A and B change page\. D-pad up and down read the rows, left and right switch player\. Z the player.s summary\. Start when ready\."$'
+
+# P1's rows, then each player to the right: Mario's second row is P3 Fox
+# as P1's is, Fox's P2 Mario, DK's P2 Mario as Fox's; DK at the edge.
+press DDown
+wait '"P2 Mario, \d+"$'
+press DDown
+wait '"P3 Fox, \d+"$'
+press DRight
+wait '"Mario, P2, \d+"$'
+press DRight
+wait '"Fox, P3, P2 Mario, \d+"$'
+press DRight
+wait '"DK, P4, \d+"$'
+press DRight
+wait '"DK, P4"$'
+press Z
+wait '"DK, P4, (1st|2nd|3rd|4th), \d+ KOs?, \d+ falls?, \d+ SDs?, (not KO.d|KO.d at \d+:\d\d)\."$'
+
+# Back to P1, its edge without "you".
+press DLeft
+wait '"Fox, P3, \d+"$'
+press DLeft
+wait '"Mario, P2, P3 Fox, \d+"$'
+press DLeft
+wait '"Link, P1, \d+"$'
+press DLeft
+wait '"Link, P1"$'
+
+# A pages P1's panel forward; A on Bonuses, the last page, is silent.
+press A
+wait '"Stats\. KOs, \d+\."$'
+press A
+wait '"Bonuses\. ([^"]+, -?\d+|No bonuses)\."$'
+press A
+sleep 0.5
+press B
+wait '"Stats\. KOs, \d+\."$'
+press Z
+wait '"Link, P1, (1st|2nd|3rd|4th), \d+ KOs?, \d+ falls?, \d+ SDs?, (not KO.d|KO.d at \d+:\d\d)\."$'
+
+press Start
+wait 'boot scene: state \d+ scene 2$'
