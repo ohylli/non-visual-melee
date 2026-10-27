@@ -125,8 +125,9 @@ public:
     explicit A11ySettings(a11y::Speech& speech)
         : settings(speech, "", false), switches(settings.model(), speech, false),
           cues(settings.model()) {
-        cues.add_cue("gap_warning", "Gap warning", 1.0f);
-        a11y::CueGroup ledge = cues.add_cue("ledge_warning", "Ledge warning", 1.0f);
+        cues.add_cue("gap_warning", "Gap warning", "Turns the gap warning on or off.", 1.0f);
+        a11y::CueGroup ledge = cues.add_cue(
+            "ledge_warning", "Ledge warning", "Turns the ledge warning on or off.", 1.0f);
         ledge.group.add_number(a11y::NumberSpec{"distance", "Ledge warning distance",
             "How far from the edge the warning starts, in stage units.", "units", 40.0f, 5.0f,
             100.0f, 1.0f, true});

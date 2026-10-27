@@ -47,13 +47,12 @@ ValueGroup CueSettings::add_shared(const std::string& id, const std::string& tit
     return m_model.group(id, title);
 }
 
-CueGroup CueSettings::add_cue(
-    const std::string& id, const std::string& title, float default_boost) {
+CueGroup CueSettings::add_cue(const std::string& id, const std::string& title,
+    const std::string& description, float default_boost) {
     ValueGroup group = m_model.group(id, title);
     std::string name = in_sentence(title);
     /* Its three rows in the menus: the switch, the volume and Preview. */
-    Switch on =
-        group.add_switch(SwitchSpec{"on", title, "Turns " + name + " on or off.", true, true});
+    Switch on = group.add_switch(SwitchSpec{"on", title, description, true, true});
     Number volume = group.add_number(NumberSpec{"volume", title + " volume",
         "The loudness of " + name + ", under the cue volume.", "%", 100.0f, 0.0f, 100.0f, 5.0f,
         true});

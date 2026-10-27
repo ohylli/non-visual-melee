@@ -39,13 +39,13 @@ wait '"Cues, On, Left and right to change\. Turns every cue on or off\."$'
 key Down
 wait "\"Cue volume, slider, 100%\. Left and right to adjust\. The loudness of all cues together, under the master volume; the game's sound effect and music volumes leave cues alone\.\"$"
 key Down
-wait '"Your position cue, On, Left and right to change\. Turns your position cue on or off\."$'
+wait '"Your position cue, On, Left and right to change\. A tick that pans with where you are across the stage, rises in pitch the higher you are, and speeds up as the nearest opponent gets closer\."$'
 key Down
 wait '"Your position cue volume, slider, 100%\. Left and right to adjust\. The loudness of your position cue, under the cue volume\."$'
 key Down
 wait '"Preview your position cue: Play, button\. Plays a short sample of your position cue, as it sounds in a match\."$'
 key Down
-wait "\"Opponent's position cue, On, Left and right to change\. Turns the opponent's position cue on or off\.\"$"
+wait "\"Opponent's position cue, On, Left and right to change\. A lower, rounder pulse at a steady pace that pans and changes pitch with where the nearest opponent is, on the stage or, with relative to you on, from you\.\"$"
 key Down
 wait "\"Opponent's position cue volume, slider, 100%\. Left and right to adjust\. The loudness of the opponent's position cue, under the cue volume\.\"$"
 key Down
@@ -55,13 +55,13 @@ wait "\"Opponent's position cue relative to you, Off, Left and right to change\.
 key Down
 wait "\"Position cues follow the camera, On, Left and right to change\. On, the cues pan across what the camera shows; off, across the whole stage to the side blast zones\. With the opponent's position cue relative to you, it changes only your position cue\.\"$"
 key Down
-wait '"Gap warning, On, Left and right to change\. Turns the gap warning on or off\."$'
+wait '"Gap warning, On, Left and right to change\. A low, steady hum while you are in the air with no floor below you, where falling straight down would knock you out\."$'
 key Down
 wait '"Gap warning volume, slider, 100%\. Left and right to adjust\. The loudness of the gap warning, under the cue volume\."$'
 key Down
 wait '"Preview gap warning: Play, button\. Plays a short sample of the gap warning, as it sounds in a match\."$'
 key Down
-wait '"Ledge warning, On, Left and right to change\. Turns the ledge warning on or off\."$'
+wait '"Ledge warning, On, Left and right to change\. A pulsing chord on the left or right as you near an edge with nothing below it, louder and closer to the centre the nearer you get\."$'
 key Down
 wait '"Ledge warning volume, slider, 100%\. Left and right to adjust\. The loudness of the ledge warning, under the cue volume\."$'
 key Down
@@ -144,7 +144,7 @@ ini '^ledge_warning\.distance = 40$'
 
 # The file keeps its comments and every other line as written.
 ini '^# A change in the game.s menus edits only its own line here\.$'
-ini '^# Turns your position cue on or off\. On or off, default on\.$'
+ini '^# A tick that pans with where you are across the stage, rises in pitch the higher you are, and speeds up as the nearest opponent gets closer\. On or off, default on\.$'
 ini '^opponent_position\.on = on$'
 
 # Down to Resume, which closes the menu, and the game runs again.

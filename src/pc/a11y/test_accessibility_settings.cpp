@@ -115,7 +115,8 @@ struct Fixture {
 
 void a_missing_file_is_written_with_defaults_and_descriptions() {
     Fixture f("defaults.ini");
-    a11y::CueGroup gap = f.cues.add_cue("gap", "Gap warning", 1.5f);
+    a11y::CueGroup gap =
+        f.cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.5f);
     std::vector<const a11y::NamedValue*> changed = f.load();
     assert(changed.empty());
     assert(fs::exists(f.path));
@@ -147,7 +148,7 @@ void a_missing_file_is_written_with_defaults_and_descriptions() {
     /* Read back, the file gives every default. */
     ValueModel again;
     CueSettings again_cues(again);
-    again_cues.add_cue("gap", "Gap warning", 1.5f);
+    again_cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.5f);
     a11y::TextRead read = again.read_text(text);
     assert(read.changed.empty() && read.missing.empty() && read.bad_lines.empty());
 }
@@ -155,7 +156,8 @@ void a_missing_file_is_written_with_defaults_and_descriptions() {
 void the_text_is_parsed_with_spaces_comments_units_and_commas() {
     ValueModel model;
     CueSettings cues(model);
-    a11y::CueGroup gap = cues.add_cue("gap", "Gap warning", 1.0f);
+    a11y::CueGroup gap =
+        cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.0f);
     a11y::TextRead read = model.read_text("\xEF\xBB\xBF# a comment\r\n"
                                           "\r\n"
                                           "  cues.on=OFF   \r\n"
@@ -223,7 +225,8 @@ void an_unreadable_line_keeps_its_last_value_and_is_reported_by_number() {
 
 void a_reload_applies_only_what_changed() {
     Fixture f("reload.ini");
-    a11y::CueGroup gap = f.cues.add_cue("gap", "Gap warning", 1.0f);
+    a11y::CueGroup gap =
+        f.cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.0f);
     f.load();
     const std::string text = read_file(f.path);
     s_lines.clear();
@@ -277,7 +280,8 @@ void an_unknown_key_is_logged_once_and_kept() {
 void a_newly_registered_value_takes_its_default_and_joins_the_file() {
     Fixture f("newer.ini");
     write_file(f.path, "# tuned by hand\ncues.on = on\ncues.volume = 60\n");
-    a11y::CueGroup gap = f.cues.add_cue("gap", "Gap warning", 2.0f);
+    a11y::CueGroup gap =
+        f.cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 2.0f);
     a11y::Number hold = gap.group.add_number(a11y::NumberSpec{"hold", "Gap hold",
         "Ticks the warning holds on after a floor appears.", "ticks", 4.0f, 0.0f, 30.0f, 1.0f});
     f.load();
@@ -300,7 +304,8 @@ void a_newly_registered_value_takes_its_default_and_joins_the_file() {
 void the_model_describes_each_value_for_a_menu() {
     ValueModel model;
     CueSettings cues(model);
-    a11y::CueGroup gap = cues.add_cue("gap", "Gap warning", 1.0f);
+    a11y::CueGroup gap =
+        cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.0f);
     assert(model.groups().size() == 2);
     assert(model.groups()[0].title == "All cues" && model.groups()[0].values.size() == 2);
     assert(model.groups()[1].title == "Gap warning");
@@ -312,7 +317,9 @@ void the_model_describes_each_value_for_a_menu() {
     assert(model.set(volume, 20.0f) && !model.set(volume, 20.0f));
     assert(model.set(volume, 140.0f) && volume.value == 100.0f);
     assert(!model.set(volume, 120.0f));
-    assert(gap.values.cue == 0 && cues.add_cue("ledge", "Ledge warning", 1.0f).values.cue == 1);
+    assert(gap.values.cue == 0 &&
+           cues.add_cue("ledge", "Ledge warning", "Turns the ledge warning on or off.", 1.0f)
+                   .values.cue == 1);
 }
 
 /* Interleaved stereo, rendered in blocks the size of a WASAPI callback. */
@@ -333,8 +340,10 @@ float rms(a11y::CueEngine& engine, int frames) {
 
 void cue_settings_feed_the_volume_chain() {
     Fixture f("engine.ini");
-    a11y::CueGroup gap = f.cues.add_cue("gap", "Gap warning", 1.0f);
-    a11y::CueGroup ledge = f.cues.add_cue("ledge", "Ledge warning", 1.0f);
+    a11y::CueGroup gap =
+        f.cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.0f);
+    a11y::CueGroup ledge =
+        f.cues.add_cue("ledge", "Ledge warning", "Turns the ledge warning on or off.", 1.0f);
     a11y::CueEngine engine({false, "", ""});
     a11y::VoiceSpec spec;
     spec.name = "gap";
@@ -373,7 +382,8 @@ void cue_settings_feed_the_volume_chain() {
 
 void a_menu_change_edits_only_its_own_line() {
     Fixture f("line_edit.ini");
-    a11y::CueGroup gap = f.cues.add_cue("gap", "Gap warning", 1.0f);
+    a11y::CueGroup gap =
+        f.cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.0f);
     /* The player's own order, spacing, comments and a key the game does
      * not know; every value present, so loading appends nothing. */
     const std::string before = "# my own notes\n"
@@ -415,7 +425,8 @@ void a_menu_change_edits_only_its_own_line() {
 void a_line_edit_keeps_line_endings_and_edits_the_line_read() {
     ValueModel model;
     CueSettings cues(model);
-    a11y::CueGroup gap = cues.add_cue("gap", "Gap warning", 1.0f);
+    a11y::CueGroup gap =
+        cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.0f);
     const a11y::NamedValue& volume = gap.values.volume.named();
     model.set(volume, 30.0f);
     assert(model.edit_text("gap.volume = 5\r\ngap.on = on\r\n", volume) ==
@@ -432,8 +443,9 @@ void a_line_edit_keeps_line_endings_and_edits_the_line_read() {
 void a_missing_key_is_added_under_its_group() {
     ValueModel model;
     CueSettings cues(model);
-    a11y::CueGroup gap = cues.add_cue("gap", "Gap warning", 1.0f);
-    cues.add_cue("ledge", "Ledge warning", 1.0f);
+    a11y::CueGroup gap =
+        cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.0f);
+    cues.add_cue("ledge", "Ledge warning", "Turns the ledge warning on or off.", 1.0f);
     const a11y::NamedValue& volume = gap.values.volume.named();
     model.set(volume, 30.0f);
     const std::string entry = "\n# The loudness of the gap warning, under the cue volume. 0 to "
@@ -458,8 +470,9 @@ void a_missing_key_is_added_under_its_group() {
     /* In the file: the player deletes the line, the poll puts the value back
      * to its default, and a menu's change adds the line under its group. */
     Fixture f("under_group.ini");
-    a11y::CueGroup file_gap = f.cues.add_cue("gap", "Gap warning", 1.0f);
-    f.cues.add_cue("ledge", "Ledge warning", 1.0f);
+    a11y::CueGroup file_gap =
+        f.cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.0f);
+    f.cues.add_cue("ledge", "Ledge warning", "Turns the ledge warning on or off.", 1.0f);
     write_file(f.path, head + tail +
                            "ledge.volume = 100\nledge.boost = 1\ncues.volume = 100\n"
                            "gap.volume = 60\n");
@@ -479,7 +492,8 @@ void a_missing_key_is_added_under_its_group() {
 
 void the_games_own_write_is_polled_back_silently() {
     Fixture f("own_write.ini");
-    a11y::CueGroup gap = f.cues.add_cue("gap", "Gap warning", 1.0f);
+    a11y::CueGroup gap =
+        f.cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.0f);
     f.load();
     s_lines.clear();
     f.now += ValueFile::kPollInterval * 3;
@@ -495,14 +509,15 @@ void the_games_own_write_is_polled_back_silently() {
     /* And the file holds the change for the next start. */
     ValueModel again;
     CueSettings again_cues(again);
-    again_cues.add_cue("gap", "Gap warning", 1.0f);
+    again_cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.0f);
     again.read_text(read_file(f.path));
     assert(again.find("gap.volume")->value == 30.0f);
 }
 
 void a_hand_edit_not_yet_polled_survives_a_menu_change() {
     Fixture f("hand_and_menu.ini");
-    a11y::CueGroup gap = f.cues.add_cue("gap", "Gap warning", 1.0f);
+    a11y::CueGroup gap =
+        f.cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.0f);
     f.load();
     std::string text = read_file(f.path);
     text.replace(text.find("cues.volume = 100"), 17, "cues.volume = 40");
@@ -524,13 +539,15 @@ std::string row_name(const a11y::ShownRow& row) {
 void the_shown_rows_list_in_order_with_each_cues_three() {
     ValueModel model;
     CueSettings cues(model);
-    a11y::CueGroup gap = cues.add_cue("gap", "Gap warning", 1.0f);
+    a11y::CueGroup gap =
+        cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.0f);
     a11y::Number hold = gap.group.add_number(
         a11y::NumberSpec{"hold", "Hold", "Ticks of hold.", "ticks", 4.0f, 0.0f, 30.0f, 1.0f});
     a11y::Switch wide =
         cues.add_shared("both", "Both cues")
             .add_switch(a11y::SwitchSpec{"wide", "Wide pan", "Pans wide.", true, true});
-    a11y::CueGroup ledge = cues.add_cue("ledge", "Ledge warning", 1.0f);
+    a11y::CueGroup ledge =
+        cues.add_cue("ledge", "Ledge warning", "Turns the ledge warning on or off.", 1.0f);
     a11y::Number distance = ledge.group.add_number(a11y::NumberSpec{"distance",
         "Ledge warning distance", "How far.", "units", 30.0f, 5.0f, 100.0f, 1.0f, true});
     std::vector<std::string> names;
@@ -566,7 +583,8 @@ void the_settings_tell_their_listener_every_change() {
     s_lines.clear();
     a11y::AccessibilitySettings settings(speech, path.string(), true);
     CueSettings cues(settings.model());
-    a11y::CueGroup gap = cues.add_cue("gap", "Gap warning", 1.0f);
+    a11y::CueGroup gap =
+        cues.add_cue("gap", "Gap warning", "Turns the gap warning on or off.", 1.0f);
     std::vector<std::string> heard;
     auto listener = [&heard](const std::vector<const a11y::NamedValue*>& changed) {
         for (const a11y::NamedValue* named : changed) {

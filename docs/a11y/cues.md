@@ -64,10 +64,11 @@ To show a tuning value, set `shown` where it is registered; to move a row, move 
 
 ### The cues' values
 
-`cue_settings.hpp` registers the values for all cues (a switch and the cue volume, 0 to 100%, both shown) and gives every cue the same three of its own through `add_cue`: a switch and its volume, both shown and followed by the cue's Preview action, and its boost (a factor of 1 to 8 under the volume, for a short click that reads quieter than a held tone), a tuning value. A cue registered with `add_cue` so appears in the menus with no other change. `add_cue` also hands out the cue's number in the engine. The cue then adds its mapping values to the group it got back, as tuning values unless one is worth a row:
+`cue_settings.hpp` registers the values for all cues (a switch and the cue volume, 0 to 100%, both shown) and gives every cue the same three of its own through `add_cue`: a switch, described by what the cue does, and its volume, both shown and followed by the cue's Preview action, and its boost (a factor of 1 to 8 under the volume, for a short click that reads quieter than a held tone), a tuning value. A cue registered with `add_cue` so appears in the menus with no other change. `add_cue` also hands out the cue's number in the engine. The cue then adds its mapping values to the group it got back, as tuning values unless one is worth a row:
 
 ```cpp
-a11y::CueGroup cue = cue_settings.add_cue("your_position", "Your position cue", 2.0f);
+a11y::CueGroup cue = cue_settings.add_cue("your_position", "Your position cue",
+    "A tick that pans with where you are across the stage.", 2.0f);
 a11y::Number pitch_range = cue.group.add_number({"pitch_range", "Pitch range",
     "Octaves from the bottom blast zone to the camera's top.", "", 2.0f, 0.0f, 2.0f, 0.1f});
 ```

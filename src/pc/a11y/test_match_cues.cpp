@@ -155,8 +155,7 @@ void both_cues_register_and_fit() {
     assert(interval->default_value == 0.4f && interval->unit == "s");
     assert(interval->min == a11y::MatchCues::kOpponentFastestInterval);
     assert(f.model.find("opponent_position.boost")->default_value == 3.0f);
-    assert(f.model.find("opponent_position.on")->description ==
-           "Turns the opponent's position cue on or off.");
+    assert(f.model.find("opponent_position.on")->description.starts_with("A lower, rounder pulse"));
 }
 
 void the_gap_warning_registers_after_the_position_cues() {
@@ -173,7 +172,7 @@ void the_gap_warning_registers_after_the_position_cues() {
     const a11y::NamedValue* hold = f.model.find("gap_warning.hold");
     assert(hold->default_value == 10.0f && hold->unit == "ticks");
     assert(f.model.find("gap_warning.boost")->default_value == 1.0f);
-    assert(f.model.find("gap_warning.on")->description == "Turns the gap warning on or off.");
+    assert(f.model.find("gap_warning.on")->description.starts_with("A low, steady hum"));
 }
 
 /* A screen reader that hears nothing, for the switches' speech. */

@@ -37,11 +37,13 @@ public:
     explicit CueSettings(ValueModel& model);
 
     /* Registers a cue's group, titled as the file heads it and the menus
-     * name it ("Your position cue"), with its switch, volume and the boost it
-     * starts with, and gives it the next cue number. The switch and the
-     * volume are shown, followed by an action, Preview, whose group is the
-     * cue's id; the boost is a tuning value. */
-    CueGroup add_cue(const std::string& id, const std::string& title, float default_boost);
+     * name it ("Your position cue"), with its switch, described by what the
+     * cue does, its volume and the boost it starts with, and gives it the
+     * next cue number. The switch and the volume are shown, followed by an
+     * action, Preview, whose group is the cue's id; the boost is a tuning
+     * value. */
+    CueGroup add_cue(const std::string& id, const std::string& title,
+        const std::string& description, float default_boost);
     /* Registers a group for values several cues share, with no cue of its
      * own: no switch, volume or cue number. */
     ValueGroup add_shared(const std::string& id, const std::string& title);

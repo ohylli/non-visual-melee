@@ -300,10 +300,15 @@ MatchCues::LedgeValues MatchCues::add_ledge_values(ValueGroup group) {
 
 MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
     : m_engine(engine),
-      m_your_cue(settings.add_cue(std::string(kYourId), "Your position cue", kYourBoost)),
+      m_your_cue(settings.add_cue(std::string(kYourId), "Your position cue",
+          "A tick that pans with where you are across the stage, rises in pitch the higher you "
+          "are, and speeds up as the nearest opponent gets closer.",
+          kYourBoost)),
       m_your(add_your_values(m_your_cue.group)),
-      m_opponent_cue(
-          settings.add_cue(std::string(kOpponentId), "Opponent's position cue", kOpponentBoost)),
+      m_opponent_cue(settings.add_cue(std::string(kOpponentId), "Opponent's position cue",
+          "A lower, rounder pulse at a steady pace that pans and changes pitch with where the "
+          "nearest opponent is, on the stage or, with relative to you on, from you.",
+          kOpponentBoost)),
       m_opponent(add_opponent_values(m_opponent_cue.group)),
       m_pan_to_camera(settings.add_shared("position_cues", "Position cues")
               .add_switch(SwitchSpec{"pan_to_camera", "Position cues follow the camera",
@@ -311,9 +316,15 @@ MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
                   "the side blast zones. With the opponent's position cue relative to you, it "
                   "changes only your position cue.",
                   StageMapping{}.pan_to_camera, true})),
-      m_gap_cue(settings.add_cue(std::string(kGapId), "Gap warning", kGapBoost)),
+      m_gap_cue(settings.add_cue(std::string(kGapId), "Gap warning",
+          "A low, steady hum while you are in the air with no floor below you, where falling "
+          "straight down would knock you out.",
+          kGapBoost)),
       m_gap(add_gap_values(m_gap_cue.group)),
-      m_ledge_cue(settings.add_cue(std::string(kLedgeId), "Ledge warning", kLedgeBoost)),
+      m_ledge_cue(settings.add_cue(std::string(kLedgeId), "Ledge warning",
+          "A pulsing chord on the left or right as you near an edge with nothing below it, "
+          "louder and closer to the centre the nearer you get.",
+          kLedgeBoost)),
       m_ledge(add_ledge_values(m_ledge_cue.group)) {
     VoiceSpec your =
         position_voice("your position", m_your_cue.values.cue, tick_sound(), kFastestInterval);
