@@ -23,6 +23,16 @@ std::string count_of(int count, std::string_view one, std::string_view many);
 /* A port as the summary names it: "P1" for port 0. */
 std::string port_name(int port);
 
+/* A stats panel page by its number, as the fork names it (the screen shows
+ * no title): "KOs and falls", "Stats", "Bonuses"; nothing for another. */
+std::optional<std::string_view> results_page_name(int page);
+
+/* A stat's label as the screen draws it, made speakable: a space before each
+ * capital that follows a lower-case letter, and each word after the first
+ * lower-cased unless it is all capitals. "DamageGiven" is "Damage given",
+ * "Attempted Grabs" "Attempted grabs", "KOs" stays. */
+std::string stat_label(std::string_view label);
+
 inline constexpr std::string_view kWinner = "Winner: ";
 inline constexpr std::string_view kNoContest = "No contest";
 inline constexpr std::string_view kYou = "you";
@@ -33,5 +43,14 @@ inline constexpr std::string_view kTotal = "total ";
  * sentence. */
 inline constexpr std::string_view kOpeningKeys = "Any button shows the stats.";
 inline constexpr std::string_view kStartWhenReady = "Start when ready.";
+/* Said after the stats panels' first announcement, on the first results of
+ * each game run. */
+inline constexpr std::string_view kStatsKeys =
+    "A and B change page. D-pad up and down read the rows, left and right switch player. Z the "
+    "player's summary. Start when ready.";
+/* A stat the screen draws as "---". */
+inline constexpr std::string_view kNoValue = "none";
+/* A Bonuses page with no row. */
+inline constexpr std::string_view kNoBonuses = "No bonuses";
 
 }  // namespace a11y

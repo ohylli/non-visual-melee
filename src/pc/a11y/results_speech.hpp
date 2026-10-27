@@ -8,17 +8,24 @@
  * with the previous one and touches no game state itself.
  *
  * "You" are the local player: controller 1's port offline, the local
- * player's online, and nobody when that port is a CPU or empty. */
+ * player's online, and nobody when that port is a CPU or empty.
+ *
+ * Once the stats panels open, the reader follows the local port's panel:
+ * its page changes are said, the game's own A, B and stick. The reading
+ * cursor is the fork's own, worked by the local controller's D-pad and Z: a
+ * row of that page for one player, said row by row, switched between
+ * players with only what differs said, and Z for the player's summary
+ * line. */
 #pragma once
 #include "game_access.h"
 #include "game_text.hpp"
+#include "speech.hpp"
+#include <cstdint>
 #include <set>
 #include <string>
 #include <vector>
 
 namespace a11y {
-
-class Speech;
 
 /* Your port, or -1 when nobody is "you". */
 int results_you(const A11yResults& results);
@@ -35,6 +42,17 @@ std::string results_player_name(const A11yResults& results, int port);
  * 0 SDs, not KO'd"; "19400 points" in Bonus mode. */
 std::string results_summary(const A11yResults& results, int port);
 
+/* One row of a stats panel's page as said: a label, and a value except on
+ * a heading. */
+struct ResultsRow {
+    std::string label;
+    std::string value;
+    bool has_value = false;
+
+    /* "Damage given, 87"; "KOs" for a heading. */
+    std::string text() const;
+};
+
 class ResultsSpeech {
 public:
     /* speech must outlive this; text decodes the game's text. */
@@ -49,6 +67,22 @@ public:
 
 private:
     void opening(const A11yResults& results);
+    /* The panels' first announcement: the page and its first row, with the
+     * keys on the first results of the run. */
+    void stats_opened(const A11yResults& results, Mode mode);
+    /* The reading cursor's moves, one press each. */
+    void step(const A11yResults& results, int by);
+    void switch_player(const A11yResults& results, int by);
+    void summary_line(const A11yResults& results);
+    /* The page's name and the cursor player's first row. */
+    std::string page_announcement(const A11yResults& results);
+    /* An opponent as page 0's rows name them: "P2 Mario", their tag in
+     * place of the port where the screen shows it, "you" for yours. */
+    std::string opponent_name(const A11yResults& results, const A11yResultsOpponent& opponent);
+    /* The rows of a player's page, as the screen lists them. */
+    std::vector<ResultsRow> rows(const A11yResults& results, int port, int page);
+    /* Game text made speakable, its trouble logged once; empty for none. */
+    std::string game_words(const std::uint8_t* text, const std::string& what);
     /* The match type's title in the game's words, or empty. */
     std::string match_type(const A11yResults& results);
     void log_once(const std::string& line);
@@ -59,6 +93,14 @@ private:
     bool m_keys_due = true;
     /* This visit's opening has been said. */
     bool m_opened = false;
+    /* No results of this game run has opened the stats panels yet. */
+    bool m_stats_keys_due = true;
+    /* The reading cursor, live once this visit's panels are open: the page
+     * of the panel it follows, the player and the row. */
+    bool m_stats_open = false;
+    int m_page = 0;
+    int m_port = 0;
+    int m_row = 0;
     std::set<std::string> m_logged;
 };
 

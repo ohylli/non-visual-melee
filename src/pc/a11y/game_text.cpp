@@ -202,6 +202,169 @@ DecodedText decode_game_text(const std::uint8_t* bytes, const GameTextSource& so
     return out;
 }
 
+namespace {
+
+/* Shift-JIS row 1's symbols from 0x8140 that have an ASCII form, folded as
+ * the game's encoder folds them, and the few kana marks the name keyboard
+ * offers. */
+const char* shift_jis_symbol(unsigned code) {
+    switch (code) {
+    case 0x8140:
+        return " ";
+    case 0x8141:
+        return "、";
+    case 0x8142:
+        return "。";
+    case 0x8143:
+        return ",";
+    case 0x8144:
+        return ".";
+    case 0x8145:
+        return "・";
+    case 0x8146:
+        return ":";
+    case 0x8147:
+        return ";";
+    case 0x8148:
+        return "?";
+    case 0x8149:
+        return "!";
+    case 0x814F:
+        return "^";
+    case 0x8151:
+        return "_";
+    case 0x815B:
+        return "ー";
+    case 0x815E:
+        return "/";
+    case 0x8160:
+        return "~";
+    case 0x8162:
+        return "|";
+    case 0x8165:
+    case 0x8166:
+        return "'";
+    case 0x8167:
+    case 0x8168:
+        return "\"";
+    case 0x8169:
+        return "(";
+    case 0x816A:
+        return ")";
+    case 0x816D:
+        return "[";
+    case 0x816E:
+        return "]";
+    case 0x816F:
+        return "{";
+    case 0x8170:
+        return "}";
+    case 0x817B:
+        return "+";
+    case 0x817C:
+        return "-";
+    case 0x817E:
+        return "×";
+    case 0x8181:
+        return "=";
+    case 0x8183:
+        return "<";
+    case 0x8184:
+        return ">";
+    case 0x818F:
+        return "￥";
+    case 0x8190:
+        return "$";
+    case 0x8193:
+        return "%";
+    case 0x8194:
+        return "#";
+    case 0x8195:
+        return "&";
+    case 0x8196:
+        return "*";
+    case 0x8197:
+        return "@";
+    default:
+        return nullptr;
+    }
+}
+
+void append_utf8(std::string& out, unsigned point) {
+    if (point < 0x80) {
+        out += static_cast<char>(point);
+    } else if (point < 0x800) {
+        out += static_cast<char>(0xC0 | (point >> 6));
+        out += static_cast<char>(0x80 | (point & 0x3F));
+    } else {
+        out += static_cast<char>(0xE0 | (point >> 12));
+        out += static_cast<char>(0x80 | ((point >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (point & 0x3F));
+    }
+}
+
+/* One two-byte Shift-JIS character; false for one with no mapping here. */
+bool append_shift_jis(std::string& out, unsigned code) {
+    if (const char* symbol = shift_jis_symbol(code)) {
+        out += symbol;
+    } else if (code >= 0x824F && code <= 0x8258) {
+        out += static_cast<char>('0' + (code - 0x824F));
+    } else if (code >= 0x8260 && code <= 0x8279) {
+        out += static_cast<char>('A' + (code - 0x8260));
+    } else if (code >= 0x8281 && code <= 0x829A) {
+        out += static_cast<char>('a' + (code - 0x8281));
+    } else if (code >= 0x829F && code <= 0x82F1) {
+        append_utf8(out, 0x3041 + (code - 0x829F)); /* hiragana */
+    } else if (code >= 0x8340 && code <= 0x837E) {
+        append_utf8(out, 0x30A1 + (code - 0x8340)); /* katakana */
+    } else if (code >= 0x8380 && code <= 0x8396) {
+        append_utf8(out, 0x30E0 + (code - 0x8380)); /* katakana past the gap */
+    } else {
+        return false;
+    }
+    return true;
+}
+
+}  // namespace
+
+DecodedText decode_shift_jis(const char* text) {
+    DecodedText out;
+    if (text == nullptr) {
+        out.malformed = true;
+        return out;
+    }
+    const auto* p = reinterpret_cast<const unsigned char*>(text);
+    while (*p != 0) {
+        unsigned lead = *p;
+        bool two_bytes = (lead >= 0x81 && lead <= 0x9F) || (lead >= 0xE0 && lead <= 0xFC);
+        if (!two_bytes) {
+            if (lead < 0x80) {
+                out.text += static_cast<char>(lead);
+            } else {
+                char buf[24];
+                std::snprintf(buf, sizeof buf, "{sjis %02X}", lead);
+                out.text += buf;
+                out.unknown_glyphs++;
+            }
+            p += 1;
+            continue;
+        }
+        if (p[1] == 0) {
+            out.malformed = true;
+            return out;
+        }
+        unsigned code = (lead << 8) | p[1];
+        if (!append_shift_jis(out.text, code)) {
+            char buf[24];
+            std::snprintf(buf, sizeof buf, "{sjis %04X}", code);
+            out.text += buf;
+            out.unknown_glyphs++;
+        }
+        p += 2;
+    }
+    return out;
+}
+
 std::string one_line(std::string text) {
     for (std::size_t at = text.find('\n'); at != std::string::npos; at = text.find('\n', at)) {
         text.replace(at, 1, " / ");
@@ -211,9 +374,10 @@ std::string one_line(std::string text) {
 
 std::string spoken_text(std::string_view text) {
     constexpr std::string_view kGlyphMark = "{glyph ";
+    constexpr std::string_view kShiftJisMark = "{sjis ";
     std::string out;
     for (std::size_t i = 0; i < text.size(); i++) {
-        if (text.substr(i).starts_with(kGlyphMark)) {
+        if (text.substr(i).starts_with(kGlyphMark) || text.substr(i).starts_with(kShiftJisMark)) {
             std::size_t close = text.find('}', i);
             if (close != std::string_view::npos) {
                 i = close;

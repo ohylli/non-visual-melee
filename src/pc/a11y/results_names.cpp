@@ -47,4 +47,34 @@ std::string port_name(int port) {
     return "P" + std::to_string(port + 1);
 }
 
+std::optional<std::string_view> results_page_name(int page) {
+    constexpr std::string_view kPages[] = {"KOs and falls", "Stats", "Bonuses"};
+    if (page < 0 || page >= static_cast<int>(std::size(kPages))) {
+        return std::nullopt;
+    }
+    return kPages[page];
+}
+
+std::string stat_label(std::string_view label) {
+    auto upper = [](char c) { return c >= 'A' && c <= 'Z'; };
+    auto lower = [](char c) { return c >= 'a' && c <= 'z'; };
+    std::string out;
+    for (std::size_t i = 0; i < label.size(); i++) {
+        char c = label[i];
+        char next = i + 1 < label.size() ? label[i + 1] : '\0';
+        if (i > 0 && upper(c)) {
+            char previous = label[i - 1];
+            if (lower(previous)) {
+                out += ' ';
+            }
+            /* A word's capital, not an abbreviation's ("KOs"). */
+            if ((lower(previous) || previous == ' ') && lower(next)) {
+                c = static_cast<char>(c - 'A' + 'a');
+            }
+        }
+        out += c;
+    }
+    return out;
+}
+
 }  // namespace a11y

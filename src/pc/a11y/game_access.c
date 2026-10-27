@@ -15,6 +15,9 @@
 #include <melee/ft/kinds/ftCommon/forward.h>
 #include <melee/ft/types.h>
 #include <melee/gm/forward.h>
+#include <melee/gm/gm_16F1.h>
+#include <melee/gm/gm_17AD.h>
+#include <melee/gm/gm_17BA.h>
 #include <melee/gm/gm_1884.h>
 #include <melee/gm/gmmain_lib.h>
 #include <melee/gm/gmonlinemode.h>
@@ -808,6 +811,103 @@ static int results_place(const MatchEnd* me, int winner, int slot) {
     return slot == winner ? 0 : me->team_standings[player->team].is_big_loser;
 }
 
+/* The Stats page's rows (lbl_803D6558 in gmresult.c): each stat's label row
+ * by its SdRst number, the value row's own string following it, and the
+ * function that gives the value row's number. */
+typedef struct A11yResultsStatRow {
+    int label;
+    s32 (*value)(s32 slot);
+} A11yResultsStatRow;
+
+static s32 results_stat_transformation(s32 slot) {
+    return fn_8017BB30(slot);
+}
+
+static s32 results_stat_drought(s32 slot) {
+    return fn_8017BACC(slot);
+}
+
+static const A11yResultsStatRow k_results_stat_rows[A11Y_RESULTS_STAT_COUNT] = {
+    {10, fn_8017AE0C},
+    {14, fn_8017B010},
+    {12, fn_8017B21C},
+    {16, fn_8017B280},
+    {18, fn_8017B2E4},
+    {20, fn_8017B348},
+    {22, fn_8017B3AC},
+    {24, fn_8017B410},
+    {26, fn_8017B4D0},
+    {28, fn_8017B534},
+    {30, fn_8017B598},
+    {32, fn_8017B5FC},
+    {34, fn_8017B660},
+    {36, fn_8017B6C4},
+    {38, fn_8017B728},
+    {40, fn_8017B78C},
+    {42, fn_8017B7F0},
+    {44, fn_8017B854},
+    {46, fn_8017B8B8},
+    {48, fn_8017B91C},
+    {50, fn_8017B9F4},
+    {52, results_stat_drought},
+    {54, results_stat_transformation},
+};
+
+/* The KOs and falls page's headings (lbl_803D6488). */
+enum {
+    A11Y_RESULTS_KOS_HEADING = 8,
+    A11Y_RESULTS_FALLS_HEADING = 9,
+    A11Y_RESULTS_SDS_HEADING = 12
+};
+
+/* The name tag slot that means none: the row shows the port (fn_8017BB94). */
+enum { A11Y_RESULTS_NO_TAG = 0x78 };
+
+/* The KOs and falls page's rows for one panel (lbl_803D6488): a row per other
+ * player, shown where the game's own test (fn_801743C4, fn_8017AE70 and its
+ * kin) finds a player in that port. */
+static void results_opponents(const MatchEnd* me, int slot, A11yResultsPlayer* row) {
+    const MatchPlayerData* self = &me->player_standings[slot];
+    for (int i = 0; i < A11Y_RESULTS_PORTS; i++) {
+        const MatchPlayerData* other = &me->player_standings[i];
+        if (i == slot || other->pkind == Gm_PKind_NA) {
+            continue;
+        }
+        A11yResultsOpponent* opponent = &row->opponents[row->opponent_count++];
+        opponent->port = i;
+        opponent->kos = results_clamp(self->kills[i], 999999);
+        opponent->falls = results_clamp(other->kills[slot], 999999);
+        if (other->x4 != A11Y_RESULTS_NO_TAG) {
+            const char* name = GetPersistentNameData(other->x4)->namedata;
+            memcpy(opponent->tag, name, sizeof(opponent->tag) - 1);
+        }
+    }
+    row->page_sds = fn_8017B21C(slot);
+}
+
+/* The Bonuses page's rows for one panel, as fn_80174468 draws them: each
+ * bonus the player earned, in the table's order. The count the page uses
+ * (lbl_8046E190) is set on entry by fn_80174284, which also records the
+ * bonuses, so it is counted again here, the same way. */
+static void results_bonuses(const MatchEnd* me, int slot, A11yResultsPlayer* row) {
+    if (fn_801701B8() != 0) {
+        return;
+    }
+    const struct UnkResultPlayerData* earned = &me->x44C[slot];
+    for (int i = 0; i < 0x100 && row->bonus_count < A11Y_RESULTS_MAX_BONUSES; i++) {
+        if (earned->x0[i] == 0) {
+            continue;
+        }
+        A11yResultsBonus* bonus = &row->bonuses[row->bonus_count++];
+        bonus->kind = fn_8016F1F0(i);
+        int text = gm_8016F208(bonus->kind);
+        if (text != 0) {
+            bonus->name = a11y_game_results_string((u16)(text - 2) + 60);
+        }
+        bonus->points = earned->x104[i];
+    }
+}
+
 static A11yCharacter results_character(const MatchPlayerData* player) {
     /* As the results model (fn_8017A67C) and the announcer (fn_80168E54)
      * choose between the two. */
@@ -840,6 +940,22 @@ void a11y_game_results(int local_port, A11yResults* out) {
         out->match_type_text =
             a11y_game_results_string(k_results_match_type_strings[me->match_kind]);
     }
+    out->page_count = data->num_pages;
+    out->kos_heading = a11y_game_results_string(A11Y_RESULTS_KOS_HEADING);
+    out->falls_heading = a11y_game_results_string(A11Y_RESULTS_FALLS_HEADING);
+    out->sds_heading = a11y_game_results_string(A11Y_RESULTS_SDS_HEADING);
+    for (int i = 0; i < A11Y_RESULTS_STAT_COUNT; i++) {
+        out->stat_labels[i][0] = a11y_game_results_string(k_results_stat_rows[i].label);
+        out->stat_labels[i][1] = a11y_game_results_string(k_results_stat_rows[i].label + 1);
+    }
+    if (local_port >= 0 && local_port < A11Y_RESULTS_PORTS) {
+        u32 pressed = HSD_PadCopyStatus[local_port].trigger;
+        out->pressed_up = (pressed & HSD_PAD_DPADUP) != 0;
+        out->pressed_down = (pressed & HSD_PAD_DPADDOWN) != 0;
+        out->pressed_left = (pressed & HSD_PAD_DPADLEFT) != 0;
+        out->pressed_right = (pressed & HSD_PAD_DPADRIGHT) != 0;
+        out->pressed_z = (pressed & HSD_PAD_Z) != 0;
+    }
     int winner = data->x6 < A11Y_RESULTS_PORTS ? data->x6 : 0;
     for (int i = 0; i < A11Y_RESULTS_PORTS; i++) {
         const MatchPlayerData* player = &me->player_standings[i];
@@ -869,6 +985,13 @@ void a11y_game_results(int local_port, A11yResults* out) {
         row->score =
             results_clamp(player->score, me->match_kind == MatchKind_Bonus ? 9999999 : 9999);
         row->coins = results_clamp(results_clamp(player->x1C, 999999), 99999);
+        row->page = (A11yResultsPage)data->player_data[i].page;
+        row->ready = data->player_data[i].x0_0;
+        results_opponents(me, i, row);
+        for (int stat = 0; stat < A11Y_RESULTS_STAT_COUNT; stat++) {
+            row->stats[stat] = k_results_stat_rows[stat].value(i);
+        }
+        results_bonuses(me, i, row);
     }
 }
 

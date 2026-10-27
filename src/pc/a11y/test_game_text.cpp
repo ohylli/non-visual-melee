@@ -153,7 +153,35 @@ void stops_on_what_it_cannot_follow() {
 
 }  // namespace
 
+void shift_jis_name_tags_decode() {
+    /* Full-width letters, digits and the name keyboard's symbols fold to
+     * ASCII; the ideographic space too. */
+    a11y::DecodedText tag = a11y::decode_shift_jis(
+        "\x82\x60\x82\x61\x82\x81\x82\x4f\x82\x58\x81\x40\x81\x44\x81\x90\x81\x95\x81\x93\x81\x97"
+        "\x81\x48\x81\x49\x81\x81\x81\x7b\x81\x7c");
+    assert(tag.text == "ABa09 .$&%@?!=+-");
+    assert(tag.unknown_glyphs == 0 && !tag.malformed);
+    /* The port as the screen draws it without a tag. */
+    assert(a11y::decode_shift_jis("\x82\x6f\x82\x51").text == "P2");
+    /* Plain ASCII passes through. */
+    assert(a11y::decode_shift_jis("Abc 1").text == "Abc 1");
+    /* Kana, the long vowel mark and the full stop of the Japanese keyboard. */
+    assert(
+        a11y::decode_shift_jis("\x82\xa0\x82\xf1\x83\x41\x83\x93\x83\x94\x81\x5b\x81\x42").text ==
+        "あんアンヴー。");
+    /* Anything else is marked and counted; a lead byte with no trail stops. */
+    a11y::DecodedText other = a11y::decode_shift_jis("A\x88\x9f"
+                                                     "B");
+    assert(other.text == "A{sjis 889F}B");
+    assert(other.unknown_glyphs == 1 && !other.malformed);
+    a11y::DecodedText cut = a11y::decode_shift_jis("A\x82");
+    assert(cut.text == "A" && cut.malformed);
+    assert(a11y::spoken_text(other.text) == "AB");
+    assert(a11y::decode_shift_jis(nullptr).malformed);
+}
+
 int main() {
+    shift_jis_name_tags_decode();
     skips_formatting_commands();
     line_commands_become_one_break();
     follows_calls_and_jumps();

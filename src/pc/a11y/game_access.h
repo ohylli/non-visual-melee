@@ -618,9 +618,42 @@ typedef enum A11yResultsSlot {
     A11Y_RESULTS_CPU = 2,
 } A11yResultsSlot;
 
+/* The stats panel's pages, by the scene's numbers. */
+typedef enum A11yResultsPage {
+    A11Y_RESULTS_PAGE_KOS = 0,
+    A11Y_RESULTS_PAGE_STATS = 1,
+    A11Y_RESULTS_PAGE_BONUSES = 2,
+} A11yResultsPage;
+
+/* The Stats page's rows, one per stat (each drawn as a label row and a value
+ * row below it), and the most Bonuses rows the snapshot keeps. */
+enum { A11Y_RESULTS_STAT_COUNT = 23, A11Y_RESULTS_MAX_BONUSES = 64 };
+
+/* One row of the KOs and falls page's two lists: another player, the KOs
+ * the panel's player dealt them and the times they KO'd the panel's
+ * player. */
+typedef struct A11yResultsOpponent {
+    int port;
+    /* The opponent's name tag where the screen shows it, Shift-JIS, copied
+     * with a terminator the game's eight bytes may lack; empty where it
+     * shows the port ("P2"). */
+    char tag[9];
+    int kos;
+    int falls;
+} A11yResultsOpponent;
+
+/* One row of the Bonuses page. */
+typedef struct A11yResultsBonus {
+    /* The bonus's number in the game's table (fn_8016F1F0). */
+    int kind;
+    /* Its name as game text (SdRst), or NULL. */
+    const uint8_t* name;
+    int points;
+} A11yResultsBonus;
+
 /* One port's column of the summary table, as the screen shows it: the
- * numbers already clamped as the screen clamps them. Zero for an empty
- * port. */
+ * numbers already clamped as the screen clamps them, and the rows of its
+ * stats panel. Zero for an empty port. */
 typedef struct A11yResultsPlayer {
     A11yResultsSlot slot;
     /* The character the player ended as: Zelda or Sheik by the form they
@@ -648,6 +681,23 @@ typedef struct A11yResultsPlayer {
     int score;
     /* Coin: the coins. */
     int coins;
+
+    /* The stats panel: its page, and whether the player is ready (closed
+     * the panel with Start). CPUs and empty ports are ready from the
+     * panels' opening. */
+    A11yResultsPage page;
+    bool ready;
+    /* The KOs and falls page: every other player, by port, and the SDs
+     * row's count. */
+    A11yResultsOpponent opponents[A11Y_RESULTS_PORTS - 1];
+    int opponent_count;
+    int page_sds;
+    /* The Stats page's values in the rows' order; a negative one is drawn
+     * as "---". */
+    int stats[A11Y_RESULTS_STAT_COUNT];
+    /* The Bonuses page, in the order drawn. */
+    A11yResultsBonus bonuses[A11Y_RESULTS_MAX_BONUSES];
+    int bonus_count;
 } A11yResultsPlayer;
 
 typedef struct A11yResults {
@@ -670,6 +720,26 @@ typedef struct A11yResults {
     int local_port;
     /* The match type's title as game text (SdRst), or NULL. */
     const uint8_t* match_type_text;
+    /* The stats panel's pages: 3, or 2 on a cancelled match, which has no
+     * Bonuses page. */
+    int page_count;
+    /* The KOs and falls page's headings as game text (SdRst), or NULL:
+     * "KOs", "Falls" and "SDs". */
+    const uint8_t* kos_heading;
+    const uint8_t* falls_heading;
+    const uint8_t* sds_heading;
+    /* The Stats page's labels as game text (SdRst), the same for every
+     * player: one string per screen row, so a label drawn over two rows
+     * ("Attempted", "Grabs") has a second, NULL otherwise. */
+    const uint8_t* stat_labels[A11Y_RESULTS_STAT_COUNT][2];
+    /* The buttons the local player's controller newly pressed this tick that
+     * the reading cursor uses: the local port's pad, online its player's
+     * synced input. */
+    bool pressed_up;
+    bool pressed_down;
+    bool pressed_left;
+    bool pressed_right;
+    bool pressed_z;
     A11yResultsPlayer players[A11Y_RESULTS_PORTS];
 } A11yResults;
 

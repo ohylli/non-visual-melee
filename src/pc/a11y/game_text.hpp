@@ -31,12 +31,21 @@ struct DecodedText {
  * and calls into other strings. */
 DecodedText decode_game_text(const std::uint8_t* bytes, const GameTextSource& source);
 
+/* A Shift-JIS (CP932) C string, as the game keeps name tags: plain ASCII,
+ * full-width letters, digits and the name keyboard's symbols folded to ASCII
+ * as the game's encoder folds them, the ideographic space to a space, and
+ * kana as kana. Any other character appears as "{sjis XXXX}" and counts as
+ * an unknown glyph, which spoken_text leaves out; a lead byte with no trail
+ * byte, or a null pointer, marks the text malformed. */
+DecodedText decode_shift_jis(const char* text);
+
 /* Decoded text for a log line, its breaks shown as " / " and its unknown
  * glyphs left marked. */
 std::string one_line(std::string text);
 
 /* Decoded text as one spoken line: the lines of wrapped text joined by a
- * space, the marks of unknown glyphs ("{glyph 4000}") left out. */
+ * space, the marks of unknown glyphs ("{glyph 4000}", "{sjis 889F}") left
+ * out. */
 std::string spoken_text(std::string_view text);
 
 }  // namespace a11y
