@@ -106,7 +106,7 @@ Most game text passes through those three functions, but not all. `HSD_SisLib_80
 
 ### Decoding game text
 
-The first experiment decoded every string of `SdMenu.usd` on an NTSC-U disc, all 1604 of them, and the description line as the player moves through the main menu tree. Run it with `MELEE_A11Y_TEXT_DUMP=1` and a drive to the main menu; the whole table is logged on the menu scene's first frame, and character select's (`SdSlChr`) on its first frame.
+The first experiment decoded every string of `SdMenu.usd` on an NTSC-U disc, all 1604 of them, and the description line as the player moves through the main menu tree. Run it with `MELEE_A11Y_TEXT_DUMP=1` and a drive to the main menu; the whole table is logged on the menu scene's first frame, character select's (`SdSlChr`) on its first frame and results' (`SdRst`) on its first tick.
 
 - **The English text decodes.** Every string came out as the screen shows it, with no command the decoder did not know; the decoder follows the jump and call commands and skips colour, scale, spacing, alignment and timing by their operand sizes, as the renderer (`HSD_SisLib_803A84BC`) does.
 - **The atlas table is exact.** The encoder's two tables (`lbl_8040C8C0`, Shift-JIS per entry, and `HSD_SisLib_8040C680`, glyph code per entry) pair up one to one over all 287 atlas glyphs: digits, Latin letters, kana, punctuation and 23 kanji. The decoder keeps its own copy, since PAL rewrites `HSD_SisLib_8040C680` at startup.
@@ -195,7 +195,7 @@ Every mode's character and stage select is the same screen: the mode is a `CSSMa
 
 ### After a match and between matches
 
-- **Results** (`src/melee/gm/gmresult.c`, `gmresultplayer.c`): per-player pages of summary and statistics, game text (`SdRst`). The screen moves on when every human player has pressed Start.
+- **Results** (`src/melee/gm/gmresult.c`, `gmresultplayer.c`): the summary table, then per-player pages of statistics, game text (`SdRst`). The screen moves on when every human player has pressed Start. See [Results in detail](#results-in-detail).
 - **1P mode screens**: intro splashes (`SdIntro`), the Continue decision (`gmregclear.c`, `SdDec`), clear screens (`SdClr`), game over and "coming soon" scenes, "New Challenger" (`gmapproach.c`). Mostly sequences with one prompt.
 - **Unlock notice** (`src/melee/if/ifprize.c`, `GS_PRIZE_INTERFACE`): shown after a VS or Special Melee match, or a challenger fight, that unlocked something.
 - **Tournament** (`src/melee/gm/gmtou_0.c` for setup, `gmtou_1.c` for the bracket, `gmtou_2.c` for choices between rounds): cursor menus with game text. Large, only skimmed.
@@ -271,6 +271,53 @@ The rows, by `x00`, with the values `menu_values[row]` keeps, in the order Right
 
 The item table holds Item Switch's items but the Party Ball, in another order, and a 31st entry, no item, out of the cursor's reach. Since the table is static, the fork keeps a copy of its kinds (`training_names.cpp`) and names the items by `ItemKind` from one table shared with Item Switch (`item_names.cpp`), so an item is named the same on both screens.
 
+## Results in detail
+
+Results is one scene, `GS_RESULTS`, for VS, every Special Melee mode, Tournament, online play and the debug VS match. The announcer names the winner while the scene builds; then the summary table shows every player's place and a few numbers, and the first press from anyone opens a stats panel per player, which each player pages through and closes with Start. The fork reads it in `results_speech.cpp`, from a snapshot `game_access.c` takes once a tick (`a11y_game_results`).
+
+### State and flow
+
+- **Where it lives.** `lbl_8046DBE8` (`ResultsData`, `gm/types.h`), a global of `gmresult.c` declared in no header, holds the scene's state in `x1`, a sub-phase of state 3 in `x0_23`, the frames since entry in `x8`, the winner in `x4`, `x5` and `x6`, and per slot the panel's page and ready flag. `x94` points to the `MatchEnd` the match left, which holds everything the summary shows. The scene's entry zeroes the struct and sets `x94` before the fork's scene hook runs.
+- **The states**, in order: 0, the announcer runs on a frame count (`fn_80179350`) and no press counts, except that on a cancelled match a human's Start skips it; 1, the summary table animates in, 40 frames; 2, the table is up and the first new press from any connected human opens every stats panel (`fn_80177920`), so state 2 always lasts at least one tick; 3, the panels (`fn_80178050`); 4, everyone is ready, a short delay, and the scene leaves.
+- **State 3's sub-phase.** `x0_23` is 0 while the panels slide open; on the tick their animation reaches its end it goes to 1 and at once to 2, so between ticks it reads 0 or 2. The panels take input from 2.
+- **The opening's moment.** About 3.3 seconds after entry, the announcer having named the winner, the scene reaches state 2; on a No Contest, as soon as Start has skipped the wait. The fork says its opening on the first tick it sees state 2 or later and nothing before; the scene speech table leaves results silent.
+- **Static values.** Two values the screen depends on are static and must be recomputed, never read: `lbl_8046E190`, the Bonuses page's row counts, and `lbl_804D3FC8` in `gmresultplayer.c`, whether no human is playing. `fn_80174284` must not be called: it records each bonus as a side effect.
+
+### What the summary table shows
+
+`MatchEnd.player_standings[i]` is port *i*. The fork recomputes each cell the way the drawing code does, clamps included, so the snapshot holds what the screen shows:
+
+- **The match type**, SdRst strings 2 to 5 by `match_kind`: "Time Battle", "Stock Battle", "Coin Battle", "Bonus Battle" (`fn_80175DC8`).
+- **KOs** (`x20`), **Falls** (`x24` less the self-destructs) and **SDs** (`self_destructs`), each clamped to 999 (`fn_80175240`). Bonus mode shows none of the three.
+- **The last row** (`fn_80175A94`): Stock the KO time, `x28` frames as m:ss up to 99:59, or "-:-" for the player the banner names, a player still in, a winning-team player still in or knocked out on the match's last frame, or on a cancelled match a player still in or level with the winner (`fn_80175880`); Time the total, `score` clamped to 9999 and drawn with its sign; Coin the coins, `x1C`; Bonus the points, `score`, drawn as a dash on a cancelled match.
+- **The character** comes from `ckind`, with Zelda and Sheik by the form the player ended in (`ftkind`), as the results model (`fn_8017A67C`) and the announcer (`fn_80168E54`) choose; the name is drawn as an image, so the fork names it from its own table.
+- **Empty ports** show "NO ENTRANT"; the fork leaves them out.
+
+### Winner and places
+
+- **The banner.** Outside teams it names `x6`, which equals `x4`: the highest port whose `is_small_loser` is 0 (`fn_80165418`). In a team match it names the team `x5`, the last active team whose own `is_small_loser` is 0 (`fn_801654A0`), and `x6` is the player of that team with the lowest `is_small_loser` (`fn_801771C0`). A cancelled match shows "NO CONTEST".
+- **Place images** (`fn_80177748`). Outside teams, the player with `is_small_loser` 0 gets the winner's image (1st with a crown) and everyone else the image of their `is_big_loser`, 0 for 1st to 3 for 4th; in a team match the player in `x6` gets the winner's image and everyone else their team's `is_big_loser`. A cancelled match shows no place.
+- **Ties.** `is_big_loser` is the place, shared by tied players; `is_small_loser` is the game's order with ties broken, so it tells which tied player the banner names. The fork says players by place, the banner's player first among the tied, then by `is_small_loser` and port. Read from the code; no driven run has met a tie yet.
+- **Teams.** `player_standings[i].team` numbers the teams as character select does: 0 red, 1 blue, 2 green; the summary's colours agree (`fn_8017507C`).
+
+### Game text
+
+Font slot 0 holds `SIS_ResultData` (SdRst), 317 strings on an NTSC-U disc, all decoding, none malformed. The fork reads it by number through `a11y_game_results_string`, which checks the symbol, as `menu_string` does for the menus.
+
+- **Match types**: 2 to 5, as above; 0 and 1 are empty, 6 and 7 Japanese leftovers in font glyphs.
+- **Stat labels**: 8 to 55, the label of each row of the stats lists (`lbl_803D6488` and `lbl_803D6558` in `gmresult.c`) by the entry's number. They are drawn without spaces ("DamageGiven", "HitPercentage", "TopSpeed"); the empty strings between them belong to the rows that carry a value. Two labels span two strings, one per row: "Attempted" and "Grabs" (38, 39), "Transformation" and "Time" (54, 55).
+- **Bonus names**: from 60 ("First Place", "Last Place", "Wire to Wire", ...); the code adds 60 to the bonus's number (`fn_80174468`). 56 to 59 are "Friendly Fire", "Coin Points", "Swiped Coins" and "Lost Coins". One font glyph, 0x4000, is the é of "Pokémon KO" (285).
+- **No units.** Neither "%" nor a distance unit is among the strings: they come with the value's own formatting.
+- **PAL.** `pc_region_sis_index` has no shift for this table; whether the PAL table numbers its strings the same is unchecked, for want of a PAL disc.
+
+### Name tags
+
+Page 0's opponent rows name a player by their tag where they have one (`fn_8017BB94`): `player_standings[i].x4` is the tag's slot, 0x78 for none, which draws "Ｐ２" (full-width, on a US language setting) and otherwise `GetPersistentNameData(slot)->namedata`, a Shift-JIS C string formatted into the text at runtime. The fork decodes no tag anywhere yet; `game_text.cpp` decodes the SIS byte code, not Shift-JIS, though the game's encoder table it was built from pairs each atlas glyph with its Shift-JIS code.
+
+### Where the fork reads it
+
+The match's tick hook (`pc_a11y_match_tick`) runs after every tick in every scene, results included, after the scene's own update. On results it hands the scene to the reader behind the usual speech gate; outside fights the netcode runs in lockstep, so results is never re-run. The scene hook marks each visit. "You" are controller 1's port offline and `pc_net_local_player()` online, and nobody when that port holds a CPU or nobody, as in the debug match with four CPUs.
+
 ## Candidate hook points
 
 Speculative: places the code offers, not decisions.
@@ -286,6 +333,7 @@ Speculative: places the code offers, not decisions.
   - every other screen keeps its own state (Rumble in `MnVibrationData`; event match, the other records pages, the sound test, the snapshot album, the movie gallery, Erase data).
 - **Something happened**: `lbAudioAx_80024030`, the menu sound function. One hook there tells the fork the player moved, confirmed, cancelled or was refused, on almost every native menu, including screens outside `mn/`. It carries no context, but it tells a poller when to look, and the refused sound explains a press that changed nothing.
 - **Training menu**: polled from the match's tick hook, which needs nothing new (see [The Training menu in detail](#the-training-menu-in-detail)).
+- **Results**: polled from the same tick hook (see [Results in detail](#results-in-detail)).
 - **Character select**: the fork polls once a frame, as for the main menu tree, through the frame hook, with each hand's and each coin's numbers caught as they update. A carried coin entering or leaving a portrait shows in `doors[i].sel_icon_prev` together with the hand's state (`sel_icon` alone misses leaving and re-entering the same one, and holds the placeholder after a pickup); a pickup, a choice, B and the coin carried down show in the hand's state and the door's `sel_icon` and character. Changes of `p_kind` (human, CPU or closed) and `mnCharSel_804D6CF7` going from zero to nonzero (Ready to Fight shown; while shown it counts animation frames) are read the same way. The confirm path that calls the announcer is no hook point: hook the character select call sites, not `gm_80168C5C` itself, which other screens call too.
 - **Stage select**: the fork polls once a frame through a hook at the top of `mnStageSel_Scene_OnFrame`, which hands over the screen's private state: the table of tiles, `mnStageSel_804D6CAE`, the pick state and the buttons the screen read. The pick runs in an object's update after the frame function, before the cursor's own update, so the buttons a poll sees acted on the tile the previous poll saw hovered. The tile table's row type is private to `mnstagesel.c`, so the fork keeps a copy of its layout and the hook passes the row's size to check it against. Steering's glide advances in a second hook, in the cursor's update after its clamp, which passes the cursor's position and the stick that moved it; that update returns early once a pick is made, so the hook falls silent there. Online, the frame function resolves the two players' picks once both are known and leaves on that same frame, after the frame hook has run, so a third hook at the resolution passes the stage's tile and both picks.
 - **Game text**: the three functions in [Game text](#game-text) see most text as it is set. Whether a generic text reader built on them is useful, or too noisy without knowing which screen a text belongs to, is open.
@@ -324,6 +372,6 @@ Terms this document uses that may deserve a place in `CONTEXT.md`:
 
 ### Open questions
 
-- Does decoding game text by number work for all English strings? For the main menu's table it does (see [Decoding game text](#decoding-game-text)); still to check are the other archives (character select, training, results, trophies, message windows), their font glyphs, and a PAL disc.
+- Does decoding game text by number work for all English strings? For the main menu's table it does (see [Decoding game text](#decoding-game-text)); results' `SdRst` decodes too ([Results in detail](#results-in-detail)); still to check are the other archives (character select, training, trophies, message windows), their font glyphs, and a PAL disc.
 - Where a string table entry is patched at runtime, is its number still a usable key?
 - How much of the trophy, snapshot and tournament code is worth reading before those screens are in scope?

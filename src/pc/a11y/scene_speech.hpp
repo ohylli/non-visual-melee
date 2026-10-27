@@ -2,9 +2,9 @@
 /* Scene speech: names the scene the player has arrived in, once it has loaded,
  * from a table keyed by the scene's kind. Scenes to operate get their name and
  * "No speech yet.", things to watch their name and the way out, and matches,
- * the main menu tree, character select and stage select nothing, since the
- * last three speak their own opening (.scratch/main-menu-tree/spec.md, "Scene
- * announcements"). */
+ * the main menu tree, character select, stage select and results nothing,
+ * since the last four speak their own opening (.scratch/main-menu-tree/spec.md,
+ * "Scene announcements"). */
 #pragma once
 #include "scene_kinds.h"
 #include <optional>
@@ -21,10 +21,9 @@ enum class SceneKind : int {
 #undef A11Y_SCENE_KIND_ENUMERATOR
 };
 
-/* What is said on entering a scene of this kind, in a netplay session when
- * online: empty for a silent scene, nothing for a kind missing from the
- * table. */
-std::optional<std::string_view> scene_announcement(int scene_kind, bool online);
+/* What is said on entering a scene of this kind: empty for a silent scene,
+ * nothing for a kind missing from the table. */
+std::optional<std::string_view> scene_announcement(int scene_kind);
 
 class SceneSpeech {
 public:
@@ -34,8 +33,8 @@ public:
     /* A scene has loaded and its first frame is next. Every arrival is
      * announced, even in the scene just left: character select after results
      * is a new arrival. A kind missing from the table stays silent and is
-     * logged, once per kind. online: a netplay session is running. */
-    void entered(int scene_kind, bool online);
+     * logged, once per kind. */
+    void entered(int scene_kind);
 
 private:
     Speech& m_speech;

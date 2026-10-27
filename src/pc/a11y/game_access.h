@@ -581,6 +581,107 @@ typedef struct A11yTrainingMenu {
 /* Fills the snapshot from game memory. Reads only. */
 void a11y_game_training_menu(A11yTrainingMenu* out);
 
+/* Results (GS_RESULTS), read once a tick by its reader
+ * (.scratch/results/spec.md) from lbl_8046DBE8 and the MatchEnd it points to
+ * (gmresult.c, gmresultplayer.c). Slot i is port i; the screen shows four. */
+enum { A11Y_RESULTS_PORTS = 4 };
+
+/* The scene's state (lbl_8046DBE8.x1), by the scene's numbers. */
+typedef enum A11yResultsState {
+    /* The announcer names the winner on a frame count; no press counts,
+     * but on a cancelled match a human's Start skips the wait. */
+    A11Y_RESULTS_ANNOUNCING = 0,
+    /* The summary table animates in. */
+    A11Y_RESULTS_SLIDING = 1,
+    /* The summary table is up: the first state where a press counts, and
+     * any press from a connected human opens every stats panel. */
+    A11Y_RESULTS_SUMMARY = 2,
+    /* The stats panels, each worked by its port's controller. */
+    A11Y_RESULTS_STATS = 3,
+    /* Every panel is ready: a short delay, then the scene leaves. */
+    A11Y_RESULTS_LEAVING = 4,
+} A11yResultsState;
+
+/* MatchKind, by the decomp's numbers (checked in game_access.c). */
+typedef enum A11yResultsMatchKind {
+    A11Y_RESULTS_TIME = 0,
+    A11Y_RESULTS_STOCK = 1,
+    A11Y_RESULTS_COIN = 2,
+    A11Y_RESULTS_BONUS = 3,
+} A11yResultsMatchKind;
+
+/* A port's slot. A demo slot, which no results screen should meet, reads as
+ * a CPU. */
+typedef enum A11yResultsSlot {
+    A11Y_RESULTS_EMPTY = 0,
+    A11Y_RESULTS_HUMAN = 1,
+    A11Y_RESULTS_CPU = 2,
+} A11yResultsSlot;
+
+/* One port's column of the summary table, as the screen shows it: the
+ * numbers already clamped as the screen clamps them. Zero for an empty
+ * port. */
+typedef struct A11yResultsPlayer {
+    A11yResultsSlot slot;
+    /* The character the player ended as: Zelda or Sheik by the form they
+     * were in at the end, as the results screen's model and the announcer
+     * have it. */
+    A11yCharacter character;
+    /* The team in a team match: 0 red, 1 blue, 2 green. */
+    int team;
+    /* The place image, from 0 for 1st; tied players share it. -1 on a
+     * cancelled match, which shows none. */
+    int place;
+    /* The game's order among players (is_small_loser): unique where places
+     * tie, 0 for the winner. */
+    int rank;
+    /* The KOs, Falls and SDs rows. */
+    int kos;
+    int falls;
+    int sds;
+    /* Stock: the screen shows the time the player was knocked out, in whole
+     * seconds; false where it shows "-:-" (a survivor, the winner, or the
+     * winning team's players still in or knocked out on the last frame). */
+    bool knocked_out;
+    int ko_seconds;
+    /* Time: the total, -9999 to 9999. Bonus: the points. */
+    int score;
+    /* Coin: the coins. */
+    int coins;
+} A11yResultsPlayer;
+
+typedef struct A11yResults {
+    /* The scene has its MatchEnd; nothing below is filled otherwise. */
+    bool valid;
+    A11yResultsState state;
+    /* State 3's sub-phase (x0_23): 0 while the stats panels slide open, 2
+     * once they take input (1 lasts only within the tick they finish). */
+    int phase;
+    A11yResultsMatchKind match_kind;
+    bool teams;
+    /* No Contest or Retry: no places, no Bonuses page. */
+    bool cancelled;
+    /* The port the winner's banner names (x6), and the winning team (x5) in
+     * a team match. Meaningless on a cancelled match. */
+    int winner;
+    int winning_team;
+    /* The port the local player plays on: controller 1's offline, the local
+     * player's online. Set by the caller, not read from the screen. */
+    int local_port;
+    /* The match type's title as game text (SdRst), or NULL. */
+    const uint8_t* match_type_text;
+    A11yResultsPlayer players[A11Y_RESULTS_PORTS];
+} A11yResults;
+
+/* Fills the snapshot from game memory. Meaningless outside the results
+ * scene, where lbl_8046DBE8 keeps whatever the last visit left. Reads
+ * only. */
+void a11y_game_results(int local_port, A11yResults* out);
+
+/* A string of results' table (SdRst, font slot 0) by the number the game's
+ * code uses, or NULL while slot 0 holds another table. */
+const uint8_t* a11y_game_results_string(int number);
+
 /* A match, read once a tick by the match cues (docs/a11y/cues.md, "The
  * match snapshot"), in world units: x grows to the right, y upwards. */
 

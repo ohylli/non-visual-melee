@@ -18,6 +18,7 @@
 #include <melee/gm/gm_1884.h>
 #include <melee/gm/gmmain_lib.h>
 #include <melee/gm/gmonlinemode.h>
+#include <melee/gm/gmresult.h>
 #include <melee/gm/gmscene.h>
 #include <melee/gm/gmvs.h>
 #include <melee/gm/types.h>
@@ -740,6 +741,134 @@ void a11y_game_training_menu(A11yTrainingMenu* out) {
     out->row = menu->x00;
     if (out->row < A11Y_TRAINING_VALUE_SLOTS) {
         out->value = menu->menu_values[out->row];
+    }
+}
+
+/* The results scene's data (gmresult.c), declared in no header. */
+extern ResultsData lbl_8046DBE8;
+
+_Static_assert(A11Y_RESULTS_TIME == MatchKind_Time && A11Y_RESULTS_STOCK == MatchKind_Stock &&
+                   A11Y_RESULTS_COIN == MatchKind_Coin && A11Y_RESULTS_BONUS == MatchKind_Bonus,
+    "MatchKind no longer has the fork's numbers");
+
+/* Results' strings sit in font slot 0 (fn_80176A6C loads SdRst there). */
+enum { A11Y_RESULTS_FONT = 0 };
+
+/* SdRst's titles of the match types, by MatchKind (fn_80175DC8). */
+static const int k_results_match_type_strings[] = {2, 3, 4, 5};
+
+const uint8_t* a11y_game_results_string(int number) {
+    const char* symbol = a11y_game_font_symbol(A11Y_RESULTS_FONT);
+    if (number < 0 || symbol == NULL || strcmp(symbol, "SIS_ResultData") != 0) {
+        return NULL;
+    }
+    return a11y_game_string(A11Y_RESULTS_FONT, pc_region_sis_index(symbol, number));
+}
+
+static int results_clamp(int value, int limit) {
+    return value > limit ? limit : value < -limit ? -limit : value;
+}
+
+/* A summary row's count as drawn (fn_80175240): the stat's own clamp, then
+ * three digits at most. */
+static int results_count(int value) {
+    value = results_clamp(value, 999999);
+    return value > 999 ? 999 : value;
+}
+
+/* Where the screen shows the KO time rather than "-:-" (fn_80175880). */
+static bool results_knocked_out(const MatchEnd* me, int winner, int slot) {
+    const MatchPlayerData* player = &me->player_standings[slot];
+    const MatchPlayerData* shown = &me->player_standings[winner];
+    if (slot == winner) {
+        return false;
+    }
+    if (me->is_teams == 1 && me->team_standings[player->team].is_big_loser == 0 &&
+        (player->stocks > 0 || (player->x28 == me->frame_count && shown->stocks == 0)))
+    {
+        return false;
+    }
+    if (gm_WasMatchCanceled(me->outcome) && (player->stocks > 0 || player->score == shown->score)) {
+        return false;
+    }
+    return true;
+}
+
+/* The place image's number (fn_80177748): the winner's own image, 1st, for
+ * the player with no rank ahead, or in a team match for the player the
+ * banner names; the others their own place or their team's. */
+static int results_place(const MatchEnd* me, int winner, int slot) {
+    const MatchPlayerData* player = &me->player_standings[slot];
+    if (gm_WasMatchCanceled(me->outcome)) {
+        return -1;
+    }
+    if (me->is_teams != 1) {
+        return player->is_small_loser == 0 ? 0 : player->is_big_loser;
+    }
+    return slot == winner ? 0 : me->team_standings[player->team].is_big_loser;
+}
+
+static A11yCharacter results_character(const MatchPlayerData* player) {
+    /* As the results model (fn_8017A67C) and the announcer (fn_80168E54)
+     * choose between the two. */
+    if (player->ckind == CKind_Zelda || player->ckind == CKind_Seak) {
+        return player->ftkind == Ft_Kind_Seak ? A11Y_CKind_Seak : A11Y_CKind_Zelda;
+    }
+    if (player->ckind < 0 || player->ckind >= CKind_Playable_Count) {
+        return A11Y_NO_CHARACTER;
+    }
+    return (A11yCharacter)player->ckind;
+}
+
+void a11y_game_results(int local_port, A11yResults* out) {
+    memset(out, 0, sizeof(*out));
+    const ResultsData* data = &lbl_8046DBE8;
+    const MatchEnd* me = data->x94;
+    if (me == NULL) {
+        return;
+    }
+    out->valid = true;
+    out->state = (A11yResultsState)data->x1;
+    out->phase = data->x0_23;
+    out->match_kind = (A11yResultsMatchKind)me->match_kind;
+    out->teams = me->is_teams == 1;
+    out->cancelled = gm_WasMatchCanceled(me->outcome);
+    out->winner = data->x6;
+    out->winning_team = data->x5;
+    out->local_port = local_port;
+    if (me->match_kind < ARRAY_SIZE(k_results_match_type_strings)) {
+        out->match_type_text =
+            a11y_game_results_string(k_results_match_type_strings[me->match_kind]);
+    }
+    int winner = data->x6 < A11Y_RESULTS_PORTS ? data->x6 : 0;
+    for (int i = 0; i < A11Y_RESULTS_PORTS; i++) {
+        const MatchPlayerData* player = &me->player_standings[i];
+        A11yResultsPlayer* row = &out->players[i];
+        switch (player->pkind) {
+        case Gm_PKind_Human:
+            row->slot = A11Y_RESULTS_HUMAN;
+            break;
+        case Gm_PKind_Cpu:
+        case Gm_PKind_Demo:
+            row->slot = A11Y_RESULTS_CPU;
+            break;
+        default:
+            row->slot = A11Y_RESULTS_EMPTY;
+            continue;
+        }
+        row->character = results_character(player);
+        row->team = player->team;
+        row->place = results_place(me, winner, i);
+        row->rank = player->is_small_loser;
+        row->kos = results_count((s32)player->x20);
+        row->falls = results_count(player->x24 - player->self_destructs);
+        row->sds = results_count(player->self_destructs);
+        row->knocked_out = results_knocked_out(me, winner, i);
+        u32 seconds = player->x28 / 60;
+        row->ko_seconds = seconds > 5999 ? 5999 : (int)seconds;
+        row->score =
+            results_clamp(player->score, me->match_kind == MatchKind_Bonus ? 9999999 : 9999);
+        row->coins = results_clamp(results_clamp(player->x1C, 999999), 99999);
     }
 }
 

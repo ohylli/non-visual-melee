@@ -209,4 +209,27 @@ std::string one_line(std::string text) {
     return text;
 }
 
+std::string spoken_text(std::string_view text) {
+    constexpr std::string_view kGlyphMark = "{glyph ";
+    std::string out;
+    for (std::size_t i = 0; i < text.size(); i++) {
+        if (text.substr(i).starts_with(kGlyphMark)) {
+            std::size_t close = text.find('}', i);
+            if (close != std::string_view::npos) {
+                i = close;
+                continue;
+            }
+        }
+        char c = text[i] == '\n' ? ' ' : text[i];
+        if (c == ' ' && (out.empty() || out.back() == ' ')) {
+            continue;
+        }
+        out += c;
+    }
+    while (!out.empty() && out.back() == ' ') {
+        out.pop_back();
+    }
+    return out;
+}
+
 }  // namespace a11y

@@ -2,6 +2,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 namespace a11y {
 
@@ -33,5 +34,9 @@ DecodedText decode_game_text(const std::uint8_t* bytes, const GameTextSource& so
 /* Decoded text for a log line, its breaks shown as " / " and its unknown
  * glyphs left marked. */
 std::string one_line(std::string text);
+
+/* Decoded text as one spoken line: the lines of wrapped text joined by a
+ * space, the marks of unknown glyphs ("{glyph 4000}") left out. */
+std::string spoken_text(std::string_view text);
 
 }  // namespace a11y

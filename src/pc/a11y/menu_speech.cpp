@@ -25,32 +25,6 @@ void add_sentence(std::string& out, std::string_view part) {
     out += part;
 }
 
-/* A decoded description as one spoken line: the lines of a wrapped
- * description joined by a space, the marks of unknown glyphs
- * ("{glyph 4000}") left out. */
-std::string spoken_text(std::string_view text) {
-    constexpr std::string_view kGlyphMark = "{glyph ";
-    std::string out;
-    for (std::size_t i = 0; i < text.size(); i++) {
-        if (text.substr(i).starts_with(kGlyphMark)) {
-            std::size_t close = text.find('}', i);
-            if (close != std::string_view::npos) {
-                i = close;
-                continue;
-            }
-        }
-        char c = text[i] == '\n' ? ' ' : text[i];
-        if (c == ' ' && (out.empty() || out.back() == ' ')) {
-            continue;
-        }
-        out += c;
-    }
-    while (!out.empty() && out.back() == ' ') {
-        out.pop_back();
-    }
-    return out;
-}
-
 /* A tree screen's hovered entry, as log lines name it. */
 std::string entry_where(const A11yMenuState& state) {
     return "[a11y] menu " + std::to_string(state.menu) + " entry " + std::to_string(state.hovered);

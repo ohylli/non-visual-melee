@@ -16,6 +16,7 @@
 #include "pc/pc.h"
 #include "pc/region.h"
 #include "port_menu_speech.hpp"
+#include "results_speech.hpp"
 #include "scene_speech.hpp"
 #include "settings_page.hpp"
 #include "speech.hpp"
@@ -46,6 +47,7 @@ std::unique_ptr<a11y::SssReader> s_sss;
 std::unique_ptr<a11y::LobbySpeech> s_lobby;
 std::unique_ptr<a11y::DirectSpeech> s_direct;
 std::unique_ptr<a11y::TrainingSpeech> s_training;
+std::unique_ptr<a11y::ResultsSpeech> s_results;
 /* The accessibility settings and their file, a11y.ini. */
 std::unique_ptr<a11y::AccessibilitySettings> s_settings;
 /* Accessibility, Speech and Steering, and the hierarchy over Cues. */
@@ -204,7 +206,7 @@ void announce_scene(int previous_scene, int css_exit, int scene_kind) {
             return;
         }
     }
-    s_scene_speech->entered(scene_kind, pc_net_active());
+    s_scene_speech->entered(scene_kind);
 }
 
 }  // namespace
@@ -232,6 +234,7 @@ extern "C" void pc_a11y_init(void) {
     s_lobby = std::make_unique<a11y::LobbySpeech>(*s_speech);
     s_direct = std::make_unique<a11y::DirectSpeech>(*s_speech);
     s_training = std::make_unique<a11y::TrainingSpeech>(*s_speech);
+    s_results = std::make_unique<a11y::ResultsSpeech>(*s_speech, game_text);
     s_settings = std::make_unique<a11y::AccessibilitySettings>(
         *s_speech, settings_file_path(config), config.log);
     /* The switches first: the first rows and the file's first groups. */
@@ -282,6 +285,7 @@ extern "C" void pc_a11y_shutdown(void) {
     s_cue_system.reset();
     s_switches.reset();
     s_settings.reset();
+    s_results.reset();
     s_training.reset();
     s_lobby.reset();
     s_direct.reset();
@@ -365,6 +369,11 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
         /* The scene's start has just reset the Training menu: a new
          * session, whose first opening says the keys. */
         s_training->session_started();
+    }
+    if (s_results != nullptr && scene_kind == static_cast<int>(a11y::SceneKind::GS_RESULTS)) {
+        /* Silent on entry: the reader speaks once the announcer has named
+         * the winner. */
+        s_results->visit_started();
     }
     announce_scene(previous_scene, css_exit, scene_kind);
     if (s_cue_system != nullptr) {
@@ -495,8 +504,20 @@ extern "C" void pc_a11y_lobby_frame(const OnlineLobbyView* view) {
 }
 
 extern "C" void pc_a11y_match_tick(uint64_t held_mask) {
+    bool results = s_scene == static_cast<int>(a11y::SceneKind::GS_RESULTS);
+    if (results) {
+        a11y::menu_text_dump_once();
+    }
     if (!game_hook_may_speak()) {
         return;
+    }
+    if (results) {
+        /* After the tick's procs, the scene's own update included. Online,
+         * the local player's controller is port 1, but they may be any
+         * player in the game. */
+        A11yResults snapshot;
+        a11y_game_results(pc_net_active() ? pc_net_local_player() : 0, &snapshot);
+        s_results->tick(snapshot);
     }
     if (s_scene == static_cast<int>(a11y::SceneKind::GS_TRAINING)) {
         /* After the tick's procs, the Training menu's own update included,

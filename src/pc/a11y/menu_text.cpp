@@ -14,7 +14,8 @@ namespace a11y {
 namespace {
 
 /* The main menu's strings sit in font slot 0 (mnMain_Scene_OnEnter in
- * mnmain.c loads SdMenu there), and character select's (SdSlChr) too. */
+ * mnmain.c loads SdMenu there), and character select's (SdSlChr) and
+ * results' (SdRst) too. */
 constexpr int k_menu_font = 0;
 /* Far past the few hundred strings of any table, in case a table's end is
  * not followed by a word that resolves nowhere. */
