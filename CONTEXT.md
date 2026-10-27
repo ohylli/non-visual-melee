@@ -226,6 +226,36 @@ _Avoid_: Random button, random cell
 A stage tile drawn as a "?" because its stage is not yet unlocked. It can be hovered but not picked.
 _Avoid_: Question mark, hidden stage (some locked stages are not drawn at all)
 
+### Results
+
+**Results**:
+The scene after a VS, Special Melee, tournament or online match, where the announcer names the winner and each player looks over the match before the next one. Classic, Adventure and All-Star end on a different scene.
+_Avoid_: Results screen, score screen, victory screen, end screen
+
+**Summary table**:
+The first view of results: the match type, the winner, each player's place, and a table of KOs, falls, SDs and one last row that depends on the match type (when each player was KO'd, a total, coins).
+_Avoid_: Scoreboard, overview, standings
+
+**Stats panel**:
+One player's box of statistics, opened for every player by the first press on results and then paged and scrolled by that player alone.
+_Avoid_: Stats screen, player card, panel (alone)
+
+**Page**:
+One of a stats panel's lists: KOs and falls against each opponent, the general statistics, or the bonuses.
+_Avoid_: Tab, screen, view
+
+**Bonus**:
+A named award with points that results lists for a player, such as "Switzerland".
+_Avoid_: Title, achievement, award
+
+**Ready**:
+A player's mark that they are done with results; the scene ends once every human player is ready, and a second Start takes it back.
+_Avoid_: Confirmed, done, finished
+
+**Reading cursor**:
+The fork's own place in a stats panel's page, which the D-pad moves row by row and from player to player while the game's panels keep their own pages and scroll.
+_Avoid_: Virtual cursor, review cursor, focus
+
 ### Online play
 
 **Lobby**:
