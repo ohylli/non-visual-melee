@@ -1,6 +1,6 @@
 # 06 Play test by ear
 
-Status: ready-for-human
+Status: resolved (2026-10-27)
 Type: task
 Blocked by: 05
 
@@ -23,3 +23,7 @@ The review of 38f8bd8..HEAD fixed what was plainly the agent's (its own commit, 
 - **`MELEE_A11Y=1` does not undo a saved Speech off.** It overrides only `accessibility.on`, so a player who turned Speech off (not Accessibility) and quit starts silent with editing `a11y.ini` the only way back. Options: let `MELEE_A11Y=1` also hold Speech on for the run; or say so in the player-facing readme. Recommendation: hold Speech too.
 - **"Saved." after a save that failed.** The rename is now retried, but if it still fails the port menu's status line says "Saved." (`Page::change` checks `saves()`, not the save), the value lives only until the game closes, and the failure is only logged; nor is the file flushed before the rename. Options: return the save's result through `AccessibilitySettings::set` to the page and announce a failure; or leave it to the log. Recommendation: return it, an interface change across three modules.
 - **Ledge warning distance steps 1 unit over 5 to 100**, so a big change takes dozens of presses (`MatchCues::add_ledge_values`). A tuning matter for the play test.
+
+### 2026-10-27, play test (maintainer)
+
+The maintainer ran the play test by ear with NVDA in the launcher and the port menu. The one finding: each cue's switch hint said only that it turns the cue on or off. Fixed in a687a7b, each cue's hint now says what the cue does. The code review's points above were not raised by the play test and stay open.
