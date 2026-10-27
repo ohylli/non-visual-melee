@@ -17,13 +17,15 @@ side by side:
   menus   the menu drive scripts (MENUS), the launcher's three and the
           port menu's two among them
   online  css_net.drive at delay 0, delay 10 and over a 100 ms slow link,
-          lan_lobby.drive (--lan), direct_call.drive, and direct_back.drive
+          results_net.drive (--muted), lan_lobby.drive (--lan),
+          direct_call.drive, and direct_back.drive
           and direct_lost.drive (--direct), the last two one after the other
           since both use the ports the router forwards; with --base-b the
           two are left out, since the base port build would write the
           maintainer's recent opponents
   NAME    an online run by its name (css_net-delay0, css_net-delay10,
-          css_net-slow, lan_lobby, direct_back, direct_lost), else
+          css_net-slow, results_net, lan_lobby, direct_back, direct_lost),
+          else
           tools/a11y/NAME.drive through drive.py; the names given in a row
           run side by side
 
@@ -84,7 +86,9 @@ ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           "training_menu": re.compile(r"\[a11y\] training menu row "),
           "port_menu": PORT_MENU_STATUS, "port_menu_a11y": PORT_MENU_STATUS,
           # The scene's placeholder, which DIRECT CONNECT's own opening replaces.
-          "direct_hub": NO_LOBBY_SPEECH, "direct_call": NO_LOBBY_SPEECH}
+          "direct_hub": NO_LOBBY_SPEECH, "direct_call": NO_LOBBY_SPEECH,
+          # With one human, readying ends results and says nothing.
+          "results": re.compile(r'"(Ready, waiting|Not ready\.|P\d (not )?ready\.)')}
 # Lines a passing run must not log between an opening line and the closing
 # line after it: no cue starts or stops while the port menu is open, since
 # the game stands still then and the stops come just before the opening.
@@ -118,7 +122,7 @@ NET = [("css_net-delay0", ["--delay", "0"]), ("css_net-delay10", ["--delay", "10
 # copies on one machine"), so both take those ports and run one at a time.
 DIRECT = ["direct_back", "direct_lost"]
 FORWARDED_PORTS = threading.Lock()
-NET_RUNS = [name for name, _ in NET] + ["lan_lobby"] + DIRECT
+NET_RUNS = [name for name, _ in NET] + ["results_net", "lan_lobby"] + DIRECT
 ONLINE = NET_RUNS + ["direct_call"]
 # Failure lines worth repeating in the report.
 FAILURE = re.compile(r">> .*(FAILED|warning: no pad change)")
@@ -157,6 +161,12 @@ def net_run(name, out_dir, base_b):
         return Run(name, [sys.executable, os.path.join(HERE, "drive_net.py"), "--lan", *extra,
                           "--port", "42150", "--out-dir", out, os.path.join(HERE, "lan_lobby.drive")],
                    out, 2)
+    if name == "results_net":
+        # Muted, so speech is on and quick chat leaves the D-pad to the
+        # reading cursor, as for a player.
+        return Run(name, [sys.executable, os.path.join(HERE, "drive_net.py"), "--muted", *extra,
+                          "--port", "42160", "--key", "a11ylevelresults", "--out-dir", out,
+                          os.path.join(HERE, "results_net.drive")], out, 2)
     if name in DIRECT:
         return Run(name, [sys.executable, os.path.join(HERE, "drive_net.py"), "--direct", "--muted", *extra,
                           "--out-dir", out, os.path.join(HERE, name + ".drive")], out, 2,

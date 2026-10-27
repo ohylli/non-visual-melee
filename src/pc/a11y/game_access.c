@@ -987,6 +987,7 @@ void a11y_game_results(int local_port, A11yResults* out) {
         row->coins = results_clamp(results_clamp(player->x1C, 999999), 99999);
         row->page = (A11yResultsPage)data->player_data[i].page;
         row->ready = data->player_data[i].x0_0;
+        row->unplugged = HSD_PadCopyStatus[i].err != 0;
         results_opponents(me, i, row);
         for (int stat = 0; stat < A11Y_RESULTS_STAT_COUNT; stat++) {
             row->stats[stat] = k_results_stat_rows[stat].value(i);

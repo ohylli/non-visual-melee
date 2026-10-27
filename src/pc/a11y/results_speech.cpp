@@ -274,6 +274,7 @@ void ResultsSpeech::tick(const A11yResults& results) {
     if (results.pressed_z) {
         summary_line(results);
     }
+    ready_changes(results);
 }
 
 void ResultsSpeech::stats_opened(const A11yResults& results, Mode mode) {
@@ -281,6 +282,9 @@ void ResultsSpeech::stats_opened(const A11yResults& results, Mode mode) {
     m_page = results.players[panel_port(results)].page;
     m_port = cursor_players(results).front();
     m_row = 0;
+    for (int port = 0; port < A11Y_RESULTS_PORTS; port++) {
+        m_ready[port] = results.players[port].ready;
+    }
     std::string text = page_announcement(results);
     if (m_stats_keys_due) {
         add_sentence(text, kStatsKeys);
@@ -358,6 +362,54 @@ void ResultsSpeech::summary_line(const A11yResults& results) {
     add_part(text, results_summary(results, m_port));
     end_sentence(text);
     m_speech.announce(text, Mode::interrupt);
+}
+
+void ResultsSpeech::ready_changes(const A11yResults& results) {
+    int you = results_you(results);
+    /* Every panel is ready and the scene leaves: the next screen speaks. */
+    bool leaving = results.state == A11Y_RESULTS_LEAVING;
+    std::string yours;
+    std::vector<std::string> others;
+    for (int port = 0; port < A11Y_RESULTS_PORTS; port++) {
+        const A11yResultsPlayer& player = results.players[port];
+        bool was_ready = m_ready[port];
+        m_ready[port] = player.ready;
+        /* CPUs are said nothing of, and nor is a human the game readied
+         * because no controller is plugged in. */
+        if (player.slot != A11Y_RESULTS_HUMAN || player.unplugged || player.ready == was_ready) {
+            continue;
+        }
+        if (port == you) {
+            if (!player.ready) {
+                yours = kNotReady;
+                continue;
+            }
+            std::vector<int> waiting;
+            for (int other = 0; other < A11Y_RESULTS_PORTS; other++) {
+                const A11yResultsPlayer& them = results.players[other];
+                if (other != you && them.slot == A11Y_RESULTS_HUMAN && !them.ready) {
+                    waiting.push_back(other);
+                }
+            }
+            if (leaving || waiting.empty()) {
+                continue;
+            }
+            yours = results.online ? std::string(kReadyWaitingForOpponent) :
+                                     std::string(kReadyWaitingFor) + port_list(waiting) + ".";
+        } else if (!player.ready) {
+            others.push_back(results.online ? std::string(kOpponentNotReady) :
+                                              port_name(port) + std::string(kOtherNotReady));
+        } else if (!leaving) {
+            others.push_back(results.online ? std::string(kOpponentReady) :
+                                              port_name(port) + std::string(kOtherReady));
+        }
+    }
+    if (!yours.empty()) {
+        m_speech.announce(yours, Mode::interrupt);
+    }
+    for (const std::string& text : others) {
+        m_speech.announce(text, Mode::queue);
+    }
 }
 
 std::string ResultsSpeech::opponent_name(

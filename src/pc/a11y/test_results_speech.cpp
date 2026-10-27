@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Results speech against hand-written snapshots of the results scene, over a
- * fake screen reader bridge: the opening, the stats panels' pages and the
- * reading cursor. Links results_speech.cpp, results_names.cpp,
+ * fake screen reader bridge: the opening, the stats panels' pages, the
+ * reading cursor and ready. Links results_speech.cpp, results_names.cpp,
  * css_names.cpp, game_text.cpp and speech.cpp only, so this file supplies the
  * pc_log_line that main.c normally provides. */
 #include "results_names.hpp"
@@ -833,6 +833,137 @@ void the_cursor_works_while_you_are_ready() {
     assert(f.press(kNone).empty());
 }
 
+/* The spec's example with humans on the ports given besides yours, P1,
+ * the panels open and taking input: the CPUs readied by the game, said
+ * nothing of. */
+struct ReadyFixture : PanelFixture {
+    explicit ReadyFixture(std::initializer_list<int> humans) {
+        for (int port : humans) {
+            results.players[port].slot = A11Y_RESULTS_HUMAN;
+        }
+        open();
+        for (A11yResultsPlayer& player : results.players) {
+            player.ready = player.slot == A11Y_RESULTS_CPU;
+        }
+        assert(tick(results, A11Y_RESULTS_STATS).empty());
+    }
+
+    /* The port's ready flag set, seen by the next tick in the state given;
+     * returns what it said. */
+    Outputs ready(int port, bool ready, A11yResultsState state = A11Y_RESULTS_STATS) {
+        results.players[port].ready = ready;
+        return tick(results, state);
+    }
+};
+
+Outputs interrupting(const char* text) {
+    return Outputs{Output{text, true}};
+}
+
+Outputs queued(const char* text) {
+    return Outputs{Output{text, false}};
+}
+
+void your_ready_names_every_human_you_wait_for() {
+    ReadyFixture one{1};
+    assert(one.ready(0, true) == interrupting("Ready, waiting for P2."));
+    ReadyFixture two{1, 2};
+    assert(two.ready(0, true) == interrupting("Ready, waiting for P2 and P3."));
+    ReadyFixture three{1, 2, 3};
+    assert(three.ready(0, true) == interrupting("Ready, waiting for P2, P3 and P4."));
+    /* A human already ready is not waited for. */
+    ReadyFixture readied{1, 3};
+    assert(readied.ready(3, true) == queued("P4 ready."));
+    assert(readied.ready(0, true) == interrupting("Ready, waiting for P2."));
+}
+
+void a_second_start_says_not_ready() {
+    ReadyFixture f{1};
+    f.ready(0, true);
+    assert(f.ready(0, false) == interrupting("Not ready."));
+    assert(f.ready(0, true) == interrupting("Ready, waiting for P2."));
+}
+
+void with_one_human_your_ready_says_nothing() {
+    /* The scene leaves on the tick you ready. */
+    ReadyFixture f{};
+    assert(f.ready(0, true, A11Y_RESULTS_LEAVING).empty());
+    /* A second human without a controller, readied by the game as the
+     * panels take input, is said nothing of and not waited for. */
+    PanelFixture g;
+    g.results.players[1].slot = A11Y_RESULTS_HUMAN;
+    g.results.players[1].unplugged = true;
+    g.open();
+    for (A11yResultsPlayer& player : g.results.players) {
+        player.ready = player.slot == A11Y_RESULTS_CPU || player.unplugged;
+    }
+    assert(g.tick(g.results, A11Y_RESULTS_STATS).empty());
+    g.results.players[0].ready = true;
+    assert(g.tick(g.results, A11Y_RESULTS_LEAVING).empty());
+}
+
+void another_humans_ready_and_unready_are_queued() {
+    ReadyFixture f{1, 2};
+    assert(f.ready(1, true) == queued("P2 ready."));
+    assert(f.ready(1, false) == queued("P2 not ready."));
+    /* Yours first, then theirs, on one tick. */
+    f.results.players[2].ready = true;
+    Outputs said = f.ready(0, true);
+    assert((said == Outputs{{"Ready, waiting for P2.", true}, {"P3 ready.", false}}));
+    /* The last ready ends the scene: nothing is said. */
+    assert(f.ready(1, true, A11Y_RESULTS_LEAVING).empty());
+}
+
+void online_the_other_human_is_your_opponent() {
+    /* You are P2, the local player; P1 is your opponent. */
+    PanelFixture f;
+    f.results.online = true;
+    f.results.local_port = 1;
+    f.results.players[0].slot = A11Y_RESULTS_HUMAN;
+    f.results.players[1].slot = A11Y_RESULTS_HUMAN;
+    f.results.players[2].slot = A11Y_RESULTS_EMPTY;
+    f.results.players[3].slot = A11Y_RESULTS_EMPTY;
+    f.open();
+    for (int port : {2, 3}) {
+        f.results.players[port].ready = true;
+        f.results.players[port].unplugged = true;
+    }
+    assert(f.tick(f.results, A11Y_RESULTS_STATS).empty());
+    f.results.players[1].ready = true;
+    assert(
+        f.tick(f.results, A11Y_RESULTS_STATS) == interrupting("Ready, waiting for your opponent."));
+    f.results.players[1].ready = false;
+    assert(f.tick(f.results, A11Y_RESULTS_STATS) == interrupting("Not ready."));
+    f.results.players[0].ready = true;
+    assert(f.tick(f.results, A11Y_RESULTS_STATS) == queued("Your opponent is ready."));
+    f.results.players[0].ready = false;
+    assert(f.tick(f.results, A11Y_RESULTS_STATS) == queued("Your opponent is not ready."));
+}
+
+void ready_keeps_the_reading_cursor() {
+    ReadyFixture f{1};
+    assert(f.press(kDown) == "P2 Mario, 1");
+    f.ready(0, true);
+    assert(f.press(kDown) == "P3 Fox, 0");
+    f.ready(0, false);
+    assert(f.press(kRight) == "Mario, P2, 0");
+    /* A new visit starts with nobody's ready seen. */
+    f.results.players[0].ready = false;
+    f.results.players[1].ready = false;
+    f.open();
+    assert(f.ready(1, true) == queued("P2 ready."));
+}
+
+void the_dpad_is_the_cursors_while_speech_is_on() {
+    Fixture on;
+    assert(on.reader.takes_dpad());
+    Outputs outputs;
+    a11y::Speech speech{a11y::Config{false, true}, std::make_unique<FakeBridge>(outputs)};
+    speech.init();
+    a11y::ResultsSpeech off{speech, a11y::GameTextSource{}};
+    assert(!off.takes_dpad());
+}
+
 void an_unknown_label_is_said_by_number_and_logged_once() {
     PanelFixture f;
     f.results.stat_labels[3][0] = nullptr;
@@ -911,6 +1042,13 @@ int main() {
     player_order_and_edges();
     z_says_the_players_summary_line();
     the_cursor_works_while_you_are_ready();
+    your_ready_names_every_human_you_wait_for();
+    a_second_start_says_not_ready();
+    with_one_human_your_ready_says_nothing();
+    another_humans_ready_and_unready_are_queued();
+    online_the_other_human_is_your_opponent();
+    ready_keeps_the_reading_cursor();
+    the_dpad_is_the_cursors_while_speech_is_on();
     an_unknown_label_is_said_by_number_and_logged_once();
     stat_labels_are_spaced();
     std::cout << "results_speech: all tests passed\n";

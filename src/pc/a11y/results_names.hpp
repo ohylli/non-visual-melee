@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace a11y {
 
@@ -22,6 +23,9 @@ std::string count_of(int count, std::string_view one, std::string_view many);
 
 /* A port as the summary names it: "P1" for port 0. */
 std::string port_name(int port);
+
+/* Ports as a list said aloud: "P2", "P2 and P3", "P2, P3 and P4". */
+std::string port_list(const std::vector<int>& ports);
 
 /* A stats panel page by its number, as the fork names it (the screen shows
  * no title): "KOs and falls", "Stats", "Bonuses"; nothing for another. */
@@ -48,6 +52,16 @@ inline constexpr std::string_view kStartWhenReady = "Start when ready.";
 inline constexpr std::string_view kStatsKeys =
     "A and B change page. D-pad up and down read the rows, left and right switch player. Z the "
     "player's summary. Start when ready.";
+/* Ready: yours with whom you wait for ("Ready, waiting for P2."), your
+ * un-ready, and another human's ("P2 ready.", "P2 not ready."); online the
+ * other human is your opponent. */
+inline constexpr std::string_view kReadyWaitingFor = "Ready, waiting for ";
+inline constexpr std::string_view kReadyWaitingForOpponent = "Ready, waiting for your opponent.";
+inline constexpr std::string_view kNotReady = "Not ready.";
+inline constexpr std::string_view kOtherReady = " ready.";
+inline constexpr std::string_view kOtherNotReady = " not ready.";
+inline constexpr std::string_view kOpponentReady = "Your opponent is ready.";
+inline constexpr std::string_view kOpponentNotReady = "Your opponent is not ready.";
 /* A stat the screen draws as "---". */
 inline constexpr std::string_view kNoValue = "none";
 /* A Bonuses page with no row. */

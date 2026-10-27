@@ -15,7 +15,13 @@
  * cursor is the fork's own, worked by the local controller's D-pad and Z: a
  * row of that page for one player, said row by row, switched between
  * players with only what differs said, and Z for the player's summary
- * line. */
+ * line.
+ *
+ * Ready is said from the panels' ready flags, compared tick to tick: your
+ * Start readying you names every human you wait for, a second Start says
+ * you are not ready, and another human's ready and un-ready are queued
+ * behind what is being said. A ready that ends the scene says nothing: the
+ * next screen speaks. */
 #pragma once
 #include "game_access.h"
 #include "game_text.hpp"
@@ -65,6 +71,11 @@ public:
     /* The scene after a tick. */
     void tick(const A11yResults& results);
 
+    /* The reading cursor takes the local controller's D-pad, so quick chat
+     * leaves it alone on results: while speech is on, as for every feature
+     * that takes keys for speech. */
+    bool takes_dpad() const { return m_speech.enabled(); }
+
 private:
     void opening(const A11yResults& results);
     /* The panels' first announcement: the page and its first row, with the
@@ -74,6 +85,8 @@ private:
     void step(const A11yResults& results, int by);
     void switch_player(const A11yResults& results, int by);
     void summary_line(const A11yResults& results);
+    /* Who readied or un-readied since the last tick. */
+    void ready_changes(const A11yResults& results);
     /* The page's name and the cursor player's first row. */
     std::string page_announcement(const A11yResults& results);
     /* An opponent as page 0's rows name them: "P2 Mario", their tag in
@@ -101,6 +114,8 @@ private:
     int m_page = 0;
     int m_port = 0;
     int m_row = 0;
+    /* Each panel's ready flag as last seen, from the panels' opening on. */
+    bool m_ready[A11Y_RESULTS_PORTS] = {};
     std::set<std::string> m_logged;
 };
 

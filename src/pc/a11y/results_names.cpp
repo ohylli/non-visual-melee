@@ -47,6 +47,17 @@ std::string port_name(int port) {
     return "P" + std::to_string(port + 1);
 }
 
+std::string port_list(const std::vector<int>& ports) {
+    std::string out;
+    for (std::size_t i = 0; i < ports.size(); i++) {
+        if (i > 0) {
+            out += i + 1 == ports.size() ? " and " : ", ";
+        }
+        out += port_name(ports[i]);
+    }
+    return out;
+}
+
 std::optional<std::string_view> results_page_name(int page) {
     constexpr std::string_view kPages[] = {"KOs and falls", "Stats", "Bonuses"};
     if (page < 0 || page >= static_cast<int>(std::size(kPages))) {

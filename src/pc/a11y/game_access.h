@@ -687,6 +687,11 @@ typedef struct A11yResultsPlayer {
      * panels' opening. */
     A11yResultsPage page;
     bool ready;
+    /* The port's controller is unplugged (its pad reports an error): the
+     * game readies a human there as soon as the panels take input, as it
+     * does a second human offline, whose port has no controller. Online
+     * both players' ports read as plugged in. */
+    bool unplugged;
     /* The KOs and falls page: every other player, by port, and the SDs
      * row's count. */
     A11yResultsOpponent opponents[A11Y_RESULTS_PORTS - 1];
@@ -718,6 +723,9 @@ typedef struct A11yResults {
     /* The port the local player plays on: controller 1's offline, the local
      * player's online. Set by the caller, not read from the screen. */
     int local_port;
+    /* A netplay session: the other human is your opponent. Set by the
+     * caller. */
+    bool online;
     /* The match type's title as game text (SdRst), or NULL. */
     const uint8_t* match_type_text;
     /* The stats panel's pages: 3, or 2 on a cancelled match, which has no

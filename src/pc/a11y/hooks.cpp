@@ -140,14 +140,16 @@ bool game_hook_may_speak() {
     return s_speech != nullptr && !pc_net_resim();
 }
 
-/* The screen on now steers a cursor with the D-pad: character select's hand
- * or stage select's cursor. */
-bool screen_steers() {
+/* The screen on now takes the D-pad for the fork: character select's hand
+ * or stage select's cursor steered, or results' reading cursor. */
+bool screen_takes_dpad() {
     switch (static_cast<a11y::SceneKind>(s_scene)) {
     case a11y::SceneKind::GS_CSS:
         return s_css != nullptr && s_css->steers();
     case a11y::SceneKind::GS_SSS:
         return s_sss != nullptr && s_sss->steers();
+    case a11y::SceneKind::GS_RESULTS:
+        return s_results != nullptr && s_results->takes_dpad();
     default:
         return false;
     }
@@ -517,6 +519,7 @@ extern "C" void pc_a11y_match_tick(uint64_t held_mask) {
          * player in the game. */
         A11yResults snapshot;
         a11y_game_results(pc_net_active() ? pc_net_local_player() : 0, &snapshot);
+        snapshot.online = pc_net_active();
         s_results->tick(snapshot);
     }
     if (s_scene == static_cast<int>(a11y::SceneKind::GS_TRAINING)) {
@@ -553,7 +556,7 @@ extern "C" uint16_t pc_a11y_chat_buttons(uint16_t buttons) {
     /* Not gated on rollback: chat runs once per video frame, outside the
      * simulation, and what it is handed changes nothing the peer sees but
      * phrases. */
-    if (!screen_steers()) {
+    if (!screen_takes_dpad()) {
         return buttons;
     }
     constexpr uint16_t dpad = PAD_BUTTON_LEFT | PAD_BUTTON_RIGHT | PAD_BUTTON_DOWN | PAD_BUTTON_UP;
