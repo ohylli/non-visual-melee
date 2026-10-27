@@ -307,7 +307,7 @@ MatchCues::MatchCues(CueSettings& settings, CueEngine& engine)
       m_your(add_your_values(m_your_cue.group)),
       m_opponent_cue(settings.add_cue(std::string(kOpponentId), "Opponent's position cue",
           "A lower, rounder pulse at a steady pace that pans and changes pitch with where the "
-          "nearest opponent is, on the stage or, with relative to you on, from you.",
+          "nearest opponent is, from you or, with relative to you off, on the stage.",
           kOpponentBoost)),
       m_opponent(add_opponent_values(m_opponent_cue.group)),
       m_pan_to_camera(settings.add_shared("position_cues", "Position cues")
