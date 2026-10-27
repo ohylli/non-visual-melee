@@ -1,6 +1,6 @@
 # 13 Play test by ear: the opponent's position cue relative to you
 
-Status: ready-for-human
+Status: resolved (2026-10-27)
 Type: task
 Blocked by: 12
 
@@ -15,3 +15,13 @@ Listen for:
 - Whether a relative opponent beside your absolute cue makes sense together, or confuses.
 
 The tuning values live in `a11y.ini` under the opponent's heading. Findings become new issues here, and the defaults change in code.
+
+## Comments
+
+### 2026-10-27: play-tested by ear
+
+The maintainer played matches with NVDA against a CPU with the opponent's position cue relative to you, and judged it good enough to be the default. No new issues.
+
+- **Relative to you is now the default** in code (was off), so the opponent's cue says where the opponent is from you unless its switch is turned off.
+- **The pan floor's default** in code becomes 0.2 (was 0.3).
+- The side distance, crossing margin and height distance stay as they were.

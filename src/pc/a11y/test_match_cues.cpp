@@ -139,12 +139,13 @@ void both_cues_register_and_fit() {
                         "opponent_position.interval", "opponent_position.relative",
                         "opponent_position.side_distance", "opponent_position.pan_floor",
                         "opponent_position.crossing_margin", "opponent_position.height_distance"}));
-    /* Relative to you is a setting, off so the stage mapping stays the
-     * default; the rest of its values are tuning values. */
+    /* Relative to you is a setting, on by default; the rest of its values
+     * are tuning values. */
     const a11y::NamedValue* relative = f.model.find("opponent_position.relative");
     assert(relative->kind == a11y::ValueKind::toggle && relative->shown);
-    assert(relative->default_value == 0.0f);
+    assert(relative->default_value == 1.0f);
     assert(!f.model.find("opponent_position.pan_floor")->shown);
+    assert(f.model.find("opponent_position.pan_floor")->default_value == 0.2f);
     /* Your cue's pitch range default, a value of its own. */
     const a11y::NamedValue* yours = f.model.find("your_position.pitch_range");
     const a11y::NamedValue* theirs = f.model.find("opponent_position.pitch_range");
@@ -398,6 +399,7 @@ void a_change_of_opponent_moves_the_voice_without_restarting_it() {
 void one_switch_frames_both_pans() {
     for (const bool to_camera : {true, false}) {
         Fixture f;
+        f.model.set(*f.model.find("opponent_position.relative"), 0.0f);
         f.model.set(*f.model.find("position_cues.pan_to_camera"), to_camera ? 1.0f : 0.0f);
         A11yMatchState match = match_with(1, 85.0f);
         match.you.x = -85.0f;

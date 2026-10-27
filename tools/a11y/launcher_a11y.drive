@@ -42,7 +42,7 @@ wait "\"Opponent's position cue volume, slider, 100%\. Left and right to adjust\
 key Down
 wait "\"Preview opponent's position cue: Play, button\. Plays a short sample of the opponent's position cue, as it sounds in a match\.\"$"
 key Down
-wait "\"Opponent's position cue relative to you, Off, Left and right to change\. On, the opponent's position cue sounds where the opponent is from you: on your left or right, above or below you; off, where they are on the stage\.\"$"
+wait "\"Opponent's position cue relative to you, On, Left and right to change\. On, the opponent's position cue sounds where the opponent is from you: on your left or right, above or below you; off, where they are on the stage\.\"$"
 key Down
 wait "\"Position cues follow the camera, On, Left and right to change\. On, the cues pan across what the camera shows; off, across the whole stage to the side blast zones\. With the opponent's position cue relative to you, it changes only your position cue\.\"$"
 key Down

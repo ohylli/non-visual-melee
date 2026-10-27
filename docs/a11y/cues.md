@@ -152,14 +152,14 @@ A tick whose pan says where you are across the stage, whose pitch says how high,
 
 ### The opponent's position cue
 
-A rounder, lower pulse on the same stage mapping, placed where the opponent is, at a steady pace.
+A rounder, lower pulse placed where the opponent is, at a steady pace: from you by default, or on your cue's stage mapping.
 
-- **Pan and pitch** as your cue's, from the opponent's position, in the same pan frame, with `opponent_position.pitch_range` of its own, starting at your cue's default.
+- **Pan and pitch**, with relative to you off, as your cue's, from the opponent's position, in the same pan frame, with `opponent_position.pitch_range` of its own, starting at your cue's default.
 - **Interval**: fixed, `opponent_position.interval`. How near the opponent is stays your cue's job.
 - **Which opponent** is the snapshot's: the nearest one in play, chosen afresh each tick. When another fighter becomes the nearest, the voice moves there without restarting, so the pulse keeps its rhythm.
 - **Silent** outside a match, while paused, before GO, with no opponent, and while the opponent is out; it sounds again on the respawn platform. While you are out it plays on.
 - **The sound**: 12 ms of lead-in, then a 400 Hz sine with a quarter of its octave, rising over 5 ms and dying away over 70 ms. It must end inside its fastest interval an octave down: 82 ms there is 164 ms, so the interval goes no lower than 0.2 s (`MatchCues::kOpponentFastestInterval`).
-- **Relative to you**, the switch `opponent_position.relative`, off by default: the cue says where the opponent is from you rather than on the stage, so their side is heard from one cue instead of compared across two pans. Your cue stays on the stage mapping, the reference.
+- **Relative to you**, the switch `opponent_position.relative`, on by default: the cue says where the opponent is from you rather than on the stage, so their side is heard from one cue instead of compared across two pans. Your cue stays on the stage mapping, the reference.
   - **Pan** from the horizontal distance: the opponent's side at `pan_floor` level with you, linear out to full at `side_distance` and held beyond. The floor keeps the side audible however near they are.
   - **Crossing**: the side holds until the opponent is more than `crossing_margin` past you the other way, then flips once, so fighters overlapping, or one standing over the other, do not flicker the pulse between the ears. The pan within the margin still grows with the distance, on the side kept. The side is the driver's only state: a new opponent, one back from a silence and every tick after the port menu's silence take it afresh from the distance's sign.
   - **Pitch** from the vertical distance, linear in octaves: the cue's own pitch level with you, `pitch_range`/2 octaves up at `height_distance` above you and held beyond, as many down as far below.

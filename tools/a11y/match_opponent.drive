@@ -1,9 +1,10 @@
 # The opponent's position cue in the debug VS match on Final Destination:
 # Link (player 1) against Mario (player 2), a human slot with no input, so
 # Mario stands still and never recovers. Link dashes over and smashes Mario
-# right until he falls off the right edge and loses a stock; Mario's cue
-# stops as he is knocked out and starts again on the respawn platform. Your
-# cue plays throughout, quickening as Link closes in.
+# right until he falls off the right edge and loses a stock; Mario's cue,
+# relative to Link by default, stops as he is knocked out and starts again
+# on the respawn platform. Your cue plays throughout, quickening as Link
+# closes in.
 # Run from Git Bash with the debug match switches (two stocks each; the
 # debug match is on Final Destination), cues on, and a trace and a dump to
 # check the pans and the two pulse trains:
@@ -19,9 +20,10 @@
 wait "state 0 scene 0$"
 press Start until "boot scene: state \d+ scene 2$"
 
-# Both cues start at GO: Link on the left, Mario as far on the right.
+# Both cues start at GO: Link on the left, Mario past the side distance,
+# fully on Link's right.
 wait 'cue your position start pan -0\.\d+ pitch [\d.]+ gain 1\.00 interval 0\.800' 60
-wait 'cue opponent position start pan 0\.\d+ pitch [\d.]+ gain 1\.00 interval 0\.400'
+wait 'cue opponent position start pan 1\.00 pitch [\d.]+ gain 1\.00 interval 0\.400'
 sleep 1
 
 # A dash to the middle, then short dashes and forward smashes until Mario
@@ -30,6 +32,7 @@ press Right 900
 sleep 1
 search 'cue opponent position stop pan (0\.\d+|1\.00) pitch 0\.50 ' Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right
 
-# Back on the respawn platform, high above the stage.
-wait 'cue opponent position start pan [-\d.]+ pitch 1\.\d+ ' 10
+# Back on the respawn platform, far up on Link's left: fully left, at the
+# top of the pitch range.
+wait 'cue opponent position start pan -1\.00 pitch 2\.00 ' 10
 sleep 2

@@ -46,13 +46,13 @@ struct OpponentMapping {
     /* Where the opponent is from you rather than on the stage: pan from
      * the horizontal distance, pitch from the vertical, the stage mapping's
      * pitch range kept and its pan frame left aside. */
-    bool relative = false;
+    bool relative = true;
     /* Relative only. World units from you to the opponent's side where the
      * pan is full, the pan level with you, so the side is always heard,
      * how far past you the opponent goes before the pulse changes sides,
      * and how far above or below you the pitch reaches the range's ends. */
     float side_distance = 80.0f;
-    float pan_floor = 0.3f;
+    float pan_floor = 0.2f;
     float crossing_margin = 4.0f;
     float height_distance = 60.0f;
 };

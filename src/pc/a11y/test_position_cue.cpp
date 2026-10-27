@@ -199,6 +199,14 @@ A11yMatchState opponent_at(float x, float y) {
     return match;
 }
 
+/* The opponent's mapping on the stage rather than relative to you, the
+ * default. */
+OpponentMapping on_the_stage() {
+    OpponentMapping mapping;
+    mapping.relative = false;
+    return mapping;
+}
+
 /* The opponent's driver on one snapshot, with no side kept. */
 std::optional<VoiceTargets> opponent_position(
     const A11yMatchState& match, const OpponentMapping& mapping) {
@@ -206,7 +214,7 @@ std::optional<VoiceTargets> opponent_position(
 }
 
 void the_opponent_cue_maps_the_opponents_position() {
-    const OpponentMapping mapping;
+    const OpponentMapping mapping = on_the_stage();
     std::optional<VoiceTargets> targets = opponent_position(opponent_at(85.0f, 114.0f), mapping);
     assert(targets.has_value());
     assert(near(targets->pan, 0.5f));
@@ -239,7 +247,7 @@ void the_opponent_cue_maps_the_opponents_position() {
 }
 
 void the_opponent_cue_keeps_its_interval() {
-    OpponentMapping mapping;
+    OpponentMapping mapping = on_the_stage();
     for (float x : {2.0f, 30.0f, 85.6f, 200.0f}) {
         std::optional<VoiceTargets> targets = opponent_position(opponent_at(x, 0.0f), mapping);
         assert(targets.has_value() && near(targets->interval, 0.4f));
@@ -250,7 +258,7 @@ void the_opponent_cue_keeps_its_interval() {
 }
 
 void the_opponent_cue_is_silent_when_it_should_be() {
-    const OpponentMapping mapping;
+    const OpponentMapping mapping = on_the_stage();
     A11yMatchState match = opponent_at(30.0f, 0.0f);
     assert(opponent_position(match, mapping).has_value());
 
@@ -284,7 +292,7 @@ void the_opponent_cue_is_silent_when_it_should_be() {
 }
 
 void the_opponent_cue_follows_a_change_of_opponent() {
-    const OpponentMapping mapping;
+    const OpponentMapping mapping = on_the_stage();
     A11yMatchState match = opponent_at(-40.0f, 0.0f);
     std::optional<VoiceTargets> before = opponent_position(match, mapping);
     /* Another fighter comes nearer: the snapshot's choice moves the cue. */
@@ -422,7 +430,7 @@ void the_previews_pulse_at_the_centre_for_about_two_seconds() {
     assert(a11y::preview_pulses(yours.slow_interval) == 3);
     assert(a11y::your_position_preview(2.07, yours).has_value());
     assert(!a11y::your_position_preview(2.09, yours).has_value());
-    OpponentMapping theirs;
+    OpponentMapping theirs = on_the_stage();
     t = a11y::opponent_position_preview(1.0, theirs);
     assert(t.has_value() && t->pan == 0.0f && near(t->interval, theirs.interval));
     assert(a11y::preview_pulses(theirs.interval) == 5);
