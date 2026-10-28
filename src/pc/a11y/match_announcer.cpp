@@ -3,6 +3,7 @@
 #include "game_text.hpp"
 #include "pc/pc.h"
 #include "speech.hpp"
+#include <algorithm>
 
 namespace a11y {
 
@@ -27,11 +28,11 @@ void MatchAnnouncer::tick(
     if (!hud.match) {
         /* Left from the pause with L+R+A+Start, which never reaches
          * GAME!, or the scene gone. */
-        finish("match gone");
+        finish("match gone", values);
         return;
     }
     if (hud.phase != 0) {
-        finish("match over");
+        finish("match over", values);
         return;
     }
     for (int slot = 0; slot < A11Y_MATCH_SLOTS; slot++) {
@@ -69,10 +70,18 @@ void MatchAnnouncer::tick(
              * scene): held until it shows again. */
             continue;
         }
-        if (player.shown != player.said && now - player.since >= values.settle) {
+        if (player.shown == player.said || now - player.since < values.settle) {
+            continue;
+        }
+        if (owed(player, values)) {
             player.said = player.shown;
             m_speech.announce_voice(
                 player.yours ? Voice::yours : Voice::opponents, slot, line(player, player.shown));
+        } else if (player.shown < player.said) {
+            /* Thresholds: a fall is silent but lowers the figure the next
+             * crossing counts from, so 85, healed to 55, hit to 65 says
+             * "65". A rise short of a threshold leaves it. */
+            player.said = player.shown;
         }
     }
 }
@@ -130,10 +139,26 @@ DamageMode MatchAnnouncer::damage_mode(
     return player.yours ? values.your_damage : values.opponents_damage;
 }
 
-void MatchAnnouncer::finish(const char* why) {
+bool MatchAnnouncer::owed(const Player& player, const MatchAnnouncementValues& values) const {
+    switch (damage_mode(player, values)) {
+    case DamageMode::every_change:
+        return player.shown != player.said;
+    case DamageMode::thresholds: {
+        /* Counted in whole multiples, so a change of interval partway
+         * through counts from the last figure said at the new spacing. */
+        const int interval = std::max(values.damage_interval, 1);
+        return player.shown / interval > player.said / interval;
+    }
+    case DamageMode::off:
+        break;
+    }
+    return false;
+}
+
+void MatchAnnouncer::finish(const char* why, const MatchAnnouncementValues& values) {
     m_stage = Stage::over;
     for (const Player& player : m_players) {
-        if (player.tracked && !player.out && player.shown != player.said && log_enabled()) {
+        if (player.tracked && !player.out && values.on && owed(player, values) && log_enabled()) {
             pc_log_line("[a11y] match announcement %s dropped (%s): \"%s\"",
                 voice_name(player.yours ? Voice::yours : Voice::opponents), why,
                 line(player, player.shown).c_str());

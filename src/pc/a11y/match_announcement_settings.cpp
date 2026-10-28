@@ -1,11 +1,34 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "match_announcement_settings.hpp"
+#include <cmath>
+#include <string>
 
 namespace a11y {
 namespace {
 
 ValueGroup group(ValueModel& model) {
     return model.group("match_announcements", "Match announcements");
+}
+
+/* In DamageMode's order. */
+const ChoiceOptions kDamageModes{{"Off", ""}, {"Every change", ""}, {"Thresholds", ""}};
+
+Choice add_damage(ValueModel& model, const char* name, const char* label, const char* how) {
+    return group(model).add_choice(ChoiceSpec{
+        .name = name,
+        .label = label,
+        .description = std::string("How ") + how +
+                       ": Every change says each new figure once it stops changing; Thresholds, "
+                       "only once it passes a multiple of the damage interval.",
+        .default_option = "Every change",
+        .options = kDamageModes,
+        .shown = true,
+    });
+}
+
+DamageMode damage_mode(const Choice& choice) {
+    const int index = choice_index(choice.named(), kDamageModes);
+    return index < 0 ? DamageMode::every_change : static_cast<DamageMode>(index);
 }
 
 }  // namespace
@@ -15,6 +38,13 @@ MatchAnnouncementSettings::MatchAnnouncementSettings(ValueModel& model)
           "Says what the HUD shows during a match: your damage in your voice, everyone else's in "
           "the opponents' voice.",
           true, true})),
+      m_your_damage(add_damage(model, "your_damage", "Your damage", "your damage is said")),
+      m_opponents_damage(add_damage(model, "opponents_damage", "Opponents' damage",
+          "everyone else's damage is said, teammates included")),
+      m_interval(group(model).add_number(NumberSpec{"damage_interval", "Damage interval",
+          "The spacing of the damage thresholds: with Thresholds, damage is said once it passes "
+          "a multiple of this.",
+          "%", 20.0f, 10.0f, 100.0f, 10.0f, true})),
       m_settle(group(model).add_number(NumberSpec{"damage_settle", "Damage settle time",
           "How long a player's damage must hold still before it is said, so a combo says only "
           "where it ends.",
@@ -23,6 +53,9 @@ MatchAnnouncementSettings::MatchAnnouncementSettings(ValueModel& model)
 MatchAnnouncementValues MatchAnnouncementSettings::values() const {
     MatchAnnouncementValues values;
     values.on = m_on.on();
+    values.your_damage = damage_mode(m_your_damage);
+    values.opponents_damage = damage_mode(m_opponents_damage);
+    values.damage_interval = static_cast<int>(std::lround(m_interval.value()));
     values.settle =
         std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(m_settle.value()));
     return values;

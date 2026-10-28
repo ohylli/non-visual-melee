@@ -3,7 +3,7 @@
 # sample, and a step Right back to the voice it started on; Your voice rate a
 # step down and back; Preview your voice by the gamepad's A, which plays at
 # once; Opponents' voice a step Right and back; and the opponents' four rows
-# read down past the Match announcements switch to Steering. Each step on a
+# read down past the match announcements' rows to Steering. Each step on a
 # Voice, Rate or Volume row logs the saved value and the reader's new value,
 # then a moment later the sample in that voice and its "plays" line; with
 # the screen reader muted the voices still render and play, into SDL's
@@ -98,7 +98,7 @@ wait "\[a11y\] voice opponents: \"Opponents' voice\"$"
 wait "\[a11y\] voice opponents plays: \"Opponents' voice\" "
 ini '^opponents_voice\.voice = %theirs%$'
 
-# The opponents' other rows, the Match announcements switch, then Steering.
+# The opponents' other rows, the match announcements' rows, then Steering.
 key Down
 wait "\"Opponents' voice rate, slider, 50\. Left and right to adjust\. How fast the opponents' voice speaks, 50 being the voice's normal speed\.\"$"
 key Down
@@ -107,6 +107,12 @@ key Down
 wait "\"Preview opponents' voice: Play, button\. Says \"Opponents' voice\" in the opponents' voice, at its rate and volume\.\"$"
 key Down
 wait '"Match announcements, On, Left and right to change\. '
+key Down
+wait '"Your damage, Every change, Left and right to change\. '
+key Down
+wait "\"Opponents' damage, Every change, Left and right to change\. "
+key Down
+wait '"Damage interval, slider, 20%\. Left and right to adjust\. '
 key Down
 wait '"Steering, On, Left and right to change\. '
 quit

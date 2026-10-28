@@ -15,7 +15,10 @@
  * figure said ("45", "P2 45"): a combo says its end figure, a heal its
  * last. A KO resets the last figure to 0 silently, so the respawn's 0% is
  * never said. At GAME! or TIME! a figure still settling is dropped, and
- * logged as dropped. Game thread only. */
+ * logged as dropped. Each side's damage can instead be said only past
+ * thresholds, a multiple of the interval crossed upward since the last
+ * figure said (35 to 52 at 20 says "52"), or not at all. Game thread
+ * only. */
 #pragma once
 #include "game_access.h"
 #include <array>
@@ -28,10 +31,14 @@ class Speech;
 
 using Clock = std::chrono::steady_clock;
 
-/* How a side's damage is said. */
+/* How a side's damage is said, in the order of the rows' options. */
 enum class DamageMode {
     off,
     every_change, /* the settled damage whenever it differs from the last said */
+    /* The settled damage once it has crossed a multiple of the interval
+     * upward since the last figure said; a fall is silent but lowers the
+     * figure the next crossing counts from. */
+    thresholds,
 };
 
 /* The match announcements' values as they stand, handed in each tick, so a
@@ -44,6 +51,8 @@ struct MatchAnnouncementValues {
     DamageMode your_damage = DamageMode::every_change;
     /* Everyone else's, teammates included. */
     DamageMode opponents_damage = DamageMode::every_change;
+    /* The thresholds' spacing, shared by both sides. */
+    int damage_interval = 20;
     /* How long a figure must hold still before it is said. */
     Clock::duration settle = std::chrono::milliseconds(600);
 };
@@ -77,7 +86,8 @@ private:
         /* The figure the HUD showed last tick, and since when. */
         int shown = 0;
         Clock::time_point since{};
-        /* The last figure said, or taken as said. */
+        /* The last figure said, or taken as said: the one a threshold's
+         * crossing counts from, lowered by a fall. */
         int said = 0;
         /* Knocked out last tick: nothing owed until the respawn. */
         bool out = false;
@@ -93,9 +103,12 @@ private:
      * one opponent and nobody else. */
     std::string label(const A11yMatchHud& hud, int slot) const;
     DamageMode damage_mode(const Player& player, const MatchAnnouncementValues& values) const;
-    /* The match is over: each figure still settling is dropped, logged
-     * with why. */
-    void finish(const char* why);
+    /* Whether the player's figure shown now is to be said once it settles,
+     * by the mode in force. */
+    bool owed(const Player& player, const MatchAnnouncementValues& values) const;
+    /* The match is over: each figure still owed is dropped, logged with
+     * why. */
+    void finish(const char* why, const MatchAnnouncementValues& values);
     std::string line(const Player& player, int figure) const;
 
     Speech& m_speech;

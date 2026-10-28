@@ -423,15 +423,171 @@ void the_switch() {
     assert(logged("[a11y] voice opponents (off): \"80\""));
 }
 
+/* Thresholds: the settled damage is said only once it has crossed a
+ * multiple of the interval upward since the last figure said, however many
+ * at once; a rise that crosses none is silent and leaves the figure the next
+ * crossing counts from. Each side has its own mode. */
+void thresholds_crossings() {
+    for (const bool yours : {true, false}) {
+        Fixture f;
+        f.values.your_damage =
+            yours ? a11y::DamageMode::thresholds : a11y::DamageMode::every_change;
+        f.values.opponents_damage =
+            yours ? a11y::DamageMode::every_change : a11y::DamageMode::thresholds;
+        const int slot = yours ? 0 : 1;
+        const std::string voice = yours ? "yours 0 " : "opponents 1 ";
+        f.go();
+        /* Up to 35 crosses 20: said. */
+        f.hud.players[slot].damage = 35;
+        assert((f.settle() == Lines{voice + "35"}));
+        /* 38 crosses nothing. */
+        f.hud.players[slot].damage = 38;
+        assert(f.settle().empty());
+        /* 52 crosses 40, counted from 35. */
+        f.hud.players[slot].damage = 52;
+        assert((f.settle() == Lines{voice + "52"}));
+        /* Several at once, said once: 52 to 85 crosses 60 and 80. */
+        f.hud.players[slot].damage = 85;
+        assert((f.settle() == Lines{voice + "85"}));
+        /* Reaching a multiple crosses it. */
+        f.hud.players[slot].damage = 100;
+        assert((f.settle() == Lines{voice + "100"}));
+        /* The other side still says every change. */
+        f.hud.players[1 - slot].damage = 3;
+        assert(f.settle().size() == 1);
+    }
+}
+
+/* A fall is silent but lowers the figure the next crossing counts from: 85,
+ * healed to 55, hit to 65 says "65". A rise above the fall that crosses no
+ * multiple stays silent. */
+void thresholds_a_fall_then_a_crossing() {
+    Fixture f;
+    f.values.opponents_damage = a11y::DamageMode::thresholds;
+    f.go();
+    f.hud.players[1].damage = 85;
+    assert((f.settle() == Lines{"opponents 1 85"}));
+    for (int damage = 84; damage >= 55; damage--) {
+        f.hud.players[1].damage = damage;
+        assert(f.ticks().empty());
+    }
+    assert(f.settle().empty());
+    f.hud.players[1].damage = 58;
+    assert(f.settle().empty());
+    f.hud.players[1].damage = 65;
+    assert((f.settle() == Lines{"opponents 1 65"}));
+}
+
+/* A KO resets the figure to 0, silently: the next hit is said only once it
+ * crosses the first multiple. */
+void thresholds_a_ko() {
+    Fixture f;
+    f.values.opponents_damage = a11y::DamageMode::thresholds;
+    f.go();
+    f.hud.players[1].damage = 75;
+    assert((f.settle() == Lines{"opponents 1 75"}));
+    f.hud.players[1].out = true;
+    f.hud.players[1].damage = 0;
+    assert(f.settle().empty());
+    f.hud.players[1].out = false;
+    assert(f.settle().empty());
+    f.hud.players[1].damage = 15;
+    assert(f.settle().empty());
+    f.hud.players[1].damage = 24;
+    assert((f.settle() == Lines{"opponents 1 24"}));
+}
+
+/* A change of interval or mode takes effect at once, partway through a
+ * match: the crossing counts from the last figure said, at the interval in
+ * force. */
+void thresholds_changes_take_effect_at_once() {
+    Fixture f;
+    f.values.opponents_damage = a11y::DamageMode::thresholds;
+    f.go();
+    f.hud.players[1].damage = 21;
+    assert((f.settle() == Lines{"opponents 1 21"}));
+    /* At 20, 21 to 35 crosses nothing; at 10 it crosses 30. */
+    f.hud.players[1].damage = 35;
+    assert(f.settle().empty());
+    f.values.damage_interval = 10;
+    assert((f.settle() == Lines{"opponents 1 35"}));
+    /* At 50, 35 to 48 crosses nothing, 35 to 50 crosses 50. */
+    f.values.damage_interval = 50;
+    f.hud.players[1].damage = 48;
+    assert(f.settle().empty());
+    f.hud.players[1].damage = 50;
+    assert((f.settle() == Lines{"opponents 1 50"}));
+    /* To every change: 50 to 53 is said; back to thresholds, 53 to 58 is
+     * not. */
+    f.values.opponents_damage = a11y::DamageMode::every_change;
+    f.hud.players[1].damage = 53;
+    assert((f.settle() == Lines{"opponents 1 53"}));
+    f.values.opponents_damage = a11y::DamageMode::thresholds;
+    f.hud.players[1].damage = 58;
+    assert(f.settle().empty());
+    /* Off and on again: nothing owed from before. */
+    f.values.opponents_damage = a11y::DamageMode::off;
+    f.hud.players[1].damage = 120;
+    assert(f.settle().empty());
+    f.values.opponents_damage = a11y::DamageMode::thresholds;
+    assert(f.settle().empty());
+    f.hud.players[1].damage = 140;
+    assert(f.settle().empty());
+    f.hud.players[1].damage = 150;
+    assert((f.settle() == Lines{"opponents 1 150"}));
+}
+
+/* A teammate follows the opponents' row, labelled; your own row leaves it
+ * alone. */
+void thresholds_a_teammate() {
+    Fixture f;
+    f.hud.teams = true;
+    add(f.hud, 2, true, 2);
+    f.hud.players[0].team = 1;
+    f.hud.players[1].team = 1;
+    f.hud.players[2].team = 0;
+    f.values.opponents_damage = a11y::DamageMode::thresholds;
+    f.go();
+    f.hud.players[1].damage = 12;
+    f.hud.players[2].damage = 9;
+    assert(f.settle().empty());
+    f.hud.players[1].damage = 27;
+    assert((f.settle() == Lines{"opponents 1 teammate CPU 2 27"}));
+    f.values.opponents_damage = a11y::DamageMode::off;
+    f.hud.players[1].damage = 44;
+    assert(f.settle().empty());
+    f.values.opponents_damage = a11y::DamageMode::every_change;
+    f.values.your_damage = a11y::DamageMode::off;
+    f.hud.players[1].damage = 46;
+    assert((f.settle() == Lines{"opponents 1 teammate CPU 2 46"}));
+}
+
+/* At GAME! a figure that crossed nothing is no figure owed; one that
+ * crossed is dropped and logged. */
+void thresholds_at_game() {
+    Fixture f;
+    f.values.your_damage = a11y::DamageMode::thresholds;
+    f.values.opponents_damage = a11y::DamageMode::thresholds;
+    f.go();
+    f.hud.players[0].damage = 15;
+    f.hud.players[1].damage = 25;
+    f.ticks(3);
+    s_lines.clear();
+    f.hud.phase = 1;
+    f.ticks();
+    assert((s_lines == std::vector<std::string>{
+                           "[a11y] match announcement opponents dropped (match over): \"25\""}));
+}
+
 /* The rows: the switch shown, on by default, read live; the settle time a
- * tuning value. */
+ * tuning value; the damage rows. */
 void the_rows() {
     a11y::ValueModel model;
     a11y::MatchAnnouncementSettings settings(model);
     const a11y::NamedValue* on = model.find(a11y::MatchAnnouncementSettings::kOnKey);
     assert(on != nullptr && on->shown && on->kind == a11y::ValueKind::toggle);
     assert(on->label == "Match announcements" && on->default_value == 1.0f);
-    assert(model.shown().size() == 1 && model.shown()[0].value == on);
+    assert(model.shown()[0].value == on);
     const a11y::NamedValue* settle = model.find("match_announcements.damage_settle");
     assert(settle != nullptr && !settle->shown);
     assert(settings.values().on);
@@ -441,9 +597,57 @@ void the_rows() {
     assert(!settings.values().on);
     model.set(*settle, 1.5f);
     assert(settings.values().settle == std::chrono::milliseconds(1500));
-    /* Every change for both sides until the damage rows land. */
+
+    /* The damage rows after the switch: two choices, Every change by
+     * default, and the interval, a slider shared by both. */
+    const a11y::NamedValue* yours = model.find(a11y::MatchAnnouncementSettings::kYourDamageKey);
+    const a11y::NamedValue* theirs =
+        model.find(a11y::MatchAnnouncementSettings::kOpponentsDamageKey);
+    const a11y::NamedValue* interval =
+        model.find(a11y::MatchAnnouncementSettings::kDamageIntervalKey);
+    assert(yours != nullptr && yours->shown && yours->kind == a11y::ValueKind::choice);
+    assert(theirs != nullptr && theirs->shown && theirs->kind == a11y::ValueKind::choice);
+    assert(interval != nullptr && interval->shown && interval->kind == a11y::ValueKind::number);
+    assert(yours->label == "Your damage" && theirs->label == "Opponents' damage");
+    assert(interval->label == "Damage interval");
+    assert(model.shown().size() == 4 && model.shown()[1].value == yours &&
+           model.shown()[2].value == theirs && model.shown()[3].value == interval);
+    const a11y::ChoiceOptions modes = a11y::choice_options(*yours);
+    assert(modes.size() == 3 && modes[0].shown() == "Off" && modes[1].shown() == "Every change" &&
+           modes[2].shown() == "Thresholds");
+    assert(a11y::choice_options(*theirs) == modes);
+    assert(yours->default_text == "Every change" && theirs->default_text == "Every change");
+    assert(interval->min == 10.0f && interval->max == 100.0f && interval->step == 10.0f);
+    assert(interval->default_value == 20.0f && interval->unit == "%");
     assert(settings.values().your_damage == a11y::DamageMode::every_change);
     assert(settings.values().opponents_damage == a11y::DamageMode::every_change);
+    assert(settings.values().damage_interval == 20);
+
+    /* Each read live, each side on its own. */
+    model.choose(*yours, "Thresholds");
+    assert(settings.values().your_damage == a11y::DamageMode::thresholds);
+    assert(settings.values().opponents_damage == a11y::DamageMode::every_change);
+    model.choose(*theirs, "Off");
+    assert(settings.values().opponents_damage == a11y::DamageMode::off);
+    /* Left from Off wraps round to Thresholds. */
+    model.choose(*theirs, a11y::choice_step(*theirs, a11y::choice_options(*theirs), -1));
+    assert(settings.values().opponents_damage == a11y::DamageMode::thresholds);
+    model.set(*interval, 70.0f);
+    assert(settings.values().damage_interval == 70);
+
+    /* The file names the options, and reads them back. */
+    const std::string text = model.to_text();
+    assert(text.find("match_announcements.your_damage = Thresholds\n") != std::string::npos);
+    assert(text.find("match_announcements.opponents_damage = Thresholds\n") != std::string::npos);
+    assert(
+        text.find("Off, Every change or Thresholds, default Every change.") != std::string::npos);
+    assert(text.find("match_announcements.damage_interval = 70\n") != std::string::npos);
+    a11y::ValueModel again;
+    a11y::MatchAnnouncementSettings read(again);
+    again.read_text(text);
+    assert(read.values().your_damage == a11y::DamageMode::thresholds);
+    assert(read.values().opponents_damage == a11y::DamageMode::thresholds);
+    assert(read.values().damage_interval == 70);
 }
 
 }  // namespace
@@ -470,6 +674,12 @@ int main() {
     no_panel_no_announcement();
     hidden_hud_holds();
     the_switch();
+    thresholds_crossings();
+    thresholds_a_fall_then_a_crossing();
+    thresholds_a_ko();
+    thresholds_changes_take_effect_at_once();
+    thresholds_a_teammate();
+    thresholds_at_game();
     the_rows();
     std::cout << "match_announcer: all tests passed\n";
     return 0;

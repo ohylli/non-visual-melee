@@ -1,7 +1,8 @@
 # The launcher's Accessibility category: every row read in its turn and
-# round to the first, Steering off and on again, Cue volume a step down and
-# back, Ledge warning distance a step up and back, Preview ledge warning
-# played to its end, pressed again and stopped by moving off it, and
+# round to the first, Steering off and on again, Your damage a step to
+# Thresholds and back, Cue volume a step down and back, Ledge warning
+# distance a step up and back, Preview ledge warning played to its end,
+# pressed again and stopped by moving off it, and
 # Accessibility turned off and on again from its own row, with the run's
 # a11y.ini checked after each change. Waits on each announcement, so a
 # missing or changed line fails the run. Run in launcher mode, with
@@ -41,6 +42,12 @@ key Down
 wait "\"Preview opponents' voice: Play, button\. Says \"Opponents' voice\" in the opponents' voice, at its rate and volume\.\"$"
 key Down
 wait '"Match announcements, On, Left and right to change\. Says what the HUD shows during a match: your damage in your voice, everyone else.s in the opponents. voice\."$'
+key Down
+wait '"Your damage, Every change, Left and right to change\. How your damage is said: Every change says each new figure once it stops changing; Thresholds, only once it passes a multiple of the damage interval\."$'
+key Down
+wait "\"Opponents' damage, Every change, Left and right to change\. How everyone else's damage is said, teammates included: Every change says each new figure once it stops changing; Thresholds, only once it passes a multiple of the damage interval\.\"$"
+key Down
+wait '"Damage interval, slider, 20%\. Left and right to adjust\. The spacing of the damage thresholds: with Thresholds, damage is said once it passes a multiple of this\."$'
 key Down
 wait '"Steering, On, Left and right to change\. The D-pad steps the hand on character select and the cursor on stage select\. Off, the D-pad does what the game makes of it, quick chat included\."$'
 key Down
@@ -82,7 +89,7 @@ wait '"Accessibility, On, Left and right to change\. '
 
 # Steering off with Right and on again with Enter: the new value alone,
 # each saved to its own line.
-key Down Down Down Down Down Down Down Down Down Down Down
+key Down Down Down Down Down Down Down Down Down Down Down Down Down Down
 wait '"Steering, On, Left and right to change\. '
 key Right
 wait '\[a11y\] accessibility settings: saved steering\.on = off$'
@@ -93,8 +100,21 @@ wait '\[a11y\] accessibility settings: saved steering\.on = on$'
 wait '"On"$'
 ini '^steering\.on = on$'
 
+# Your damage a step Right to Thresholds and Left back, each saved by the
+# option's name.
+key Up Up Up
+wait '"Your damage, Every change, Left and right to change\. '
+key Right
+wait '\[a11y\] accessibility settings: saved match_announcements\.your_damage = Thresholds$'
+wait '"Thresholds"$'
+ini '^match_announcements\.your_damage = Thresholds$'
+key Left
+wait '\[a11y\] accessibility settings: saved match_announcements\.your_damage = Every change$'
+wait '"Every change"$'
+ini '^match_announcements\.your_damage = Every change$'
+
 # Cue volume a step down and back up.
-key Down Down
+key Down Down Down Down Down
 wait '"Cue volume, slider, 100%\. '
 key Left
 wait '\[a11y\] accessibility settings: saved cues\.volume = 95$'
@@ -107,7 +127,7 @@ ini '^cues\.volume = 100$'
 
 # Up past the first row wraps to the last, Ledge warning distance: a step
 # up and back down.
-key Up Up Up Up Up Up Up Up Up Up Up Up Up Up
+key Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up
 wait '"Ledge warning distance, slider, 40 units\. '
 key Right
 wait '\[a11y\] accessibility settings: saved ledge_warning\.distance = 41$'
