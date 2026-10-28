@@ -2,7 +2,7 @@
 
 A primer for the work of making matches accessible. It describes what the game knows during a match and how to read it: the players' damage and stocks, where the fighters are, how a stage's ground, platforms, walls and ledges are modelled, what knocks a fighter out, and the items. It ends with candidate hook points and open questions. It does not decide what any of it should sound like.
 
-Values marked as measured come from a probe run on 2026-10-05: temporary logging added to a debug match on Battlefield and Final Destination, driven by `tools/a11y/drive.py`, then removed.
+Values marked as measured come from a probe run on 2026-10-05: temporary logging added to a debug match on Battlefield and Final Destination, driven by `tools/a11y/drive.py`, then removed. Later measurements name their date or drive script.
 
 ## Mental model
 
@@ -192,7 +192,7 @@ A KO is the fighter's knockout states, motion states 0 to 11 (`DeadDown` to `Sle
 
 `Player_GetStocks(slot)`; the panel shows up to five icons, then one icon and a count ([Stocks, KOs and respawns](#stocks-kos-and-respawns)).
 
-- **Which matches show them**: a stock match (`gm_8016B094()`) and the modes that count lives (`rules.x4_2`, `gm_8016B0E8()`: Classic, Adventure, Multi-Man), as `ifStatus_802F6508` gives each panel its stock icons; a timed match shows none. `ftCo_800D34E0` takes a stock at a KO on the same test. The snapshot's `stocks` says it.
+- **Which matches show them**: a stock match (`gm_8016B094()`) and the modes that count lives (`rules.x4_2`, `gm_8016B0E8()`: Classic, Adventure, Multi-Man), as `ifStatus_802F6508` gives each panel its stock icons; a timed match shows none. `ftCo_800D34E0` takes a stock at a KO on the same test. The snapshot's `shows_stocks` says it.
 - **When the count changes**: on the KO's tick for a side or bottom KO, at the end of the flight for a star or screen KO, and at a team's stock steal, below. Measured in the debug match with three stocks: Mario smashed off the right edge and Link walking off the left each went from 3 to 2 on the tick the cues stopped for the fall.
 - **Multi-Man's wireframes** each start with one stock and leave the slot at their KO, so the next one in it starts afresh: in 10-Man Melee six wireframes knocked out gave no stock line.
 
@@ -206,7 +206,7 @@ In a team match a player out of stocks can take one from a teammate, and the cou
 
 ### The timer on the HUD
 
-The HUD shows "M:SS.cc" at the top; at five seconds left a countdown swaps it for large digits, and the game's announcer counts five to one, then "Time!". The match announcements say the time left at each whole minute and at 30 seconds; the snapshot's `timer`, `timer_counts_up`, `timer_seconds` and `timer_frames` carry what they need.
+The HUD shows "M:SS.cc" at the top; at five seconds left a countdown swaps it for large digits, and the game's announcer counts five to one, then "Time!". The snapshot's `timer`, `timer_counts_up`, `timer_seconds` and `timer_frames` carry it.
 
 - **Which matches have one**: `StartMeleeRules.timer_enabled`, and `timer_counts_up` for one that counts up. VS mode's rules (`gm_80167BC8`) give a time match its time limit and a stock match its stock time limit, each a countdown, and no timer when the limit is unlimited; ranked online forces a countdown (`gmonlinemode.c`); an event takes both flags and its limit from the event's data (`gmevent.c`). Multi-Man and All-Star count up, except 3-Minute Melee, which counts down (`gmMultiman_InitTimedRules`); Home-Run Contest counts down from 10 seconds. Every match scene, the single-player modes', the events' and online included, runs on the one `VsSceneController` (`fn_8016E730` copies the rules into it), so all of them read the same way.
 - **How it runs**: `fn_8016CD98` (`gmvs.c`) advances it before the procs, only while `hud_enabled` and not paused. `unk_2C` counts up through each second, 0 to 59, on a countdown too: a countdown starts at `timer_seconds` = the limit and `unk_2C` = 59, and as `unk_2C` wraps to 0 a second comes off. The HUD draws it in a proc (`ifTime_UpdateTimers`) with the hundredths `99 - 99 * unk_2C / 59` (`gm_8016AF0C`), so it shows "N:00.00" while `unk_2C` is 59, the tick before the second comes off, and "N-1:59.99" on the next. TIME! comes at 0 and 59.
@@ -220,7 +220,7 @@ The HUD shows "M:SS.cc" at the top; at five seconds left a countdown swaps it fo
 - **The label over the fighter** is the port's ("2P") for a human, "CP" for every computer player, or a human's name tag. In VS and online slot n plays on port n, so the third panel is P3's or the third CPU's; in Multi-Man the panels carry no number.
 - **The name tag**: `Player_GetNametagSlotID(slot)`, 120 for none, then `GetPersistentNameData(index)->namedata`, up to eight bytes of Shift-JIS without a terminator, as results reads it; `decode_shift_jis` (`game_text.cpp`) decodes it. Online each copy looks the index up on its own memory card, so the peer's tag is not reliable.
 - **Stable through the match**: the slot's tag index is set at the match's start from character select's choice (`gmvs.c`, from `PlayerInitData.nametag`) and to none when a single-player mode spawns a fighter mid-match (`gm_16A2.c`, `gm_181A.c`); a respawn and a team's stock steal leave it.
-- **Human or computer**: `Player_GetPlayerSlotType`; a demo player and a boss count as computer players. **Team**: `Player_GetTeam(slot)` and `gm_8016B168()` for a team match, as for the cues.
+- **Human or computer**: `Player_GetPlayerSlotType`; a demo player and a boss count as computer players. The title screen's attract loop (game mode `GM_OPENING_MV`, `gmopeningmode.c`) plays its demo fights as CPUs with a HUD, so the snapshot counts no match in that mode. **Team**: `Player_GetTeam(slot)` and `gm_8016B168()` for a team match, as for the cues.
 
 ## Position and motion
 
@@ -471,6 +471,6 @@ Everything in the table can also be had by polling once a tick and comparing wit
 
 ## Open questions
 
-- **Predicted ticks online.** Whether an announcement waits for its tick to be confirmed, at the cost of a few ticks' delay, or speaks at once and occasionally reports a hit that rollback undoes. The match announcements speak at once but say a damage figure only once it has held still for a while (`.scratch/match-announcements/spec.md`, "Online"), which hides a figure a rollback changes; a stock is said on its tick, and a KO that rollback undoes would still be said.
+- **Predicted ticks online.** Whether an announcement waits for its tick to be confirmed, at the cost of a few ticks' delay, or speaks at once and occasionally reports a hit that rollback undoes. Still open for the match announcements' stocks, said on their tick, so a KO that rollback undoes is said; their damage waits out the settle time (`.scratch/match-announcements/spec.md`, "Online").
 - **Ledge grabs and held items** were not observed in the probe: where a held item's `pos` sits is unchecked, and the holder's position is a safe stand-in.
 - **Most stages' state fields** beyond Pokémon Stadium and Brinstar are unnamed in the decomp.

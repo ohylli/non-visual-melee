@@ -76,8 +76,8 @@ A11yMatchHud before_go() {
     A11yMatchHud hud{};
     hud.match = true;
     hud.hud_enabled = false;
-    hud.phase = 0;
-    hud.stocks = true;
+    hud.decided = false;
+    hud.shows_stocks = true;
     hud.you = 0;
     for (int slot = 0; slot < 2; slot++) {
         A11yMatchHudPlayer& player = hud.players[slot];
@@ -278,20 +278,25 @@ void the_baseline_at_go() {
 }
 
 /* At GAME! or TIME! a figure still settling is dropped and logged as
- * dropped; the match's end is final until the next scene. */
+ * dropped. Online a rollback can take GAME! back: the match goes on,
+ * followed afresh from what the HUD shows. A match left from the pause is
+ * gone until the next scene. */
 void game_drops_a_pending_figure() {
     Fixture f;
     f.go();
     f.hud.players[0].damage = 45;
     f.hud.players[1].damage = 70;
     f.ticks(3);
-    f.hud.phase = 1;
+    f.hud.decided = true;
     assert(f.settle().empty());
     assert(logged("[a11y] match announcement yours dropped (match over): \"45\""));
     assert(logged("[a11y] match announcement opponents dropped (match over): \"70\""));
-    f.hud.phase = 0;
     f.hud.players[1].damage = 90;
     assert(f.settle().empty());
+    f.hud.decided = false;
+    assert(f.settle().empty());
+    f.hud.players[1].damage = 95;
+    assert((f.settle() == Lines{"opponents 1 95"}));
 
     /* The loser's star KO, cut short by the freeze, is no figure owed. */
     Fixture g;
@@ -301,7 +306,7 @@ void game_drops_a_pending_figure() {
     s_lines.clear();
     g.hud.players[1].out = true;
     g.ticks();
-    g.hud.phase = 1;
+    g.hud.decided = true;
     g.ticks();
     assert(s_lines.empty());
 
@@ -313,6 +318,11 @@ void game_drops_a_pending_figure() {
     h.hud = A11yMatchHud{};
     assert(h.settle().empty());
     assert(logged("[a11y] match announcement opponents dropped (match gone): \"33\""));
+    h.hud = before_go();
+    h.hud.hud_enabled = true;
+    h.ticks(3);
+    h.hud.players[1].damage = 40;
+    assert(h.settle().empty());
 
     /* The next scene's match starts anew. */
     h.announcer.scene_entered();
@@ -634,7 +644,7 @@ void thresholds_at_game() {
     f.hud.players[1].damage = 25;
     f.ticks(3);
     s_lines.clear();
-    f.hud.phase = 1;
+    f.hud.decided = true;
     f.ticks();
     assert((s_lines == std::vector<std::string>{
                            "[a11y] match announcement opponents dropped (match over): \"25\""}));
@@ -737,7 +747,7 @@ void stocks_switches() {
 /* A timed match shows no stocks: none said, whatever the count does. */
 void stocks_not_in_a_timed_match() {
     Fixture f;
-    f.hud.stocks = false;
+    f.hud.shows_stocks = false;
     f.go();
     f.hud.players[1].stocks = 3;
     f.hud.players[0].stocks = 1;
@@ -897,7 +907,7 @@ void time_left_the_switches() {
     Fixture g;
     g.timer(90);
     g.go();
-    g.hud.phase = 1;
+    g.hud.decided = true;
     assert(g.count(90 * 60).empty());
 }
 

@@ -19,6 +19,7 @@
 #include <melee/gm/gm_17AD.h>
 #include <melee/gm/gm_17BA.h>
 #include <melee/gm/gm_1884.h>
+#include <melee/gm/gm_1A3F.h>
 #include <melee/gm/gmmain_lib.h>
 #include <melee/gm/gmonlinemode.h>
 #include <melee/gm/gmresult.h>
@@ -865,9 +866,18 @@ enum {
 };
 
 /* The name tag slot that means none: the row shows the port (fn_8017BB94). */
-enum { A11Y_RESULTS_NO_TAG = 0x78 };
+enum { A11Y_NO_TAG = 0x78 };
 /* The memory card's name tag slots (GetPersistentNameData). */
-enum { A11Y_RESULTS_TAG_SLOTS = GM_NAMETAG_BANK_COUNT * GM_NAMETAG_BANK_SIZE };
+enum { A11Y_TAG_SLOTS = GM_NAMETAG_BANK_COUNT * GM_NAMETAG_BANK_SIZE };
+
+/* Copies the name tag in a name tag slot, up to eight bytes of Shift-JIS
+ * with no terminator of their own, into out (nine bytes, zeroed); none
+ * leaves it empty. */
+static void copy_name_tag(int tag, char* out) {
+    if (tag != A11Y_NO_TAG && tag >= 0 && tag < A11Y_TAG_SLOTS) {
+        memcpy(out, GetPersistentNameData(tag)->namedata, 8);
+    }
+}
 
 /* The KOs and falls page's rows for one panel (lbl_803D6488): a row per other
  * player, shown where the game's own test (fn_801743C4, fn_8017AE70 and its
@@ -883,10 +893,7 @@ static void results_opponents(const MatchEnd* me, int slot, A11yResultsPlayer* r
         opponent->port = i;
         opponent->kos = results_clamp(self->kills[i], 999999);
         opponent->falls = results_clamp(other->kills[slot], 999999);
-        if (other->x4 != A11Y_RESULTS_NO_TAG && other->x4 < A11Y_RESULTS_TAG_SLOTS) {
-            const char* name = GetPersistentNameData(other->x4)->namedata;
-            memcpy(opponent->tag, name, sizeof(opponent->tag) - 1);
-        }
+        copy_name_tag(other->x4, opponent->tag);
     }
     row->page_sds = fn_8017B21C(slot);
 }
@@ -1236,6 +1243,12 @@ _Static_assert(A11Y_MATCH_SLOTS == Gm_Player_NumMax, "the game keeps another num
 void a11y_game_match_hud(int local_port, bool online, A11yMatchHud* out) {
     memset(out, 0, sizeof(*out));
     out->online = online;
+    if (gm_GetCurrentGameMode() == GM_OPENING_MV) {
+        /* The title screen's attract loop: its demo fights, CPUs with a HUD,
+         * and the how-to-play movie are matches nobody plays, where only
+         * the game's announcer speaks (scene_speech.cpp). */
+        return;
+    }
     for (int slot = 0; slot < A11Y_MATCH_SLOTS; slot++) {
         const Fighter* fp = match_fighter(slot);
         if (fp == NULL) {
@@ -1260,19 +1273,16 @@ void a11y_game_match_hud(int local_port, bool online, A11yMatchHud* out) {
         /* As the results' KOs and falls page reads it: set at the match's
          * start from the player's choice on character select, and to none
          * for a fighter a single-player mode spawns mid-match. */
-        u8 tag = Player_GetNametagSlotID(slot);
-        if (tag != A11Y_RESULTS_NO_TAG && tag < A11Y_RESULTS_TAG_SLOTS) {
-            memcpy(player->tag, GetPersistentNameData(tag)->namedata, sizeof(player->tag) - 1);
-        }
+        copy_name_tag(Player_GetNametagSlotID(slot), player->tag);
     }
     if (!out->match) {
         return;
     }
     const VsSceneState* scene = gmVs_GetSceneState();
     out->hud_enabled = scene->hud_enabled != 0;
-    out->phase = scene->unk_0;
+    out->decided = scene->unk_0 != 0;
     out->teams = gm_8016B168();
-    out->stocks = gm_8016B094() || gm_8016B0E8();
+    out->shows_stocks = gm_8016B094() || gm_8016B0E8();
     /* The timer advances before the procs run (fn_8016CD98), only while
      * hud_enabled, and stands still while paused; the HUD draws it in a proc
      * (ifTime_UpdateTimers), so this tick's figures are the ones it shows.

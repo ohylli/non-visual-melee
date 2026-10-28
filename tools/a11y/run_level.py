@@ -151,8 +151,9 @@ COUNT = {"match_gap": GAP_ONCE, "match_gap_battlefield": GAP_ONCE, "match_ledge"
 def threshold_crossings(lines, out):
     """Failure lines unless each damage figure said in a voice crossed a
     multiple of the damage interval, read from the run's a11y.ini, since the
-    last one said in that voice. A figure below the last said came after a
-    KO, which counts the next crossing from 0."""
+    last one said in that voice. A stock line says a KO, which counts the
+    next crossing from 0, as does a figure below the last said (a KO with
+    stocks off, or a heal)."""
     try:
         with open(out + ".settings/a11y.ini", encoding="utf-8") as f:
             interval = int(re.search(r"^match_announcements\.damage_interval = (\d+)$", f.read(), re.M)[1])
@@ -160,6 +161,10 @@ def threshold_crossings(lines, out):
         return [f">> FAILED: no damage interval in the run's a11y.ini: {e}"]
     failures, said = [], {}
     for line in lines:
+        stock = re.search(r'\[a11y\] voice (\w+): "(\d+ stocks|last stock)"$', line)
+        if stock:
+            said[stock[1]] = 0
+            continue
         m = re.search(r'\[a11y\] voice (\w+): "(\d+)"$', line)
         if not m:
             continue

@@ -70,7 +70,7 @@ Prism's output call is expected to hand the text over and return without waiting
 
 ## Voices
 
-The voices speak match announcements, so the player hears from the first syllable whether a line is about them; everything else stays on the screen reader. ADR-0008 records why the fork renders them itself rather than letting Prism play them. Each is a Prism OneCore instance of its own, kept for the run and never shared, since the maintainer's other mods lost lines to sharing one or tearing one down while another spoke.
+The voices speak the match announcements about players, so the player hears from the first syllable whether a line is about them; everything else stays on the screen reader. ADR-0008 records why the fork renders them itself rather than letting Prism play them. Each is a Prism OneCore instance of its own, kept for the run and never shared, since the maintainer's other mods lost lines to sharing one or tearing one down while another spoke.
 
 ### What speaks through them
 

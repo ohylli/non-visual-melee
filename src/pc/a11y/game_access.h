@@ -906,22 +906,24 @@ typedef struct A11yMatchHudPlayer {
 
 typedef struct A11yMatchHud {
     /* A match is on: some slot's fighter is on the live fighter list,
-     * which is empty outside a match. */
+     * which is empty outside a match, and not the title screen's attract
+     * loop (GM_OPENING_MV: its demo fights and the how-to-play movie). */
     bool match;
     /* VsSceneState.hud_enabled: set as GO ends; cleared again while the
      * pause camera or a single-player mode's scripted scene hides the HUD,
      * and at the match's end. */
     bool hud_enabled;
-    /* VsSceneState.unk_0: 0 while the match runs, paused included; 1 from
-     * GAME! or TIME!, 2 a single-player mode's score tally, 3 finished.
-     * Training never leaves 0. */
-    int phase;
+    /* GAME! or TIME! has come: VsSceneState.unk_0 past 0 (1 from GAME! or
+     * TIME!, 2 a single-player mode's score tally, 3 finished), where 0 is
+     * the match running, paused included. Training never leaves 0, nor does
+     * a match left from the pause. */
+    bool decided;
     bool teams;
     /* The HUD shows stocks: a stock match (gm_8016B094), or a mode counting
      * lives (rules.x4_2, gm_8016B0E8: Classic, Adventure, Multi-Man), as
      * the panels' stock icons (ifStatus_802F6508) and the stock loss at a
      * KO (ftCo_800D34E0) decide. */
-    bool stocks;
+    bool shows_stocks;
     /* The match has a timer (StartMeleeRules.timer_enabled), and it counts
      * up (Multi-Man, All-Star) rather than down. */
     bool timer;

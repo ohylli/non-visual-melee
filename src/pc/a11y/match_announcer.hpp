@@ -9,9 +9,10 @@
  * itself.
  *
  * A match's announcements run from GO, when the HUD comes on, to GAME! or
- * TIME!. At GO every player's damage is taken as already said, so a match
- * starting at 300% says nothing until it changes; the player labels are
- * decided then too and kept. Damage is said once it has held still for the
+ * TIME!; a GAME! that an online rollback takes back starts them anew. At GO
+ * every player's damage is taken as already said, so a match starting at
+ * 300% says nothing until it changes; the player labels are decided then
+ * too and kept. Damage is said once it has held still for the
  * settle time, with no maximum wait, whenever it differs from the last
  * figure said ("45", "P2 45"): a combo says its end figure, a heal its
  * last. A KO resets the last figure to 0 silently, so the respawn's 0% is
@@ -39,6 +40,7 @@
 namespace a11y {
 
 class Speech;
+enum class Voice;
 
 using Clock = std::chrono::steady_clock;
 
@@ -93,7 +95,8 @@ private:
     enum class Stage {
         waiting, /* for GO */
         running, /* from GO */
-        over,    /* from GAME! or TIME!, or the match gone, until the next scene */
+        over,    /* from GAME! or TIME!, unless a rollback takes it back */
+        gone,    /* the match left from the pause, until the next scene */
     };
 
     struct Player {
@@ -115,6 +118,12 @@ private:
         int stocks = 0;
         /* "P2", "teammate Bob", or empty where no label is said. */
         std::string label;
+
+        Voice voice() const;
+        /* A teammate behind the Teammates switch: nothing of theirs said. */
+        bool left_out(const MatchAnnouncementValues& values) const {
+            return teammate && !values.teammates;
+        }
     };
 
     void start(const A11yMatchHud& hud, Clock::time_point now);
@@ -140,9 +149,9 @@ private:
     /* Whether the player's figure shown now is to be said once it settles,
      * by the mode in force. */
     bool owed(const Player& player, const MatchAnnouncementValues& values) const;
-    /* The match is over: each figure still owed is dropped, logged with
-     * why. */
-    void finish(const char* why, const MatchAnnouncementValues& values);
+    /* The match is over or gone (stage): each figure still owed is
+     * dropped, logged with why. */
+    void finish(Stage stage, const char* why, const MatchAnnouncementValues& values);
     std::string line(const Player& player, int figure) const;
     std::string stock_line(const Player& player, int stocks) const;
 

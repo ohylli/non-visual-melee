@@ -14,6 +14,10 @@ constexpr int kHalfMinute = 30 * kTicksPerSecond;
 
 }  // namespace
 
+Voice MatchAnnouncer::Player::voice() const {
+    return yours ? Voice::yours : Voice::opponents;
+}
+
 void MatchAnnouncer::scene_entered() {
     m_stage = Stage::waiting;
     m_labelled = false;
@@ -23,12 +27,11 @@ void MatchAnnouncer::scene_entered() {
 
 void MatchAnnouncer::tick(
     const A11yMatchHud& hud, const MatchAnnouncementValues& values, Clock::time_point now) {
-    if (m_stage == Stage::over) {
-        return;
-    }
-    if (m_stage == Stage::waiting) {
-        /* GO ends as the HUD comes on; until then nobody can be hit. */
-        if (hud.match && hud.hud_enabled && hud.phase == 0) {
+    if (m_stage != Stage::running) {
+        /* GO ends as the HUD comes on; until then nobody can be hit. Online
+         * a predicted tick can reach GAME! and a rollback take it back: the
+         * match goes on, followed afresh from what the HUD shows. */
+        if (m_stage != Stage::gone && hud.match && hud.hud_enabled && !hud.decided) {
             start(hud, now);
         }
         return;
@@ -36,11 +39,11 @@ void MatchAnnouncer::tick(
     if (!hud.match) {
         /* Left from the pause with L+R+A+Start, which never reaches
          * GAME!, or the scene gone. */
-        finish("match gone", values);
+        finish(Stage::gone, "match gone", values);
         return;
     }
-    if (hud.phase != 0) {
-        finish("match over", values);
+    if (hud.decided) {
+        finish(Stage::over, "match over", values);
         return;
     }
     time_left(hud, values);
@@ -85,8 +88,7 @@ void MatchAnnouncer::tick(
         }
         if (owed(player, values)) {
             player.said = player.shown;
-            m_speech.announce_voice(
-                player.yours ? Voice::yours : Voice::opponents, slot, line(player, player.shown));
+            m_speech.announce_voice(player.voice(), slot, line(player, player.shown));
         } else if (player.shown < player.said) {
             /* Thresholds: a fall is silent but lowers the figure the next
              * crossing counts from, so 85, healed to 55, hit to 65 says
@@ -155,17 +157,15 @@ bool MatchAnnouncer::teammate(const A11yMatchHud& hud, int slot) {
 
 DamageMode MatchAnnouncer::damage_mode(
     const Player& player, const MatchAnnouncementValues& values) const {
-    if (player.teammate && !values.teammates) {
+    if (player.left_out(values)) {
         return DamageMode::off;
     }
     return player.yours ? values.your_damage : values.opponents_damage;
 }
 
 bool MatchAnnouncer::stocks_on(const Player& player, const MatchAnnouncementValues& values) const {
-    if (player.teammate && !values.teammates) {
-        return false;
-    }
-    return player.yours ? values.your_stocks : values.opponents_stocks;
+    return !player.left_out(values) &&
+           (player.yours ? values.your_stocks : values.opponents_stocks);
 }
 
 void MatchAnnouncer::stocks(
@@ -176,7 +176,7 @@ void MatchAnnouncer::stocks(
         return;
     }
     /* Off, or no stocks on the HUD (a timed match): taken as said. */
-    const bool on = hud.stocks && values.on && stocks_on(player, values);
+    const bool on = hud.shows_stocks && values.on && stocks_on(player, values);
     if (on && !hud.hud_enabled) {
         /* The HUD hidden mid-match: held until it shows again, as damage
          * is. */
@@ -187,8 +187,7 @@ void MatchAnnouncer::stocks(
         /* On the tick it changes, a KO's or a steal's: a stock line about
          * the player takes the place of a damage line still waiting. At 0
          * the game's announcer calls the elimination. */
-        m_speech.announce_voice(
-            player.yours ? Voice::yours : Voice::opponents, slot, stock_line(player, count));
+        m_speech.announce_voice(player.voice(), slot, stock_line(player, count));
     }
 }
 
@@ -243,13 +242,12 @@ bool MatchAnnouncer::owed(const Player& player, const MatchAnnouncementValues& v
     return false;
 }
 
-void MatchAnnouncer::finish(const char* why, const MatchAnnouncementValues& values) {
-    m_stage = Stage::over;
+void MatchAnnouncer::finish(Stage stage, const char* why, const MatchAnnouncementValues& values) {
+    m_stage = stage;
     for (const Player& player : m_players) {
         if (player.tracked && !player.out && values.on && owed(player, values) && log_enabled()) {
             pc_log_line("[a11y] match announcement %s dropped (%s): \"%s\"",
-                voice_name(player.yours ? Voice::yours : Voice::opponents), why,
-                line(player, player.shown).c_str());
+                voice_name(player.voice()), why, line(player, player.shown).c_str());
         }
     }
 }
