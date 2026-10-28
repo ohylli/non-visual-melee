@@ -414,6 +414,123 @@ void starts_and_stops_are_logged_once() {
     assert(s_lines[1] == "[a11y] cue tick stop pan 0.25 pitch 1.00 gain 1.00 interval 0.250");
 }
 
+VoiceSpec once(const char* name) {
+    VoiceSpec spec;
+    spec.name = name;
+    spec.mode = VoiceMode::once;
+    return spec;
+}
+
+/* The frames from the first sounding one to the last, inclusive; -1 when
+ * silent. */
+std::pair<int, int> sounding_span(const std::vector<float>& out) {
+    int first = -1;
+    int last = -1;
+    for (size_t f = 0; f < out.size() / 2; f++) {
+        if (std::fabs(out[2 * f]) > 1e-7f) {
+            if (first == -1) {
+                first = static_cast<int>(f);
+            }
+            last = static_cast<int>(f);
+        }
+    }
+    return {first, last};
+}
+
+/* A voice's line: a buffer handed over at run time, played from its start
+ * once, ramped in and out, and then silence. */
+void a_once_voice_plays_its_buffer_once() {
+    const float most = kCentredFull / 50.0f;
+    CueEngine engine;
+    int voice = engine.add_voice(once("your voice"));
+    assert(voice == 0);
+    assert(!engine.playing(voice));
+    assert(engine.play(voice, constant(1.0f, 4800)));
+    assert(engine.playing(voice));
+    std::vector<float> out = render(engine, kCueRate / 5);
+    auto [first, last] = sounding_span(out);
+    assert(first == 0 && last == 4799);
+    /* Ramps at both ends: no step bigger than a ramp's, full level in the
+     * middle. */
+    assert(largest_step(out, 0) < most);
+    assert(near(out[2 * 2400], kCentredFull, 1e-4));
+    assert(!engine.playing(voice));
+    /* Not looped: silence after. */
+    assert(peak(render(engine, kCueRate / 5)) == 0.0f);
+    /* Again plays it again, from the start. */
+    assert(engine.play(voice, constant(1.0f, 4800)));
+    out = render(engine, kCueRate / 5);
+    assert(sounding_span(out) == std::make_pair(0, 4799));
+    /* Nothing was logged for a line: the voices log their own. */
+    s_lines.clear();
+    engine.play(voice, constant(1.0f, 480));
+    render(engine, 960);
+    assert(s_lines.empty());
+}
+
+/* A new line while one plays cuts it with the stop ramp and starts at
+ * once; a line handed over before the last was taken replaces it. */
+void a_once_voice_cuts_with_a_ramp() {
+    const float most = kCentredFull / 50.0f;
+    CueEngine engine;
+    int voice = engine.add_voice(once("opponents' voice"));
+    engine.play(voice, constant(1.0f, kCueRate));
+    std::vector<float> out = render(engine, 4800);
+    float before = out[out.size() - 2];
+    assert(near(before, kCentredFull, 1e-4));
+    engine.play(voice, constant(0.5f, kCueRate));
+    out = render(engine, 4800);
+    assert(largest_step(out, 0, before) < most);
+    /* Down within the ramp, up again, and at the new line's level. */
+    float lowest = 1.0f;
+    for (int f = 0; f < 480; f++) {
+        lowest = std::min(lowest, out[2 * static_cast<size_t>(f)]);
+    }
+    assert(lowest < most);
+    assert(near(out[out.size() - 2], 0.5f * kCentredFull, 1e-4));
+    /* Two handed over between blocks: the later one plays, the earlier
+     * never does. */
+    engine.play(voice, constant(0.25f, kCueRate));
+    engine.play(voice, constant(0.125f, kCueRate));
+    out = render(engine, 4800);
+    assert(near(out[out.size() - 2], 0.125f * kCentredFull, 1e-4));
+    /* Stopped, it ramps out and is done. */
+    engine.stop(voice);
+    before = out[out.size() - 2];
+    out = render(engine, 4800);
+    assert(largest_step(out, 0, before) < most);
+    assert(peak(std::vector<float>(out.begin() + 960, out.end())) == 0.0f);
+    assert(!engine.playing(voice));
+    /* Many lines in a row never run out of room. */
+    for (int i = 0; i < 20; i++) {
+        assert(engine.play(voice, constant(0.5f, 960)));
+        render(engine, 480);
+    }
+    render(engine, 4800);
+    assert(!engine.playing(voice));
+}
+
+/* A voice's chain is master volume × its own gain (the voice's Volume): the
+ * cue volume, the cue switches and any cue's level leave it alone. */
+void a_once_voice_takes_master_and_its_own_volume() {
+    CueEngine engine;
+    int voice = engine.add_voice(once("your voice"));
+    engine.set_master_volume(0.5f);
+    engine.set_mix_level(CueLevel{false, 0.1f, 1.0f});
+    engine.set_cue_level(0, CueLevel{false, 0.2f, 3.0f});
+    engine.set_targets(voice, at(0.0f, 0.5f, 0.6f));
+    engine.play(voice, constant(1.0f, kCueRate));
+    std::vector<float> out = render(engine, 4800);
+    assert(near(out[out.size() - 2], 0.5 * 0.6 * kCentredFull, 1e-4));
+    /* The volume is live, with a glide. */
+    engine.set_targets(voice, at(0.0f, 0.5f, 1.0f));
+    out = render(engine, 4800);
+    assert(near(out[out.size() - 2], 0.5 * kCentredFull, 1e-4));
+    engine.set_master_volume(0.0f);
+    render(engine, 4800);
+    assert(peak(render(engine, 4800)) < 1e-5f);
+}
+
 void the_trace_has_a_line_per_voice_each_tick(const std::string& path) {
     {
         CueEngineOptions options;
@@ -477,6 +594,9 @@ int main(int argc, char** argv) {
     five_voices_stay_under_full_scale();
     a_pulse_that_does_not_fit_is_refused();
     starts_and_stops_are_logged_once();
+    a_once_voice_plays_its_buffer_once();
+    a_once_voice_cuts_with_a_ramp();
+    a_once_voice_takes_master_and_its_own_volume();
     the_trace_has_a_line_per_voice_each_tick(dump + ".trace");
     write_pulse_train(dump);
     std::cout << "cue_engine: all tests passed\n";

@@ -29,6 +29,7 @@ endif ()
 target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/hooks.cpp
         ${CMAKE_CURRENT_LIST_DIR}/speech.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/voices.cpp
         ${CMAKE_CURRENT_LIST_DIR}/event_pipe.cpp
         ${CMAKE_CURRENT_LIST_DIR}/screen_reader_bridge.cpp
         ${CMAKE_CURRENT_LIST_DIR}/rmlui_reader.cpp
@@ -189,6 +190,21 @@ if (TARGET unit_tests)
     add_test(NAME speech COMMAND speech_test)
     set_tests_properties(speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests speech_test)
+
+    # The voices against a fake voice bridge, their worker the real one, with
+    # speech over a fake screen reader and the cue engine rendered into
+    # buffers; its own pc_log_line.
+    add_executable(voices_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_voices.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/voices.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/cue_engine.cpp)
+    target_include_directories(voices_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_link_libraries(voices_test PRIVATE a11y_miniaudio)
+    target_compile_options(voices_test PRIVATE -UNDEBUG)
+    add_test(NAME voices COMMAND voices_test)
+    set_tests_properties(voices PROPERTIES LABELS melee)
+    add_dependencies(unit_tests voices_test)
 
     # Launcher speech against the real resources/launcher.rml, in an RmlUi
     # context that draws nothing, with the Accessibility category's rows

@@ -12,6 +12,16 @@ feature --announce--> speech --log line--> melee-pc.log
                          +--> screen reader bridge --> Prism --> NVDA / JAWS / Windows voice
 ```
 
+Beside the screen reader, speech has two **voices** of the fork's own (below, "Voices"): **your voice** for what happens to you and **the opponents' voice** for what happens to everyone else. A feature hands a voice a line with its **subject**, whom it is about. Speech logs it and passes it to the voices (`voices.cpp`), whose worker thread has the bridge render it with a Windows voice to samples, and the cue engine plays them (ADR-0008):
+
+```
+feature --announce_voice--> speech --log line--> melee-pc.log
+                               |
+                               +--> voices: queue --> worker --> bridge --> Prism (OneCore) --> samples
+                                                                                               |
+                                    cue engine's once voice <--- evened out, mono, 48 kHz <-----+
+```
+
 ## Speech never filters
 
 Speech says exactly what it is given, every time, and never drops a repeat. A feature that checks game state every frame keeps its own "last said" state. That keeps the speech log an exact record of what each hook asked for.
@@ -22,7 +32,9 @@ Every announcement, and every speech event worth knowing about (startup, the bac
 
 With speech off, by its switch or Accessibility's (below), announcements are still logged, marked `(off)`, and the speech log goes on recording. A run can check a feature's announcements without talking over the maintainer's screen reader: `MELEE_A11Y=0` turns Accessibility off for the run. Prism is started the first time speech is on, so a run that never turns it on never starts Prism.
 
-A feature that takes keys for speech leaves them alone with speech off (the launcher's line reading is one), so a run that checks such a feature needs speech on without the screen reader: `MELEE_A11Y_SCREEN_READER=0` keeps accessibility on, never starts Prism, and logs each announcement marked as muted.
+A feature that takes keys for speech leaves them alone with speech off (the launcher's line reading is one), so a run that checks such a feature needs speech on without the screen reader: `MELEE_A11Y_SCREEN_READER=0` keeps accessibility on, never starts the screen reader, and logs each announcement marked as muted. The voices still play (below, "Voices").
+
+Each voice's line is one line too, naming its voice, marked `(off)` as the screen reader's are; the voices add what became of it: when it plays, with its render time and its wait, and when it is cut off or dropped, and why. The `verify` skill has the lines.
 
 The port's logger cuts each line at 512 bytes, so a very long announcement is truncated in the log. What gets spoken is not affected.
 
@@ -42,15 +54,56 @@ Four switches are settings like any other, rows of the accessibility settings in
 
 - `MELEE_A11Y=1` forces Accessibility on, the way back for a player who saved it off and starts the game silent; editing `a11y.ini` is the other.
 - An override of Steering or Cues holds against Accessibility as well, so an agent run with Accessibility off (`MELEE_A11Y=0`) still steers with `MELEE_A11Y_STEER=1` and hears cues with `MELEE_A11Y_CUES=1`. Without an override they sit under Accessibility like any switch.
-- The developer switches stay environment-only, never settings: `MELEE_A11Y_LOG`, `MELEE_A11Y_SCREEN_READER`, the cue dump, trace and previews, the event pipe and the text dump.
+- The developer switches stay environment-only, never settings: `MELEE_A11Y_LOG`, `MELEE_A11Y_SCREEN_READER`, the cue dump, trace and previews, the voices' preview (`MELEE_A11Y_VOICE_PREVIEW`), the event pipe and the text dump.
 
 ## Threading rule
 
-Speech runs on the game thread only, the thread that started it. Prism's backends are not thread-safe, and neither is the port's logger. Every feature planned so far runs on the game thread anyway.
+Speech runs on the game thread only, the thread that started it. Prism's backends are not thread-safe, and neither is the port's logger. Every feature planned so far runs on the game thread anyway. The voices' worker is the one exception inside speech: it owns the voices' Prism instances and never logs, and hands its results to the game thread (below, "Voices").
 
 A call from any other thread is a bug: speech logs it and drops it. If a feature on another thread ever needs to speak (the netplay timer thread is the likely one), a queue inside speech can hand announcements to the game thread without changing any feature.
 
 Prism's output call is expected to hand the text over and return without waiting for speech to finish, so it should not hold up a frame. That is an assumption from Prism's API, not a measurement. If a hitch is ever noticed, time the Windows voice fallback (SAPI) first.
+
+## Voices
+
+The voices speak match announcements, so the player hears from the first syllable whether a line is about them; everything else stays on the screen reader. ADR-0008 records why the fork renders them itself rather than letting Prism play them. Each is a Prism OneCore instance of its own, kept for the run and never shared, since the maintainer's other mods lost lines to sharing one or tearing one down while another spoke.
+
+### Rendering and playing
+
+- **One worker thread** (`Voices::work`) starts the first time speech is on, opens both instances, lists the installed voices and renders a test line, then renders each line as it is asked for: `prism_backend_speak_to_memory`, which returns once the whole line is synthesized. The game thread hands it text and never waits; each frame it takes back what was rendered.
+- **Evening out.** OneCore's loudness varies from word to word (grimdark's finding), so every line is raised or lowered to one peak (`kVoicePeak`, a tuning value) after it is mixed down to mono and resampled to the cue engine's 48 kHz with miniaudio's resampler. A voice's volume is applied after that, by the cue engine, never by Prism's own volume, which the evening out would undo.
+- **Playing.** Each voice has a once voice in the cue engine (`docs/a11y/cues.md`), which plays a buffer handed to it at run time, centred, with the engine's ramps. Its chain is the master volume × the voice's volume, under neither the cue volume nor any cue switch.
+- **Rate** is Prism's 0 to 1, 0.5 the voice's normal speed, set on the instance before the next line is rendered.
+
+### Queueing
+
+Every line carries its subject: a player's slot in a match, or a preview (`kPreviewSubject`). Within one voice:
+
+- a new line about the subject whose line is playing cuts that line off with the engine's stop ramp as soon as the new one is rendered, ahead of the lines waiting;
+- a new line about a subject whose line is waiting takes its place in the queue;
+- any other waits behind the lines already there.
+
+So a queue never holds two lines about one subject, and a stale figure is never said after a fresh one. Each line is rendered when it is queued, so the next one is ready when its turn comes. The two voices never wait for or cut each other, nor the screen reader.
+
+### Switches, the port menu and the developer preview
+
+- **Under the Speech switch**, and Accessibility above it: off, a voice's line is logged `(off)` and never rendered. Turning either off lets the line playing finish and drops the lines waiting; so does the port menu opening. A line said while the menu is open plays: the menu is where a voice's preview is asked for. In a VS pause nothing changes.
+- **`MELEE_A11Y_SCREEN_READER=0` leaves the voices playing**, unmarked (open question 5 of `.scratch/voices/spec.md`): they play through the cue engine, never the screen reader, so a driven run, whose audio goes to SDL's dummy driver, checks them through the speech log and the cue dump without a sound. That starts Prism on the worker for the voices alone.
+- **`MELEE_A11Y_VOICE_PREVIEW=1`**, a developer switch, has your voice say "Your voice" as soon as the voices are ready and the opponents' voice "Opponents' voice" a pause after it ends, through speech and its log, so the voices can be checked before any feature speaks with them.
+- **Online** nothing changes: the callers are behind the hooks' rollback gate like all speech, the voices' frame runs at the frame boundary outside the simulation, and the cue engine never touches the game's sounds.
+
+### Choosing a voice
+
+A voice is known by its display name ("Microsoft Zira"): Prism has no stable id, and its indexes may change between runs. `find_voice` takes a setting's text and gives the voice of that name, ignoring case, else the first whose name holds the text ("Zira"), else the Windows default voice. Your voice wants "Zira" and the opponents' voice "Mark" until a setting says otherwise. The worker and the game thread look in the same list, sorted by language and then name, as the menus show it. If OneCore cannot start or its test line fails, the voices log why and drop their lines; what the player hears then is the Voice rows' issue (`.scratch/voices/issues/03-voice-rows.md`).
+
+### What Prism v0.18.2 does
+
+Measured on the maintainer's machine (Windows 10, seven OneCore voices, among them a Finnish one), from a worker thread, answering the spec's open questions 1 to 3:
+
+- **Rendering to memory** is as in v0.14.4: the OneCore backend synthesizes the whole line, then calls back once, on the calling thread, with float samples (mono, 16 kHz for every voice installed here), silence trimmed. Rate applies to the rendered line: the same long line lasted 2.5 s at 0.5, 1.5 s at 0.8 and 6.5 s at 0.2. v0.18.2 also sets OneCore's pitch, which v0.14.4 did not.
+- **The apartment.** `prism_init` still initialises COM as a single-threaded apartment on the thread that calls it, and the OneCore backend moves its blocking WinRT calls to the thread pool when called from one. So the worker calls `prism_init` itself, a context apart from the screen reader's, and creates its instances there; nothing else is needed. Two instances also rendered at once from two threads.
+- **Shutting down.** `prism_shutdown` on the worker, called while the game exits (from its atexit handler, where `pc_a11y_shutdown` runs), never returned once a OneCore instance had rendered. The worker frees its instances and leaves the context to the process's end (`PrismVoiceBridge::close`).
+- **Render time.** Opening both instances took about a third of a second, on the worker. A short line ("45") renders in about 5 ms, the first in each voice in 15 to 30 ms; a long one (2.5 s of speech) in 15 to 45 ms. In the game, a line plays one or two frame boundaries after it was said, about 33 ms, plus the audio device's buffer. Rendering is fast enough that a cache of rendered lines is not worth having: each line is rendered as it is queued, which is all the rendering ahead it needs. The speech log gives each line's render time and its wait, for a play test to read.
 
 ## Prism is a prebuilt, required DLL
 

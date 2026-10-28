@@ -48,11 +48,18 @@ Config config_from_environment() {
     config.cue_trace = trace != nullptr ? trace : "";
     const char* preview = std::getenv("MELEE_A11Y_CUE_PREVIEW");
     config.cue_preview = preview != nullptr ? preview : "";
+    const char* voice_preview = std::getenv("MELEE_A11Y_VOICE_PREVIEW");
+    config.voice_preview = voice_preview != nullptr && voice_preview[0] != '\0' &&
+                           std::strcmp(voice_preview, "0") != 0;
     const char* settings_file = std::getenv("MELEE_A11Y_SETTINGS");
     if (settings_file != nullptr) {
         config.settings_file = settings_file;
     }
     return config;
+}
+
+const char* voice_name(Voice voice) {
+    return voice == Voice::yours ? "yours" : "opponents";
 }
 
 bool log_enabled() {
@@ -78,6 +85,16 @@ void Speech::set_on(bool on) {
     if (on && m_thread != std::thread::id()) {
         start_bridge();
     }
+    if (!on && m_voices != nullptr) {
+        m_voices->drop_waiting("speech off");
+    }
+}
+
+void Speech::attach_voices(VoiceLines* voices) {
+    m_voices = voices;
+    if (m_voices != nullptr && m_bridge_started) {
+        m_voices->start();
+    }
 }
 
 void Speech::start_bridge() {
@@ -85,6 +102,11 @@ void Speech::start_bridge() {
         return;
     }
     m_bridge_started = true;
+    if (m_voices != nullptr) {
+        /* Whatever the screen reader switch says: the voices play through
+         * the cue engine. */
+        m_voices->start();
+    }
     if (!m_config.screen_reader) {
         log("screen reader off (MELEE_A11Y_SCREEN_READER=0)");
         return;
@@ -106,16 +128,41 @@ void Speech::shutdown() {
     log("speech shutdown");
 }
 
-void Speech::announce(std::string_view text, Mode mode) {
-    /* Checked first, so another thread never writes m_last or reaches the
-     * bridge, neither of which is thread-safe. The log line is the one thing
-     * it still touches: a bug report worth the small risk of a garbled line. */
+/* Checked first, so another thread never writes m_last or reaches the
+ * bridge or the voices, none of which is thread-safe. The log line is the
+ * one thing it still touches: a bug report worth the small risk of a garbled
+ * line. */
+bool Speech::on_game_thread(std::string_view text) const {
     if (m_thread == std::thread::id()) {
         log("speech called before init, dropped: \"%.*s\"", text_length(text), text.data());
-        return;
+        return false;
     }
     if (!initialized_on_this_thread()) {
         log("speech called off the game thread, dropped: \"%.*s\"", text_length(text), text.data());
+        return false;
+    }
+    return true;
+}
+
+void Speech::announce_voice(Voice voice, Subject subject, std::string_view text) {
+    if (!on_game_thread(text)) {
+        return;
+    }
+    if (!m_on) {
+        log("voice %s (off): \"%.*s\"", voice_name(voice), text_length(text), text.data());
+        return;
+    }
+    log("voice %s: \"%.*s\"", voice_name(voice), text_length(text), text.data());
+    if (m_voices == nullptr) {
+        log("voice %s dropped (no voices): \"%.*s\"", voice_name(voice), text_length(text),
+            text.data());
+        return;
+    }
+    m_voices->say(voice, subject, text);
+}
+
+void Speech::announce(std::string_view text, Mode mode) {
+    if (!on_game_thread(text)) {
         return;
     }
     m_last = Announcement{std::string(text), mode};

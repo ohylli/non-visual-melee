@@ -64,10 +64,150 @@ private:
     PrismBackend* m_backend = nullptr;
 };
 
+std::string error_text(PrismError error) {
+    const char* message = prism_error_string(error);
+    return message != nullptr ? message : "unknown Prism error";
+}
+
+/* The voices' instances. Prism is started here a second time, on the
+ * voices' worker thread: prism_init initialises COM on the thread that calls
+ * it as a single-threaded apartment, and the OneCore backend then moves its
+ * blocking WinRT calls to the thread pool, so the worker needs nothing of its
+ * own. A context of its own also keeps the screen reader's, on the game
+ * thread, out of the worker's way. Measured with v0.18.2 in
+ * docs/a11y/speech.md, "Voices". */
+class PrismVoiceBridge final : public VoiceBridge {
+public:
+    ~PrismVoiceBridge() override { close(); }
+
+    std::string open(int count) override {
+        PrismConfig config = prism_config_init();
+        m_context = prism_init(&config);
+        if (m_context == nullptr) {
+            return "Prism did not start";
+        }
+        for (int i = 0; i < count; i++) {
+            PrismBackend* backend = prism_registry_create(m_context, PRISM_BACKEND_ONE_CORE);
+            if (backend == nullptr) {
+                return "no OneCore backend";
+            }
+            m_instances.push_back(backend);
+            /* create, unlike create_best, leaves it uninitialised. */
+            const PrismError error = prism_backend_initialize(backend);
+            if (error != PRISM_OK) {
+                return "OneCore did not start: " + error_text(error);
+            }
+        }
+        return {};
+    }
+
+    /* The context is left to the process's end, never shut down: the voices
+     * close only as the game exits, from its atexit handler, and there
+     * prism_shutdown on the worker never returned once a OneCore instance
+     * had rendered (v0.18.2; freeing the instances, or CoUninitialize alone,
+     * returns). The worker's apartment ends with the thread. */
+    void close() override {
+        for (PrismBackend* backend : m_instances) {
+            prism_backend_free(backend);
+        }
+        m_instances.clear();
+        m_context = nullptr;
+    }
+
+    std::vector<VoiceInfo> voices() override {
+        std::vector<VoiceInfo> found;
+        PrismBackend* backend = instance(0);
+        size_t count = 0;
+        if (backend == nullptr || prism_backend_count_voices(backend, &count) != PRISM_OK) {
+            return found;
+        }
+        for (size_t i = 0; i < count; i++) {
+            VoiceInfo voice;
+            /* Each text lives in the backend until its next call. */
+            const char* text = nullptr;
+            if (prism_backend_get_voice_name(backend, i, &text) == PRISM_OK && text != nullptr) {
+                voice.name = text;
+            }
+            text = nullptr;
+            if (prism_backend_get_voice_language(backend, i, &text) == PRISM_OK && text != nullptr)
+            {
+                voice.language = text;
+            }
+            found.push_back(std::move(voice));
+        }
+        return found;
+    }
+
+    int default_voice() override {
+        /* Each instance starts at the Windows default voice. */
+        PrismBackend* backend = instance(0);
+        size_t index = 0;
+        if (backend == nullptr || prism_backend_get_voice(backend, &index) != PRISM_OK) {
+            return -1;
+        }
+        return static_cast<int>(index);
+    }
+
+    std::string set_voice(int which, int index) override {
+        PrismBackend* backend = instance(which);
+        if (backend == nullptr || index < 0) {
+            return "no such voice";
+        }
+        const PrismError error = prism_backend_set_voice(backend, static_cast<size_t>(index));
+        return error == PRISM_OK ? std::string() : error_text(error);
+    }
+
+    std::string set_rate(int which, float rate) override {
+        PrismBackend* backend = instance(which);
+        if (backend == nullptr) {
+            return "no such instance";
+        }
+        const PrismError error = prism_backend_set_rate(backend, rate);
+        return error == PRISM_OK ? std::string() : error_text(error);
+    }
+
+    std::string render(int which, std::string_view utf8, RenderedLine& out) override {
+        PrismBackend* backend = instance(which);
+        if (backend == nullptr) {
+            return "no such instance";
+        }
+        out = RenderedLine{};
+        const std::string text(utf8);
+        /* OneCore calls back once, on this thread, before returning; Prism's
+         * documentation allows chunks, so they are appended. */
+        const PrismError error =
+            prism_backend_speak_to_memory(backend, text.c_str(), collect, &out);
+        return error == PRISM_OK ? std::string() : error_text(error);
+    }
+
+private:
+    static void PRISM_CALL collect(
+        void* userdata, const float* samples, size_t count, size_t channels, size_t rate) {
+        RenderedLine& out = *static_cast<RenderedLine*>(userdata);
+        out.samples.insert(out.samples.end(), samples, samples + count);
+        out.channels = static_cast<int>(channels);
+        out.rate = static_cast<int>(rate);
+    }
+
+    PrismBackend* instance(int which) const {
+        if (which < 0 || which >= static_cast<int>(m_instances.size())) {
+            return nullptr;
+        }
+        return m_instances[static_cast<size_t>(which)];
+    }
+
+    PrismContext* m_context = nullptr;
+    std::vector<PrismBackend*> m_instances;
+};
+
 }  // namespace
 
 std::unique_ptr<ScreenReaderBridge> make_screen_reader_bridge() {
     return std::make_unique<PrismBridge>();
+}
+
+std::unique_ptr<VoiceBridge> make_voice_bridge() {
+    return std::make_unique<PrismVoiceBridge>();
 }
 
 }  // namespace a11y
@@ -85,10 +225,26 @@ public:
     std::string output(std::string_view, bool) override { return {}; }
 };
 
+/* No voices without Prism: open fails, and the voices say so. */
+class NoVoiceBridge final : public VoiceBridge {
+public:
+    std::string open(int) override { return "no Prism on this platform"; }
+    void close() override {}
+    std::vector<VoiceInfo> voices() override { return {}; }
+    int default_voice() override { return -1; }
+    std::string set_voice(int, int) override { return "no voices"; }
+    std::string set_rate(int, float) override { return "no voices"; }
+    std::string render(int, std::string_view, RenderedLine&) override { return "no voices"; }
+};
+
 }  // namespace
 
 std::unique_ptr<ScreenReaderBridge> make_screen_reader_bridge() {
     return std::make_unique<SilentBridge>();
+}
+
+std::unique_ptr<VoiceBridge> make_voice_bridge() {
+    return std::make_unique<NoVoiceBridge>();
 }
 
 }  // namespace a11y

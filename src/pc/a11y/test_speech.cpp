@@ -220,6 +220,66 @@ void off_thread_call_is_dropped() {
     assert(speech.last().text == "mine");
 }
 
+/* The voices as speech sees them, recording each call. */
+class FakeVoices final : public a11y::VoiceLines {
+public:
+    void start() override { starts++; }
+    void say(a11y::Voice voice, a11y::Subject subject, std::string_view text) override {
+        said.push_back(std::string(a11y::voice_name(voice)) + " " + std::to_string(subject) + " " +
+                       std::string(text));
+    }
+    void drop_waiting(const char* why) override { drops.push_back(why); }
+
+    int starts = 0;
+    std::vector<std::string> said;
+    std::vector<std::string> drops;
+};
+
+/* A voice's line is logged naming its voice and reaches the voices while
+ * speech is on; off, it is logged (off) alone. The voices start with the
+ * screen reader, whatever its switch says, and turning speech off drops
+ * their waiting lines. */
+void voice_lines_are_logged_and_gated() {
+    BridgeCalls calls;
+    a11y::Config config = kOn;
+    config.speech = false;
+    a11y::Speech speech = make_speech(calls, config);
+    FakeVoices voices;
+    speech.attach_voices(&voices);
+    speech.init();
+    assert(voices.starts == 0);
+    speech.announce_voice(a11y::Voice::yours, 1, "45");
+    assert(logged("[a11y] voice yours (off): \"45\""));
+    assert(voices.said.empty());
+    speech.set_on(true);
+    assert(voices.starts == 1);
+    speech.announce_voice(a11y::Voice::opponents, 2, "P2 60");
+    assert(logged("[a11y] voice opponents: \"P2 60\""));
+    assert(voices.said.size() == 1 && voices.said[0] == "opponents 2 P2 60");
+    /* Not the screen reader's: last() and the bridge are left alone. */
+    assert(calls.outputs.empty() && speech.last().text.empty());
+    speech.set_on(false);
+    assert(voices.drops.size() == 1 && voices.drops[0] == std::string("speech off"));
+    speech.set_on(true);
+    assert(voices.starts == 1);
+    speech.attach_voices(nullptr);
+    speech.announce_voice(a11y::Voice::yours, 1, "gone");
+    assert(logged("[a11y] voice yours dropped (no voices): \"gone\""));
+
+    BridgeCalls muted_calls;
+    a11y::Config muted = kOn;
+    muted.screen_reader = false;
+    a11y::Speech muted_speech = make_speech(muted_calls, muted);
+    FakeVoices muted_voices;
+    muted_speech.init();
+    /* Attached after speech was on: started at once. */
+    muted_speech.attach_voices(&muted_voices);
+    assert(muted_voices.starts == 1);
+    muted_speech.announce_voice(a11y::Voice::yours, a11y::kPreviewSubject, "Your voice");
+    assert(logged("[a11y] voice yours: \"Your voice\""));
+    assert(muted_voices.said.size() == 1);
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -243,6 +303,7 @@ int main() {
     last_is_most_recent_announcement();
     call_before_init_is_dropped();
     off_thread_call_is_dropped();
+    voice_lines_are_logged_and_gated();
     std::cout << "speech: all tests passed\n";
     return 0;
 }

@@ -32,6 +32,12 @@ struct Sound {
 enum class VoiceMode {
     looped, /* the sound over and over, without a seam */
     pulsed, /* the sound once every interval, silence between */
+    /* A sound handed over at run time by play, played once from its start:
+     * a voice's line (voices.hpp). Added with no sound; centred unless its
+     * pan says otherwise, at pitch 1. Its chain is the master volume × its
+     * gain target alone: the mix and cue levels, the cue volume and every
+     * cue switch leave it alone. */
+    once,
 };
 
 /* What a voice should sound like now. The audio thread glides to each new
@@ -47,7 +53,7 @@ struct VoiceTargets {
 struct VoiceSpec {
     std::string name; /* in log and trace lines: "ledge right" */
     int cue = 0;      /* the cue whose level it takes, 0 to kMaxCues - 1 */
-    Sound sound;
+    Sound sound;      /* none for a once voice */
     VoiceMode mode = VoiceMode::looped;
     /* Targets are held to these. A pulsed voice's sound must end inside its
      * fastest interval even at its lowest pitch, where it plays longest, or
@@ -103,12 +109,23 @@ public:
     int add_voice(VoiceSpec spec);
     /* Starting a voice that plays changes only its targets; a pulsed voice
      * started from silence pulses at once. Each start and stop is logged
-     * with the voice's targets. */
+     * with the voice's targets. A once voice is not started: play starts
+     * it. */
     void start(int voice, const VoiceTargets& targets);
     void set_targets(int voice, const VoiceTargets& targets);
+    /* A once voice's stop ramps its sound out and drops one handed over and
+     * not yet begun; neither is logged. */
     void stop(int voice);
     void stop_all();
+    /* A once voice plays from play until its sound has played out or
+     * ramped out, as the audio thread finds. */
     bool playing(int voice) const;
+    /* A once voice's next sound, at its targets. It begins at once,
+     * ramping in; one sounding is cut with the stop ramp first, and one
+     * handed over earlier and not yet begun is dropped. False, with a log
+     * line, for a voice that is not a once voice. Not logged otherwise: the
+     * voices log their own lines. */
+    bool play(int voice, Sound sound);
     /* The volume chain: master × mix level × the voice's cue level × the
      * voice's gain target. Master is the launcher's volume with mute
      * applied. */
@@ -133,6 +150,29 @@ private:
         /* Volume × boost, or 0 while off unless the switch is ignored. */
         float gain(bool ignore_switch) const;
     };
+    /* A once voice's sounds, handed from the game thread to the audio
+     * thread without a lock. A slot is free (the game thread may write it),
+     * handed (in next, not yet taken), held (the audio thread reads it) or
+     * done (the audio thread has finished with it; the game thread frees
+     * it at its next play). Four are enough: one sounding, one waiting for
+     * it to ramp out, one handed over, one being written. */
+    static constexpr int kOnceSlots = 4;
+    enum SlotState { kFree, kHanded, kHeld, kDone };
+    struct Once {
+        std::array<Sound, kOnceSlots> sounds;
+        std::array<std::atomic<int>, kOnceSlots> state{};
+        /* The slot handed over and not yet taken, or -1. */
+        std::atomic<int> next{-1};
+        /* Game thread: stops asked for, counted. */
+        std::atomic<int> stops{0};
+        /* Audio thread: a slot is held, sounding or waiting to. */
+        std::atomic<bool> busy{false};
+        /* Audio thread only. */
+        int current = -1;  /* the slot sounding */
+        int incoming = -1; /* the slot that begins once current ramps out */
+        int stops_seen = 0;
+        bool cutting = false; /* current ramps out with nothing after it */
+    };
     struct Voice {
         /* Fixed once published. */
         VoiceSpec spec;
@@ -156,12 +196,14 @@ private:
         float pan_now = 0.0f;
         float pitch_now = 1.0f;
         float gain_now = 0.0f; /* the whole chain, glided */
+        Once once;
     };
 
     Voice* voice_at(int voice);
     void write_targets(Voice& v, const VoiceTargets& targets);
     void log_voice(const Voice& v, const char* event) const;
     void render_voice(Voice& v, float chain, float* out, int frames);
+    void render_once(Voice& v, float chain, float* out, int frames);
     void fall_between(Voice& v, double interval, int frames) const;
 
     CueEngineOptions m_options;

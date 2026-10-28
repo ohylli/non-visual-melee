@@ -13,6 +13,36 @@ namespace a11y {
  * for separate happenings, never for the parts of one announcement. */
 enum class Mode { interrupt, queue };
 
+/* The fork's own voices beside the screen reader (voices.hpp, primer
+ * docs/a11y/speech.md, "Voices"): your voice speaks what happens to you, the
+ * opponents' voice what happens to everyone else. */
+enum class Voice { yours, opponents };
+constexpr int kVoiceCount = 2;
+
+/* "yours" or "opponents", in log lines. */
+const char* voice_name(Voice voice);
+
+/* Whom a voice's line is about: a player's slot in a match (0 to 5), or a
+ * preview. Within one voice a new line about a subject replaces the one
+ * about it already there (voices.hpp). */
+using Subject = int;
+constexpr Subject kPreviewSubject = -1;
+
+/* The voices as speech sees them: voices.cpp, attached once the cue engine
+ * they play through is open. Game thread only. */
+class VoiceLines {
+public:
+    virtual ~VoiceLines() = default;
+    /* The first time speech is on: the voices' worker starts, kept for the
+     * run. */
+    virtual void start() = 0;
+    /* A line that speech has logged and let through. */
+    virtual void say(Voice voice, Subject subject, std::string_view text) = 0;
+    /* The voices stop where they are: each line playing finishes, the
+     * lines waiting are dropped, each logged with why. */
+    virtual void drop_waiting(const char* why) = 0;
+};
+
 struct Config {
     /* Whether speech is on from init(), until set_on says otherwise: the
      * game starts it off and the switches turn it on once the accessibility
@@ -40,6 +70,9 @@ struct Config {
      * play in turn from the first frame (CueSystem::preview_frame); empty
      * for none. */
     std::string cue_preview;
+    /* MELEE_A11Y_VOICE_PREVIEW: set and not "0", each voice says its name
+     * once the voices are ready, your voice first (Voices::frame). */
+    bool voice_preview = false;
     /* MELEE_A11Y_SETTINGS: the accessibility settings file; unset for
      * a11y.ini in the folder where the base port keeps its settings. Set but
      * empty, as a shell slip leaves it, means no file at all: an agent run
@@ -72,6 +105,14 @@ public:
     /* Speaks exactly what it is given, every time: no duplicate suppression.
      * text is UTF-8. Off, it is only logged, marked (off). */
     void announce(std::string_view text, Mode mode);
+    /* A line in one of the voices, about subject, logged naming the voice.
+     * Off, it is only logged, marked (off), and never reaches the voices.
+     * MELEE_A11Y_SCREEN_READER=0 leaves the voices alone: they play through
+     * the cue engine, never through the screen reader. Not kept as last(). */
+    void announce_voice(Voice voice, Subject subject, std::string_view text);
+    /* The voices, or nullptr to let go of them before they are destroyed.
+     * Started now if speech has been on. */
+    void attach_voices(VoiceLines* voices);
     /* The most recent announcement, spoken or not. For a later "repeat last"
      * key. */
     const Announcement& last() const { return m_last; }
@@ -80,8 +121,9 @@ public:
     bool enabled() const { return m_on; }
     /* The switches' decision, live. An announcement made before turning it
      * off has reached the screen reader, which speaks it out: nothing sent
-     * after can cut it off. The screen reader is started the first time
-     * speech is on, so a run that never turns it on never starts it. */
+     * after can cut it off. Each voice finishes its line and drops the ones
+     * waiting. The screen reader and the voices are started the first time
+     * speech is on, so a run that never turns it on never starts them. */
     void set_on(bool on);
     bool initialized_on_this_thread() const;
 
@@ -89,6 +131,8 @@ private:
     /* One speech log line, prefixed "[a11y] "; nothing when the log switch is
      * off. */
     void log(const char* fmt, ...) const __attribute__((format(printf, 2, 3)));
+    /* Logs and drops a call from before init or off the game thread. */
+    bool on_game_thread(std::string_view text) const;
 
     /* The screen reader the first time speech is on. */
     void start_bridge();
@@ -98,6 +142,7 @@ private:
     bool m_on;
     bool m_bridge_started = false; /* start_bridge has run */
     bool m_bridge_initialized = false;
+    VoiceLines* m_voices = nullptr;
     std::thread::id m_thread;
     Announcement m_last;
 };

@@ -125,7 +125,11 @@ int CueEngine::add_voice(VoiceSpec spec) {
     if (spec.cue < 0 || spec.cue >= kMaxCues) {
         return refuse("no such cue");
     }
-    if (spec.sound.samples.empty()) {
+    if (spec.mode == VoiceMode::once) {
+        if (spec.alternates_with != -1) {
+            return refuse("a once voice alternates with none");
+        }
+    } else if (spec.sound.samples.empty()) {
         return refuse("no sound");
     }
     spec.lowest_pitch = clamped(spec.lowest_pitch, 0.01f, kHighestPitch, 1.0f);
@@ -201,7 +205,7 @@ void CueEngine::log_voice(const Voice& v, const char* event) const {
 
 void CueEngine::start(int voice, const VoiceTargets& targets) {
     Voice* v = voice_at(voice);
-    if (v == nullptr) {
+    if (v == nullptr || v->spec.mode == VoiceMode::once) {
         return;
     }
     write_targets(*v, targets);
@@ -223,6 +227,16 @@ void CueEngine::set_targets(int voice, const VoiceTargets& targets) {
 
 void CueEngine::stop(int voice) {
     Voice* v = voice_at(voice);
+    if (v != nullptr && v->spec.mode == VoiceMode::once) {
+        Once& o = v->once;
+        const int handed = o.next.exchange(-1, std::memory_order_acq_rel);
+        if (handed != -1) {
+            o.sounds[static_cast<size_t>(handed)] = Sound{};
+            o.state[static_cast<size_t>(handed)].store(kFree, std::memory_order_relaxed);
+        }
+        o.stops.fetch_add(1, std::memory_order_release);
+        return;
+    }
     if (v == nullptr || !v->started) {
         return;
     }
@@ -242,7 +256,50 @@ bool CueEngine::playing(int voice) const {
     if (voice < 0 || voice >= m_voice_count.load(std::memory_order_relaxed)) {
         return false;
     }
-    return m_voices[static_cast<size_t>(voice)].started;
+    const Voice& v = m_voices[static_cast<size_t>(voice)];
+    if (v.spec.mode == VoiceMode::once) {
+        /* next first: the audio thread marks itself busy before it takes
+         * the slot, so a line between the two is never missed. */
+        return v.once.next.load(std::memory_order_seq_cst) != -1 ||
+               v.once.busy.load(std::memory_order_seq_cst);
+    }
+    return v.started;
+}
+
+bool CueEngine::play(int voice, Sound sound) {
+    Voice* v = voice_at(voice);
+    if (v == nullptr || v->spec.mode != VoiceMode::once) {
+        if (m_options.log) {
+            pc_log_line("[a11y] cue voice %d cannot play a sound handed to it", voice);
+        }
+        return false;
+    }
+    Once& o = v->once;
+    int free_slot = -1;
+    for (int i = 0; i < kOnceSlots; i++) {
+        std::atomic<int>& state = o.state[static_cast<size_t>(i)];
+        if (state.load(std::memory_order_acquire) == kDone) {
+            /* Freed here, on the game thread, never on the audio thread. */
+            o.sounds[static_cast<size_t>(i)] = Sound{};
+            state.store(kFree, std::memory_order_relaxed);
+        }
+        if (free_slot == -1 && state.load(std::memory_order_relaxed) == kFree) {
+            free_slot = i;
+        }
+    }
+    /* At most two slots are held and one handed, so one is always free. */
+    if (free_slot == -1) {
+        return false;
+    }
+    o.sounds[static_cast<size_t>(free_slot)] = std::move(sound);
+    o.state[static_cast<size_t>(free_slot)].store(kHanded, std::memory_order_relaxed);
+    const int replaced = o.next.exchange(free_slot, std::memory_order_seq_cst);
+    if (replaced != -1) {
+        /* Never taken, so the audio thread will never read it. */
+        o.sounds[static_cast<size_t>(replaced)] = Sound{};
+        o.state[static_cast<size_t>(replaced)].store(kFree, std::memory_order_relaxed);
+    }
+    return true;
 }
 
 void CueEngine::set_master_volume(float volume) {
@@ -281,7 +338,7 @@ void CueEngine::trace_tick(int tick) {
         const Voice& v = m_voices[static_cast<size_t>(i)];
         const VoiceTargets& t = v.targets;
         std::fprintf(m_trace, "%d\t%s\t%s\t%.3f\t%.3f\t%.3f\t", tick, v.spec.name.c_str(),
-            v.started ? "on" : "off", static_cast<double>(t.pan), static_cast<double>(t.pitch),
+            playing(i) ? "on" : "off", static_cast<double>(t.pan), static_cast<double>(t.pitch),
             static_cast<double>(t.gain));
         if (v.spec.mode == VoiceMode::pulsed) {
             std::fprintf(m_trace, "%.3f\n", static_cast<double>(t.interval));
@@ -297,6 +354,10 @@ void CueEngine::render(float* out, int frames) {
     const int count = m_voice_count.load(std::memory_order_acquire);
     for (int i = 0; i < count; i++) {
         Voice& v = m_voices[static_cast<size_t>(i)];
+        if (v.spec.mode == VoiceMode::once) {
+            render_once(v, master, out, frames);
+            continue;
+        }
         const bool ignore = v.spec.ignores_switches;
         const float chain =
             master * m_mix.gain(ignore) * m_cues[static_cast<size_t>(v.spec.cue)].gain(ignore);
@@ -369,6 +430,74 @@ void CueEngine::render_voice(Voice& v, float chain, float* out, int frames) {
     }
     if (!on && v.ramp <= 0.0f) {
         v.sounding = false;
+    }
+}
+
+void CueEngine::render_once(Voice& v, float chain, float* out, int frames) {
+    Once& o = v.once;
+    auto finish = [&o](int slot) {
+        o.state[static_cast<size_t>(slot)].store(kDone, std::memory_order_release);
+    };
+    const int stops = o.stops.load(std::memory_order_acquire);
+    if (stops != o.stops_seen) {
+        o.stops_seen = stops;
+        if (o.incoming != -1) {
+            finish(o.incoming);
+            o.incoming = -1;
+        }
+        o.cutting = o.current != -1;
+    }
+    if (o.next.load(std::memory_order_acquire) != -1) {
+        o.busy.store(true, std::memory_order_seq_cst);
+        const int taken = o.next.exchange(-1, std::memory_order_seq_cst);
+        if (taken != -1) {
+            o.state[static_cast<size_t>(taken)].store(kHeld, std::memory_order_relaxed);
+            if (o.current == -1) {
+                o.current = taken;
+                v.position = 0.0;
+                v.ramp = 0.0f;
+                v.pan_now = v.pan.load(std::memory_order_relaxed);
+                v.gain_now = chain * v.gain.load(std::memory_order_relaxed);
+            } else {
+                if (o.incoming != -1) {
+                    finish(o.incoming);
+                }
+                o.incoming = taken;
+                o.cutting = false;
+            }
+        }
+    }
+    const float pan = v.pan.load(std::memory_order_relaxed);
+    const float gain = chain * v.gain.load(std::memory_order_relaxed);
+    for (int f = 0; f < frames && o.current != -1; f++) {
+        const std::vector<float>& samples = o.sounds[static_cast<size_t>(o.current)].samples;
+        const double length = static_cast<double>(samples.size());
+        const bool out_ramp = o.incoming != -1 || o.cutting;
+        v.ramp = std::clamp(v.ramp + (out_ramp ? -kRampStep : kRampStep), 0.0f, 1.0f);
+        if ((out_ramp && v.ramp <= 0.0f) || v.position >= length) {
+            /* Played out or ramped out: the next begins here, ramping in. */
+            finish(o.current);
+            o.current = o.incoming;
+            o.incoming = -1;
+            o.cutting = false;
+            v.position = 0.0;
+            v.ramp = 0.0f;
+            continue;
+        }
+        v.pan_now += (pan - v.pan_now) * kGlide;
+        v.gain_now += (gain - v.gain_now) * kGlide;
+        /* The end ramps out too, over the sound's last frames. */
+        const float tail = static_cast<float>(length - v.position) * kRampStep;
+        const float level = std::min(v.ramp, tail) * v.gain_now;
+        const float sample = samples[static_cast<size_t>(v.position)] * level;
+        v.position += 1.0;
+        const float angle = (v.pan_now + 1.0f) * kQuarterPi;
+        out[2 * f] += sample * std::cos(angle);
+        out[2 * f + 1] += sample * std::sin(angle);
+    }
+    v.sounding = o.current != -1;
+    if (o.current == -1) {
+        o.busy.store(false, std::memory_order_seq_cst);
     }
 }
 

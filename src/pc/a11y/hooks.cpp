@@ -23,6 +23,7 @@
 #include "sss_reader.hpp"
 #include "switches.hpp"
 #include "training_speech.hpp"
+#include "voices.hpp"
 #include <SDL3/SDL.h>
 #include <cstdlib>
 #include <dolphin/pad.h>
@@ -55,6 +56,9 @@ std::unique_ptr<a11y::Switches> s_switches;
 /* The cue engine, the cues' values and the cues of a match, open whatever
  * the switches say. */
 std::unique_ptr<a11y::CueSystem> s_cue_system;
+/* Your voice and the opponents' voice, playing through the cue system's
+ * engine, so destroyed before it. */
+std::unique_ptr<a11y::Voices> s_voices;
 /* The launcher's master volume with mute applied, kept from before the
  * engine opens. */
 float s_master_volume = 1.0f;
@@ -242,6 +246,10 @@ extern "C" void pc_a11y_init(void) {
     /* The switches first: the first rows and the file's first groups. */
     s_switches = std::make_unique<a11y::Switches>(s_settings->model(), *s_speech, config.log);
     s_cue_system = a11y::CueSystem::open(config, *s_speech, *s_settings, s_master_volume);
+    /* Attached to speech before the switches turn it on, which starts the
+     * voices' worker. */
+    s_voices = std::make_unique<a11y::Voices>(*s_speech, s_cue_system->engine(),
+        a11y::make_voice_bridge(), config.log, config.voice_preview);
     /* Once every feature has registered its values. */
     a11y::Switches::override_from(config, *s_settings);
     s_settings->listen(settings_changed);
@@ -284,6 +292,7 @@ extern "C" void pc_a11y_shutdown(void) {
     a11y::port_menu_speech_stop();
     a11y::launcher_speech_stop();
     a11y::settings_pages_stop();
+    s_voices.reset();
     s_cue_system.reset();
     s_switches.reset();
     s_settings.reset();
@@ -309,6 +318,9 @@ extern "C" void pc_a11y_launcher_frame(void) {
     a11y::settings_pages_frame(a11y::SettingsHost::launcher, true);
     if (s_cue_system != nullptr) {
         s_cue_system->preview_frame(a11y::Clock::now());
+    }
+    if (s_voices != nullptr) {
+        s_voices->frame(a11y::Clock::now(), false);
     }
     a11y::launcher_speech_frame(a11y::Clock::now());
 }
@@ -343,6 +355,11 @@ extern "C" void pc_a11y_port_menu_frame(bool open) {
         /* At every frame boundary, the menu open or not, outside the
          * simulation: a preview never touches the game. */
         s_cue_system->preview_frame(a11y::Clock::now());
+    }
+    if (s_voices != nullptr) {
+        /* The voices' lines play in turn here, outside the simulation too;
+         * the menu opening drops the lines waiting. */
+        s_voices->frame(a11y::Clock::now(), open);
     }
     if (!game_hook_may_speak()) {
         return;

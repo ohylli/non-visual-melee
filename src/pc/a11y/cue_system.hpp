@@ -48,6 +48,9 @@ public:
     void settings_changed(const std::vector<const NamedValue*>& changed);
     /* The output opened: false when the cues run unheard. */
     bool sounding() const { return m_output != nullptr; }
+    /* The engine the voices play through (voices.hpp), which must be
+     * destroyed before this. */
+    CueEngine& engine() { return *m_engine; }
     /* Whether Accessibility lets the cues sound (Switches::cues_allowed). */
     void set_allowed(bool allowed);
     /* The launcher's master volume with mute applied. */
