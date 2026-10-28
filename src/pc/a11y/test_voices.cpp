@@ -6,6 +6,7 @@
  * pc_log_line that main.c normally provides. */
 #include "cue_engine.hpp"
 #include "speech.hpp"
+#include "test_voice_bridge.hpp"
 #include "voices.hpp"
 #include <algorithm>
 #include <cassert>
@@ -25,6 +26,8 @@ using a11y::kCueRate;
 using a11y::Voice;
 using a11y::Voices;
 using a11y::VoicesState;
+using a11y::test::FakeVoiceBridge;
+using a11y::test::VoiceCalls;
 
 std::vector<std::string> s_lines;
 
@@ -33,74 +36,6 @@ public:
     std::string init() override { return "Fake"; }
     void shutdown() override {}
     std::string output(std::string_view, bool) override { return {}; }
-};
-
-/* What the fake voice bridge was asked, from the worker thread. */
-struct VoiceCalls {
-    std::mutex mutex;
-    int opens = 0;
-    int closes = 0;
-    std::vector<std::pair<int, int>> set_voices; /* instance, bridge index */
-    std::vector<std::pair<int, float>> set_rates;
-    std::vector<std::pair<int, std::string>> renders;
-};
-
-/* Renders each line as 0.1 s per character of a stereo constant at 16 kHz,
- * quieter on the right; a line of "silence" renders silence, and "fail"
- * fails. */
-class FakeVoiceBridge final : public a11y::VoiceBridge {
-public:
-    FakeVoiceBridge(VoiceCalls& calls, std::string open_error)
-        : m_calls(calls), m_open_error(std::move(open_error)) {}
-
-    std::string open(int count) override {
-        std::lock_guard<std::mutex> lock(m_calls.mutex);
-        m_calls.opens++;
-        assert(count == a11y::kVoiceCount);
-        return m_open_error;
-    }
-    void close() override {
-        std::lock_guard<std::mutex> lock(m_calls.mutex);
-        m_calls.closes++;
-    }
-    std::vector<a11y::VoiceInfo> voices() override {
-        return {{"Microsoft David", "en-US"}, {"Microsoft George", "en-GB"},
-            {"Microsoft Zira", "en-US"}, {"Microsoft Heidi", "fi-FI"}, {"Microsoft Mark", "en-US"}};
-    }
-    int default_voice() override { return 1; }
-    std::string set_voice(int instance, int index) override {
-        std::lock_guard<std::mutex> lock(m_calls.mutex);
-        m_calls.set_voices.emplace_back(instance, index);
-        return {};
-    }
-    std::string set_rate(int instance, float rate) override {
-        std::lock_guard<std::mutex> lock(m_calls.mutex);
-        m_calls.set_rates.emplace_back(instance, rate);
-        return {};
-    }
-    std::string render(int instance, std::string_view utf8, a11y::RenderedLine& out) override {
-        {
-            std::lock_guard<std::mutex> lock(m_calls.mutex);
-            m_calls.renders.emplace_back(instance, std::string(utf8));
-        }
-        if (utf8 == "fail") {
-            return "boom";
-        }
-        const float level = utf8 == "silence" ? 0.0f : 0.3f;
-        const size_t frames = utf8.size() * 1600;
-        out.channels = 2;
-        out.rate = 16000;
-        out.samples.clear();
-        for (size_t f = 0; f < frames; f++) {
-            out.samples.push_back(level);
-            out.samples.push_back(level / 3.0f);
-        }
-        return {};
-    }
-
-private:
-    VoiceCalls& m_calls;
-    std::string m_open_error;
 };
 
 /* Speech, the cue engine and the voices, wired as hooks.cpp wires them. */
@@ -445,10 +380,33 @@ void a_failed_render_is_dropped() {
     assert(logged(plays("yours", "next")));
 }
 
-void unavailable_voices_drop_their_lines() {
+/* What a screen reader was handed, with whether it interrupted. */
+struct Spoken {
+    std::vector<std::pair<std::string, bool>> lines;
+};
+
+class RecordingScreenReader final : public a11y::ScreenReaderBridge {
+public:
+    explicit RecordingScreenReader(Spoken& spoken) : m_spoken(spoken) {}
+    std::string init() override { return "Fake"; }
+    void shutdown() override {}
+    std::string output(std::string_view utf8, bool interrupt) override {
+        m_spoken.lines.emplace_back(std::string(utf8), interrupt);
+        return {};
+    }
+
+private:
+    Spoken& m_spoken;
+};
+
+/* OneCore unavailable: the screen reader speaks every line, queued, those
+ * waiting first in the order they were said, whatever their voice and
+ * subject. (The Voice rows tell it the voices are unavailable.) */
+void unavailable_voices_speak_through_the_screen_reader() {
     VoiceCalls calls;
+    Spoken spoken;
     a11y::Config config = Rig::config();
-    a11y::Speech speech(config, std::make_unique<NoScreenReader>());
+    a11y::Speech speech(config, std::make_unique<RecordingScreenReader>(spoken));
     CueEngine engine;
     s_lines.clear();
     {
@@ -457,13 +415,28 @@ void unavailable_voices_drop_their_lines() {
         speech.init();
         assert(voices.state() == VoicesState::starting);
         speech.announce_voice(Voice::yours, 1, "early");
+        speech.announce_voice(Voice::opponents, 2, "theirs");
+        speech.announce_voice(Voice::yours, 1, "again");
+        assert(spoken.lines.empty());
         voices.wait_for_worker();
         voices.frame(Clock::time_point{}, false);
         assert(voices.state() == VoicesState::unavailable);
+        assert(voices.installed().empty());
         assert(logged("[a11y] voices unavailable: OneCore did not start"));
-        assert(logged("[a11y] voice yours dropped (voices unavailable): \"early\""));
+        /* "early" was replaced while it waited. */
+        assert((spoken.lines ==
+                std::vector<std::pair<std::string, bool>>{{"theirs", false}, {"again", false}}));
+        assert(logged("[a11y] voice yours dropped (replaced): \"early\""));
         speech.announce_voice(Voice::opponents, 1, "late");
-        assert(logged("[a11y] voice opponents dropped (voices unavailable): \"late\""));
+        speech.announce_voice(Voice::opponents, 1, "later");
+        assert(logged("[a11y] voice opponents: \"late\""));
+        assert(logged("[a11y] speak queue: \"late\""));
+        assert(spoken.lines.size() == 4);
+        assert(spoken.lines[2] == std::make_pair(std::string("late"), false));
+        assert(spoken.lines[3] == std::make_pair(std::string("later"), false));
+        voices.frame(Clock::time_point{}, false);
+        assert(spoken.lines.size() == 4);
+        assert(!logged("[a11y] voice yours plays"));
     }
     std::lock_guard<std::mutex> lock(calls.mutex);
     assert(calls.closes == 1);
@@ -542,7 +515,7 @@ int main() {
     the_port_menu_drops_the_waiting_lines();
     lines_are_evened_out();
     a_failed_render_is_dropped();
-    unavailable_voices_drop_their_lines();
+    unavailable_voices_speak_through_the_screen_reader();
     the_worker_starts_with_speech();
     the_developer_preview_says_each_voice();
     std::cout << "voices: all tests passed\n";

@@ -30,6 +30,8 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/hooks.cpp
         ${CMAKE_CURRENT_LIST_DIR}/speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/voices.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/voice_settings.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/voice_names.cpp
         ${CMAKE_CURRENT_LIST_DIR}/event_pipe.cpp
         ${CMAKE_CURRENT_LIST_DIR}/screen_reader_bridge.cpp
         ${CMAKE_CURRENT_LIST_DIR}/rmlui_reader.cpp
@@ -205,6 +207,27 @@ if (TARGET unit_tests)
     add_test(NAME voices COMMAND voices_test)
     set_tests_properties(voices PROPERTIES LABELS melee)
     add_dependencies(unit_tests voices_test)
+
+    # The voices' rows wired as the game wires them, over the accessibility
+    # settings' file in a scratch folder, the voices' worker the real one
+    # over a fake voice bridge; a fake screen reader and its own pc_log_line.
+    add_executable(voice_settings_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_voice_settings.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/voice_settings.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/voice_names.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/voices.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/switches.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/accessibility_settings.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/value_model.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/value_file.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/cue_engine.cpp)
+    target_include_directories(voice_settings_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_link_libraries(voice_settings_test PRIVATE a11y_miniaudio)
+    target_compile_options(voice_settings_test PRIVATE -UNDEBUG)
+    add_test(NAME voice_settings COMMAND voice_settings_test ${CMAKE_BINARY_DIR}/voice_settings_test)
+    set_tests_properties(voice_settings PROPERTIES LABELS melee)
+    add_dependencies(unit_tests voice_settings_test)
 
     # Launcher speech against the real resources/launcher.rml, in an RmlUi
     # context that draws nothing, with the Accessibility category's rows

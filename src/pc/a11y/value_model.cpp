@@ -266,6 +266,7 @@ Choice ValueGroup::add_choice(const ChoiceSpec& spec) {
     named.options = spec.options;
     named.list = spec.list;
     named.fallback = spec.fallback;
+    named.none = spec.none;
     named.shown = spec.shown;
     return Choice(m_model->add(m_index, std::move(named)));
 }

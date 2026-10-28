@@ -23,6 +23,7 @@
 #include "sss_reader.hpp"
 #include "switches.hpp"
 #include "training_speech.hpp"
+#include "voice_settings.hpp"
 #include "voices.hpp"
 #include <SDL3/SDL.h>
 #include <cstdlib>
@@ -59,6 +60,9 @@ std::unique_ptr<a11y::CueSystem> s_cue_system;
 /* Your voice and the opponents' voice, playing through the cue system's
  * engine, so destroyed before it. */
 std::unique_ptr<a11y::Voices> s_voices;
+/* The voices' rows, registered with the switches and attached to the voices
+ * once the settings are loaded. */
+std::unique_ptr<a11y::VoiceSettings> s_voice_settings;
 /* The launcher's master volume with mute applied, kept from before the
  * engine opens. */
 float s_master_volume = 1.0f;
@@ -133,6 +137,20 @@ void settings_changed(const std::vector<const a11y::NamedValue*>& changed) {
     }
     if (s_cue_system != nullptr) {
         s_cue_system->settings_changed(changed);
+    }
+    if (s_voice_settings != nullptr) {
+        s_voice_settings->changed(changed, a11y::Clock::now());
+    }
+}
+
+/* The voices' frame and their rows', at every frame boundary of the
+ * launcher (`launcher`) and the game, outside the simulation. */
+void voices_frame(bool launcher, bool port_menu_open) {
+    if (s_voices != nullptr) {
+        s_voices->frame(a11y::Clock::now(), port_menu_open);
+    }
+    if (s_voice_settings != nullptr) {
+        s_voice_settings->frame(a11y::Clock::now(), launcher);
     }
 }
 
@@ -243,8 +261,11 @@ extern "C" void pc_a11y_init(void) {
     s_results = std::make_unique<a11y::ResultsSpeech>(*s_speech, game_text);
     s_settings = std::make_unique<a11y::AccessibilitySettings>(
         *s_speech, settings_file_path(config), config.log);
-    /* The switches first: the first rows and the file's first groups. */
-    s_switches = std::make_unique<a11y::Switches>(s_settings->model(), *s_speech, config.log);
+    /* The switches first: the first rows and the file's first groups, the
+     * voices' rows after Speech. */
+    s_switches = std::make_unique<a11y::Switches>(s_settings->model(), *s_speech, config.log, [] {
+        s_voice_settings = std::make_unique<a11y::VoiceSettings>(s_settings->model(), *s_speech);
+    });
     s_cue_system = a11y::CueSystem::open(config, *s_speech, *s_settings, s_master_volume);
     /* Attached to speech before the switches turn it on, which starts the
      * voices' worker. */
@@ -254,6 +275,7 @@ extern "C" void pc_a11y_init(void) {
     a11y::Switches::override_from(config, *s_settings);
     s_settings->listen(settings_changed);
     s_settings->load(a11y::Clock::now());
+    s_voice_settings->attach(*s_voices);
     apply_switches(s_switches->start());
     s_speech->announce("Non-Visual Melee ready", a11y::Mode::interrupt);
     if (!s_cue_system->sounding()) {
@@ -270,6 +292,10 @@ extern "C" void pc_a11y_init(void) {
     a11y::settings_pages_start(
         *s_settings, a11y::SettingsPageGame{
                          [](std::string_view cue) {
+                             /* A voice's Preview, else a cue's. */
+                             if (s_voice_settings != nullptr && s_voice_settings->preview(cue)) {
+                                 return;
+                             }
                              if (s_cue_system != nullptr) {
                                  s_cue_system->preview(cue, a11y::Clock::now());
                              }
@@ -292,6 +318,7 @@ extern "C" void pc_a11y_shutdown(void) {
     a11y::port_menu_speech_stop();
     a11y::launcher_speech_stop();
     a11y::settings_pages_stop();
+    s_voice_settings.reset();
     s_voices.reset();
     s_cue_system.reset();
     s_switches.reset();
@@ -319,9 +346,7 @@ extern "C" void pc_a11y_launcher_frame(void) {
     if (s_cue_system != nullptr) {
         s_cue_system->preview_frame(a11y::Clock::now());
     }
-    if (s_voices != nullptr) {
-        s_voices->frame(a11y::Clock::now(), false);
-    }
+    voices_frame(true, false);
     a11y::launcher_speech_frame(a11y::Clock::now());
 }
 
@@ -356,11 +381,9 @@ extern "C" void pc_a11y_port_menu_frame(bool open) {
          * simulation: a preview never touches the game. */
         s_cue_system->preview_frame(a11y::Clock::now());
     }
-    if (s_voices != nullptr) {
-        /* The voices' lines play in turn here, outside the simulation too;
-         * the menu opening drops the lines waiting. */
-        s_voices->frame(a11y::Clock::now(), open);
-    }
+    /* The voices' lines play in turn here, outside the simulation too; the
+     * menu opening drops the lines waiting. */
+    voices_frame(false, open);
     if (!game_hook_may_speak()) {
         return;
     }
@@ -395,6 +418,11 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
         s_results->visit_started();
     }
     announce_scene(previous_scene, css_exit, scene_kind);
+    if (s_voice_settings != nullptr && game_hook_may_speak()) {
+        /* Queued behind the first scene's announcement, which interrupts:
+         * what the screen reader needs to know of the voices. */
+        s_voice_settings->scene_announced();
+    }
     if (s_cue_system != nullptr) {
         /* After the scene's announcement, which interrupts. */
         s_cue_system->scene_entered();

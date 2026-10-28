@@ -115,14 +115,9 @@ std::vector<int> sort_voices(std::vector<VoiceInfo>& voices) {
     return order;
 }
 
-int find_voice(const std::vector<VoiceInfo>& voices, std::string_view wanted, int default_voice) {
-    if (voices.empty()) {
-        return -1;
-    }
-    const int fallback =
-        default_voice >= 0 && default_voice < static_cast<int>(voices.size()) ? default_voice : 0;
+int match_voice(const std::vector<VoiceInfo>& voices, std::string_view wanted) {
     if (wanted.empty()) {
-        return fallback;
+        return -1;
     }
     for (size_t i = 0; i < voices.size(); i++) {
         if (same_text(voices[i].name, wanted)) {
@@ -134,7 +129,19 @@ int find_voice(const std::vector<VoiceInfo>& voices, std::string_view wanted, in
             return static_cast<int>(i);
         }
     }
-    return fallback;
+    return -1;
+}
+
+int find_voice(const std::vector<VoiceInfo>& voices, std::string_view wanted, int default_voice) {
+    if (voices.empty()) {
+        return -1;
+    }
+    const int found = match_voice(voices, wanted);
+    if (found >= 0) {
+        return found;
+    }
+    return default_voice >= 0 && default_voice < static_cast<int>(voices.size()) ? default_voice :
+                                                                                   0;
 }
 
 Sound even_out(const RenderedLine& line) {
@@ -220,7 +227,8 @@ void Voices::say(Voice voice, Subject subject, std::string_view text) {
     line.text = std::string(text);
     line.said = Clock::now();
     if (m_state == VoicesState::unavailable) {
-        drop(index, line, "voices unavailable");
+        /* Neither the subject nor the voice counts there. */
+        m_speech.announce(text, Mode::queue);
         return;
     }
     auto same = std::find_if(v.waiting.begin(), v.waiting.end(),
@@ -315,8 +323,21 @@ void Voices::opened(
     const std::string& error, std::vector<VoiceInfo> listed, int default_index, double test_ms) {
     if (!error.empty()) {
         m_state = VoicesState::unavailable;
+        /* The screen reader is told by the Voice rows (voice_settings.hpp),
+         * when it will be heard. */
         log("voices unavailable: %s", error.c_str());
-        drop_waiting("voices unavailable");
+        /* The lines waiting, in the order they were said, whichever voice. */
+        std::vector<Line> waiting;
+        for (VoiceSlot& v : m_voices) {
+            waiting.insert(waiting.end(), std::make_move_iterator(v.waiting.begin()),
+                std::make_move_iterator(v.waiting.end()));
+            v.waiting.clear();
+        }
+        std::sort(waiting.begin(), waiting.end(),
+            [](const Line& a, const Line& b) { return a.id < b.id; });
+        for (const Line& line : waiting) {
+            m_speech.announce(line.text, Mode::queue);
+        }
         return;
     }
     m_state = VoicesState::ready;

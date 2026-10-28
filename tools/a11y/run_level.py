@@ -15,7 +15,7 @@ Arguments are groups or script names, run in that order, a group's runs
 side by side:
 
   menus   the menu drive scripts (MENUS), the launcher's three and the
-          port menu's two among them
+          port menu's three among them
   online  css_net.drive at delay 0, delay 10 and over a 100 ms slow link,
           results_net.drive (--muted), lan_lobby.drive (--lan),
           direct_call.drive, and direct_back.drive
@@ -54,18 +54,18 @@ MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens
          "sss_skipped", "sss_glide_pick", "leaf_screens", "sss_hover", "css_classic", "css_training",
          "css_slots", "css_portraits", "css_steps", "results", "results_no_contest", "results_cpu4",
          "results_teams", "training_menu", "launcher_home",
-         "launcher_settings", "launcher_a11y", "port_menu", "port_menu_a11y", "direct_hub"]
+         "launcher_settings", "launcher_a11y", "port_menu", "port_menu_a11y", "port_menu_voices", "direct_hub"]
 # drive.py options a script needs: the launcher's scripts open the launcher,
 # with accessibility on but muted, since its line reading needs the switch on,
 # as the port menu's does.
 ARGS = {"launcher_home": ["--launcher", "--muted"], "launcher_settings": ["--launcher", "--muted"],
         "launcher_a11y": ["--launcher", "--muted"], "port_menu": ["--muted"], "port_menu_a11y": ["--muted"],
-        "match_port_menu": ["--muted"], "direct_call": ["--muted"]}
+        "port_menu_voices": ["--muted"], "match_port_menu": ["--muted"], "direct_call": ["--muted"]}
 # Settings a script needs from the environment. The Accessibility
 # category's scripts leave Steering and Cues to the run's a11y.ini, so their
 # rows show no "(environment)" whatever the caller exports.
 A11Y_ROWS = {"MELEE_A11Y_STEER": "", "MELEE_A11Y_CUES": ""}
-ENV = {"launcher_a11y": A11Y_ROWS, "port_menu_a11y": A11Y_ROWS,
+ENV = {"launcher_a11y": A11Y_ROWS, "port_menu_a11y": A11Y_ROWS, "port_menu_voices": A11Y_ROWS,
        "results": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE_DEBUG_VS_STAGE": "31"},
        "results_no_contest": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STAGE": "31"},
        # Poke Floats, where three of the four CPUs fall out within half a minute.
@@ -92,6 +92,7 @@ ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           # The Training menu's hidden row, or a value the reader cannot name.
           "training_menu": re.compile(r"\[a11y\] training menu row "),
           "port_menu": PORT_MENU_STATUS, "port_menu_a11y": PORT_MENU_STATUS,
+          "port_menu_voices": PORT_MENU_STATUS,
           # The scene's placeholder, which DIRECT CONNECT's own opening replaces.
           "direct_hub": NO_LOBBY_SPEECH, "direct_call": NO_LOBBY_SPEECH,
           "results": re.compile(READY), "results_teams": re.compile(READY),
@@ -123,8 +124,13 @@ LEDGE_BATTLEFIELD = [(re.compile(r"\[a11y\] cue ledge left start "), 1),
 # two repeats come about 0.15 s apart, on the settle, so either may be said
 # too; the quicker ones after them never.
 TRAINING_NUMBERS = [(re.compile(r'\[a11y\] speak \w+( \(off\))?: "\d+"$'), range(7, 10))]
+# The voices' samples: one for each settled run of steps on a Voice or Rate
+# row and one for Preview, the quick run of two steps Left among them.
+VOICE_SAMPLES = [(re.compile(r'\[a11y\] voice yours: "Your voice"$'), 6),
+                 (re.compile(r"\[a11y\] voice opponents: \"Opponents' voice\"$"), 2)]
 COUNT = {"match_gap": GAP_ONCE, "match_gap_battlefield": GAP_ONCE, "match_ledge": GAP_ONCE + LEDGE,
-         "match_ledge_battlefield": LEDGE_BATTLEFIELD, "training_menu": TRAINING_NUMBERS}
+         "match_ledge_battlefield": LEDGE_BATTLEFIELD, "training_menu": TRAINING_NUMBERS,
+         "port_menu_voices": VOICE_SAMPLES}
 NET = [("css_net-delay0", ["--delay", "0"]), ("css_net-delay10", ["--delay", "10"]),
        ("css_net-slow", ["--sim-delay-ms", "100"])]
 # Direct Connect's two-copy runs meet over the internet through the router's

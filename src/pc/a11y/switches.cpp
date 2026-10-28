@@ -25,18 +25,29 @@ std::string held_by(const NamedValue* named, const char* variable) {
     return std::string(" (") + variable + "=" + (named->value != 0.0f ? "1" : "0") + ")";
 }
 
+/* The Speech switch, then what after_speech registers below it. */
+Switch speech_switch(ValueModel& model, const std::function<void()>& after_speech) {
+    Switch on =
+        model.group("speech", "Speech")
+            .add_switch(SwitchSpec{"on", "Speech",
+                "Turns speech on or off, through the screen reader and the voices.", true, true});
+    if (after_speech) {
+        after_speech();
+    }
+    return on;
+}
+
 }  // namespace
 
-Switches::Switches(ValueModel& model, Speech& speech, bool log)
+Switches::Switches(
+    ValueModel& model, Speech& speech, bool log, const std::function<void()>& after_speech)
     : m_model(model), m_speech(speech), m_log(log),
       m_accessibility(model.group("accessibility", "Accessibility")
               .add_switch(SwitchSpec{"on", "Accessibility",
                   "Turns everything Non-Visual Melee adds on or off: speech, steering and the "
                   "cues.",
                   true, true})),
-      m_speech_on(model.group("speech", "Speech")
-              .add_switch(SwitchSpec{"on", "Speech",
-                  "Turns speech through the screen reader on or off.", true, true})),
+      m_speech_on(speech_switch(model, after_speech)),
       m_steering(model.group("steering", "Steering")
               .add_switch(SwitchSpec{"on", "Steering",
                   "The D-pad steps the hand on character select and the cursor on stage "

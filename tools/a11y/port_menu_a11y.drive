@@ -31,7 +31,23 @@ wait '"Accessibility"$'
 key Right
 wait '"Accessibility, On, Left and right to change\. Turns everything Non-Visual Melee adds on or off: speech, steering and the cues\."$'
 key Down
-wait '"Speech, On, Left and right to change\. Turns speech through the screen reader on or off\."$'
+wait '"Speech, On, Left and right to change\. Turns speech on or off, through the screen reader and the voices\."$'
+key Down
+wait '"Your voice, [^",]+(, [^"]+)?, Left and right to change\. The Windows voice that says what happens to you in a match\."$'
+key Down
+wait "\"Your voice rate, slider, 50\. Left and right to adjust\. How fast your voice speaks, 50 being the voice's normal speed\.\"$"
+key Down
+wait '"Your voice volume, slider, 100%\. Left and right to adjust\. The loudness of your voice, under the master volume\."$'
+key Down
+wait '"Preview your voice: Play, button\. Says "Your voice" in your voice, at its rate and volume\."$'
+key Down
+wait "\"Opponents' voice, [^\",]+(, [^\"]+)?, Left and right to change\. The Windows voice that says what happens to everyone else, teammates included, in a match\.\"$"
+key Down
+wait "\"Opponents' voice rate, slider, 50\. Left and right to adjust\. How fast the opponents' voice speaks, 50 being the voice's normal speed\.\"$"
+key Down
+wait "\"Opponents' voice volume, slider, 100%\. Left and right to adjust\. The loudness of the opponents' voice, under the master volume\.\"$"
+key Down
+wait "\"Preview opponents' voice: Play, button\. Says \"Opponents' voice\" in the opponents' voice, at its rate and volume\.\"$"
 key Down
 wait '"Steering, On, Left and right to change\. The D-pad steps the hand on character select and the cursor on stage select\. Off, the D-pad does what the game makes of it, quick chat included\."$'
 key Down
@@ -94,7 +110,7 @@ wait '\[a11y\] speak queue \(muted\): "Speech, On, Left and right to change\. '
 ini '^speech\.on = on$'
 
 # Cue volume a step down and back up by the D-pad.
-gamepad dpdown dpdown dpdown
+gamepad dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown
 wait '"Cue volume, slider, 100%\. '
 gamepad dpleft
 wait '\[a11y\] accessibility settings: saved cues\.volume = 95$'
@@ -131,7 +147,7 @@ wait '"Accessibility"$'
 # Ledge warning distance, the last row, a step down and back up.
 key Right
 wait '"Accessibility, On, Left and right to change\. '
-key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
+key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
 wait '"Ledge warning distance, slider, 40 units\. '
 key Left
 wait '\[a11y\] accessibility settings: saved ledge_warning\.distance = 39$'

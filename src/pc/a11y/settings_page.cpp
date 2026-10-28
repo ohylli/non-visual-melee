@@ -23,7 +23,8 @@ namespace {
 constexpr const char* kPageId = "page-accessibility";
 /* A Preview row's button. The row's name says what it plays. */
 constexpr const char* kPlay = "Play";
-/* A choice with no options listed now, as the Voice rows with no voice. */
+/* A choice with no options listed now and no words of its own for why
+ * (ChoiceSpec::none). */
 constexpr const char* kNoOption = "None";
 
 /* Text for RML: what would read as markup, escaped. */
@@ -61,7 +62,11 @@ std::string shown_value(const NamedValue& named) {
     } else if (named.kind == ValueKind::choice) {
         const ChoiceOptions options = choice_options(named);
         const int index = choice_index(named, options);
-        text = index < 0 ? kNoOption : options[static_cast<std::size_t>(index)].shown();
+        if (index >= 0) {
+            text = options[static_cast<std::size_t>(index)].shown();
+        } else {
+            text = named.none ? named.none() : kNoOption;
+        }
     } else {
         text = format_value(named);
         if (named.unit == "%") {

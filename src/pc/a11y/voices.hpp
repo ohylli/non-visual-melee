@@ -39,10 +39,12 @@ class CueEngine;
 struct Sound;
 
 enum class VoicesState {
-    stopped,     /* speech has not been on yet: no worker */
-    starting,    /* the worker is opening the instances */
-    ready,       /* lines are rendered and played */
-    unavailable, /* OneCore did not start, or its test line failed: lines are dropped */
+    stopped,  /* speech has not been on yet: no worker */
+    starting, /* the worker is opening the instances */
+    ready,    /* lines are rendered and played */
+    /* OneCore did not start, or its test line failed: lines go to the screen
+     * reader, queued. */
+    unavailable,
 };
 
 /* The loudest sample of every line once evened out, before the cue engine's
@@ -51,8 +53,10 @@ constexpr float kVoicePeak = 0.8f;
 
 /* The voice a setting's text names among the installed: the one of that
  * display name, ignoring case; else the first whose name holds the text,
- * ignoring case ("Zira"); else default_voice. Empty text is the default. -1
- * when none is installed. */
+ * ignoring case ("Zira"); -1 for none, and for empty text. */
+int match_voice(const std::vector<VoiceInfo>& voices, std::string_view wanted);
+/* The voice a setting's text gives: match_voice's, else default_voice. Empty
+ * text is the default. -1 when none is installed. */
 int find_voice(const std::vector<VoiceInfo>& voices, std::string_view wanted, int default_voice);
 
 /* Sorts voices by language and then name, as the menus list them, and
@@ -84,7 +88,9 @@ public:
     /* Each frame, from the launcher's frame hook and from the port menu's,
      * which runs at every frame boundary, outside the simulation: the
      * worker's news logged, rendered lines played in turn, the lines waiting
-     * dropped as the port menu opens, and MELEE_A11Y_VOICE_PREVIEW's lines. */
+     * dropped as the port menu opens, and MELEE_A11Y_VOICE_PREVIEW's lines.
+     * OneCore found unavailable, the lines waiting go to the screen reader,
+     * queued. */
     void frame(Clock::time_point now, bool port_menu_open);
 
     VoicesState state() const { return m_state; }

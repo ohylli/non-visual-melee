@@ -995,7 +995,8 @@ constexpr const char* kAccessibilityRow =
     "Accessibility, On, Left and right to change. Turns everything Non-Visual Melee adds on or "
     "off: speech, steering and the cues.";
 constexpr const char* kSpeechRow =
-    "Speech, On, Left and right to change. Turns speech through the screen reader on or off.";
+    "Speech, On, Left and right to change. Turns speech on or off, through the screen reader "
+    "and the voices.";
 constexpr const char* kTestVoiceRow =
     "Test voice, Microsoft Mark, Left and right to change. A choice of the tests' own.";
 

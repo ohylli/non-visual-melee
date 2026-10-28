@@ -1,0 +1,109 @@
+# The voices' rows in the port menu's Accessibility category, from the main
+# menu: Your voice a step Right, a quick run of two steps Left that plays one
+# sample, and a step Right back to the voice it started on; Your voice rate a
+# step down and back; Preview your voice by the gamepad's A, which plays at
+# once; Opponents' voice a step Right and back; and the opponents' four rows
+# read down to Steering. Each step on a Voice, Rate or Volume row logs the
+# saved value and the reader's new value, then a moment later the sample in
+# that voice and its "plays" line; with the screen reader muted the voices
+# still render and play, into SDL's dummy driver. Expects the voices ready
+# by the time the menu opens, and at least two voices installed. The run's
+# a11y.ini starts from the defaults. Run with accessibility on but muted,
+# and with Steering and Cues left to the run's a11y.ini, so Steering's row
+# shows no "(environment)" (as run_level.py runs it):
+#   MELEE_A11Y_STEER= MELEE_A11Y_CUES= python tools/a11y/drive.py --muted tools/a11y/port_menu_voices.drive
+# run_level.py also counts the samples: six in your voice and two in the
+# opponents' voice, one for each settled run of steps and one for Preview.
+
+# Title screen to the main menu (main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$" 20 0.3
+sleep 1
+
+# F1 opens the menu on Graphics; Up past Quit game and Resume is
+# Accessibility, the last category.
+key F1
+wait '"PC settings\. Graphics\. '
+key Up Up Up
+wait '"Accessibility"$'
+key Right
+wait '"Accessibility, On, Left and right to change\. '
+
+# Your voice, right after Speech: the voice in use, by its display name and,
+# when the voices installed span more than one language, the language.
+key Down Down
+wait '"Your voice, (?P<yours>[^",]+)(, [^"]+)?, Left and right to change\. The Windows voice that says what happens to you in a match\."$'
+
+# A step Right: the next voice, saved by its display name, said alone, and a
+# moment later its sample.
+key Right
+wait '\[a11y\] accessibility settings: saved your_voice\.voice = (?P<next>[^,]+)$'
+wait '\[a11y\] speak interrupt \(muted\): "%next%(, [^"]+)?"$'
+wait '\[a11y\] voice yours: "Your voice"$'
+wait '\[a11y\] voice yours plays: "Your voice" \(rendered in \d+ ms, \d+ ms after it was said\)$'
+ini '^your_voice\.voice = %next%$'
+
+# Two steps Left at once: each said, one sample once they settle.
+key Left Left
+wait '\[a11y\] accessibility settings: saved your_voice\.voice = %yours%$'
+wait '\[a11y\] accessibility settings: saved your_voice\.voice = (?P<before>[^,]+)$'
+wait '\[a11y\] voice yours: "Your voice"$'
+wait '\[a11y\] voice yours plays: "Your voice" '
+ini '^your_voice\.voice = %before%$'
+
+# A step Right back to the voice the run started on.
+key Right
+wait '\[a11y\] accessibility settings: saved your_voice\.voice = %yours%$'
+wait '\[a11y\] voice yours: "Your voice"$'
+wait '\[a11y\] voice yours plays: "Your voice" '
+ini '^your_voice\.voice = %yours%$'
+
+# Your voice rate a step down and back up, each with its sample.
+key Down
+wait "\"Your voice rate, slider, 50\. Left and right to adjust\. How fast your voice speaks, 50 being the voice's normal speed\.\"$"
+key Left
+wait '\[a11y\] accessibility settings: saved your_voice\.rate = 45$'
+wait '\[a11y\] speak interrupt \(muted\): "45"$'
+wait '\[a11y\] voice yours: "Your voice"$'
+wait '\[a11y\] voice yours plays: "Your voice" '
+ini '^your_voice\.rate = 45$'
+key Right
+wait '\[a11y\] accessibility settings: saved your_voice\.rate = 50$'
+wait '\[a11y\] voice yours: "Your voice"$'
+wait '\[a11y\] voice yours plays: "Your voice" '
+ini '^your_voice\.rate = 50$'
+
+# Preview your voice: A plays the sample at once.
+key Down
+wait '"Your voice volume, slider, 100%\. Left and right to adjust\. The loudness of your voice, under the master volume\."$'
+key Down
+wait '"Preview your voice: Play, button\. Says "Your voice" in your voice, at its rate and volume\."$'
+gamepad a
+wait '\[a11y\] voice yours: "Your voice"$' 0.3
+wait '\[a11y\] voice yours plays: "Your voice" '
+
+# Opponents' voice a step Right and back, each with its sample.
+key Down
+wait "\"Opponents' voice, (?P<theirs>[^\",]+)(, [^\"]+)?, Left and right to change\. The Windows voice that says what happens to everyone else, teammates included, in a match\.\"$"
+key Right
+wait '\[a11y\] accessibility settings: saved opponents_voice\.voice = (?P<other>[^,]+)$'
+wait "\[a11y\] voice opponents: \"Opponents' voice\"$"
+wait "\[a11y\] voice opponents plays: \"Opponents' voice\" "
+ini '^opponents_voice\.voice = %other%$'
+key Left
+wait '\[a11y\] accessibility settings: saved opponents_voice\.voice = %theirs%$'
+wait "\[a11y\] voice opponents: \"Opponents' voice\"$"
+wait "\[a11y\] voice opponents plays: \"Opponents' voice\" "
+ini '^opponents_voice\.voice = %theirs%$'
+
+# The opponents' other rows, then Steering.
+key Down
+wait "\"Opponents' voice rate, slider, 50\. Left and right to adjust\. How fast the opponents' voice speaks, 50 being the voice's normal speed\.\"$"
+key Down
+wait "\"Opponents' voice volume, slider, 100%\. Left and right to adjust\. The loudness of the opponents' voice, under the master volume\.\"$"
+key Down
+wait "\"Preview opponents' voice: Play, button\. Says \"Opponents' voice\" in the opponents' voice, at its rate and volume\.\"$"
+key Down
+wait '"Steering, On, Left and right to change\. '
+quit

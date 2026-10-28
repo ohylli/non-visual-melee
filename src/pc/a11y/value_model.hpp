@@ -38,6 +38,7 @@ struct ChoiceOption {
      * (United States)". */
     std::string label;
     const std::string& shown() const { return label.empty() ? text : label; }
+    bool operator==(const ChoiceOption&) const = default;
 };
 using ChoiceOptions = std::vector<ChoiceOption>;
 /* A choice's options asked at run time, each time they are needed: every
@@ -50,6 +51,9 @@ using ChoiceList = std::function<ChoiceOptions()>;
  * Zira"). */
 using ChoiceFallback =
     std::function<std::string(std::string_view saved, const ChoiceOptions& options)>;
+/* What a row shows while no option is listed, asked each time: why there is
+ * none ("Unavailable"). Game thread. */
+using ChoiceNone = std::function<std::string()>;
 
 /* One value. A toggle holds 0 or 1, with the range 0 to 1 and step 1. A
  * choice holds the text of an option (text) and leaves the numbers at 0. */
@@ -74,12 +78,14 @@ struct NamedValue {
      * option listed now (a voice uninstalled), kept as it is until the
      * player picks another; its default; and its options, fixed at
      * registration or asked of list at run time, with the fallback for a
-     * text that names none (choice_index). A choice has no override. */
+     * text that names none (choice_index), and the row's words while none
+     * is listed. A choice has no override. */
     std::string text;
     std::string default_text;
     ChoiceOptions options;
     ChoiceList list;
     ChoiceFallback fallback;
+    ChoiceNone none;
 };
 
 /* A row of the menus that acts rather than holds a value: a button. Never
@@ -129,6 +135,8 @@ struct ChoiceSpec {
     ChoiceOptions options;
     ChoiceList list;
     ChoiceFallback fallback;
+    /* The row's text with no option listed; without it, "None". */
+    ChoiceNone none;
     bool shown = false;
 };
 
