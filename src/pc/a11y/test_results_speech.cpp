@@ -536,7 +536,10 @@ struct PanelFixture : Fixture {
     std::string open(A11yResultsPage page = A11Y_RESULTS_PAGE_KOS) {
         on_page(results, page);
         visit(results);
-        Outputs said = tick(results, A11Y_RESULTS_STATS);
+        /* Your own press opens them. */
+        A11yResults opened = results;
+        opened.pressed_any = true;
+        Outputs said = tick(opened, A11Y_RESULTS_STATS);
         assert(said.size() == 1);
         assert(said[0].interrupt);
         return said[0].text;
@@ -551,6 +554,7 @@ struct PanelFixture : Fixture {
         now.pressed_left = button == kLeft;
         now.pressed_right = button == kRight;
         now.pressed_z = button == kZ;
+        now.pressed_any = button != kNone;
         Outputs said = tick(now, A11Y_RESULTS_STATS);
         assert(said.size() <= 1);
         if (said.empty()) {
@@ -580,8 +584,9 @@ void the_opening_press_reads_no_row() {
     /* The D-pad press that opened the panels, seen on their first tick. */
     A11yResults opened = f.results;
     opened.pressed_down = true;
+    opened.pressed_any = true;
     Outputs said = f.tick(opened, A11Y_RESULTS_STATS);
-    assert(said.size() == 1);
+    assert(said.size() == 1 && said[0].interrupt);
     assert(said[0].text == std::string("KOs and falls. KOs.") + kStatsKeys);
     /* The cursor is still on the first row. */
     assert(f.press(kDown) == "P2 Mario, 1");
@@ -599,6 +604,8 @@ void stats_opened_by_another_player_and_keys_once_a_run() {
     f.visit(f.results);
     Outputs said = f.tick(f.results, A11Y_RESULTS_STATS);
     assert(said.size() == 1 && said[0].text == std::string("KOs and falls. KOs.") + kStatsKeys);
+    /* It waits behind your opening rather than cutting it off. */
+    assert(!said[0].interrupt);
     /* The next results of the run: no keys. */
     assert(f.open() == "KOs and falls. KOs.");
 }

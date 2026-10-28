@@ -241,8 +241,11 @@ void ResultsSpeech::tick(const A11yResults& results) {
     }
     if (!m_stats_open) {
         /* The press that opened the panels is only that: whatever it was,
-         * it reads no row. */
-        stats_opened(results, opened_now ? Mode::queue : Mode::interrupt);
+         * it reads no row. Only your own press cuts off what is being
+         * said; another player's, often a second or two into your opening
+         * online, waits behind it. */
+        bool yours = results.pressed_any && !opened_now;
+        stats_opened(results, yours ? Mode::interrupt : Mode::queue);
         return;
     }
     int page = results.players[panel_port(results)].page;

@@ -107,11 +107,13 @@ b-fork wait '"Stock Battle\. Winner: [^."]+\. 1st [^"]+, P2, you, [^"]*2nd Pichu
 b-base wait 'boot scene: state \d+ scene 5$'
 sleep 1
 
-# A's D-pad opens both machines' stats panels; each then steps its own
-# reading cursor with the D-pad, which quick chat leaves alone.
+# A's D-pad opens both machines' stats panels: on a the press was its own,
+# so the panels' opening interrupts; on b it was the opponent's, so it is
+# queued. Each then steps its own reading cursor with the D-pad, which
+# quick chat leaves alone.
 a press DDown
-a wait '"KOs and falls\. KOs\. A and B change page\. D-pad up and down read the rows, left and right switch player\. Z the player.s summary\. Start when ready\."$'
-b-fork wait '"KOs and falls\. KOs\. A and B change page\. D-pad up and down read the rows, left and right switch player\. Z the player.s summary\. Start when ready\."$'
+a wait '\[a11y\] speak interrupt.*: "KOs and falls\. KOs\. A and B change page\. D-pad up and down read the rows, left and right switch player\. Z the player.s summary\. Start when ready\."$'
+b-fork wait '\[a11y\] speak queue.*: "KOs and falls\. KOs\. A and B change page\. D-pad up and down read the rows, left and right switch player\. Z the player.s summary\. Start when ready\."$'
 a press DDown
 a wait '"P2 %winner%, 0"$'
 a press DRight

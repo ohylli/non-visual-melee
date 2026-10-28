@@ -742,6 +742,10 @@ typedef struct A11yResults {
     bool pressed_left;
     bool pressed_right;
     bool pressed_z;
+    /* Any button the local player's controller newly pressed this tick: on
+     * the panels' first tick, whether the press that opened them was
+     * yours. */
+    bool pressed_any;
     A11yResultsPlayer players[A11Y_RESULTS_PORTS];
 } A11yResults;
 

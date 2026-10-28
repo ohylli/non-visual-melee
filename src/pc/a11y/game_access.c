@@ -963,6 +963,7 @@ void a11y_game_results(int local_port, A11yResults* out) {
         out->pressed_left = (pressed & HSD_PAD_DPADLEFT) != 0;
         out->pressed_right = (pressed & HSD_PAD_DPADRIGHT) != 0;
         out->pressed_z = (pressed & HSD_PAD_Z) != 0;
+        out->pressed_any = pressed != 0;
     }
     int winner = data->x6 < A11Y_RESULTS_PORTS ? data->x6 : 0;
     for (int i = 0; i < A11Y_RESULTS_PORTS; i++) {
