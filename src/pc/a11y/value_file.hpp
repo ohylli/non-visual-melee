@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace a11y {
@@ -40,6 +41,9 @@ public:
      * that changed, that hand edit's included; the poll after it finds the
      * file as saved and reads nothing. */
     std::vector<const NamedValue*> set(const NamedValue& named, float value, Clock::time_point now);
+    /* A front end's choice, the option's text, saved as set saves. */
+    std::vector<const NamedValue*> choose(
+        const NamedValue& named, std::string_view text, Clock::time_point now);
 
     /* The last read's error announcement ("Accessibility settings, line 12
      * not understood."), empty when it read cleanly: already spoken once, kept
@@ -59,6 +63,11 @@ private:
         bool operator==(const Stamp&) const = default;
     };
 
+    /* set and choose: the file read, the model changed by `apply` (true
+     * when it changed the value), and the line saved. */
+    template <class Apply>
+    std::vector<const NamedValue*> change(
+        const NamedValue& named, Clock::time_point now, Apply apply);
     /* Writes the defaults when the file is missing; false when it is still
      * missing. */
     bool ensure_written();

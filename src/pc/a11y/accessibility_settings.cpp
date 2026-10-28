@@ -28,7 +28,7 @@ AccessibilitySettings::AccessibilitySettings(Speech& speech, const std::string& 
 bool AccessibilitySettings::override_value(
     std::string_view key, float value, const std::string& why) {
     const NamedValue* named = m_model.find(key);
-    if (named == nullptr) {
+    if (named == nullptr || named->kind == ValueKind::choice) {
         return false;
     }
     m_model.override_value(*named, value);
@@ -52,8 +52,22 @@ void AccessibilitySettings::poll(Clock::time_point now) {
 }
 
 bool AccessibilitySettings::set(const NamedValue& named, float value, Clock::time_point now) {
+    return change(
+        named, [&] { return m_model.set(named, value); },
+        [&] { return m_file->set(named, value, now); });
+}
+
+bool AccessibilitySettings::choose(
+    const NamedValue& named, std::string_view text, Clock::time_point now) {
+    return change(
+        named, [&] { return m_model.choose(named, text); },
+        [&] { return m_file->choose(named, text, now); });
+}
+
+template <class Apply, class Save>
+bool AccessibilitySettings::change(const NamedValue& named, Apply apply, Save save) {
     if (m_file == nullptr) {
-        if (!m_model.set(named, value)) {
+        if (!apply()) {
             return false;
         }
         if (m_log) {
@@ -63,7 +77,7 @@ bool AccessibilitySettings::set(const NamedValue& named, float value, Clock::tim
         changed({&named});
         return true;
     }
-    std::vector<const NamedValue*> values = m_file->set(named, value, now);
+    std::vector<const NamedValue*> values = save();
     changed(values);
     return std::find(values.begin(), values.end(), &named) != values.end();
 }

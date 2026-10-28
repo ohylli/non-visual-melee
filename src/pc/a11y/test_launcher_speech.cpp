@@ -996,6 +996,8 @@ constexpr const char* kAccessibilityRow =
     "off: speech, steering and the cues.";
 constexpr const char* kSpeechRow =
     "Speech, On, Left and right to change. Turns speech through the screen reader on or off.";
+constexpr const char* kTestVoiceRow =
+    "Test voice, Microsoft Mark, Left and right to change. A choice of the tests' own.";
 
 void accessibility_category_rows(Rml::Context& context) {
     Page page(context);
@@ -1007,11 +1009,12 @@ void accessibility_category_rows(Rml::Context& context) {
     page.frame();
     assert(page.take() == (std::vector<Output>{interrupt(kAccessibilityRow)}));
     const std::vector<std::string> rows = pc_a11y_settings_rows();
-    assert(rows.size() == 12);
+    assert(rows.size() == 13);
     assert(rows.front() == "a11y-accessibility-on");
     assert(rows[4] == "a11y-cues-volume");
     assert(rows[7] == "a11y-gap_warning-preview");
-    assert(rows.back() == "a11y-ledge_warning-distance");
+    assert(rows[11] == "a11y-ledge_warning-distance");
+    assert(rows.back() == "a11y-test-voice");
     const std::vector<std::string> said{kSpeechRow,
         "Steering, On, Left and right to change. The D-pad steps the hand on character select and "
         "the cursor on stage select. Off, the D-pad does what the game makes of it, quick chat "
@@ -1031,7 +1034,7 @@ void accessibility_category_rows(Rml::Context& context) {
         "sounds in a match.",
         "Ledge warning distance, slider, 40 units. Left and right to adjust. How far from the edge "
         "the warning starts, in stage units.",
-        kAccessibilityRow};
+        kTestVoiceRow, kAccessibilityRow};
     for (const std::string& text : said) {
         page.step(1);
         page.frame();
@@ -1101,6 +1104,48 @@ void accessibility_slider(Rml::Context& context) {
     a11y::settings_pages_frame(a11y::SettingsHost::launcher, true);
     page.frame();
     assert(page.take() == (std::vector<Output>{interrupt("30 units")}));
+}
+
+/* A choice steps through its options with Left and Right, round from
+ * either end, and to the next with Enter or A, said as the option alone;
+ * the row shows an option by its label. The options may change while the
+ * page is open: the row then shows the option in use, the saved text kept. */
+void accessibility_choice(Rml::Context& context) {
+    Page page(context);
+    page.open_rows(kAccessibilityTab);
+    page.focus("a11y-test-voice");
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(kTestVoiceRow)}));
+    page.horizontal(1);
+    assert(
+        page.take() == (std::vector<Output>{interrupt("Microsoft Zira, English (United States)")}));
+    assert(page.a11y().value("test.voice").text == "Microsoft Zira");
+    page.horizontal(1);
+    assert(page.take() == (std::vector<Output>{interrupt("Microsoft David")}));
+    page.horizontal(-1);
+    assert(
+        page.take() == (std::vector<Output>{interrupt("Microsoft Zira, English (United States)")}));
+    page.press();
+    assert(page.take() == (std::vector<Output>{interrupt("Microsoft David")}));
+    assert(page.a11y().value("test.voice").text == "Microsoft David");
+    /* The launcher plays no sounds. */
+    assert(page.a11y().take().empty());
+    /* David uninstalled: the default's option shows, David stays saved. */
+    page.a11y().voices.erase(page.a11y().voices.begin());
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt("Microsoft Mark")}));
+    assert(page.a11y().value("test.voice").text == "Microsoft David");
+    page.horizontal(1);
+    assert(
+        page.take() == (std::vector<Output>{interrupt("Microsoft Zira, English (United States)")}));
+    /* None listed: the row says so, and a step changes nothing. */
+    page.a11y().voices.clear();
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt("None")}));
+    page.horizontal(1);
+    page.press();
+    assert(page.take().empty());
+    assert(page.a11y().value("test.voice").text == "Microsoft Zira");
 }
 
 /* Preview plays its cue on Enter or A, again from its start when pressed
@@ -1254,6 +1299,7 @@ int main(int argc, char** argv) {
     accessibility_category_rows(*context);
     accessibility_switch(*context);
     accessibility_slider(*context);
+    accessibility_choice(*context);
     accessibility_preview(*context);
     accessibility_switches_speech(*context);
     every_control_has_a_name(*context);

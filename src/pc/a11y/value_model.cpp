@@ -58,19 +58,64 @@ std::string format_amount(const NamedValue& named, float value) {
     return named.unit == "%" ? number + "%" : number + " " + named.unit;
 }
 
-/* The comment above a value: its description, then what it takes. */
-std::string describe(const NamedValue& named) {
-    std::string range = named.kind == ValueKind::toggle ?
-                            "On or off" :
-                            format_number(named.min) + " to " + format_amount(named, named.max);
-    return "# " + named.description + " " + range + ", default " +
-           format_amount(named, named.default_value) + ".\n";
+/* A choice's fixed options as the file writes them: "Off, Every change or
+ * Thresholds". Options asked at run time are left unnamed, so the file
+ * never depends on what was installed when it was written. */
+std::string option_list(const NamedValue& named) {
+    if (named.list || named.options.empty()) {
+        return "One of the options the menus list";
+    }
+    std::string text;
+    for (std::size_t i = 0; i < named.options.size(); ++i) {
+        if (i > 0) {
+            text += i + 1 == named.options.size() ? " or " : ", ";
+        }
+        text += named.options[i].text;
+    }
+    return text;
 }
 
-std::string format_line(const NamedValue& named, float value) {
-    std::string text =
-        named.kind == ValueKind::toggle ? format_amount(named, value) : format_number(value);
-    return named.key + " = " + text + "\n";
+/* The comment above a value: its description, then what it takes. */
+std::string describe(const NamedValue& named) {
+    std::string range;
+    switch (named.kind) {
+    case ValueKind::toggle:
+        range = "On or off";
+        break;
+    case ValueKind::number:
+        range = format_number(named.min) + " to " + format_amount(named, named.max);
+        break;
+    case ValueKind::choice:
+        range = option_list(named);
+        break;
+    }
+    const std::string default_shown = named.kind == ValueKind::choice ?
+                                          named.default_text :
+                                          format_amount(named, named.default_value);
+    return "# " + named.description + " " + range + ", default " + default_shown + ".\n";
+}
+
+/* The value as the file holds it, as the file writes it: under an
+ * override, the file's own; `at_default`, the default. */
+std::string written(const NamedValue& named, bool at_default);
+
+std::string format_line(const NamedValue& named, bool at_default) {
+    return named.key + " = " + written(named, at_default) + "\n";
+}
+
+/* Text compared ignoring ASCII case: "off" names the option "Off". */
+bool same_text(std::string_view a, std::string_view b) {
+    return a.size() == b.size() && lowered(a) == lowered(b);
+}
+
+/* The option whose text this is, ignoring case; -1 for none. */
+int find_option(const ChoiceOptions& options, std::string_view text) {
+    for (std::size_t i = 0; i < options.size(); ++i) {
+        if (same_text(options[i].text, text)) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
 }
 
 bool read_toggle(std::string_view text, float& out) {
@@ -123,11 +168,59 @@ float file_value(const NamedValue& named) {
     return named.overridden ? named.saved : named.value;
 }
 
+std::string written(const NamedValue& named, bool at_default) {
+    if (named.kind == ValueKind::choice) {
+        return at_default ? named.default_text : named.text;
+    }
+    const float value = at_default ? named.default_value : file_value(named);
+    return named.kind == ValueKind::toggle ? format_amount(named, value) : format_number(value);
+}
+
 }  // namespace
 
 std::string format_value(const NamedValue& named) {
-    return named.kind == ValueKind::toggle ? format_amount(named, named.value) :
-                                             format_number(named.value);
+    switch (named.kind) {
+    case ValueKind::toggle:
+        return format_amount(named, named.value);
+    case ValueKind::choice:
+        return named.text;
+    case ValueKind::number:
+        break;
+    }
+    return format_number(named.value);
+}
+
+ChoiceOptions choice_options(const NamedValue& named) {
+    return named.list ? named.list() : named.options;
+}
+
+int choice_index(const NamedValue& named, const ChoiceOptions& options) {
+    if (options.empty()) {
+        return -1;
+    }
+    int index = find_option(options, named.text);
+    if (index < 0 && named.fallback) {
+        index = find_option(options, named.fallback(named.text, options));
+    }
+    if (index < 0) {
+        index = find_option(options, named.default_text);
+    }
+    return index < 0 ? 0 : index;
+}
+
+std::string choice_step(const NamedValue& named, const ChoiceOptions& options, int direction) {
+    const int count = static_cast<int>(options.size());
+    if (count == 0) {
+        return {};
+    }
+    const int index = choice_index(named, options) + direction;
+    return options[static_cast<std::size_t>((index % count + count) % count)].text;
+}
+
+std::string Choice::option() const {
+    const ChoiceOptions options = choice_options(*m_named);
+    const int index = choice_index(*m_named, options);
+    return index < 0 ? std::string() : options[static_cast<std::size_t>(index)].text;
 }
 
 Switch ValueGroup::add_switch(const SwitchSpec& spec) {
@@ -159,6 +252,24 @@ Number ValueGroup::add_number(const NumberSpec& spec) {
     return Number(m_model->add(m_index, std::move(named)));
 }
 
+Choice ValueGroup::add_choice(const ChoiceSpec& spec) {
+    NamedValue named;
+    named.key = spec.name;
+    named.label = spec.label;
+    named.description = spec.description;
+    named.kind = ValueKind::choice;
+    named.default_value = 0.0f;
+    named.min = 0.0f;
+    named.max = 0.0f;
+    named.step = 0.0f;
+    named.default_text = spec.default_option;
+    named.options = spec.options;
+    named.list = spec.list;
+    named.fallback = spec.fallback;
+    named.shown = spec.shown;
+    return Choice(m_model->add(m_index, std::move(named)));
+}
+
 const NamedAction& ValueGroup::add_action(const ActionSpec& spec) {
     const ValueModel::Group& owner = m_model->m_groups[m_index];
     NamedAction& added = m_model->m_actions.emplace_back(
@@ -181,6 +292,7 @@ NamedValue& ValueModel::add(std::size_t group, NamedValue named) {
     Group& owner = m_groups[group];
     named.key = owner.id + "." + named.key;
     named.value = named.default_value;
+    named.text = named.default_text;
     /* A key registered twice is a programming error; the second gets the
      * first's value rather than a duplicate line in the file. */
     if (NamedValue* existing = find_mutable(named.key)) {
@@ -223,7 +335,7 @@ const NamedValue* ValueModel::find(std::string_view key) const {
 
 bool ValueModel::set(const NamedValue& named, float value) {
     NamedValue* target = find_mutable(named.key);
-    if (target == nullptr || !std::isfinite(value)) {
+    if (target == nullptr || target->kind == ValueKind::choice || !std::isfinite(value)) {
         return false;
     }
     value = held(*target, value);
@@ -233,9 +345,18 @@ bool ValueModel::set(const NamedValue& named, float value) {
     return changed;
 }
 
+bool ValueModel::choose(const NamedValue& named, std::string_view text) {
+    NamedValue* target = find_mutable(named.key);
+    if (target == nullptr || target->kind != ValueKind::choice || target->text == text) {
+        return false;
+    }
+    target->text = std::string(text);
+    return true;
+}
+
 bool ValueModel::override_value(const NamedValue& named, float value) {
     NamedValue* target = find_mutable(named.key);
-    if (target == nullptr || !std::isfinite(value)) {
+    if (target == nullptr || target->kind == ValueKind::choice || !std::isfinite(value)) {
         return false;
     }
     if (!target->overridden) {
@@ -280,8 +401,7 @@ std::string ValueModel::write(const std::vector<const NamedValue*>& only, bool a
                 heading = true;
             }
             /* Under an override, the file's own value: an override is never written. */
-            float value = at_defaults ? named->default_value : file_value(*named);
-            text += "\n" + describe(*named) + format_line(*named, value);
+            text += "\n" + describe(*named) + format_line(*named, at_defaults);
         }
     }
     return text;
@@ -301,9 +421,7 @@ std::string ValueModel::edit_text(std::string_view text, const NamedValue& named
         lines.push_back(rest.substr(0, length));
         rest.remove_prefix(length);
     }
-    const float saved = file_value(named);
-    std::string value =
-        named.kind == ValueKind::toggle ? format_amount(named, saved) : format_number(saved);
+    const std::string value = written(named, false);
     std::size_t found = lines.size();
     for (std::size_t i = 0; i < lines.size(); ++i) {
         std::string_view body = line_body(lines[i]);
@@ -362,7 +480,7 @@ std::string ValueModel::edit_text(std::string_view text, const NamedValue& named
     while (heading < lines.size() && heading_title(lines[heading]) != owner->title) {
         ++heading;
     }
-    std::string entry = "\n" + describe(named) + format_line(named, named.value);
+    std::string entry = "\n" + describe(named) + format_line(named, false);
     if (heading == lines.size()) {
         out = std::string(text);
         if (!out.empty() && out.back() != '\n') {
@@ -406,6 +524,8 @@ TextRead ValueModel::read_text(std::string_view text) {
     /* The value each known key's line gives, or the value it held when the
      * line cannot be read. */
     std::map<NamedValue*, float> given;
+    /* The same for choices: the text each gives. */
+    std::map<NamedValue*, std::string> given_text;
     std::map<std::string, std::string> unknown;
     /* Notepad may save with a byte order mark. */
     if (text.substr(0, 3) == "\xEF\xBB\xBF") {
@@ -438,6 +558,28 @@ TextRead ValueModel::read_text(std::string_view text) {
             read.unknown.emplace_back(key);
             continue;
         }
+        if (named->kind == ValueKind::choice) {
+            if (value.empty()) {
+                read.bad_lines.push_back(number);
+                read.notes.push_back("line " + std::to_string(number) +
+                                     " not understood: " + std::string(trim(raw)) + "; " +
+                                     named->key + " stays " + named->text);
+                given_text.try_emplace(named, named->text);
+                continue;
+            }
+            /* Only fixed options are checked: a run-time list may not be
+             * known yet, and its owner says what it falls back to. */
+            if (!named->list && !named->options.empty() && find_option(named->options, value) < 0) {
+                NamedValue probe = *named;
+                probe.text = std::string(value);
+                const int index = choice_index(probe, named->options);
+                read.notes.push_back("line " + std::to_string(number) + ": " + named->key + " = " +
+                                     std::string(value) + " is none of the options; using " +
+                                     named->options[static_cast<std::size_t>(index)].text);
+            }
+            given_text[named] = std::string(value);
+            continue;
+        }
         float parsed = 0.0f;
         bool ok = named->kind == ValueKind::toggle ? read_toggle(value, parsed) :
                                                      read_number(*named, value, parsed);
@@ -458,6 +600,20 @@ TextRead ValueModel::read_text(std::string_view text) {
         given[named] = clamped;
     }
     for (NamedValue& named : m_values) {
+        if (named.kind == ValueKind::choice) {
+            auto found = given_text.find(&named);
+            std::string text = named.default_text;
+            if (found != given_text.end()) {
+                text = found->second;
+            } else {
+                read.missing.push_back(&named);
+            }
+            if (text != named.text) {
+                named.text = std::move(text);
+                read.changed.push_back(&named);
+            }
+            continue;
+        }
         auto found = given.find(&named);
         float value = named.default_value;
         if (found != given.end()) {

@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The accessibility settings: the value model, its text, its file against
  * real files in a scratch folder, the line edit a menu's change saves, the
- * menus' rows, and the cues' values feeding the cue engine rendered into a
- * buffer. Speech goes to a fake screen reader bridge; this file supplies
- * the pc_log_line that main.c normally provides. Its one argument is the
- * scratch folder. */
+ * menus' rows, the cues' values feeding the cue engine rendered into a
+ * buffer, and the choice kind of value. Speech goes to a fake screen reader bridge; this file
+ * supplies the pc_log_line that main.c normally provides. Its one argument is the scratch folder.
+ */
 #include "accessibility_settings.hpp"
 #include "cue_engine.hpp"
 #include "cue_settings.hpp"
@@ -726,6 +726,209 @@ void an_override_of_a_key_the_file_lacks_is_not_appended() {
     assert(f.poll_later().empty());
 }
 
+/* The match announcements' kind of choice: fixed options, saved as the
+ * option's text, which the file describes; a front end's choice edits its
+ * line alone. */
+a11y::Choice add_damage(ValueModel& model) {
+    return model.group("damage", "Damage")
+        .add_choice(a11y::ChoiceSpec{
+            .name = "yours",
+            .label = "Your damage",
+            .description = "When your damage is said.",
+            .default_option = "Every change",
+            .options = {{"Off", ""}, {"Every change", ""}, {"Thresholds", ""}},
+            .shown = true,
+        });
+}
+
+void a_choice_is_saved_as_its_options_text() {
+    Fixture f("choice_text.ini");
+    a11y::Choice damage = add_damage(f.model);
+    assert(damage.named().kind == a11y::ValueKind::choice);
+    assert(f.load().empty());
+    assert(damage.option() == "Every change" && damage.saved() == "Every change");
+    std::string before = read_file(f.path);
+    assert(before.find("# When your damage is said. Off, Every change or Thresholds, default "
+                       "Every change.\ndamage.yours = Every change\n") != std::string::npos);
+    s_lines.clear();
+    std::vector<const a11y::NamedValue*> changed =
+        f.file->choose(damage.named(), "Thresholds", f.now);
+    assert(changed.size() == 1 && changed[0] == &damage.named());
+    assert(damage.option() == "Thresholds");
+    std::string after = before;
+    after.replace(after.find("damage.yours = Every change"), 27, "damage.yours = Thresholds");
+    assert(read_file(f.path) == after);
+    assert(
+        (s_lines == std::vector<std::string>{"[a11y] accessibility settings: saved damage.yours = "
+                                             "Thresholds"}));
+    /* The same choice again: nothing to save. */
+    assert(f.file->choose(damage.named(), "Thresholds", f.now).empty());
+    /* A choice is not a number, and a number not a choice. */
+    assert(f.file->set(damage.named(), 1.0f, f.now).empty());
+    assert(!f.model.choose(*f.model.find("cues.volume"), "Off"));
+    /* Read back at the next start. */
+    ValueModel again;
+    CueSettings again_cues(again);
+    a11y::Choice again_damage = add_damage(again);
+    a11y::TextRead read = again.read_text(after);
+    assert(read.bad_lines.empty() && read.missing.empty());
+    assert(read.changed.size() == 1 && again_damage.option() == "Thresholds");
+    assert(f.spoken.empty());
+}
+
+/* A hand edit: the line's text, read as written; an option's text in any
+ * case names it. An empty value is a line not understood. */
+void a_hand_edit_of_a_choice_is_picked_up() {
+    Fixture f("choice_hand.ini");
+    a11y::Choice damage = add_damage(f.model);
+    f.load();
+    std::string text = read_file(f.path);
+    text.replace(text.find("damage.yours = Every change"), 27, "damage.yours =  off  # quiet");
+    edit_file(f.path, text);
+    std::vector<const a11y::NamedValue*> changed = f.poll_later();
+    assert(changed.size() == 1 && changed[0] == &damage.named());
+    assert(damage.saved() == "off" && damage.option() == "Off");
+    assert(count_logged("[a11y] accessibility settings: damage.yours = off") == 1);
+    /* A menu's choice keeps the comment. */
+    f.file->choose(damage.named(), "Every change", f.now);
+    assert(
+        read_file(f.path).find("\ndamage.yours =  Every change  # quiet\n") != std::string::npos);
+    text = read_file(f.path);
+    text.replace(text.find("damage.yours =  Every change"), 28, "damage.yours =");
+    edit_file(f.path, text);
+    assert(f.poll_later().empty());
+    assert(damage.saved() == "Every change");
+    assert(f.spoken.size() == 1 && f.spoken[0].find("not understood") != std::string::npos);
+    assert(count_logged_containing("damage.yours stays Every change") == 1);
+}
+
+/* A saved text that names no option stays in the file, unchanged by every
+ * other save, while the option in use is the fallback; picking an option
+ * replaces it. */
+void a_saved_option_not_listed_is_kept_and_the_fallback_used() {
+    Fixture f("choice_unlisted.ini");
+    a11y::Choice damage = add_damage(f.model);
+    f.load();
+    std::string text = read_file(f.path);
+    text.replace(text.find("damage.yours = Every change"), 27, "damage.yours = Sometimes");
+    edit_file(f.path, text);
+    f.poll_later();
+    assert(damage.saved() == "Sometimes" && damage.option() == "Every change");
+    assert(count_logged_containing(
+               "damage.yours = Sometimes is none of the options; using Every change") == 1);
+    f.file->set(*f.model.find("cues.volume"), 30.0f, f.now);
+    assert(read_file(f.path).find("\ndamage.yours = Sometimes\n") != std::string::npos);
+    assert(f.poll_later().empty() && damage.saved() == "Sometimes");
+    /* A step goes from the option in use. */
+    assert(a11y::choice_step(damage.named(), damage.options(), 1) == "Thresholds");
+    f.file->choose(damage.named(), "Thresholds", f.now);
+    assert(read_file(f.path).find("\ndamage.yours = Thresholds\n") != std::string::npos);
+
+    /* A fallback of the registration's own. */
+    ValueModel model;
+    a11y::Choice picky = model.group("x", "X").add_choice(a11y::ChoiceSpec{
+        .name = "pick",
+        .default_option = "B",
+        .options = {{"A", ""}, {"B", ""}, {"C", ""}},
+        .fallback = [](std::string_view, const a11y::ChoiceOptions&) { return std::string("C"); },
+    });
+    assert(picky.option() == "B");
+    model.read_text("x.pick = Z\n");
+    assert(picky.saved() == "Z" && picky.option() == "C");
+    /* A fallback naming no option: the default's, then the first. */
+    a11y::Choice lost = model.group("x", "X").add_choice(a11y::ChoiceSpec{
+        .name = "lost",
+        .default_option = "B",
+        .options = {{"A", ""}, {"B", ""}},
+        .fallback = [](std::string_view, const a11y::ChoiceOptions&) { return std::string("Q"); },
+    });
+    model.read_text("x.lost = Z\n");
+    assert(lost.option() == "B");
+    a11y::Choice first = model.group("x", "X").add_choice(a11y::ChoiceSpec{
+        .name = "first",
+        .default_option = "Q",
+        .options = {{"A", ""}, {"B", ""}},
+    });
+    assert(first.option() == "A");
+    /* No override for a choice. */
+    assert(!model.override_value(lost.named(), 0.0f) && !lost.named().overridden);
+}
+
+/* The Voice rows' kind of choice: options asked at run time, which change
+ * between reads; the saved text is matched against them as they stand. */
+void a_choices_options_may_change_between_reads() {
+    Fixture f("choice_list.ini");
+    a11y::ChoiceOptions voices{{"Microsoft David", ""}, {"Microsoft Mark", ""},
+        {"Microsoft Zira", "Microsoft Zira, English (United States)"}};
+    int asked = 0;
+    auto list = [&] {
+        ++asked;
+        return voices;
+    };
+    /* Your voice's default, as the spec has it: the first voice whose name
+     * holds "Zira", else the Windows default voice. */
+    auto fallback = [](std::string_view saved, const a11y::ChoiceOptions& options) {
+        for (const a11y::ChoiceOption& option : options) {
+            if (option.text.find(saved) != std::string::npos) {
+                return option.text;
+            }
+        }
+        return std::string("Microsoft David");
+    };
+    a11y::Choice voice = f.model.group("voices", "Voices")
+                             .add_choice(a11y::ChoiceSpec{
+                                 .name = "yours",
+                                 .label = "Your voice",
+                                 .description = "The voice that speaks what happens to you.",
+                                 .default_option = "Zira",
+                                 .list = list,
+                                 .fallback = fallback,
+                                 .shown = true,
+                             });
+    f.load();
+    /* The file does not depend on what is installed when it is written. */
+    assert(asked == 0);
+    assert(read_file(f.path).find("# The voice that speaks what happens to you. One of the "
+                                  "options the menus list, default Zira.\nvoices.yours = Zira\n") !=
+           std::string::npos);
+    assert(voice.saved() == "Zira" && voice.option() == "Microsoft Zira");
+    assert(a11y::choice_index(voice.named(), voice.options()) == 2);
+    assert(voice.options()[2].shown() == "Microsoft Zira, English (United States)");
+    assert(voice.options()[1].shown() == "Microsoft Mark");
+    f.file->choose(voice.named(), "Microsoft Mark", f.now);
+    assert(voice.option() == "Microsoft Mark");
+    /* Mark uninstalled: the fallback, the file unchanged. */
+    voices.erase(voices.begin() + 1);
+    assert(voice.option() == "Microsoft David" && voice.saved() == "Microsoft Mark");
+    assert(f.poll_later().empty());
+    assert(read_file(f.path).find("\nvoices.yours = Microsoft Mark\n") != std::string::npos);
+    /* Reinstalled, at another place in the list: Mark again. */
+    voices.push_back({"Microsoft Mark", ""});
+    assert(voice.option() == "Microsoft Mark");
+    assert(a11y::choice_index(voice.named(), voice.options()) == 2);
+    /* None listed. */
+    voices.clear();
+    assert(voice.option().empty() && a11y::choice_index(voice.named(), voice.options()) == -1);
+    assert(a11y::choice_step(voice.named(), voice.options(), 1).empty());
+}
+
+/* A step wraps round at either end, as the base port's choice rows do. */
+void a_choice_step_wraps_at_each_end() {
+    ValueModel model;
+    a11y::Choice damage = add_damage(model);
+    const a11y::ChoiceOptions options = damage.options();
+    model.choose(damage.named(), "Thresholds");
+    assert(a11y::choice_step(damage.named(), options, 1) == "Off");
+    assert(a11y::choice_step(damage.named(), options, -1) == "Every change");
+    model.choose(damage.named(), "Off");
+    assert(a11y::choice_step(damage.named(), options, -1) == "Thresholds");
+    assert(a11y::choice_step(damage.named(), options, 1) == "Every change");
+    /* One option: a step stays on it. */
+    a11y::Choice one = model.group("x", "X").add_choice(
+        a11y::ChoiceSpec{.name = "one", .default_option = "A", .options = {{"A", ""}}});
+    assert(a11y::choice_step(one.named(), one.options(), 1) == "A");
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -759,6 +962,11 @@ int main(int argc, char** argv) {
     the_settings_tell_their_listener_every_change();
     an_override_holds_for_the_run_and_is_never_written();
     an_override_of_a_key_the_file_lacks_is_not_appended();
+    a_choice_is_saved_as_its_options_text();
+    a_hand_edit_of_a_choice_is_picked_up();
+    a_saved_option_not_listed_is_kept_and_the_fallback_used();
+    a_choices_options_may_change_between_reads();
+    a_choice_step_wraps_at_each_end();
     std::cout << "accessibility_settings: all tests passed\n";
     return 0;
 }

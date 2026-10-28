@@ -422,8 +422,9 @@ if (TARGET unit_tests)
     endif ()
 
     # The accessibility settings: the value model, its file against files in
-    # a scratch folder, the menus' rows, and the cues' values feeding the cue
-    # engine rendered into a buffer; a fake bridge and its own pc_log_line.
+    # a scratch folder, the menus' rows, the cues' values feeding the cue
+    # engine rendered into a buffer, and choices; a fake bridge and its own
+    # pc_log_line.
     add_executable(accessibility_settings_test EXCLUDE_FROM_ALL
             ${CMAKE_CURRENT_LIST_DIR}/test_accessibility_settings.cpp
             ${CMAKE_CURRENT_LIST_DIR}/accessibility_settings.cpp

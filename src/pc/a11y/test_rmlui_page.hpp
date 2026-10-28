@@ -117,9 +117,11 @@ public:
 
 /* The accessibility settings as pc_a11y_init wires them, enough for the
  * Accessibility category: the switches first, the cues' shared values, the
- * gap warning and the ledge warning with its distance, and no file. The
- * listener tells the switches, as the hooks' does. What the rows ask of the
- * game is recorded in `asked`: "preview <cue>", "stop", "sound <n>". */
+ * gap warning and the ledge warning with its distance, and no file; last a
+ * choice of the tests' own, whose options, `voices`, are asked at run time
+ * as the Voice rows' installed voices will be. The listener tells the
+ * switches, as the hooks' does. What the rows ask of the game is recorded in
+ * `asked`: "preview <cue>", "stop", "sound <n>". */
 class A11ySettings {
 public:
     explicit A11ySettings(a11y::Speech& speech)
@@ -131,6 +133,16 @@ public:
         ledge.group.add_number(a11y::NumberSpec{"distance", "Ledge warning distance",
             "How far from the edge the warning starts, in stage units.", "units", 40.0f, 5.0f,
             100.0f, 1.0f, true});
+        settings.model()
+            .group("test", "Tests")
+            .add_choice(a11y::ChoiceSpec{
+                .name = "voice",
+                .label = "Test voice",
+                .description = "A choice of the tests' own.",
+                .default_option = "Microsoft Mark",
+                .list = [this] { return voices; },
+                .shown = true,
+            });
     }
 
     ~A11ySettings() { a11y::settings_pages_stop(); }
@@ -170,6 +182,8 @@ public:
     a11y::Switches switches;
     a11y::CueSettings cues;
     std::vector<std::string> asked;
+    a11y::ChoiceOptions voices{{"Microsoft David", ""}, {"Microsoft Mark", ""},
+        {"Microsoft Zira", "Microsoft Zira, English (United States)"}};
 };
 
 /* The base port's hand-off from its Change listener (Launcher::ProcessEvent,

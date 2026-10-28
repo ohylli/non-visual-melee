@@ -40,6 +40,8 @@ constexpr const char* kAccessibilityRow =
     "off: speech, steering and the cues.";
 constexpr const char* kSpeechRow =
     "Speech, On, Left and right to change. Turns speech through the screen reader on or off.";
+constexpr const char* kTestVoiceRow =
+    "Test voice, Microsoft Mark, Left and right to change. A choice of the tests' own.";
 
 /* The port menu's tab_ids, with the fork's Accessibility and without the
  * launcher's own category. */
@@ -805,6 +807,9 @@ void accessibility_category_rows(Rml::Context& context) {
                "the edge the warning starts, in stage units.")}));
     menu.step(1);
     menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kTestVoiceRow)}));
+    menu.step(1);
+    menu.frame();
     assert(menu.take() == (std::vector<Output>{interrupt(kResume)}));
 }
 
@@ -855,6 +860,32 @@ void accessibility_slider(Rml::Context& context) {
     menu.press();
     assert(menu.take() == none());
     assert(menu.a11y().take().empty());
+}
+
+/* A choice steps through its options with Left and Right, round from
+ * either end, and to the next with Enter or A, each with the menu's confirm
+ * sound, as its own choice rows; said as the option alone. */
+void accessibility_choice(Rml::Context& context) {
+    Menu menu(context);
+    menu.open_rows(kAccessibilityTab);
+    menu.focus("a11y-test-voice");
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kTestVoiceRow)}));
+    menu.a11y().take();
+    menu.horizontal(-1);
+    assert(menu.take() == (std::vector<Output>{interrupt("Microsoft David")}));
+    assert(menu.a11y().value("test.voice").text == "Microsoft David");
+    assert(menu.a11y().take() == (std::vector<std::string>{"sound 1"}));
+    menu.horizontal(-1);
+    assert(
+        menu.take() == (std::vector<Output>{interrupt("Microsoft Zira, English (United States)")}));
+    assert(menu.a11y().take() == (std::vector<std::string>{"sound 1"}));
+    menu.press();
+    assert(menu.take() == (std::vector<Output>{interrupt("Microsoft David")}));
+    assert(menu.a11y().take() == (std::vector<std::string>{"sound 1"}));
+    menu.status("Saved.");
+    menu.run(a11y::kSettleTime * 2);
+    assert(menu.take() == none());
 }
 
 /* Preview plays its cue, silently and with no sound of the menu's; leaving
@@ -987,6 +1018,7 @@ int main(int argc, char** argv) {
     accessibility_category_rows(*context);
     accessibility_switch(*context);
     accessibility_slider(*context);
+    accessibility_choice(*context);
     accessibility_preview(*context);
     accessibility_switches_speech(*context);
     every_control_has_a_name(*context);

@@ -43,7 +43,8 @@ public:
      * before load(): the value holds for the run whatever the file says, and
      * the file keeps its own, never written over (ValueModel::override_value).
      * A front end's change lifts it. why names the variable for the log:
-     * "MELEE_A11Y=0". False for an unknown key. */
+     * "MELEE_A11Y=0". False for an unknown key and for a choice, which has
+     * none. */
     bool override_value(std::string_view key, float value, const std::string& why);
     /* Once, after every value is registered: writes or completes the file
      * and applies it (ValueFile::load). */
@@ -54,6 +55,9 @@ public:
     /* A front end's change, held to the value's range and saved to its
      * line. True when the value changed. */
     bool set(const NamedValue& named, float value, Clock::time_point now);
+    /* A front end's choice, the option's text, saved as set saves. True
+     * when the saved text changed. */
+    bool choose(const NamedValue& named, std::string_view text, Clock::time_point now);
     /* Whether a change is saved: false with no file. */
     bool saves() const { return m_file != nullptr; }
 
@@ -64,6 +68,10 @@ public:
 
 private:
     void changed(const std::vector<const NamedValue*>& values);
+    /* set and choose: `apply` changes the model alone, `save` through the
+     * file. */
+    template <class Apply, class Save>
+    bool change(const NamedValue& named, Apply apply, Save save);
 
     ValueModel m_model;
     std::unique_ptr<ValueFile> m_file; /* null with no file */

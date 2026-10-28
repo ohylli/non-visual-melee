@@ -72,9 +72,20 @@ std::vector<const NamedValue*> ValueFile::poll(Clock::time_point now) {
 
 std::vector<const NamedValue*> ValueFile::set(
     const NamedValue& named, float value, Clock::time_point now) {
+    return change(named, now, [&] { return m_model.set(named, value); });
+}
+
+std::vector<const NamedValue*> ValueFile::choose(
+    const NamedValue& named, std::string_view text, Clock::time_point now) {
+    return change(named, now, [&] { return m_model.choose(named, text); });
+}
+
+template <class Apply>
+std::vector<const NamedValue*> ValueFile::change(
+    const NamedValue& named, Clock::time_point now, Apply apply) {
     m_next_check = now + kPollInterval;
     std::vector<const NamedValue*> changed = check();
-    if (!m_model.set(named, value)) {
+    if (!apply()) {
         return changed;
     }
     changed.erase(std::remove(changed.begin(), changed.end(), &named), changed.end());
