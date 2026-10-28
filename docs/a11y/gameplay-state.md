@@ -181,6 +181,8 @@ What the HUD shows is `Player_GetDamage(slot)` (see [Damage percent](#damage-per
 - A CPU's attack on you and yours on it each changed the figure on the tick of the hit, and a combo's hits a few ticks apart.
 - On Poké Floats a fighter off screen took a point at a time, a second or so apart: off-screen damage goes through `Fighter_TakeDamage_8006CC7C`, so the HUD counts it as a hit.
 - Training's menu sets a CPU's damage when it closes: the figure the menu's reader already said appears on the HUD as the menu closes.
+- In Multi-Man Melee the next wireframe in a slot shows 0% where the last one's figure was, with no KO state seen between ([Stocks on the HUD](#stocks-on-the-hud)), so a reader comparing figures sees a fall to 0 (measured in 10-Man Melee: "CPU 5 0" after a wireframe's KO).
+- Online both copies see the same figures, read after the tick and never during a re-run: in `tools/a11y/match_net.drive` each change of either player's damage and stocks was said on both copies with the same figure, fork against fork, and a fork copy against a base port one said both players' figures, the session in sync.
 
 ### A KO
 
@@ -469,6 +471,6 @@ Everything in the table can also be had by polling once a tick and comparing wit
 
 ## Open questions
 
-- **Predicted ticks online.** Whether an announcement waits for its tick to be confirmed, at the cost of a few ticks' delay, or speaks at once and occasionally reports a hit that rollback undoes.
+- **Predicted ticks online.** Whether an announcement waits for its tick to be confirmed, at the cost of a few ticks' delay, or speaks at once and occasionally reports a hit that rollback undoes. The match announcements speak at once but say a damage figure only once it has held still for a while (`.scratch/match-announcements/spec.md`, "Online"), which hides a figure a rollback changes; a stock is said on its tick, and a KO that rollback undoes would still be said.
 - **Ledge grabs and held items** were not observed in the probe: where a held item's `pos` sits is unchecked, and the holder's position is a safe stand-in.
 - **Most stages' state fields** beyond Pokémon Stadium and Brinstar are unnamed in the decomp.

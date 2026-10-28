@@ -17,17 +17,16 @@ side by side:
   menus   the menu drive scripts (MENUS), the launcher's four and the
           port menu's three among them
   online  css_net.drive at delay 0, delay 10 and over a 100 ms slow link,
-          results_net.drive (--muted), lan_lobby.drive (--lan),
-          direct_call.drive, and direct_back.drive
-          and direct_lost.drive (--direct), the last two one after the other
+          results_net.drive and match_net.drive (--muted), lan_lobby.drive
+          (--lan), direct_call.drive, and direct_back.drive and
+          direct_lost.drive (--direct), the last two one after the other
           since both use the ports the router forwards; with --base-b the
           two are left out, since the base port build would write the
           maintainer's recent opponents
   NAME    an online run by its name (css_net-delay0, css_net-delay10,
-          css_net-slow, results_net, lan_lobby, direct_back, direct_lost),
-          else
-          tools/a11y/NAME.drive through drive.py; the names given in a row
-          run side by side
+          css_net-slow, results_net, match_net, lan_lobby, direct_back,
+          direct_lost), else tools/a11y/NAME.drive through drive.py; the
+          names given in a row run side by side
 
   python tools/a11y/run_level.py lan_lobby --base-b ../melee-pc-base/build
 
@@ -53,7 +52,8 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens", "sss_steps",
          "sss_skipped", "sss_glide_pick", "leaf_screens", "sss_hover", "css_classic", "css_training",
          "css_slots", "css_portraits", "css_steps", "results", "results_no_contest", "results_cpu4",
-         "results_teams", "match_stock_steal", "training_menu", "launcher_home",
+         "results_teams", "match_damage", "match_thresholds", "match_stocks", "match_stock_steal",
+         "match_time", "training_menu", "launcher_home",
          "launcher_settings", "launcher_a11y", "launcher_voices", "port_menu", "port_menu_a11y",
          "port_menu_voices", "direct_hub"]
 # drive.py options a script needs: the launcher's scripts open the launcher,
@@ -63,7 +63,8 @@ ARGS = {"launcher_home": ["--launcher", "--muted"], "launcher_settings": ["--lau
         "launcher_a11y": ["--launcher", "--muted"], "launcher_voices": ["--launcher", "--muted"],
         "port_menu": ["--muted"], "port_menu_a11y": ["--muted"],
         "port_menu_voices": ["--muted"], "match_port_menu": ["--muted"], "direct_call": ["--muted"],
-        "match_stock_steal": ["--muted"]}
+        "match_damage": ["--muted"], "match_thresholds": ["--muted"], "match_stocks": ["--muted"],
+        "match_stock_steal": ["--muted"], "match_time": ["--muted"]}
 # Settings a script needs from the environment. The Accessibility
 # category's scripts leave Steering and Cues to the run's a11y.ini, so their
 # rows show no "(environment)" whatever the caller exports.
@@ -74,6 +75,9 @@ ENV = {"launcher_a11y": A11Y_ROWS, "launcher_voices": A11Y_ROWS, "port_menu_a11y
        "results_no_contest": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STAGE": "31"},
        # Poke Floats, where three of the four CPUs fall out within half a minute.
        "results_cpu4": {"MELEE_DEBUG_VS": "cpu4", "MELEE_DEBUG_VS_STOCKS": "1", "MELEE_DEBUG_VS_STAGE": "23"},
+       "match_damage": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "2"},
+       "match_thresholds": {"MELEE_DEBUG_VS": "cpu", "MELEE_DEBUG_VS_STOCKS": "2"},
+       "match_stocks": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "3"},
        "match_opponent": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
        "match_gap": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2"},
        "match_gap_battlefield": {"MELEE_DEBUG_VS": "1", "MELEE_DEBUG_VS_STOCKS": "2",
@@ -104,8 +108,10 @@ ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           "match_stock_steal": re.compile(r'\[a11y\] voice \w+( \(off\))?: "([^"]*, )?0 stocks"'),
           # A cancelled match has no places and no Bonuses page.
           "results_no_contest": re.compile(r'\[a11y\] speak .*("Bonuses\.|\b[1-4](st|nd|rd|th)\b)|' + READY),
-          # Four CPUs: nobody is "you".
-          "results_cpu4": re.compile(r'\[a11y\] speak .*, you\b|' + READY)}
+          # Four CPUs: nobody is "you", in speech or in your voice.
+          "results_cpu4": re.compile(r'\[a11y\] speak .*, you\b|\[a11y\] voice yours\b|' + READY),
+          # A one-minute match: its starting minute is never said.
+          "match_time": re.compile(r'"\d+ minutes? left"')}
 # Lines a passing run must not log between an opening line and the closing
 # line after it: no cue starts or stops while the port menu is open, since
 # the game stands still then and the stops come just before the opening.
@@ -140,6 +146,36 @@ LAUNCHER_VOICE_SAMPLES = [(YOUR_SAMPLE, 5), (THEIR_SAMPLE, 1)]
 COUNT = {"match_gap": GAP_ONCE, "match_gap_battlefield": GAP_ONCE, "match_ledge": GAP_ONCE + LEDGE,
          "match_ledge_battlefield": LEDGE_BATTLEFIELD, "training_menu": TRAINING_NUMBERS,
          "port_menu_voices": VOICE_SAMPLES, "launcher_voices": LAUNCHER_VOICE_SAMPLES}
+
+
+def threshold_crossings(lines, out):
+    """Failure lines unless each damage figure said in a voice crossed a
+    multiple of the damage interval, read from the run's a11y.ini, since the
+    last one said in that voice. A figure below the last said came after a
+    KO, which counts the next crossing from 0."""
+    try:
+        with open(out + ".settings/a11y.ini", encoding="utf-8") as f:
+            interval = int(re.search(r"^match_announcements\.damage_interval = (\d+)$", f.read(), re.M)[1])
+    except (OSError, TypeError) as e:
+        return [f">> FAILED: no damage interval in the run's a11y.ini: {e}"]
+    failures, said = [], {}
+    for line in lines:
+        m = re.search(r'\[a11y\] voice (\w+): "(\d+)"$', line)
+        if not m:
+            continue
+        voice, figure = m[1], int(m[2])
+        last = said.get(voice, 0)
+        if figure < last:
+            last = 0
+        if figure // interval <= last // interval:
+            failures.append(f">> FAILED: {voice} said {figure} after {last}, crossing no multiple of {interval}")
+        said[voice] = figure
+    return failures
+
+
+# Checks of a transcript, each giving its failure lines: Thresholds says a
+# figure only once it has crossed a multiple of the interval.
+CHECK = {"match_thresholds": threshold_crossings}
 NET = [("css_net-delay0", ["--delay", "0"]), ("css_net-delay10", ["--delay", "10"]),
        ("css_net-slow", ["--sim-delay-ms", "100"])]
 # Direct Connect's two-copy runs meet over the internet through the router's
@@ -147,7 +183,7 @@ NET = [("css_net-delay0", ["--delay", "0"]), ("css_net-delay10", ["--delay", "10
 # copies on one machine"), so both take those ports and run one at a time.
 DIRECT = ["direct_back", "direct_lost"]
 FORWARDED_PORTS = threading.Lock()
-NET_RUNS = [name for name, _ in NET] + ["results_net", "lan_lobby"] + DIRECT
+NET_RUNS = [name for name, _ in NET] + ["results_net", "match_net", "lan_lobby"] + DIRECT
 ONLINE = NET_RUNS + ["direct_call"]
 # Failure lines worth repeating in the report.
 FAILURE = re.compile(r">> .*(FAILED|warning: no pad change)")
@@ -192,6 +228,11 @@ def net_run(name, out_dir, base_b):
         return Run(name, [sys.executable, os.path.join(HERE, "drive_net.py"), "--muted", *extra,
                           "--port", "42160", "--key", "a11ylevelresults", "--out-dir", out,
                           os.path.join(HERE, "results_net.drive")], out, 2)
+    if name == "match_net":
+        # Muted, so the voices render and log their "plays" lines.
+        return Run(name, [sys.executable, os.path.join(HERE, "drive_net.py"), "--muted", *extra,
+                          "--port", "42170", "--key", "a11ylevelmatch", "--out-dir", out,
+                          os.path.join(HERE, "match_net.drive")], out, 2)
     if name in DIRECT:
         return Run(name, [sys.executable, os.path.join(HERE, "drive_net.py"), "--direct", "--muted", *extra,
                           "--out-dir", out, os.path.join(HERE, name + ".drive")], out, 2,
@@ -252,8 +293,9 @@ def execute_held(run, slots, lock):
     absent = ABSENT.get(run.name)
     counts = COUNT.get(run.name, [])
     between = BETWEEN.get(run.name)
+    check = CHECK.get(run.name)
     logged_lines = []
-    if absent or counts or between:
+    if absent or counts or between or check:
         try:
             with open(run.out, encoding="utf-8", errors="replace") as f:
                 logged_lines = [line.rstrip("\n") for line in f]
@@ -276,6 +318,11 @@ def execute_held(run, slots, lock):
             elif inside and banned.search(line):
                 run.code = run.code or 1
                 run.failures.append(f">> FAILED: logged {banned.pattern!r} {when}: {line}")
+    if check:
+        found = check(logged_lines, run.out)
+        if found:
+            run.code = run.code or 1
+            run.failures += found
     for pattern, times in counts:
         logged = sum(1 for line in logged_lines if pattern.search(line))
         if logged not in (times if isinstance(times, range) else (times,)):

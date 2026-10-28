@@ -1,0 +1,31 @@
+# Both players' stocks in the debug VS match on Final Destination: Link
+# (player 1) against a Mario who stands still with no input, three stocks
+# each. Link dashes over and smashes Mario off the right edge: Mario's
+# damage is said in the opponents' voice as the smashes land, then
+# "2 stocks" on the tick he falls, with no label, as the match has one
+# opponent. Link then walks off the left edge himself: "2 stocks" in your
+# voice. About 30 seconds.
+# Run from Git Bash with the debug match switches, muted, so the voices
+# render and log their "plays" lines (run_level.py sets the switches):
+#   MELEE_DEBUG_VS=1 MELEE_DEBUG_VS_STOCKS=3 \
+#     python tools/a11y/drive.py --muted tools/a11y/match_stocks.drive
+
+# Start on the title screen goes straight into the debug match.
+wait "state 0 scene 0$"
+press Start until "boot scene: state \d+ scene 2$"
+wait 'cue opponent position start' 60
+sleep 1
+
+# A dash to the middle, then short dashes and forward smashes until Mario
+# goes over the edge and falls past the bottom blast zone.
+press Right 900
+sleep 1
+search 'voice opponents: "2 stocks"$' Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right Right A+Right
+wait 'voice opponents plays: "2 stocks" '
+
+# Link walks off the left edge: his own stocks, in your voice.
+sleep 5
+press Left 8000
+wait 'voice yours: "2 stocks"$' 30
+wait 'voice yours plays: "2 stocks" '
+sleep 1

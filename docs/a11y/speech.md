@@ -72,6 +72,10 @@ Prism's output call is expected to hand the text over and return without waiting
 
 The voices speak match announcements, so the player hears from the first syllable whether a line is about them; everything else stays on the screen reader. ADR-0008 records why the fork renders them itself rather than letting Prism play them. Each is a Prism OneCore instance of its own, kept for the run and never shared, since the maintainer's other mods lost lines to sharing one or tearing one down while another spoke.
 
+### What speaks through them
+
+The match announcements (`match_announcer.cpp`, read from the tick hook; spec `.scratch/match-announcements/spec.md`): your damage and stocks in your voice, everyone else's in the opponents' voice, each line's subject the player's slot, so a new line about a player replaces an older one about the same player. The time left, also a match announcement, goes to the screen reader, queued. What the announcements read, and when the HUD shows it: `docs/a11y/gameplay-state.md`, "The HUD".
+
 ### Rendering and playing
 
 - **One worker thread** (`Voices::work`) starts the first time speech is on, opens both instances, lists the installed voices and renders a test line, then renders each line as it is asked for: `prism_backend_speak_to_memory`, which returns once the whole line is synthesized. The game thread hands it text and never waits; each frame it takes back what was rendered.

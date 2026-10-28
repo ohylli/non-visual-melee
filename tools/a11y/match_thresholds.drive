@@ -1,0 +1,55 @@
+# Damage thresholds in the debug VS match on Final Destination: Link
+# (player 1) against a CPU Mario who attacks, two stocks each, with Your
+# damage and Opponents' damage set to Thresholds in the port menu's
+# Accessibility category on the title screen. Link walks over and jabs
+# until Mario's damage is said in the opponents' voice, then waits for
+# Mario's hits to make his own said in your voice. A jab's few points
+# cross nothing, so most settled figures go unsaid: each one said has
+# crossed a multiple of the damage interval since the last said, which
+# run_level.py checks against the interval in the run's a11y.ini. About
+# 40 seconds.
+# Run from Git Bash with the debug match switches, muted, as for a player,
+# since the port menu's reader needs accessibility on (run_level.py sets
+# the switches):
+#   MELEE_DEBUG_VS=cpu MELEE_DEBUG_VS_STOCKS=2 \
+#     python tools/a11y/drive.py --muted tools/a11y/match_thresholds.drive
+
+# The port menu on the title screen: Up past Quit game and Resume to
+# Accessibility, the last category, then down its rows past Speech and the
+# voices' eight and the Match announcements switch to the damage rows, each
+# a step Right from Every change to Thresholds, saved by the option's name.
+wait "state 0 scene 0$"
+sleep 1
+key F1
+wait '"PC settings\. Graphics\. '
+key Up Up Up
+wait '"Accessibility"$'
+key Right
+wait '"Accessibility, On, Left and right to change\. '
+key Down Down Down Down Down Down Down Down Down Down Down
+wait '"Your damage, Every change, Left and right to change\. '
+key Right
+wait '\[a11y\] accessibility settings: saved match_announcements\.your_damage = Thresholds$'
+ini '^match_announcements\.your_damage = Thresholds$'
+key Down
+wait "\"Opponents' damage, Every change, Left and right to change\. "
+key Right
+wait '\[a11y\] accessibility settings: saved match_announcements\.opponents_damage = Thresholds$'
+ini '^match_announcements\.opponents_damage = Thresholds$'
+key Escape Escape
+wait '"Back to game"$'
+sleep 1
+
+# Start on the title screen goes straight into the debug match.
+press Start until "boot scene: state \d+ scene 2$"
+sleep 3
+
+# Link walks over and jabs until Mario's damage crosses a threshold.
+press Right 1200
+search 'voice opponents: "\d+"$' A*40
+wait 'voice opponents plays: "\d+" '
+
+# Mario's attacks: Link's damage, once it crosses a threshold.
+wait 'voice yours: "\d+"$' 60
+wait 'voice yours plays: "\d+" '
+sleep 1

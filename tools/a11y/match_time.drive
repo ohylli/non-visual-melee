@@ -1,0 +1,68 @@
+# The time left in a one-minute time match through the menus: VS mode with
+# Fox for player 1 against a CPU, the time limit set from 2 minutes to 1 on
+# Custom Rules from the rules header, a random stage. The match starts at
+# 1:00, which goes unsaid (the rules header said it), and 30 seconds in the
+# screen reader says "30 seconds left", queued, on the tick the HUD shows
+# 0:30.00. run_level.py fails it on any line saying minutes left. The run
+# quits there, before TIME!. About a minute.
+# Run with the default --scene title, muted:
+#   python tools/a11y/drive.py --muted tools/a11y/match_time.drive
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$" 20 0.3
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# VS. Mode, Melee.
+press Down
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press A
+wait '"Character select\. Player 1, no character\."'
+sleep 1
+
+# Fox for player 1, and player 2 made a CPU, which gets a random character
+# and makes the match ready.
+press DUp
+wait ': "Player 1: closed"$'
+press DUp
+wait ': "Pichu"$'
+press DUp
+wait ': "Fox"$'
+wait 'glide to "Fox" ended after \d+ frames: arrived'
+press A
+sleep 1
+search ': "Player 2: closed"$' DDown*3 DLeft*3 DRight*3
+wait 'glide to "Player 2: closed" ended'
+press A until ': "Player 2: CPU, [^"]+?\. Ready to fight\. Press Start\."$'
+sleep 0.5
+
+# Up to the rules header and into Custom Rules: the time limit from 2
+# minutes to 1.
+search ': "Rules: 2-minute KO fest!"$' DUp*6 DRight*4 DLeft*8
+wait 'glide to "Rules: 2-minute KO fest!" ended after \d+ frames: arrived'
+press A
+wait ': "Custom Rules\. Rules: Time\. '
+sleep 1
+press Down
+wait ': "Time limit: 2 minutes\. '
+press Left
+wait ': "1 minute"$'
+press B
+wait '"Character select\. '
+sleep 1
+
+# Start on stage select picks a random stage.
+press Start
+wait '"Stage select\. '
+sleep 1
+press Start
+wait 'boot scene: state \d+ scene 2$'
+
+# 30 seconds after GO, the time left on the screen reader, queued.
+wait '\[a11y\] speak queue \(muted\): "30 seconds left"$' 60
+sleep 1

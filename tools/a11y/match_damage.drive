@@ -1,0 +1,26 @@
+# Damage in the debug VS match on Final Destination: Link (player 1)
+# against a CPU Mario who attacks, two stocks each. Link walks over and
+# jabs until Mario's damage is said in the opponents' voice, then waits for
+# Mario's hits to make his own said in your voice: each figure once it
+# holds still, with no label, as the match has one opponent. Nothing is
+# said at GO. About 25 seconds.
+# Run from Git Bash with the debug match switches, muted, so the voices
+# render and log their "plays" lines (run_level.py sets the switches):
+#   MELEE_DEBUG_VS=cpu MELEE_DEBUG_VS_STOCKS=2 \
+#     python tools/a11y/drive.py --muted tools/a11y/match_damage.drive
+
+# Start on the title screen goes straight into the debug match.
+wait "state 0 scene 0$"
+press Start until "boot scene: state \d+ scene 2$"
+sleep 3
+
+# Link walks over and jabs until Mario's damage settles and is said; nothing
+# was said at GO.
+press Right 1200
+search 'voice opponents: "\d+"$' A*12
+wait 'voice opponents plays: "\d+" '
+
+# Mario's attacks: Link's damage, once it holds still.
+wait 'voice yours: "\d+"$' 40
+wait 'voice yours plays: "\d+" '
+sleep 1

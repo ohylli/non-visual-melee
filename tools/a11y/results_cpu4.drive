@@ -11,12 +11,14 @@
 # Run from Git Bash with the debug match switches:
 #   MELEE_DEBUG_VS=cpu4 MELEE_DEBUG_VS_STOCKS=1 MELEE_DEBUG_VS_STAGE=23 \
 #     python tools/a11y/drive.py tools/a11y/results_cpu4.drive
-# run_level.py fails it on any line saying "you" or a ready.
+# run_level.py fails it on any line saying "you", in your voice, or a ready.
 
 # Start on the title screen goes straight into the debug match, which the
-# CPUs end on their own.
+# CPUs end on their own. With nobody "you", every match announcement is in
+# the opponents' voice, labelled by slot ("CPU 2 13"), and none in yours.
 wait "state 0 scene 0$"
 press Start until "boot scene: state \d+ scene 2$"
+wait 'voice opponents \(off\): "CPU [1-4] \d+"$' 60
 wait '"Stock Battle\. Winner: (?P<winner>Link|Mario|Fox|DK)\. 1st (?P=winner), P[1-4], [^."]+\.( (1st|2nd|3rd|4th) (Link|Mario|Fox|DK), P[1-4], [^."]+\.){3} Any button shows the stats\. Start when ready\."$' 120
 
 # Controller 1's press opens the panels, on P1's.
