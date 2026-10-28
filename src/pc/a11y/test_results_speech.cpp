@@ -236,9 +236,13 @@ void opening_said_when_the_summary_is_passed_unseen() {
     Fixture f;
     A11yResults results = two_players(A11Y_RESULTS_STOCK);
     assert(f.tick(results, A11Y_RESULTS_SLIDING).empty());
+    /* Even after your own press, the panels' opening waits behind the
+     * opening said on the same tick. */
+    results.pressed_any = true;
     Outputs said = f.tick(results, A11Y_RESULTS_STATS);
     assert(said.size() == 2);
-    assert(said[0].text.starts_with("Stock Battle."));
+    assert(said[0].text.starts_with("Stock Battle.") && said[0].interrupt);
+    assert(!said[1].interrupt);
 }
 
 void time_totals_with_their_sign() {

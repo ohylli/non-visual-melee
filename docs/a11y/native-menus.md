@@ -334,7 +334,7 @@ The stat labels come from SdRst ([Game text](#game-text)). The fork joins a labe
 
 ### The reading cursor's input
 
-The reader sees the local port's newly pressed D-pad directions and Z in `HSD_PadCopyStatus[port].trigger`, read after the tick, the same pad the panels read; online that pad holds the local player's synced input, which the D-pad reaches whatever quick chat's mask does ([netplay primer](netplay.md), "Quick chat shares the D-pad"). The press that opens the panels is taken as only that: the reader reads no row on the tick it sees state 3 first. Any press from any connected human opens them, so the reader also sees whether the local port pressed anything on that tick (any bit of `trigger`): only your own press interrupts what is being said, and the panels' opening after another player's press is queued behind it, since online an opponent often presses a second or two into your opening.
+The reader sees the local port's newly pressed D-pad directions and Z in `HSD_PadCopyStatus[port].trigger`, read after the tick, the same pad the panels read; online that pad holds the local player's synced input, which the D-pad reaches whatever quick chat's mask does ([netplay primer](netplay.md), "Quick chat shares the D-pad"). The press that opens the panels is taken as only that: the reader reads no row on the tick it sees state 3 first. Since anyone's press opens them ([State and flow](#state-and-flow)), the reader also sees whether the local port pressed anything on that tick (any bit of `trigger`, the game's own test): only your own press interrupts what is being said, and the panels' opening after another player's press is queued behind it.
 
 ### Ready
 

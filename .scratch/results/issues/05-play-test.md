@@ -17,7 +17,7 @@ The maintainer plays results with NVDA and judges the wording of `.scratch/resul
   - Do the decoded stat labels read well with their spaces and units?
   - Do the bonus names ("No R 4 U") read well?
 - **Z.** Press Z on a few players.
-- **Online.** Play a match against a friend or a second copy, and ready in turn. Is "Ready, waiting for your opponent." and "Your opponent is ready." right? Did the two points proposed in writing hold up: another player's un-ready, and the reading cursor while ready?
+- **Online.** Play a match against a friend or a second copy, and ready in turn. Is "Ready, waiting for your opponent." and "Your opponent is ready." right? Did the two points proposed in writing hold up: another player's un-ready, and the reading cursor while ready? Does an opponent's early press leave your opening whole, the panels' opening following it?
 
 ## Done when
 
@@ -37,4 +37,4 @@ The review's fixes are in their own commit ("Results: review fixes"). Left for t
 
 ### 2026-10-28, another player's press (agent)
 
-The review's first point is fixed as recommended: the snapshot's `pressed_any` says whether the local port pressed anything on the panels' first tick, and the panels' opening interrupts only after your own press; after another player's it is queued behind what is being said. `results_net.drive` now checks both sides: interrupting on a, whose press it was, queued on b. Listen for it online: an opponent's early press should leave your opening whole, the panels' opening following it.
+The review's first point is fixed as recommended: the snapshot's `pressed_any` says whether the local port pressed anything on the panels' first tick, and the panels' opening interrupts only after your own press; after another player's it is queued behind what is being said. `results_net.drive` now checks both sides: interrupting on a, whose press it was, queued on b. "What to try" asks for it under Online.

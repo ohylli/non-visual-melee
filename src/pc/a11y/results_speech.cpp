@@ -243,7 +243,8 @@ void ResultsSpeech::tick(const A11yResults& results) {
         /* The press that opened the panels is only that: whatever it was,
          * it reads no row. Only your own press cuts off what is being
          * said; another player's, often a second or two into your opening
-         * online, waits behind it. */
+         * online, waits behind it, as the panels' opening always does
+         * behind an opening said on this same tick. */
         bool yours = results.pressed_any && !opened_now;
         stats_opened(results, yours ? Mode::interrupt : Mode::queue);
         return;
