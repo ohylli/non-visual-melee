@@ -83,9 +83,8 @@ private:
     const Rows& rows(Voice voice) const { return m_rows[static_cast<size_t>(voice)]; }
     /* title as a row's name begins, in_sentence as it reads inside one
      * ("the opponents' voice"), about what the voice says. */
-    static Rows add_rows(ValueModel& model, const char* id, const char* title,
-        const char* in_sentence, const char* default_voice, const char* about, ChoiceList list,
-        ChoiceFallback fallback, ChoiceNone none);
+    Rows add_rows(ValueModel& model, const char* id, const char* title, const char* in_sentence,
+        const char* default_voice, const char* about);
     void apply(Voice voice);
     /* The option in use for a saved text the options hold none of: as
      * find_voice gives it, so the row shows the voice that speaks. */

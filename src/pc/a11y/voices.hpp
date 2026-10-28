@@ -42,14 +42,17 @@ enum class VoicesState {
     stopped,  /* speech has not been on yet: no worker */
     starting, /* the worker is opening the instances */
     ready,    /* lines are rendered and played */
-    /* OneCore did not start, or its test line failed: lines go to the screen
-     * reader, queued. */
+    /* OneCore did not start, its test line failed, or the cue engine has
+     * no audio output: lines go to the screen reader, queued. */
     unavailable,
 };
 
 /* The loudest sample of every line once evened out, before the cue engine's
- * chain: OneCore's loudness varies from word to word. A tuning value. */
+ * chain: OneCore's loudness varies from word to word. Set by ear. */
 constexpr float kVoicePeak = 0.8f;
+
+/* A rate, 0 to 1, that is the voice's normal speed. */
+constexpr float kNormalRate = 0.5f;
 
 /* The voice a setting's text names among the installed: the one of that
  * display name, ignoring case; else the first whose name holds the text,
@@ -76,10 +79,15 @@ public:
     Voices(Speech& speech, CueEngine& engine, std::unique_ptr<VoiceBridge> bridge, bool log,
         bool preview);
     /* Detaches from speech, stops the voices and joins the worker, which
-     * closes the bridge on its own thread. */
+     * closes the bridge on its own thread. Only as the game exits: the
+     * bridge leaves Prism's context open (PrismVoiceBridge::close). */
     ~Voices() override;
     Voices(const Voices&) = delete;
     Voices& operator=(const Voices&) = delete;
+
+    /* The cue engine has no output: the voices are unavailable from their
+     * start, their lines going to the screen reader. Before speech is on. */
+    void no_audio_output() { m_audible = false; }
 
     void start() override;
     void say(Voice voice, Subject subject, std::string_view text) override;
@@ -106,7 +114,8 @@ public:
     /* The display name find_voice gives for the voice's text; empty until
      * ready. */
     std::string voice_in_use(Voice voice) const;
-    /* 0 to 1, 0.5 the voice's normal speed: from the next line rendered. */
+    /* 0 to 1, kNormalRate the voice's normal speed: from the next line
+     * rendered. */
     void set_rate(Voice voice, float rate);
     /* 0 to 1, at once, the line playing included: the voice's factor of
      * the cue engine's chain, under the master volume. */
@@ -139,7 +148,7 @@ private:
     struct VoiceSlot {
         int engine_voice = -1;
         std::string wanted;
-        float rate = 0.5f;
+        float rate = kNormalRate;
         std::deque<Line> waiting;
         Playing playing;
     };
@@ -149,7 +158,7 @@ private:
         int id = 0;
         std::string text;
         std::string wanted;
-        float rate = 0.5f;
+        float rate = kNormalRate;
     };
     /* The worker's answer to a job. */
     struct Rendered {
@@ -163,6 +172,9 @@ private:
     VoiceSlot& slot(Voice voice) { return m_voices[static_cast<size_t>(voice)]; }
     const VoiceSlot& slot(Voice voice) const { return m_voices[static_cast<size_t>(voice)]; }
     void ask_render(int voice, const Line& line);
+    /* A line replaced or dropped before the worker reached it: not
+     * rendered. */
+    void forget_render(int voice, int id);
     void take_news();
     void opened(
         const std::string& error, std::vector<VoiceInfo> listed, int default_index, double test_ms);
@@ -182,11 +194,17 @@ private:
     int m_default_index = -1; /* in m_installed */
     int m_next_id = 1;
     bool m_port_menu_open = false;
+    bool m_audible = true;
 
-    /* MELEE_A11Y_VOICE_PREVIEW: 0 not yet, 1 your voice asked, 2 waiting
-     * for the pause, 3 done. */
+    /* MELEE_A11Y_VOICE_PREVIEW's progress. */
+    enum class PreviewStep {
+        not_yet,
+        yours_asked,
+        pausing,
+        done,
+    };
     bool m_preview;
-    int m_preview_step = 0;
+    PreviewStep m_preview_step = PreviewStep::not_yet;
     Clock::time_point m_preview_at;
 
     /* The worker's own: the bridge, and the voices sorted, with the default's

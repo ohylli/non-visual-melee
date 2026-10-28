@@ -13,9 +13,9 @@ bool touches(const std::vector<const NamedValue*>& changed, const NamedValue& na
     return std::find(changed.begin(), changed.end(), &named) != changed.end();
 }
 
-/* A Rate row's value, 0 to 100, as Prism's rate, 0 to 1, 0.5 the voice's
- * normal speed. */
-float prism_rate(const Number& rate) {
+/* A Rate row's value, 0 to 100, as the voices' rate, 0 to 1, kNormalRate
+ * the voice's normal speed. */
+float bridge_rate(const Number& rate) {
     return rate.value() / 100.0f;
 }
 
@@ -44,25 +44,13 @@ VoiceSettings::VoiceSettings(ValueModel& model, Speech& speech)
                   "through; a quicker run of changes plays one sample.",
                   "s", 0.6f, 0.0f, 3.0f, 0.1f})),
       m_rows{
-          add_rows(
-              model, "your_voice", "Your voice", "your voice", "Zira", "what happens to you",
-              [this] { return m_options; },
-              [this](std::string_view saved, const ChoiceOptions& options) {
-                  return fallback(saved, options);
-              },
-              [this] { return none(); }),
-          add_rows(
-              model, "opponents_voice", "Opponents' voice", "the opponents' voice", "Mark",
-              "what happens to everyone else, teammates included,", [this] { return m_options; },
-              [this](std::string_view saved, const ChoiceOptions& options) {
-                  return fallback(saved, options);
-              },
-              [this] { return none(); }),
+          add_rows(model, "your_voice", "Your voice", "your voice", "Zira", "what happens to you"),
+          add_rows(model, "opponents_voice", "Opponents' voice", "the opponents' voice", "Mark",
+              "what happens to everyone else, teammates included,"),
       } {}
 
 VoiceSettings::Rows VoiceSettings::add_rows(ValueModel& model, const char* id, const char* title,
-    const char* in_sentence, const char* default_voice, const char* about, ChoiceList list,
-    ChoiceFallback fallback, ChoiceNone none) {
+    const char* in_sentence, const char* default_voice, const char* about) {
     ValueGroup group = model.group(id, title);
     const std::string name = title;
     const std::string inside = in_sentence;
@@ -71,9 +59,11 @@ VoiceSettings::Rows VoiceSettings::add_rows(ValueModel& model, const char* id, c
         .label = name,
         .description = std::string("The Windows voice that says ") + about + " in a match.",
         .default_option = default_voice,
-        .list = std::move(list),
-        .fallback = std::move(fallback),
-        .none = std::move(none),
+        /* Called only once the rows exist: this is whole by then. */
+        .list = [this] { return m_options; },
+        .fallback = [this](std::string_view saved,
+                        const ChoiceOptions& options) { return fallback(saved, options); },
+        .none = [this] { return none(); },
         .shown = true,
     });
     Number rate = group.add_number(NumberSpec{"rate", name + " rate",
@@ -100,7 +90,7 @@ void VoiceSettings::attach(Voices& voices) {
 void VoiceSettings::apply(Voice voice) {
     const Rows& r = rows(voice);
     m_voices->set_voice(voice, r.voice.saved());
-    m_voices->set_rate(voice, prism_rate(r.rate));
+    m_voices->set_rate(voice, bridge_rate(r.rate));
     m_voices->set_volume(voice, r.volume.value() / 100.0f);
 }
 

@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <system_error>
 #include <utility>
 
 namespace a11y {
@@ -197,8 +198,17 @@ void Voices::start() {
     if (m_state != VoicesState::stopped) {
         return;
     }
+    if (!m_audible) {
+        opened("no audio output", {}, -1, 0.0);
+        return;
+    }
     m_state = VoicesState::starting;
-    m_worker = std::thread([this] { work(); });
+    try {
+        m_worker = std::thread([this] { work(); });
+    } catch (const std::system_error& e) {
+        /* Reached from the hooks: nothing may escape to C. */
+        opened(std::string("the worker did not start: ") + e.what(), {}, -1, 0.0);
+    }
 }
 
 void Voices::log(const char* fmt, ...) const {
@@ -236,6 +246,7 @@ void Voices::say(Voice voice, Subject subject, std::string_view text) {
     if (same != v.waiting.end()) {
         /* In its place, or still cutting the line playing if it was. */
         drop(index, *same, "replaced");
+        forget_render(index, same->id);
         line.cuts = same->cuts;
         *same = line;
     } else if (v.playing.on && v.playing.subject == subject) {
@@ -256,11 +267,19 @@ void Voices::ask_render(int voice, const Line& line) {
     m_wake.notify_one();
 }
 
+void Voices::forget_render(int voice, int id) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_jobs.erase(std::remove_if(m_jobs.begin(), m_jobs.end(),
+                     [voice, id](const Job& job) { return job.voice == voice && job.id == id; }),
+        m_jobs.end());
+}
+
 void Voices::drop_waiting(const char* why) {
     for (int i = 0; i < kVoiceCount; i++) {
         VoiceSlot& v = m_voices[static_cast<size_t>(i)];
         for (const Line& line : v.waiting) {
             drop(i, line, why);
+            forget_render(i, line.id);
         }
         v.waiting.clear();
     }
@@ -371,13 +390,17 @@ void Voices::advance(int voice) {
             v.waiting.pop_front();
             continue;
         }
+        Sound sound;
+        sound.samples = std::move(next.samples);
+        if (!m_engine.play(v.engine_voice, std::move(sound))) {
+            drop(voice, next, "the cue engine refused it");
+            v.waiting.pop_front();
+            continue;
+        }
         if (sounding && v.playing.on) {
             log("voice %s cut: \"%.*s\"", voice_name(static_cast<Voice>(voice)),
                 text_length(v.playing.text), v.playing.text.data());
         }
-        Sound sound;
-        sound.samples = std::move(next.samples);
-        m_engine.play(v.engine_voice, std::move(sound));
         log("voice %s plays: \"%.*s\" (rendered in %.0f ms, %.0f ms after it was said)",
             voice_name(static_cast<Voice>(voice)), text_length(next.text), next.text.data(),
             next.render_ms, ms_between(next.said, Clock::now()));
@@ -392,23 +415,23 @@ void Voices::preview_frame(Clock::time_point now) {
         return;
     }
     switch (m_preview_step) {
-    case 0:
+    case PreviewStep::not_yet:
         m_speech.announce_voice(Voice::yours, kPreviewSubject, "Your voice");
-        m_preview_step = 1;
+        m_preview_step = PreviewStep::yours_asked;
         break;
-    case 1:
+    case PreviewStep::yours_asked:
         if (!speaking(Voice::yours)) {
             m_preview_at = now + kPreviewPause;
-            m_preview_step = 2;
+            m_preview_step = PreviewStep::pausing;
         }
         break;
-    case 2:
+    case PreviewStep::pausing:
         if (now >= m_preview_at) {
             m_speech.announce_voice(Voice::opponents, kPreviewSubject, "Opponents' voice");
-            m_preview_step = 3;
+            m_preview_step = PreviewStep::done;
         }
         break;
-    default:
+    case PreviewStep::done:
         break;
     }
 }
@@ -424,7 +447,7 @@ std::string Voices::voice_in_use(Voice voice) const {
 }
 
 void Voices::set_rate(Voice voice, float rate) {
-    slot(voice).rate = std::clamp(std::isfinite(rate) ? rate : 0.5f, 0.0f, 1.0f);
+    slot(voice).rate = std::clamp(std::isfinite(rate) ? rate : kNormalRate, 0.0f, 1.0f);
 }
 
 void Voices::set_volume(Voice voice, float volume) {
@@ -491,7 +514,7 @@ void Voices::work() {
     std::array<int, kVoiceCount> voice_set;
     voice_set.fill(m_worker_default);
     std::array<float, kVoiceCount> rate_set;
-    rate_set.fill(0.5f);
+    rate_set.fill(kNormalRate);
     while (true) {
         Job job;
         {

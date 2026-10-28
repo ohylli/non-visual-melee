@@ -37,9 +37,12 @@ enum class MenuSound {
 
 /* What the rows ask of the game. */
 struct SettingsPageGame {
-    /* A cue's preview, by the cue's id (CueSystem::preview), and its stop
-     * (CueSystem::stop_preview), nothing when none plays. */
-    std::function<void(std::string_view cue)> preview;
+    /* A Preview row's press, by its action's group: a voice's sample
+     * (VoiceSettings::preview) or a cue's preview (CueSystem::preview, the
+     * group being the cue's id). The stop is a cue preview's
+     * (CueSystem::stop_preview), nothing when none plays: a voice's sample
+     * is a line of a second, which plays out, and a new one cuts it. */
+    std::function<void(std::string_view group)> preview;
     std::function<void()> stop_preview;
     /* A sound of the port menu's; the launcher plays none, as the game has
      * loaded none yet. */
@@ -66,7 +69,7 @@ void settings_pages_start(AccessibilitySettings& settings, SettingsPageGame game
 void settings_pages_stop();
 /* Once a frame of the host's loop, after it has reacted to the frame's
  * input: the rows show the values the game uses (a hand edit, an override
- * lifted), and a preview a row started stops once that row has lost focus,
+ * lifted), and a cue's preview a row started stops once that row has lost focus,
  * the page has gone, or the port menu is closed (`open` false). */
 void settings_pages_frame(SettingsHost host, bool open);
 

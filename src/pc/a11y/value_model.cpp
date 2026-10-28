@@ -213,8 +213,13 @@ std::string choice_step(const NamedValue& named, const ChoiceOptions& options, i
     if (count == 0) {
         return {};
     }
-    const int index = choice_index(named, options) + direction;
-    return options[static_cast<std::size_t>((index % count + count) % count)].text;
+    const int current = choice_index(named, options);
+    const int index = ((current + direction) % count + count) % count;
+    if (index == current) {
+        /* One option: the saved text stays, even one the fallback matched. */
+        return named.text;
+    }
+    return options[static_cast<std::size_t>(index)].text;
 }
 
 std::string Choice::option() const {

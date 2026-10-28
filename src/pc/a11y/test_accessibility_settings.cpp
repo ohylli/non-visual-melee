@@ -927,6 +927,9 @@ void a_choice_step_wraps_at_each_end() {
     a11y::Choice one = model.group("x", "X").add_choice(
         a11y::ChoiceSpec{.name = "one", .default_option = "A", .options = {{"A", ""}}});
     assert(a11y::choice_step(one.named(), one.options(), 1) == "A");
+    /* ... and keeps the saved text as it is, so the step saves nothing. */
+    model.choose(one.named(), "a");
+    assert(a11y::choice_step(one.named(), one.options(), -1) == "a");
 }
 
 }  // namespace

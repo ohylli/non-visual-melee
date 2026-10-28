@@ -442,6 +442,27 @@ void unavailable_voices_speak_through_the_screen_reader() {
     assert(calls.closes == 1);
 }
 
+/* With no audio output the voices could never be heard: unavailable from
+ * their start, without opening OneCore, every line on the screen reader. */
+void no_audio_output_sends_the_lines_to_the_screen_reader() {
+    VoiceCalls calls;
+    Spoken spoken;
+    a11y::Speech speech(Rig::config(), std::make_unique<RecordingScreenReader>(spoken));
+    CueEngine engine;
+    s_lines.clear();
+    Voices voices(speech, engine, std::make_unique<FakeVoiceBridge>(calls, ""), true, false);
+    voices.no_audio_output();
+    speech.init();
+    assert(voices.state() == VoicesState::unavailable);
+    assert(logged("[a11y] voices unavailable: no audio output"));
+    speech.announce_voice(Voice::yours, 1, "45");
+    voices.frame(Clock::time_point{}, false);
+    assert(spoken.lines.size() == 1 && spoken.lines[0] == std::make_pair(std::string("45"), false));
+    assert(!logged("[a11y] voice yours plays"));
+    std::lock_guard<std::mutex> lock(calls.mutex);
+    assert(calls.opens == 0);
+}
+
 /* The worker starts the first time speech is on, and never before. */
 void the_worker_starts_with_speech() {
     VoiceCalls calls;
@@ -516,6 +537,7 @@ int main() {
     lines_are_evened_out();
     a_failed_render_is_dropped();
     unavailable_voices_speak_through_the_screen_reader();
+    no_audio_output_sends_the_lines_to_the_screen_reader();
     the_worker_starts_with_speech();
     the_developer_preview_says_each_voice();
     std::cout << "voices: all tests passed\n";

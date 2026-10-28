@@ -271,6 +271,9 @@ extern "C" void pc_a11y_init(void) {
      * voices' worker. */
     s_voices = std::make_unique<a11y::Voices>(*s_speech, s_cue_system->engine(),
         a11y::make_voice_bridge(), config.log, config.voice_preview);
+    if (!s_cue_system->sounding()) {
+        s_voices->no_audio_output();
+    }
     /* Once every feature has registered its values. */
     a11y::Switches::override_from(config, *s_settings);
     s_settings->listen(settings_changed);
@@ -291,13 +294,13 @@ extern "C" void pc_a11y_init(void) {
      * simulation, so they are counted in no netplay tick's sound order. */
     a11y::settings_pages_start(
         *s_settings, a11y::SettingsPageGame{
-                         [](std::string_view cue) {
+                         [](std::string_view group) {
                              /* A voice's Preview, else a cue's. */
-                             if (s_voice_settings != nullptr && s_voice_settings->preview(cue)) {
+                             if (s_voice_settings != nullptr && s_voice_settings->preview(group)) {
                                  return;
                              }
                              if (s_cue_system != nullptr) {
-                                 s_cue_system->preview(cue, a11y::Clock::now());
+                                 s_cue_system->preview(group, a11y::Clock::now());
                              }
                          },
                          [] {

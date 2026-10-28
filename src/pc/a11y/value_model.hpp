@@ -177,7 +177,8 @@ ChoiceOptions choice_options(const NamedValue& named);
 int choice_index(const NamedValue& named, const ChoiceOptions& options);
 /* The text of the option a step Left (-1) or Right (1) from the one in use
  * lands on, wrapping round at either end as the base port's own choice rows
- * do; empty with no options. */
+ * do; empty with no options. With one option, the saved text as it is, so
+ * the step changes nothing. */
 std::string choice_step(const NamedValue& named, const ChoiceOptions& options, int direction);
 
 class Choice {
