@@ -188,7 +188,19 @@ A KO is the fighter's knockout states, motion states 0 to 11 (`DeadDown` to `Sle
 
 ### Stocks on the HUD
 
-`Player_GetStocks(slot)`; the panel shows up to five icons, then one icon and a count, and none in a timed match ([Stocks, KOs and respawns](#stocks-kos-and-respawns)).
+`Player_GetStocks(slot)`; the panel shows up to five icons, then one icon and a count ([Stocks, KOs and respawns](#stocks-kos-and-respawns)).
+
+- **Which matches show them**: a stock match (`gm_8016B094()`) and the modes that count lives (`rules.x4_2`, `gm_8016B0E8()`: Classic, Adventure, Multi-Man), as `ifStatus_802F6508` gives each panel its stock icons; a timed match shows none. `ftCo_800D34E0` takes a stock at a KO on the same test. The snapshot's `stocks` says it.
+- **When the count changes**: on the KO's tick for a side or bottom KO, at the end of the flight for a star or screen KO, and at a team's stock steal, below. Measured in the debug match with three stocks: Mario smashed off the right edge and Link walking off the left each went from 3 to 2 on the tick the cues stopped for the fall.
+- **Multi-Man's wireframes** each start with one stock and leave the slot at their KO, so the next one in it starts afresh: in 10-Man Melee six wireframes knocked out gave no stock line.
+
+### A team's stock steal
+
+In a team match a player out of stocks can take one from a teammate, and the count rises.
+
+- **Where**: `fn_8016B918` (`gmvs.c`), run each tick of a VS match with teams (`rules.is_vs` and `is_teams`) from the VS scene's update, before the outcome is checked. A player with 0 stocks whose fighter is still there presses Start (D-pad up with X in a debug ROM) and takes a stock from the first teammate by slot with more than one, if the stock icons' animation has room (`ifStock_802F7EFC`): `Player_LoseStock` on the giver, `Player_SetStocks` one higher on the taker, then `fn_8016719C(taker, 0)`, the respawn.
+- **The taker's panel is there on the steal's tick.** In VS a panel is never taken down at an elimination: `rules.x2_7`, which frees it 200 ticks after the digits fly apart, is set only by single-player modes (`gm_17C0.c`), and the steal is VS's alone. The respawn also calls `ifStatus_802F6508`, which makes the panel again or reuses it, on that same tick, before the tick hook. The eliminated fighter stays on the fighter list, sleeping, so the slot stays in the snapshot throughout.
+- **Measured** in `tools/a11y/match_stock_steal.drive`: Pichu, out of stocks, pressed Start, and as the press reached the game his count went from 0 to 1 and the CPU teammate's from 3 to 2, both said then.
 
 ### Labels and name tags
 

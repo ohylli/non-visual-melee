@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The match announcements (.scratch/match-announcements/spec.md; primer
  * docs/a11y/gameplay-state.md, "The HUD"): what the HUD shows of each player,
- * said in the voices. Your damage in your voice; everyone else's whose HUD
- * panel shows in the opponents' voice, teammates included, each line's
- * subject the player's slot, so a newer line about a player replaces an
- * older one (voices.hpp). Fed once a tick from a snapshot (A11yMatchHud) and
- * touching no game state itself.
+ * said in the voices. Your damage and stocks in your voice; everyone else's
+ * whose HUD panel shows in the opponents' voice, teammates included behind
+ * their own switch, each line's subject the player's slot, so a newer line
+ * about a player, damage or stocks, replaces an older one (voices.hpp). Fed
+ * once a tick from a snapshot (A11yMatchHud) and touching no game state
+ * itself.
  *
  * A match's announcements run from GO, when the HUD comes on, to GAME! or
  * TIME!. At GO every player's damage is taken as already said, so a match
@@ -17,8 +18,12 @@
  * never said. At GAME! or TIME! a figure still settling is dropped, and
  * logged as dropped. Each side's damage can instead be said only past
  * thresholds, a multiple of the interval crossed upward since the last
- * figure said (35 to 52 at 20 says "52"), or not at all. Game thread
- * only. */
+ * figure said (35 to 52 at 20 says "52"), or not at all.
+ *
+ * Stocks are said on the tick the count changes, falls and rises (a team's
+ * stock steal) alike, where the HUD shows them: "2 stocks", "last stock" at
+ * one, "P2, 2 stocks" after a label. At 0 nothing: the game's announcer
+ * calls the elimination. Game thread only. */
 #pragma once
 #include "game_access.h"
 #include <array>
@@ -53,6 +58,11 @@ struct MatchAnnouncementValues {
     DamageMode opponents_damage = DamageMode::every_change;
     /* The thresholds' spacing, shared by both sides. */
     int damage_interval = 20;
+    bool your_stocks = true;
+    /* Everyone else's, teammates included. */
+    bool opponents_stocks = true;
+    /* Off, a teammate's damage and stocks are taken as said. */
+    bool teammates = true;
     /* How long a figure must hold still before it is said. */
     Clock::duration settle = std::chrono::milliseconds(600);
 };
@@ -83,6 +93,8 @@ private:
          * there. */
         bool tracked = false;
         bool yours = false;
+        /* On your team in a team match, decided as it is followed. */
+        bool teammate = false;
         /* The figure the HUD showed last tick, and since when. */
         int shown = 0;
         Clock::time_point since{};
@@ -91,6 +103,8 @@ private:
         int said = 0;
         /* Knocked out last tick: nothing owed until the respawn. */
         bool out = false;
+        /* The stocks last said, or taken as said. */
+        int stocks = 0;
         /* "P2", "teammate Bob", or empty where no label is said. */
         std::string label;
     };
@@ -102,7 +116,13 @@ private:
     /* The player's label in the opponents' voice, decided at GO: empty for
      * one opponent and nobody else. */
     std::string label(const A11yMatchHud& hud, int slot) const;
+    /* On your team in a team match. */
+    static bool teammate(const A11yMatchHud& hud, int slot);
+    /* Off for a teammate behind the Teammates switch. */
     DamageMode damage_mode(const Player& player, const MatchAnnouncementValues& values) const;
+    bool stocks_on(const Player& player, const MatchAnnouncementValues& values) const;
+    /* Says the player's stocks when they changed and are to be said. */
+    void stocks(const A11yMatchHud& hud, int slot, const MatchAnnouncementValues& values);
     /* Whether the player's figure shown now is to be said once it settles,
      * by the mode in force. */
     bool owed(const Player& player, const MatchAnnouncementValues& values) const;
@@ -110,6 +130,7 @@ private:
      * why. */
     void finish(const char* why, const MatchAnnouncementValues& values);
     std::string line(const Player& player, int figure) const;
+    std::string stock_line(const Player& player, int stocks) const;
 
     Speech& m_speech;
     Stage m_stage = Stage::waiting;

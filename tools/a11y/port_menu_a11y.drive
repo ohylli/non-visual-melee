@@ -49,13 +49,19 @@ wait "\"Opponents' voice volume, slider, 100%\. Left and right to adjust\. The l
 key Down
 wait "\"Preview opponents' voice: Play, button\. Says \"Opponents' voice\" in the opponents' voice, at its rate and volume\.\"$"
 key Down
-wait '"Match announcements, On, Left and right to change\. Says what the HUD shows during a match: your damage in your voice, everyone else.s in the opponents. voice\."$'
+wait '"Match announcements, On, Left and right to change\. Says what the HUD shows during a match: your damage and stocks in your voice, everyone else.s in the opponents. voice\."$'
 key Down
 wait '"Your damage, Every change, Left and right to change\. How your damage is said: Every change says each new figure once it stops changing; Thresholds, only once it passes a multiple of the damage interval\."$'
 key Down
 wait "\"Opponents' damage, Every change, Left and right to change\. How everyone else's damage is said, teammates included: Every change says each new figure once it stops changing; Thresholds, only once it passes a multiple of the damage interval\.\"$"
 key Down
 wait '"Damage interval, slider, 20%\. Left and right to adjust\. The spacing of the damage thresholds: with Thresholds, damage is said once it passes a multiple of this\."$'
+key Down
+wait '"Your stocks, On, Left and right to change\. Says your stocks left each time they change, in a match that counts stocks\."$'
+key Down
+wait "\"Opponents' stocks, On, Left and right to change\. Says everyone else's stocks left each time they change, teammates included\.\"$"
+key Down
+wait "\"Teammates, On, Left and right to change\. Says your teammates' damage and stocks in a team match, as the opponents' rows set\. Off, teammates are left out\.\"$"
 key Down
 wait '"Steering, On, Left and right to change\. The D-pad steps the hand on character select and the cursor on stage select\. Off, the D-pad does what the game makes of it, quick chat included\."$'
 key Down
@@ -118,7 +124,7 @@ wait '\[a11y\] speak queue \(muted\): "Speech, On, Left and right to change\. '
 ini '^speech\.on = on$'
 
 # Cue volume a step down and back up by the D-pad.
-gamepad dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown
+gamepad dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown
 wait '"Cue volume, slider, 100%\. '
 gamepad dpleft
 wait '\[a11y\] accessibility settings: saved cues\.volume = 95$'
@@ -155,7 +161,7 @@ wait '"Accessibility"$'
 # Ledge warning distance, the last row, a step down and back up.
 key Right
 wait '"Accessibility, On, Left and right to change\. '
-key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
+key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
 wait '"Ledge warning distance, slider, 40 units\. '
 key Left
 wait '\[a11y\] accessibility settings: saved ledge_warning\.distance = 39$'

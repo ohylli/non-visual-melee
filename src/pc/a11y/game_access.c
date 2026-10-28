@@ -1272,5 +1272,6 @@ void a11y_game_match_hud(int local_port, bool online, A11yMatchHud* out) {
     out->hud_enabled = scene->hud_enabled != 0;
     out->phase = scene->unk_0;
     out->teams = gm_8016B168();
+    out->stocks = gm_8016B094() || gm_8016B0E8();
     out->you = match_your_slot(local_port, online);
 }

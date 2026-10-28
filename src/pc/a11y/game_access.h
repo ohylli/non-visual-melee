@@ -917,6 +917,11 @@ typedef struct A11yMatchHud {
      * Training never leaves 0. */
     int phase;
     bool teams;
+    /* The HUD shows stocks: a stock match (gm_8016B094), or a mode counting
+     * lives (rules.x4_2, gm_8016B0E8: Classic, Adventure, Multi-Man), as
+     * the panels' stock icons (ifStatus_802F6508) and the stock loss at a
+     * KO (ftCo_800D34E0) decide. */
+    bool stocks;
     /* The local player's slot, as A11yMatchState.you: -1 for none (four
      * computer players). */
     int you;

@@ -35,8 +35,8 @@ DamageMode damage_mode(const Choice& choice) {
 
 MatchAnnouncementSettings::MatchAnnouncementSettings(ValueModel& model)
     : m_on(group(model).add_switch(SwitchSpec{"on", "Match announcements",
-          "Says what the HUD shows during a match: your damage in your voice, everyone else's in "
-          "the opponents' voice.",
+          "Says what the HUD shows during a match: your damage and stocks in your voice, everyone "
+          "else's in the opponents' voice.",
           true, true})),
       m_your_damage(add_damage(model, "your_damage", "Your damage", "your damage is said")),
       m_opponents_damage(add_damage(model, "opponents_damage", "Opponents' damage",
@@ -45,6 +45,16 @@ MatchAnnouncementSettings::MatchAnnouncementSettings(ValueModel& model)
           "The spacing of the damage thresholds: with Thresholds, damage is said once it passes "
           "a multiple of this.",
           "%", 20.0f, 10.0f, 100.0f, 10.0f, true})),
+      m_your_stocks(group(model).add_switch(SwitchSpec{"your_stocks", "Your stocks",
+          "Says your stocks left each time they change, in a match that counts stocks.", true,
+          true})),
+      m_opponents_stocks(group(model).add_switch(SwitchSpec{"opponents_stocks", "Opponents' stocks",
+          "Says everyone else's stocks left each time they change, teammates included.", true,
+          true})),
+      m_teammates(group(model).add_switch(SwitchSpec{"teammates", "Teammates",
+          "Says your teammates' damage and stocks in a team match, as the opponents' rows set. "
+          "Off, teammates are left out.",
+          true, true})),
       m_settle(group(model).add_number(NumberSpec{"damage_settle", "Damage settle time",
           "How long a player's damage must hold still before it is said, so a combo says only "
           "where it ends.",
@@ -56,6 +66,9 @@ MatchAnnouncementValues MatchAnnouncementSettings::values() const {
     values.your_damage = damage_mode(m_your_damage);
     values.opponents_damage = damage_mode(m_opponents_damage);
     values.damage_interval = static_cast<int>(std::lround(m_interval.value()));
+    values.your_stocks = m_your_stocks.on();
+    values.opponents_stocks = m_opponents_stocks.on();
+    values.teammates = m_teammates.on();
     values.settle =
         std::chrono::duration_cast<Clock::duration>(std::chrono::duration<float>(m_settle.value()));
     return values;

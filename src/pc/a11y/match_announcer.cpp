@@ -48,6 +48,7 @@ void MatchAnnouncer::tick(
             follow(hud, slot, now);
             continue;
         }
+        stocks(hud, slot, values);
         if (seen.damage != player.shown) {
             player.shown = seen.damage;
             player.since = now;
@@ -110,6 +111,8 @@ void MatchAnnouncer::follow(const A11yMatchHud& hud, int slot, Clock::time_point
     Player& player = m_players[slot];
     player.tracked = true;
     player.yours = slot == hud.you;
+    player.teammate = !player.yours && teammate(hud, slot);
+    player.stocks = seen.stocks;
     player.shown = seen.damage;
     player.out = seen.out;
     player.said = seen.out ? 0 : seen.damage;
@@ -129,14 +132,53 @@ std::string MatchAnnouncer::label(const A11yMatchHud& hud, int slot) const {
          * every computer player, so a CPU goes by its slot. */
         name = seen.human ? "P" + std::to_string(seen.port + 1) : "CPU " + std::to_string(slot + 1);
     }
-    const bool teammate = hud.teams && hud.you >= 0 && hud.players[hud.you].present &&
-                          seen.team == hud.players[hud.you].team;
-    return teammate ? "teammate " + name : name;
+    return teammate(hud, slot) ? "teammate " + name : name;
+}
+
+bool MatchAnnouncer::teammate(const A11yMatchHud& hud, int slot) {
+    /* The slots' teams (Player_GetTeam), as the cues' nearest opponent
+     * skips teammates. */
+    return hud.teams && hud.you >= 0 && slot != hud.you && hud.players[hud.you].present &&
+           hud.players[slot].team == hud.players[hud.you].team;
 }
 
 DamageMode MatchAnnouncer::damage_mode(
     const Player& player, const MatchAnnouncementValues& values) const {
+    if (player.teammate && !values.teammates) {
+        return DamageMode::off;
+    }
     return player.yours ? values.your_damage : values.opponents_damage;
+}
+
+bool MatchAnnouncer::stocks_on(const Player& player, const MatchAnnouncementValues& values) const {
+    if (player.teammate && !values.teammates) {
+        return false;
+    }
+    return player.yours ? values.your_stocks : values.opponents_stocks;
+}
+
+void MatchAnnouncer::stocks(
+    const A11yMatchHud& hud, int slot, const MatchAnnouncementValues& values) {
+    const int count = hud.players[slot].stocks;
+    Player& player = m_players[slot];
+    if (count == player.stocks) {
+        return;
+    }
+    /* Off, or no stocks on the HUD (a timed match): taken as said. */
+    const bool on = hud.stocks && values.on && stocks_on(player, values);
+    if (on && !hud.hud_enabled) {
+        /* The HUD hidden mid-match: held until it shows again, as damage
+         * is. */
+        return;
+    }
+    player.stocks = count;
+    if (on && count > 0) {
+        /* On the tick it changes, a KO's or a steal's: a stock line about
+         * the player takes the place of a damage line still waiting. At 0
+         * the game's announcer calls the elimination. */
+        m_speech.announce_voice(
+            player.yours ? Voice::yours : Voice::opponents, slot, stock_line(player, count));
+    }
 }
 
 bool MatchAnnouncer::owed(const Player& player, const MatchAnnouncementValues& values) const {
@@ -169,6 +211,11 @@ void MatchAnnouncer::finish(const char* why, const MatchAnnouncementValues& valu
 std::string MatchAnnouncer::line(const Player& player, int figure) const {
     std::string figure_text = std::to_string(figure);
     return player.label.empty() ? figure_text : player.label + " " + figure_text;
+}
+
+std::string MatchAnnouncer::stock_line(const Player& player, int stocks) const {
+    std::string count = stocks == 1 ? "last stock" : std::to_string(stocks) + " stocks";
+    return player.label.empty() ? count : player.label + ", " + count;
 }
 
 }  // namespace a11y

@@ -38,17 +38,32 @@ public:
     int screen_reader_lines = 0;
 };
 
-/* The voices as speech sees them: each line as "<voice> <subject> <text>". */
+/* The voices as speech sees them: each line as "<voice> <subject> <text>".
+ * While a line plays (playing), the next lines wait, and one about a subject
+ * whose line is waiting takes that line's place, as voices.hpp queues them. */
 class FakeVoices final : public a11y::VoiceLines {
 public:
     void start() override {}
     void say(a11y::Voice voice, a11y::Subject subject, std::string_view text) override {
-        said.push_back(std::string(a11y::voice_name(voice)) + " " + std::to_string(subject) + " " +
-                       std::string(text));
+        const std::string about =
+            std::string(a11y::voice_name(voice)) + " " + std::to_string(subject) + " ";
+        if (!playing) {
+            said.push_back(about + std::string(text));
+            return;
+        }
+        for (std::string& line : waiting) {
+            if (line.compare(0, about.size(), about) == 0) {
+                line = about + std::string(text);
+                return;
+            }
+        }
+        waiting.push_back(about + std::string(text));
     }
     void drop_waiting(const char*) override {}
 
     std::vector<std::string> said;
+    bool playing = false;
+    std::vector<std::string> waiting;
 };
 
 using Lines = std::vector<std::string>;
@@ -60,6 +75,7 @@ A11yMatchHud before_go() {
     hud.match = true;
     hud.hud_enabled = false;
     hud.phase = 0;
+    hud.stocks = true;
     hud.you = 0;
     for (int slot = 0; slot < 2; slot++) {
         A11yMatchHudPlayer& player = hud.players[slot];
@@ -371,8 +387,8 @@ void no_panel_no_announcement() {
     assert(stamina.settle().empty());
 }
 
-/* The HUD hidden mid-match (the pause camera): a figure waits until it shows
- * again. */
+/* The HUD hidden mid-match (the pause camera): a figure or a stock count
+ * waits until it shows again. */
 void hidden_hud_holds() {
     Fixture f;
     f.go();
@@ -381,6 +397,12 @@ void hidden_hud_holds() {
     assert(f.settle().empty());
     f.hud.hud_enabled = true;
     assert((f.ticks() == Lines{"opponents 1 25"}));
+    /* A stock change too. */
+    f.hud.hud_enabled = false;
+    f.hud.players[1].stocks = 3;
+    assert(f.settle().empty());
+    f.hud.hud_enabled = true;
+    assert((f.ticks() == Lines{"opponents 1 3 stocks"}));
 }
 
 /* The Match announcements switch: off, nothing is said and every figure is
@@ -579,6 +601,164 @@ void thresholds_at_game() {
                            "[a11y] match announcement opponents dropped (match over): \"25\""}));
 }
 
+/* Stocks: said on the tick the count changes, "last stock" at one, nothing
+ * at 0, where the game's announcer calls the elimination. Not at GO. */
+void stocks_a_loss_and_last_stock() {
+    Fixture f;
+    f.hud.players[0].stocks = 3;
+    f.hud.players[1].stocks = 3;
+    assert(f.go().empty());
+    /* A side KO: the stock goes on the KO's tick, the damage with it. */
+    f.hud.players[1].damage = 60;
+    f.settle();
+    f.hud.players[1].out = true;
+    f.hud.players[1].damage = 0;
+    f.hud.players[1].stocks = 2;
+    assert((f.ticks() == Lines{"opponents 1 2 stocks"}));
+    assert(f.settle().empty());
+    f.hud.players[1].out = false;
+    f.hud.players[1].stocks = 1;
+    assert((f.ticks() == Lines{"opponents 1 last stock"}));
+    f.hud.players[1].stocks = 0;
+    assert(f.settle().empty());
+    /* Yours in your voice. */
+    f.hud.players[0].stocks = 2;
+    assert((f.ticks() == Lines{"yours 0 2 stocks"}));
+    f.hud.players[0].stocks = 1;
+    assert((f.ticks() == Lines{"yours 0 last stock"}));
+
+    /* Labelled: after the label, with a comma. */
+    Fixture three;
+    add(three.hud, 2, true, 2);
+    add(three.hud, 3, true, 3, "BOB");
+    three.go();
+    three.hud.players[1].stocks = 3;
+    three.hud.players[2].stocks = 1;
+    three.hud.players[3].stocks = 2;
+    assert((three.ticks() == Lines{"opponents 1 CPU 2, 3 stocks", "opponents 2 P3, last stock",
+                                 "opponents 3 BOB, 2 stocks"}));
+}
+
+/* A team stock steal: the eliminated player takes a stock from a teammate
+ * with more than one, and both counts are said, the rise as a fall is. */
+void stocks_a_steal() {
+    Fixture f;
+    f.hud.teams = true;
+    add(f.hud, 2, false, 2);
+    f.hud.players[0].team = 1;
+    f.hud.players[1].team = 1;
+    f.hud.players[2].team = 0;
+    for (int slot = 0; slot < 3; slot++) {
+        f.hud.players[slot].stocks = 3;
+    }
+    f.go();
+    f.hud.players[0].stocks = 0;
+    f.hud.players[0].out = true;
+    assert(f.settle().empty());
+    /* The steal, the respawn starting on its tick. */
+    f.hud.players[0].stocks = 1;
+    f.hud.players[0].out = false;
+    f.hud.players[1].stocks = 2;
+    assert((f.ticks() == Lines{"yours 0 last stock", "opponents 1 teammate CPU 2, 2 stocks"}));
+    assert(f.settle().empty());
+}
+
+/* Each side's stocks switch, and the Match announcements switch: off, a
+ * change is taken as said, so on again only later changes are said. */
+void stocks_switches() {
+    Fixture f;
+    f.go();
+    f.values.your_stocks = false;
+    f.hud.players[0].stocks = 3;
+    f.hud.players[1].stocks = 3;
+    assert((f.ticks() == Lines{"opponents 1 3 stocks"}));
+    f.values.your_stocks = true;
+    assert(f.settle().empty());
+    f.values.opponents_stocks = false;
+    f.hud.players[0].stocks = 2;
+    f.hud.players[1].stocks = 2;
+    assert((f.ticks() == Lines{"yours 0 2 stocks"}));
+    f.values.opponents_stocks = true;
+    assert(f.settle().empty());
+    /* Damage goes on without them. */
+    f.values.your_stocks = false;
+    f.values.opponents_stocks = false;
+    f.hud.players[1].damage = 14;
+    assert((f.settle() == Lines{"opponents 1 14"}));
+    f.values.your_stocks = true;
+    f.values.opponents_stocks = true;
+    f.values.on = false;
+    f.hud.players[0].stocks = 1;
+    f.hud.players[1].stocks = 1;
+    assert(f.settle().empty());
+    f.values.on = true;
+    assert(f.settle().empty());
+}
+
+/* A timed match shows no stocks: none said, whatever the count does. */
+void stocks_not_in_a_timed_match() {
+    Fixture f;
+    f.hud.stocks = false;
+    f.go();
+    f.hud.players[1].stocks = 3;
+    f.hud.players[0].stocks = 1;
+    assert(f.settle().empty());
+}
+
+/* The Teammates switch: off, a teammate's damage and stocks are not said,
+ * and on again only later changes are; an opponent's go on. */
+void the_teammates_switch() {
+    Fixture f;
+    f.hud.teams = true;
+    add(f.hud, 2, false, 2);
+    f.hud.players[0].team = 1;
+    f.hud.players[1].team = 1;
+    f.hud.players[2].team = 0;
+    f.go();
+    f.values.teammates = false;
+    f.hud.players[1].damage = 30;
+    f.hud.players[1].stocks = 3;
+    f.hud.players[2].damage = 40;
+    f.hud.players[2].stocks = 3;
+    assert((f.ticks() == Lines{"opponents 2 CPU 3, 3 stocks"}));
+    assert((f.settle() == Lines{"opponents 2 CPU 3 40"}));
+    f.values.teammates = true;
+    assert(f.settle().empty());
+    f.hud.players[1].damage = 35;
+    f.hud.players[1].stocks = 2;
+    assert((f.ticks() == Lines{"opponents 1 teammate CPU 2, 2 stocks"}));
+    assert((f.settle() == Lines{"opponents 1 teammate CPU 2 35"}));
+
+    /* Without teams nobody is a teammate, whatever the slots hold. */
+    Fixture g;
+    g.hud.players[0].team = 1;
+    g.hud.players[1].team = 1;
+    g.values.teammates = false;
+    g.go();
+    g.hud.players[1].damage = 9;
+    g.hud.players[1].stocks = 2;
+    assert((g.ticks() == Lines{"opponents 1 2 stocks"}));
+    assert((g.settle() == Lines{"opponents 1 9"}));
+}
+
+/* A stock line has the player's slot as its subject, as a damage line does,
+ * so it takes the place of a damage line about the same player still
+ * waiting in the voice's queue. */
+void a_stock_line_replaces_a_waiting_damage_line() {
+    Fixture f;
+    f.go();
+    f.voices.playing = true;
+    f.hud.players[0].damage = 20;
+    f.hud.players[1].damage = 85;
+    f.settle();
+    assert((f.voices.waiting == Lines{"yours 0 20", "opponents 1 85"}));
+    f.hud.players[1].out = true;
+    f.hud.players[1].damage = 0;
+    f.hud.players[1].stocks = 3;
+    f.ticks();
+    assert((f.voices.waiting == Lines{"yours 0 20", "opponents 1 3 stocks"}));
+}
+
 /* The rows: the switch shown, on by default, read live; the settle time a
  * tuning value; the damage rows. */
 void the_rows() {
@@ -610,7 +790,7 @@ void the_rows() {
     assert(interval != nullptr && interval->shown && interval->kind == a11y::ValueKind::number);
     assert(yours->label == "Your damage" && theirs->label == "Opponents' damage");
     assert(interval->label == "Damage interval");
-    assert(model.shown().size() == 4 && model.shown()[1].value == yours &&
+    assert(model.shown().size() == 7 && model.shown()[1].value == yours &&
            model.shown()[2].value == theirs && model.shown()[3].value == interval);
     const a11y::ChoiceOptions modes = a11y::choice_options(*yours);
     assert(modes.size() == 3 && modes[0].shown() == "Off" && modes[1].shown() == "Every change" &&
@@ -648,6 +828,28 @@ void the_rows() {
     assert(read.values().your_damage == a11y::DamageMode::thresholds);
     assert(read.values().opponents_damage == a11y::DamageMode::thresholds);
     assert(read.values().damage_interval == 70);
+
+    /* The stocks rows and Teammates after the interval: switches, on by
+     * default, each read live; the settle time stays last in the file. */
+    const char* const keys[] = {a11y::MatchAnnouncementSettings::kYourStocksKey,
+        a11y::MatchAnnouncementSettings::kOpponentsStocksKey,
+        a11y::MatchAnnouncementSettings::kTeammatesKey};
+    const char* const labels[] = {"Your stocks", "Opponents' stocks", "Teammates"};
+    for (int i = 0; i < 3; i++) {
+        const a11y::NamedValue* row = model.find(keys[i]);
+        assert(row != nullptr && row->shown && row->kind == a11y::ValueKind::toggle);
+        assert(row->label == labels[i] && row->default_value == 1.0f);
+        assert(model.shown()[4 + i].value == row);
+    }
+    assert(text.find("match_announcements.teammates = ") < text.find("damage_settle = "));
+    assert(settings.values().your_stocks && settings.values().opponents_stocks &&
+           settings.values().teammates);
+    model.set(*model.find(keys[0]), 0.0f);
+    assert(!settings.values().your_stocks && settings.values().opponents_stocks);
+    model.set(*model.find(keys[1]), 0.0f);
+    assert(!settings.values().opponents_stocks && settings.values().teammates);
+    model.set(*model.find(keys[2]), 0.0f);
+    assert(!settings.values().teammates);
 }
 
 }  // namespace
@@ -680,6 +882,12 @@ int main() {
     thresholds_changes_take_effect_at_once();
     thresholds_a_teammate();
     thresholds_at_game();
+    stocks_a_loss_and_last_stock();
+    stocks_a_steal();
+    stocks_switches();
+    stocks_not_in_a_timed_match();
+    the_teammates_switch();
+    a_stock_line_replaces_a_waiting_damage_line();
     the_rows();
     std::cout << "match_announcer: all tests passed\n";
     return 0;

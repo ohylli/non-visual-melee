@@ -53,7 +53,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens", "sss_steps",
          "sss_skipped", "sss_glide_pick", "leaf_screens", "sss_hover", "css_classic", "css_training",
          "css_slots", "css_portraits", "css_steps", "results", "results_no_contest", "results_cpu4",
-         "results_teams", "training_menu", "launcher_home",
+         "results_teams", "match_stock_steal", "training_menu", "launcher_home",
          "launcher_settings", "launcher_a11y", "launcher_voices", "port_menu", "port_menu_a11y",
          "port_menu_voices", "direct_hub"]
 # drive.py options a script needs: the launcher's scripts open the launcher,
@@ -62,7 +62,8 @@ MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens
 ARGS = {"launcher_home": ["--launcher", "--muted"], "launcher_settings": ["--launcher", "--muted"],
         "launcher_a11y": ["--launcher", "--muted"], "launcher_voices": ["--launcher", "--muted"],
         "port_menu": ["--muted"], "port_menu_a11y": ["--muted"],
-        "port_menu_voices": ["--muted"], "match_port_menu": ["--muted"], "direct_call": ["--muted"]}
+        "port_menu_voices": ["--muted"], "match_port_menu": ["--muted"], "direct_call": ["--muted"],
+        "match_stock_steal": ["--muted"]}
 # Settings a script needs from the environment. The Accessibility
 # category's scripts leave Steering and Cues to the run's a11y.ini, so their
 # rows show no "(environment)" whatever the caller exports.
@@ -99,6 +100,8 @@ ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           # The scene's placeholder, which DIRECT CONNECT's own opening replaces.
           "direct_hub": NO_LOBBY_SPEECH, "direct_call": NO_LOBBY_SPEECH,
           "results": re.compile(READY), "results_teams": re.compile(READY),
+          # A count of 0 is the game's announcer's to call.
+          "match_stock_steal": re.compile(r'\[a11y\] voice \w+( \(off\))?: "([^"]*, )?0 stocks"'),
           # A cancelled match has no places and no Bonuses page.
           "results_no_contest": re.compile(r'\[a11y\] speak .*("Bonuses\.|\b[1-4](st|nd|rd|th)\b)|' + READY),
           # Four CPUs: nobody is "you".

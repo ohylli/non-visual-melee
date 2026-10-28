@@ -114,5 +114,11 @@ wait "\"Opponents' damage, Every change, Left and right to change\. "
 key Down
 wait '"Damage interval, slider, 20%\. Left and right to adjust\. '
 key Down
+wait '"Your stocks, On, Left and right to change\. '
+key Down
+wait "\"Opponents' stocks, On, Left and right to change\. "
+key Down
+wait '"Teammates, On, Left and right to change\. '
+key Down
 wait '"Steering, On, Left and right to change\. '
 quit
