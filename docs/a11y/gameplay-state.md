@@ -59,7 +59,7 @@ The match scene (`GS_VS`) is shared by VS, Classic, Target Test and more (`nativ
 
 ### The tick hook
 
-The fork's hook is there: `pc_a11y_match_tick(held_mask)`, right after `pc_slp_tick_end`, with the same mask. It runs in every scene that ticks, menus included, and again for each tick a rollback re-runs, which `hooks.cpp` keeps silent. `a11y_game_match_state` (`game_access.c`) reads the match from it into a snapshot, and the match cues work from that (`cues.md`). In the Training scene it also hands the Training menu to its reader, with the cues on or off (`native-menus.md`, "The Training menu in detail"), and on results it hands the results scene to its reader (`native-menus.md`, "Results in detail"). Whether a match is on is the snapshot's to say: the local player's slot must have a fighter, and that fighter must be on the live fighter list, which is empty outside a match. The second test keeps a slot's pointer from being followed should it outlive its fighter; the player slots are static and survive every scene.
+The fork's hook is there: `pc_a11y_match_tick(held_mask)`, right after `pc_slp_tick_end`, with the same mask. It runs in every scene that ticks, menus included, and again for each tick a rollback re-runs, which `hooks.cpp` keeps silent. `a11y_game_match_state` (`game_access.c`) reads the match from it into a snapshot, and the match cues work from that (`cues.md`). In the Training scene it also hands the Training menu to its reader, with the cues on or off (`native-menus.md`, "The Training menu in detail"), and on results it hands the results scene to its reader (`native-menus.md`, "Results in detail"). In every scene it reads the HUD for the match announcements ([The HUD](#the-hud)), which the scene hook resets, each match being a scene of its own. Whether a match is on is the snapshot's to say: the local player's slot must have a fighter, and that fighter must be on the live fighter list, which is empty outside a match. The second test keeps a slot's pointer from being followed should it outlive its fighter; the player slots are static and survive every scene.
 
 ### Pause, freezes and slow motion
 
@@ -157,7 +157,45 @@ A player who loses the last stock sleeps like any other dead fighter, except aft
 - **Ready and GO**: the match opens with the "Ready" graphic. When it ends, `fn_8016B7F8` enables all input: the GO moment. When GO ends, `fn_8016B784` sets `hud_enabled`, after which the timer runs and pausing works.
 - **Pause**: `gm_GetDbPauseFlag(1)` is true while a player has paused; `VsSceneState.pauser` says who.
 
-The phases and pause flag above are the VS scene's. Training keeps its own: it never sets `unk_0`, and pauses through `gm_GetDbPauseFlag(2)`.
+The phases and pause flag above are the VS scene's. Training keeps its own: it never sets `unk_0`, and pauses through `gm_GetDbPauseFlag(2)`. Training does show GO, and `hud_enabled` comes on as it ends, as in VS. Each match scene's start (`fn_8016DCC0`) zeroes `VsSceneState`, so `hud_enabled` is clear until that match's GO.
+
+`hud_enabled` also goes off mid-match: the pause camera clears it while it is up (`gmcamera.c`), and single-player modes clear it for scripted scenes, such as Master Hand's entrance in Classic (`gm_17C0.c`) and some events (`gmevent.c`).
+
+## The HUD
+
+The HUD at the bottom of the screen has one panel per player: the damage as a whole number, the stock icons in a stock match, and the character's emblem. Over each fighter the game draws a label: "1P" to "4P" by controller port, "CP" for every computer player with no number, or a human's name tag instead. The match announcements (`.scratch/match-announcements/spec.md`) read all of it from one snapshot, `a11y_game_match_hud` (`game_access.c`), filled each tick from the tick hook.
+
+### Which players have a panel
+
+- **Where**: `ifStatus_HudInfo.players[slot]` (`IfDamageState`, `src/melee/if/ifstatus.c`), one per slot. A panel shows while its `HUD_parent_entity` is not null; the fork compares the pointer and never follows it.
+- **Made** at the match's start by `ifStatus_802F665C(rules.x0_3)`, which calls `ifStatus_802F6508` for every slot: a panel for each slot below `StartMeleeRules.x0_3`, the panel count, whose slot is not empty, when `rules.x2_6` allows panels (Camera Mode clears it). The count is 4 in VS, 6 in Multi-Man and All-Star, and set per stage or event elsewhere.
+- **Kept through a KO and the respawn**: the respawn (`Player_80032070` calls `ifStatus_802F6E1C`) runs `ifStatus_802F6508` again, which reuses the slot's panel. Between the KO and the respawn the digits fly apart (`explode_animation`) but the panel stays.
+- **Taken down** by `ifStatus_802F6788`: when `rules.x2_7` is set, 200 ticks after an eliminated player's digits fly apart (`ifStatus_802F5B48`); when a single-player mode removes a fighter (`fn_8016EF98`, `gm_80167320`); and with the whole HUD at the scene's end (`ifStatus_802F6804`).
+- **Hidden without going**: `hide_all_digits` hides every panel's digits at once (the pause, Corneria's and Venom's scripted moments). The fork counts a panel as showing through it.
+- **Multi-Man's wireframes have panels.** Measured on 2026-10-28 in 10-Man Melee: three wireframes on the stage, each with a panel showing its damage beside yours, the panels in slot order with no number. A single-player mode that spawns a fighter mid-match (`gm_16A2.c`) makes no panel then, but its respawn does, while the slot is below the panel count.
+
+### Damage on the HUD
+
+What the HUD shows is `Player_GetDamage(slot)` (see [Damage percent](#damage-percent)), copied every tick by `ifStatus_802F5B48` and clamped to 0 to 999, in stamina mode `Player_GetRemainingHP` instead (`Player_GetMoreFlagsBit2`). Measured in the debug match and with four CPUs:
+
+- A CPU's attack on you and yours on it each changed the figure on the tick of the hit, and a combo's hits a few ticks apart.
+- On Poké Floats a fighter off screen took a point at a time, a second or so apart: off-screen damage goes through `Fighter_TakeDamage_8006CC7C`, so the HUD counts it as a hit.
+- Training's menu sets a CPU's damage when it closes: the figure the menu's reader already said appears on the HUD as the menu closes.
+
+### A KO
+
+A KO is the fighter's knockout states, motion states 0 to 11 (`DeadDown` to `Sleep`), as the cues' `out` reads them, in stock and timed matches alike: the snapshot's `out`. The damage goes to 0 inside them (`ftCo_800D34E0`), on the KO's tick for a side or bottom KO and at the end of the flight for a star or screen KO, so the damage is never 0 outside them because of the KO. The falls count (`Player_GetFalls`) would also mark it, but the state is there on every tick of the KO, so a tick skipped for a rollback re-run never hides one. Measured: Mario smashed off Final Destination at 25% in the debug match, and nothing was said of his 0% after the respawn. After the KO that ends a match the GAME! freeze stops the fighter mid-flight ([Respawn](#respawn)), so a star KO's damage can still show when the match ends.
+
+### Stocks on the HUD
+
+`Player_GetStocks(slot)`; the panel shows up to five icons, then one icon and a count, and none in a timed match ([Stocks, KOs and respawns](#stocks-kos-and-respawns)).
+
+### Labels and name tags
+
+- **The label over the fighter** is the port's ("2P") for a human, "CP" for every computer player, or a human's name tag. In VS and online slot n plays on port n, so the third panel is P3's or the third CPU's; in Multi-Man the panels carry no number.
+- **The name tag**: `Player_GetNametagSlotID(slot)`, 120 for none, then `GetPersistentNameData(index)->namedata`, up to eight bytes of Shift-JIS without a terminator, as results reads it; `decode_shift_jis` (`game_text.cpp`) decodes it. Online each copy looks the index up on its own memory card, so the peer's tag is not reliable.
+- **Stable through the match**: the slot's tag index is set at the match's start from character select's choice (`gmvs.c`, from `PlayerInitData.nametag`) and to none when a single-player mode spawns a fighter mid-match (`gm_16A2.c`, `gm_181A.c`); a respawn and a team's stock steal leave it.
+- **Human or computer**: `Player_GetPlayerSlotType`; a demo player and a boss count as computer players. **Team**: `Player_GetTeam(slot)` and `gm_8016B168()` for a team match, as for the cues.
 
 ## Position and motion
 

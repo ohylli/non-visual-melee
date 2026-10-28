@@ -27,6 +27,8 @@
 #include <melee/gm/types.h>
 #include <melee/gr/forward.h>
 #include <melee/gr/stage.h>
+#include <melee/if/ifstatus.h>
+#include <melee/if/types.h>
 #include <melee/it/forward.h>
 #include <melee/lb/lb_00B0.h>
 #include <melee/lb/lbspdisplay.h>
@@ -1227,4 +1229,48 @@ void a11y_game_match_state(
     if (!out->you.out) {
         match_floor_below(you, edge_offset, stage->blast_bottom, &out->below);
     }
+}
+
+_Static_assert(A11Y_MATCH_SLOTS == Gm_Player_NumMax, "the game keeps another number of slots");
+
+void a11y_game_match_hud(int local_port, bool online, A11yMatchHud* out) {
+    memset(out, 0, sizeof(*out));
+    out->online = online;
+    for (int slot = 0; slot < A11Y_MATCH_SLOTS; slot++) {
+        const Fighter* fp = match_fighter(slot);
+        if (fp == NULL) {
+            continue;
+        }
+        out->match = true;
+        A11yMatchHudPlayer* player = &out->players[slot];
+        player->present = true;
+        /* Made at the match's start for the first rules.x0_3 slots in play
+         * when rules.x2_6 allows panels (ifStatus_802F6508), made again at a
+         * respawn, and freed (the pointer cleared) when the match's HUD goes
+         * or, with rules.x2_7, 200 ticks after an eliminated player's digits
+         * explode (ifStatus_802F5B48). Only compared, never followed. */
+        player->panel = ifStatus_HudInfo.players[slot].HUD_parent_entity != NULL;
+        player->human = Player_GetPlayerSlotType(slot) == Gm_PKind_Human;
+        player->port = Player_GetPadPort(slot);
+        player->team = Player_GetTeam(slot);
+        player->damage = Player_GetDamage(slot);
+        player->stamina = Player_GetMoreFlagsBit2(slot);
+        player->stocks = Player_GetStocks(slot);
+        player->out = fp->motion_id >= ftCo_MS_DeadDown && fp->motion_id <= ftCo_MS_Sleep;
+        /* As the results' KOs and falls page reads it: set at the match's
+         * start from the player's choice on character select, and to none
+         * for a fighter a single-player mode spawns mid-match. */
+        u8 tag = Player_GetNametagSlotID(slot);
+        if (tag != A11Y_RESULTS_NO_TAG && tag < A11Y_RESULTS_TAG_SLOTS) {
+            memcpy(player->tag, GetPersistentNameData(tag)->namedata, sizeof(player->tag) - 1);
+        }
+    }
+    if (!out->match) {
+        return;
+    }
+    const VsSceneState* scene = gmVs_GetSceneState();
+    out->hud_enabled = scene->hud_enabled != 0;
+    out->phase = scene->unk_0;
+    out->teams = gm_8016B168();
+    out->you = match_your_slot(local_port, online);
 }

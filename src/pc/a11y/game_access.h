@@ -865,6 +865,71 @@ typedef struct A11yMatchState {
 void a11y_game_match_state(
     int local_port, bool online, uint64_t held_mask, float edge_offset, A11yMatchState* out);
 
+/* What the match's HUD shows of each player, read once a tick by the match
+ * announcements (.scratch/match-announcements/spec.md; primer
+ * docs/a11y/gameplay-state.md, "The HUD"). Slot i is player slot i; in VS
+ * and online slot n plays on port n. */
+enum { A11Y_MATCH_SLOTS = 6 };
+
+typedef struct A11yMatchHudPlayer {
+    /* The slot is in the match: not empty, and its fighter is on the live
+     * fighter list. Nothing below is filled otherwise. */
+    bool present;
+    /* Its HUD panel shows: the HUD made one for the slot
+     * (ifStatus_HudInfo), as it does for the first rules.x0_3 slots in
+     * play, Multi-Man's wireframes included. Kept through a KO and the
+     * respawn; gone once an eliminated player's panel is taken down. */
+    bool panel;
+    /* A human; otherwise a computer player (a CPU, a demo player or a
+     * boss). */
+    bool human;
+    /* The controller port. */
+    int port;
+    /* Its team in a team match, as the slot holds it. */
+    int team;
+    /* The damage the HUD shows, a whole number (Player_GetDamage). */
+    int damage;
+    /* Stamina mode: the HUD shows the HP left instead of the damage. */
+    bool stamina;
+    /* Stocks left. */
+    int stocks;
+    /* Knocked out, or between death and respawn (motion states 0 to 11,
+     * as A11yMatchFighter.out): the KO has reset, or is about to reset, the
+     * damage to 0. */
+    bool out;
+    /* The name tag drawn over the fighter, Shift-JIS, copied with a
+     * terminator the game's eight bytes may lack; empty for none. Each
+     * copy of the game reads it from its own memory card, so online the
+     * peer's is not reliable. */
+    char tag[9];
+} A11yMatchHudPlayer;
+
+typedef struct A11yMatchHud {
+    /* A match is on: some slot's fighter is on the live fighter list,
+     * which is empty outside a match. */
+    bool match;
+    /* VsSceneState.hud_enabled: set as GO ends; cleared again while the
+     * pause camera or a single-player mode's scripted scene hides the HUD,
+     * and at the match's end. */
+    bool hud_enabled;
+    /* VsSceneState.unk_0: 0 while the match runs, paused included; 1 from
+     * GAME! or TIME!, 2 a single-player mode's score tally, 3 finished.
+     * Training never leaves 0. */
+    int phase;
+    bool teams;
+    /* The local player's slot, as A11yMatchState.you: -1 for none (four
+     * computer players). */
+    int you;
+    /* A netplay session. Set by the caller. */
+    bool online;
+    A11yMatchHudPlayer players[A11Y_MATCH_SLOTS];
+} A11yMatchHud;
+
+/* Fills the snapshot after a simulated tick (pc_a11y_match_tick), in any
+ * scene: outside a match it says so. local_port is the controller port the
+ * local player plays on. Reads only. */
+void a11y_game_match_hud(int local_port, bool online, A11yMatchHud* out);
+
 #ifdef __cplusplus
 }
 #endif

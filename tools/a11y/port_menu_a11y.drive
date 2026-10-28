@@ -49,6 +49,8 @@ wait "\"Opponents' voice volume, slider, 100%\. Left and right to adjust\. The l
 key Down
 wait "\"Preview opponents' voice: Play, button\. Says \"Opponents' voice\" in the opponents' voice, at its rate and volume\.\"$"
 key Down
+wait '"Match announcements, On, Left and right to change\. Says what the HUD shows during a match: your damage in your voice, everyone else.s in the opponents. voice\."$'
+key Down
 wait '"Steering, On, Left and right to change\. The D-pad steps the hand on character select and the cursor on stage select\. Off, the D-pad does what the game makes of it, quick chat included\."$'
 key Down
 wait '"Cues, On, Left and right to change\. Turns every cue on or off\."$'
@@ -110,7 +112,7 @@ wait '\[a11y\] speak queue \(muted\): "Speech, On, Left and right to change\. '
 ini '^speech\.on = on$'
 
 # Cue volume a step down and back up by the D-pad.
-gamepad dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown
+gamepad dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown dpdown
 wait '"Cue volume, slider, 100%\. '
 gamepad dpleft
 wait '\[a11y\] accessibility settings: saved cues\.volume = 95$'
@@ -147,7 +149,7 @@ wait '"Accessibility"$'
 # Ledge warning distance, the last row, a step down and back up.
 key Right
 wait '"Accessibility, On, Left and right to change\. '
-key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
+key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
 wait '"Ledge warning distance, slider, 40 units\. '
 key Left
 wait '\[a11y\] accessibility settings: saved ledge_warning\.distance = 39$'

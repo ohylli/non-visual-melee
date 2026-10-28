@@ -9,6 +9,8 @@
 #include "game_text.hpp"
 #include "launcher_speech.hpp"
 #include "lobby_speech.hpp"
+#include "match_announcement_settings.hpp"
+#include "match_announcer.hpp"
 #include "menu_speech.hpp"
 #include "menu_text.hpp"
 #include "pc/net.h"
@@ -63,6 +65,9 @@ std::unique_ptr<a11y::Voices> s_voices;
 /* The voices' rows, registered with the switches and attached to the voices
  * once the settings are loaded. */
 std::unique_ptr<a11y::VoiceSettings> s_voice_settings;
+/* The match announcements and their rows, after the voices' rows. */
+std::unique_ptr<a11y::MatchAnnouncer> s_match_announcer;
+std::unique_ptr<a11y::MatchAnnouncementSettings> s_match_settings;
 /* The launcher's master volume with mute applied, kept from before the
  * engine opens. */
 float s_master_volume = 1.0f;
@@ -259,12 +264,14 @@ extern "C" void pc_a11y_init(void) {
     s_direct = std::make_unique<a11y::DirectSpeech>(*s_speech);
     s_training = std::make_unique<a11y::TrainingSpeech>(*s_speech);
     s_results = std::make_unique<a11y::ResultsSpeech>(*s_speech, game_text);
+    s_match_announcer = std::make_unique<a11y::MatchAnnouncer>(*s_speech);
     s_settings = std::make_unique<a11y::AccessibilitySettings>(
         *s_speech, settings_file_path(config), config.log);
     /* The switches first: the first rows and the file's first groups, the
-     * voices' rows after Speech. */
+     * voices' rows after Speech, and the match announcements' after them. */
     s_switches = std::make_unique<a11y::Switches>(s_settings->model(), *s_speech, config.log, [] {
         s_voice_settings = std::make_unique<a11y::VoiceSettings>(s_settings->model(), *s_speech);
+        s_match_settings = std::make_unique<a11y::MatchAnnouncementSettings>(s_settings->model());
     });
     s_cue_system = a11y::CueSystem::open(config, *s_speech, *s_settings, s_master_volume);
     /* Attached to speech before the switches turn it on, which starts the
@@ -325,7 +332,9 @@ extern "C" void pc_a11y_shutdown(void) {
     s_voices.reset();
     s_cue_system.reset();
     s_switches.reset();
+    s_match_settings.reset();
     s_settings.reset();
+    s_match_announcer.reset();
     s_results.reset();
     s_training.reset();
     s_lobby.reset();
@@ -414,6 +423,11 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
         /* The scene's start has just reset the Training menu: a new
          * session, whose first opening says the keys. */
         s_training->session_started();
+    }
+    if (s_match_announcer != nullptr) {
+        /* Each match is a scene of its own, sudden death and each of a
+         * single-player mode's stages included. */
+        s_match_announcer->scene_entered();
     }
     if (s_results != nullptr && scene_kind == static_cast<int>(a11y::SceneKind::GS_RESULTS)) {
         /* Silent on entry: the reader speaks once the announcer has named
@@ -578,8 +592,14 @@ extern "C" void pc_a11y_match_tick(uint64_t held_mask) {
         a11y_game_training_menu(&menu);
         s_training->tick(menu, a11y::Clock::now());
     }
+    int local_port = pc_net_active() ? pc_net_local_player() : 0;
+    if (s_match_announcer != nullptr && s_match_settings != nullptr) {
+        /* In every scene: outside a match the snapshot says so. */
+        A11yMatchHud hud;
+        a11y_game_match_hud(local_port, pc_net_active(), &hud);
+        s_match_announcer->tick(hud, s_match_settings->values(), a11y::Clock::now());
+    }
     if (s_cue_system != nullptr) {
-        int local_port = pc_net_active() ? pc_net_local_player() : 0;
         s_cue_system->tick(local_port, pc_net_active(), held_mask);
     }
 }

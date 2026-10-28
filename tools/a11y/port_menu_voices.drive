@@ -3,14 +3,15 @@
 # sample, and a step Right back to the voice it started on; Your voice rate a
 # step down and back; Preview your voice by the gamepad's A, which plays at
 # once; Opponents' voice a step Right and back; and the opponents' four rows
-# read down to Steering. Each step on a Voice, Rate or Volume row logs the
-# saved value and the reader's new value, then a moment later the sample in
-# that voice and its "plays" line; with the screen reader muted the voices
-# still render and play, into SDL's dummy driver. Expects the voices ready
-# by the time the menu opens, and at least two voices installed. The run's
-# a11y.ini starts from the defaults. Run with accessibility on but muted,
-# and with Steering and Cues left to the run's a11y.ini, so Steering's row
-# shows no "(environment)" (as run_level.py runs it):
+# read down past the Match announcements switch to Steering. Each step on a
+# Voice, Rate or Volume row logs the saved value and the reader's new value,
+# then a moment later the sample in that voice and its "plays" line; with
+# the screen reader muted the voices still render and play, into SDL's
+# dummy driver. Expects the voices ready by the time the menu opens, and at
+# least two voices installed. The run's a11y.ini starts from the defaults.
+# Run with accessibility on but muted, and with Steering and Cues left to
+# the run's a11y.ini, so Steering's row shows no "(environment)" (as
+# run_level.py runs it):
 #   MELEE_A11Y_STEER= MELEE_A11Y_CUES= python tools/a11y/drive.py --muted tools/a11y/port_menu_voices.drive
 # run_level.py also counts the samples: six in your voice and two in the
 # opponents' voice, one for each settled run of steps and one for Preview.
@@ -97,13 +98,15 @@ wait "\[a11y\] voice opponents: \"Opponents' voice\"$"
 wait "\[a11y\] voice opponents plays: \"Opponents' voice\" "
 ini '^opponents_voice\.voice = %theirs%$'
 
-# The opponents' other rows, then Steering.
+# The opponents' other rows, the Match announcements switch, then Steering.
 key Down
 wait "\"Opponents' voice rate, slider, 50\. Left and right to adjust\. How fast the opponents' voice speaks, 50 being the voice's normal speed\.\"$"
 key Down
 wait "\"Opponents' voice volume, slider, 100%\. Left and right to adjust\. The loudness of the opponents' voice, under the master volume\.\"$"
 key Down
 wait "\"Preview opponents' voice: Play, button\. Says \"Opponents' voice\" in the opponents' voice, at its rate and volume\.\"$"
+key Down
+wait '"Match announcements, On, Left and right to change\. '
 key Down
 wait '"Steering, On, Left and right to change\. '
 quit
