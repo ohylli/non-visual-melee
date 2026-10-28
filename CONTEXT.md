@@ -39,7 +39,7 @@ _Avoid_: Translations, labels, text map
 ### What the player hears
 
 **Announcement**:
-One complete unit of speech sent to the screen reader: everything the player needs to hear about the thing that just changed, composed as a single text. A setting and its value are one announcement, not two. An announcement either interrupts current speech or is queued after it; queueing is for separate happenings, never for the parts of one.
+One complete unit of speech, sent to the screen reader or spoken by a voice: everything the player needs to hear about the thing that just changed, composed as a single text. A setting and its value are one announcement, not two. An announcement either interrupts current speech or is queued after it; queueing is for separate happenings, never for the parts of one.
 _Avoid_: Message, utterance, speech line, TTS string
 
 **Cue**:
@@ -73,11 +73,31 @@ _Avoid_: TTS log, debug output
 ### How speech is produced
 
 **Speech**:
-The fork's subsystem that takes announcements from every feature, writes the speech log and goes quiet while the Speech or Accessibility switch is off. The only part of the fork that knows a screen reader exists.
+The fork's subsystem that takes announcements from every feature, writes the speech log, says each through the screen reader or a voice, and goes quiet while the Speech or Accessibility switch is off. The only part of the fork that knows a screen reader or a voice exists.
 _Avoid_: TTS, narrator, announcer (the game has its own announcer voice: "Ready, go!")
 
+**Voice**:
+A Windows voice the fork speaks with itself, beside the screen reader, so the player hears at once whom an announcement is about. There are two: **your voice**, for what happens to you, and **the opponents' voice**, for what happens to everyone else in the match, teammates included. Everything else stays on the screen reader.
+_Avoid_: TTS voice, channel, speaker, narrator, player voice
+
+**Match announcement**:
+An announcement about a match as it is played: a player's damage, their stocks, the time left.
+_Avoid_: Callout, combat speech, match speech
+
+**Player label**:
+The words a match announcement names a player by when the voice alone does not tell whom it is about: the player's name tag where they have one, otherwise their port ("P2") or, for a computer player, "CPU" and their slot ("CPU 3"); a teammate's label starts with "teammate". The character's name is never used.
+_Avoid_: Player name, tag, port name
+
+**Settled damage**:
+A player's damage, as the HUD shows it, once it has held still for a moment: what a damage announcement says, so a flurry of hits is one line, not one per hit.
+_Avoid_: Final damage, current damage, percent
+
+**Damage threshold**:
+A multiple of the damage interval the player chooses (20%, 40%, 60% at an interval of 20). In threshold mode a player's settled damage is said only once it has crossed one upward since it was last said.
+_Avoid_: Milestone, step, breakpoint
+
 **Screen reader bridge**:
-The thin layer inside speech that talks to the screen reader library and holds every platform-specific detail. Nothing else in the fork touches the library.
+The thin layer inside speech that talks to the screen reader library, for the screen reader and the voices alike, and holds every platform-specific detail. Nothing else in the fork touches the library.
 _Avoid_: Prism wrapper, TTS backend, speech backend
 
 ### The three user interfaces
