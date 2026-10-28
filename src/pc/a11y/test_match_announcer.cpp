@@ -17,6 +17,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -31,11 +32,12 @@ class FakeBridge final : public a11y::ScreenReaderBridge {
 public:
     std::string init() override { return "Fake"; }
     void shutdown() override {}
-    std::string output(std::string_view, bool) override {
-        screen_reader_lines++;
+    std::string output(std::string_view text, bool interrupt) override {
+        spoken.push_back((interrupt ? "interrupt " : "queue ") + std::string(text));
         return "";
     }
-    int screen_reader_lines = 0;
+    /* Each line given to the screen reader, as "<interrupt|queue> <text>". */
+    std::vector<std::string> spoken;
 };
 
 /* The voices as speech sees them: each line as "<voice> <subject> <text>".
@@ -102,7 +104,9 @@ void add(A11yMatchHud& hud, int slot, bool human, int port, const char* tag = ""
 
 struct Fixture {
     FakeVoices voices;
-    a11y::Speech speech{a11y::Config{}, std::make_unique<FakeBridge>()};
+    std::unique_ptr<FakeBridge> made = std::make_unique<FakeBridge>();
+    FakeBridge* bridge = made.get();
+    a11y::Speech speech{a11y::Config{}, std::move(made)};
     a11y::MatchAnnouncer announcer{speech};
     a11y::MatchAnnouncementValues values;
     A11yMatchHud hud = before_go();
@@ -135,6 +139,41 @@ struct Fixture {
     Lines go() {
         hud.hud_enabled = true;
         return ticks();
+    }
+
+    /* A timer on the HUD, counting down unless up, as it stands at the
+     * match's start: a countdown from seconds shows "M:SS.00". */
+    void timer(int seconds, bool up = false) {
+        hud.timer = true;
+        hud.timer_counts_up = up;
+        hud.timer_seconds = seconds;
+        hud.timer_frames = up ? 0 : 59;
+    }
+
+    /* Runs n ticks with the timer advancing first, as the game's does
+     * (fn_8016CD98), and returns what the screen reader was given, clearing
+     * it. at, if given, gets the timer's figures on each line's tick. */
+    Lines count(int n, std::vector<std::pair<int, int>>* at = nullptr) {
+        Lines spoken;
+        for (int i = 0; i < n; i++) {
+            if (hud.timer && hud.hud_enabled && ++hud.timer_frames >= 60) {
+                hud.timer_frames = 0;
+                if (hud.timer_counts_up) {
+                    hud.timer_seconds++;
+                } else if (hud.timer_seconds != 0) {
+                    hud.timer_seconds--;
+                }
+            }
+            ticks();
+            for (std::string& line : bridge->spoken) {
+                if (at != nullptr) {
+                    at->emplace_back(hud.timer_seconds, hud.timer_frames);
+                }
+                spoken.push_back(std::move(line));
+            }
+            bridge->spoken.clear();
+        }
+        return spoken;
     }
 };
 
@@ -759,6 +798,109 @@ void a_stock_line_replaces_a_waiting_damage_line() {
     assert((f.voices.waiting == Lines{"yours 0 20", "opponents 1 3 stocks"}));
 }
 
+/* A countdown says each whole minute and 30 seconds, queued on the screen
+ * reader, on the tick the HUD shows "M:00.00"; the starting minute is not
+ * said, nor anything in the voices. */
+void time_left_each_minute() {
+    Fixture f;
+    f.timer(180);
+    assert(f.go().empty());
+    std::vector<std::pair<int, int>> at;
+    assert((f.count(180 * 60, &at) ==
+            Lines{"queue 2 minutes left", "queue 1 minute left", "queue 30 seconds left"}));
+    assert((at == std::vector<std::pair<int, int>>{{120, 59}, {60, 59}, {30, 59}}));
+    assert(f.hud.timer_seconds == 0 && f.hud.timer_frames == 59);
+    assert(f.voices.said.empty());
+    assert(logged("[a11y] speak queue: \"1 minute left\""));
+
+    /* A one-minute match: only 30 seconds. */
+    Fixture g;
+    g.timer(60);
+    g.go();
+    assert((g.count(60 * 60) == Lines{"queue 30 seconds left"}));
+}
+
+/* A limit that is not a whole minute, as an event carries its time from one
+ * stage to the next: the first whole minute below it is said. */
+void time_left_not_a_whole_minute() {
+    Fixture f;
+    f.timer(103);
+    f.hud.timer_frames = 20;
+    f.go();
+    assert((f.count(103 * 60) == Lines{"queue 1 minute left", "queue 30 seconds left"}));
+
+    /* Set back up partway through (an event's next stage, Adventure's race):
+     * the new time is where it counts from, said again below it. */
+    Fixture g;
+    g.timer(70);
+    g.go();
+    assert((g.count(10 * 60 + 1) == Lines{"queue 1 minute left"}));
+    g.timer(95);
+    assert((g.count(65 * 60) == Lines{"queue 1 minute left", "queue 30 seconds left"}));
+}
+
+/* A timer counting up (Multi-Man, All-Star) says nothing, nor does a match
+ * without a timer, nor a countdown with no limit. */
+void time_left_counting_up_and_none() {
+    Fixture f;
+    f.timer(0, true);
+    f.go();
+    assert(f.count(3 * 60 * 60).empty());
+    assert(f.hud.timer_seconds == 180);
+
+    Fixture g;
+    g.go();
+    assert(g.count(2 * 60 * 60).empty());
+
+    Fixture h;
+    h.timer(-1);
+    h.go();
+    assert(h.count(60).empty());
+}
+
+/* Paused, the timer stands still at 1:00.00: said once. Hidden by the pause
+ * camera on that tick and shown again: still once. */
+void time_left_a_pause() {
+    Fixture f;
+    f.timer(61);
+    f.go();
+    assert((f.count(60) == Lines{"queue 1 minute left"}));
+    assert(f.hud.timer_seconds == 60 && f.hud.timer_frames == 59);
+    /* Paused: the HUD on, the timer still (ticks leaves it). */
+    assert(f.ticks(600).empty() && f.bridge->spoken.empty());
+    /* The pause camera: the HUD hidden, the timer still. */
+    f.hud.hud_enabled = false;
+    assert(f.count(600).empty());
+    f.hud.hud_enabled = true;
+    assert(f.count(1).empty());
+    assert(f.hud.timer_seconds == 59);
+    assert((f.count(30 * 60) == Lines{"queue 30 seconds left"}));
+}
+
+/* The Time left switch and the Match announcements switch: off, a minute
+ * passes silently, and on again only the next is said. At TIME! nothing
+ * more. */
+void time_left_the_switches() {
+    Fixture f;
+    f.timer(150);
+    f.go();
+    f.values.time_left = false;
+    assert(f.count(31 * 60).empty());
+    f.values.time_left = true;
+    assert((f.count(60 * 60) == Lines{"queue 1 minute left"}));
+    f.values.on = false;
+    assert(f.count(30 * 60).empty());
+    f.values.on = true;
+    assert(f.count(25 * 60).empty());
+
+    /* TIME!: the match is over. */
+    Fixture g;
+    g.timer(90);
+    g.go();
+    g.hud.phase = 1;
+    assert(g.count(90 * 60).empty());
+}
+
 /* The rows: the switch shown, on by default, read live; the settle time a
  * tuning value; the damage rows. */
 void the_rows() {
@@ -790,7 +932,7 @@ void the_rows() {
     assert(interval != nullptr && interval->shown && interval->kind == a11y::ValueKind::number);
     assert(yours->label == "Your damage" && theirs->label == "Opponents' damage");
     assert(interval->label == "Damage interval");
-    assert(model.shown().size() == 7 && model.shown()[1].value == yours &&
+    assert(model.shown().size() == 8 && model.shown()[1].value == yours &&
            model.shown()[2].value == theirs && model.shown()[3].value == interval);
     const a11y::ChoiceOptions modes = a11y::choice_options(*yours);
     assert(modes.size() == 3 && modes[0].shown() == "Off" && modes[1].shown() == "Every change" &&
@@ -850,6 +992,19 @@ void the_rows() {
     assert(!settings.values().opponents_stocks && settings.values().teammates);
     model.set(*model.find(keys[2]), 0.0f);
     assert(!settings.values().teammates);
+
+    /* Time left last, a switch on by default, read live, before the settle
+     * time in the file. */
+    const a11y::NamedValue* time_left = model.find(a11y::MatchAnnouncementSettings::kTimeLeftKey);
+    assert(time_left != nullptr && time_left->shown && time_left->kind == a11y::ValueKind::toggle);
+    assert(time_left->label == "Time left" && time_left->default_value == 1.0f);
+    assert(model.shown()[7].value == time_left);
+    assert(text.find("match_announcements.teammates = ") <
+               text.find("match_announcements.time_left = ") &&
+           text.find("match_announcements.time_left = ") < text.find("damage_settle = "));
+    assert(settings.values().time_left);
+    model.set(*time_left, 0.0f);
+    assert(!settings.values().time_left);
 }
 
 }  // namespace
@@ -888,6 +1043,11 @@ int main() {
     stocks_not_in_a_timed_match();
     the_teammates_switch();
     a_stock_line_replaces_a_waiting_damage_line();
+    time_left_each_minute();
+    time_left_not_a_whole_minute();
+    time_left_counting_up_and_none();
+    time_left_a_pause();
+    time_left_the_switches();
     the_rows();
     std::cout << "match_announcer: all tests passed\n";
     return 0;

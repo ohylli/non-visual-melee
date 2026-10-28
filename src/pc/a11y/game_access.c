@@ -1273,5 +1273,15 @@ void a11y_game_match_hud(int local_port, bool online, A11yMatchHud* out) {
     out->phase = scene->unk_0;
     out->teams = gm_8016B168();
     out->stocks = gm_8016B094() || gm_8016B0E8();
+    /* The timer advances before the procs run (fn_8016CD98), only while
+     * hud_enabled, and stands still while paused; the HUD draws it in a proc
+     * (ifTime_UpdateTimers), so this tick's figures are the ones it shows.
+     * Every match, the single-player modes', events' and online included,
+     * runs on this scene state and these rules. */
+    const StartMeleeRules* rules = gm_GetStartMeleeRules();
+    out->timer = rules->timer_enabled;
+    out->timer_counts_up = rules->timer_counts_up;
+    out->timer_seconds = scene->timer_seconds > 0x7FFFFFFFu ? -1 : (int)scene->timer_seconds;
+    out->timer_frames = scene->unk_2C;
     out->you = match_your_slot(local_port, online);
 }

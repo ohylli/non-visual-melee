@@ -922,6 +922,17 @@ typedef struct A11yMatchHud {
      * the panels' stock icons (ifStatus_802F6508) and the stock loss at a
      * KO (ftCo_800D34E0) decide. */
     bool stocks;
+    /* The match has a timer (StartMeleeRules.timer_enabled), and it counts
+     * up (Multi-Man, All-Star) rather than down. */
+    bool timer;
+    bool timer_counts_up;
+    /* VsSceneState.timer_seconds: on a countdown the whole seconds left; -1
+     * for a countdown with no limit, which no mode in the game starts. */
+    int timer_seconds;
+    /* VsSceneState.unk_2C, the ticks within the second, 0 to 59: a countdown
+     * starts at 59 and shows "N:00.00" there, then on the next tick takes a
+     * second off and shows "N-1:59.99" at 0. */
+    int timer_frames;
     /* The local player's slot, as A11yMatchState.you: -1 for none (four
      * computer players). */
     int you;

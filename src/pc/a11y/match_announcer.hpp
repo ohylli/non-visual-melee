@@ -23,7 +23,13 @@
  * Stocks are said on the tick the count changes, falls and rises (a team's
  * stock steal) alike, where the HUD shows them: "2 stocks", "last stock" at
  * one, "P2, 2 stocks" after a label. At 0 nothing: the game's announcer
- * calls the elimination. Game thread only. */
+ * calls the elimination.
+ *
+ * The time left goes to the screen reader, queued: "2 minutes left", "1
+ * minute left" at each whole minute of a countdown and "30 seconds left", on
+ * the tick the HUD shows that time. The starting minute is not said (the
+ * rules header said it), a timer counting up says nothing, and the game's
+ * own five-to-one countdown is left alone. Game thread only. */
 #pragma once
 #include "game_access.h"
 #include <array>
@@ -63,6 +69,8 @@ struct MatchAnnouncementValues {
     bool opponents_stocks = true;
     /* Off, a teammate's damage and stocks are taken as said. */
     bool teammates = true;
+    /* Off, each minute passes unsaid. */
+    bool time_left = true;
     /* How long a figure must hold still before it is said. */
     Clock::duration settle = std::chrono::milliseconds(600);
 };
@@ -121,6 +129,12 @@ private:
     /* Off for a teammate behind the Teammates switch. */
     DamageMode damage_mode(const Player& player, const MatchAnnouncementValues& values) const;
     bool stocks_on(const Player& player, const MatchAnnouncementValues& values) const;
+    /* Says the time left when the countdown reached a whole minute or 30
+     * seconds since last tick. */
+    void time_left(const A11yMatchHud& hud, const MatchAnnouncementValues& values);
+    /* The countdown's time left as the HUD shows it, in ticks: "1:00.00" is
+     * 3600. -1 with no countdown. */
+    static int countdown(const A11yMatchHud& hud);
     /* Says the player's stocks when they changed and are to be said. */
     void stocks(const A11yMatchHud& hud, int slot, const MatchAnnouncementValues& values);
     /* Whether the player's figure shown now is to be said once it settles,
@@ -138,6 +152,8 @@ private:
      * more players besides you at GO, or no "you". */
     bool m_labelled = false;
     std::array<Player, A11Y_MATCH_SLOTS> m_players{};
+    /* The countdown's time left last tick (countdown()). */
+    int m_time_left = -1;
 };
 
 }  // namespace a11y

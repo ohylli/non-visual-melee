@@ -4,8 +4,8 @@
  * the voices' rows: the Match announcements switch, over every match
  * announcement and itself under Speech; Your damage and Opponents' damage,
  * each a choice of Off, Every change or Thresholds; the Damage interval both
- * share; Your stocks, Opponents' stocks and Teammates, switches; and the
- * settle time, a tuning value.
+ * share; Your stocks, Opponents' stocks, Teammates and Time left, switches;
+ * and the settle time, a tuning value.
  * The announcer reads them as they stand each tick, so a change takes effect
  * at once. Game thread only. */
 #pragma once
@@ -30,6 +30,7 @@ public:
     static constexpr const char* kYourStocksKey = "match_announcements.your_stocks";
     static constexpr const char* kOpponentsStocksKey = "match_announcements.opponents_stocks";
     static constexpr const char* kTeammatesKey = "match_announcements.teammates";
+    static constexpr const char* kTimeLeftKey = "match_announcements.time_left";
 
 private:
     Switch m_on;
@@ -39,6 +40,7 @@ private:
     Switch m_your_stocks;
     Switch m_opponents_stocks;
     Switch m_teammates;
+    Switch m_time_left;
     Number m_settle;
 };
 

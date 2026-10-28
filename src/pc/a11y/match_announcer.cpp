@@ -6,11 +6,19 @@
 #include <algorithm>
 
 namespace a11y {
+namespace {
+
+constexpr int kTicksPerSecond = 60;
+constexpr int kMinute = 60 * kTicksPerSecond;
+constexpr int kHalfMinute = 30 * kTicksPerSecond;
+
+}  // namespace
 
 void MatchAnnouncer::scene_entered() {
     m_stage = Stage::waiting;
     m_labelled = false;
     m_players = {};
+    m_time_left = -1;
 }
 
 void MatchAnnouncer::tick(
@@ -35,6 +43,7 @@ void MatchAnnouncer::tick(
         finish("match over", values);
         return;
     }
+    time_left(hud, values);
     for (int slot = 0; slot < A11Y_MATCH_SLOTS; slot++) {
         const A11yMatchHudPlayer& seen = hud.players[slot];
         Player& player = m_players[slot];
@@ -89,6 +98,8 @@ void MatchAnnouncer::tick(
 
 void MatchAnnouncer::start(const A11yMatchHud& hud, Clock::time_point now) {
     m_stage = Stage::running;
+    /* The starting minute is not said. */
+    m_time_left = countdown(hud);
     int others = 0;
     for (int slot = 0; slot < A11Y_MATCH_SLOTS; slot++) {
         const A11yMatchHudPlayer& seen = hud.players[slot];
@@ -179,6 +190,41 @@ void MatchAnnouncer::stocks(
         m_speech.announce_voice(
             player.yours ? Voice::yours : Voice::opponents, slot, stock_line(player, count));
     }
+}
+
+void MatchAnnouncer::time_left(const A11yMatchHud& hud, const MatchAnnouncementValues& values) {
+    const int before = m_time_left;
+    const int left = countdown(hud);
+    m_time_left = left;
+    if (left < 0 || before < 0 || left >= before) {
+        /* No countdown; or the timer still (paused, the HUD hidden), so a
+         * minute is never said twice; or set back up (an event's next stage
+         * carrying its time), counted from there. */
+        return;
+    }
+    /* The latest mark reached since last tick: 30 seconds, or the whole
+     * minute at or above the time left now. */
+    const int mark = left <= kHalfMinute ? kHalfMinute : (left + kMinute - 1) / kMinute * kMinute;
+    if (mark >= before || !values.on || !values.time_left) {
+        /* Off, the mark passes unsaid: turned on again, only the next is. */
+        return;
+    }
+    const int minutes = mark / kMinute;
+    const std::string text = mark == kHalfMinute ? "30 seconds left" :
+                             minutes == 1        ? "1 minute left" :
+                                                   std::to_string(minutes) + " minutes left";
+    /* Queued, never cutting off what the screen reader is saying. */
+    m_speech.announce(text, Mode::queue);
+}
+
+int MatchAnnouncer::countdown(const A11yMatchHud& hud) {
+    if (!hud.timer || hud.timer_counts_up || hud.timer_seconds < 0) {
+        return -1;
+    }
+    /* timer_frames counts up through each second: a countdown shows
+     * "M:SS.00" at 59 and takes the second off as it wraps to 0. */
+    return hud.timer_seconds * kTicksPerSecond + (kTicksPerSecond - 1) -
+           std::clamp(hud.timer_frames, 0, kTicksPerSecond - 1);
 }
 
 bool MatchAnnouncer::owed(const Player& player, const MatchAnnouncementValues& values) const {
