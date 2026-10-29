@@ -53,4 +53,21 @@ std::string decode_trouble(const DecodedText& decoded);
  * out. */
 std::string spoken_text(std::string_view text);
 
+/* Game text by its first byte as one spoken line, the readers' shared step:
+ * decoded, a decoding problem handed to log as "<what> <trouble>" (a reader's
+ * LogOnce), and spoken as spoken_text has it. nullptr gives no words; a
+ * reader that wants it logged checks first. */
+template <typename Log>
+std::string spoken_game_text(
+    const std::uint8_t* bytes, const GameTextSource& source, Log& log, const std::string& what) {
+    if (bytes == nullptr) {
+        return "";
+    }
+    DecodedText decoded = decode_game_text(bytes, source);
+    if (std::string trouble = decode_trouble(decoded); !trouble.empty()) {
+        log(what + " " + trouble);
+    }
+    return spoken_text(decoded.text);
+}
+
 }  // namespace a11y

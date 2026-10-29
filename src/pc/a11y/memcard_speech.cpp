@@ -101,11 +101,8 @@ std::string MemcardSpeech::game_words(int number) {
         m_log_once("[a11y] memory card: no game text for text " + std::to_string(number));
         return "";
     }
-    DecodedText decoded = decode_game_text(bytes, m_text);
-    if (std::string trouble = decode_trouble(decoded); !trouble.empty()) {
-        m_log_once("[a11y] memory card: text " + std::to_string(number) + " " + trouble);
-    }
-    return spoken_text(decoded.text);
+    return spoken_game_text(
+        bytes, m_text, m_log_once, "[a11y] memory card: text " + std::to_string(number));
 }
 
 }  // namespace a11y

@@ -226,11 +226,7 @@ std::string MenuSpeech::description(
         m_log_once(where + ": no description");
         return "";
     }
-    DecodedText decoded = decode_game_text(game_text, m_text);
-    if (std::string trouble = decode_trouble(decoded); !trouble.empty()) {
-        m_log_once(where + ": description " + trouble);
-    }
-    return spoken_text(decoded.text);
+    return spoken_game_text(game_text, m_text, m_log_once, where + ": description");
 }
 
 }  // namespace a11y

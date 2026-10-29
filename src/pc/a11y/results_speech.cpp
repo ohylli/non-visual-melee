@@ -469,14 +469,7 @@ std::vector<ResultsRow> ResultsSpeech::rows(const A11yResults& results, int port
 }
 
 std::string ResultsSpeech::game_words(const std::uint8_t* text, const std::string& what) {
-    if (text == nullptr) {
-        return "";
-    }
-    DecodedText decoded = decode_game_text(text, m_text);
-    if (std::string trouble = decode_trouble(decoded); !trouble.empty()) {
-        m_log_once("[a11y] results: " + what + " " + trouble);
-    }
-    return spoken_text(decoded.text);
+    return spoken_game_text(text, m_text, m_log_once, "[a11y] results: " + what);
 }
 
 }  // namespace a11y

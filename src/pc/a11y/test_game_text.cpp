@@ -193,8 +193,29 @@ void decode_trouble_names_what_went_wrong() {
     assert(a11y::decode_trouble(cut) == "\"A\", malformed");
 }
 
+/* The readers' shared step: spoken words, and a problem logged under the
+ * reader's own words. */
+void spoken_game_text_logs_trouble() {
+    std::vector<std::string> logged;
+    auto log = [&logged](const std::string& line) { logged.push_back(line); };
+    Bytes clean;
+    add_text(clean, "Hi there.");
+    clean.push_back(0x00);
+    assert(a11y::spoken_game_text(clean.data(), ntsc(), log, "test: text 1") == "Hi there.");
+    assert(logged.empty());
+    Bytes marked;
+    add_text(marked, "A");
+    marked.insert(marked.end(), {0x40, 0x05, 0x00});
+    assert(a11y::spoken_game_text(marked.data(), ntsc(), log, "test: text 2") == "A");
+    assert(logged.size() == 1);
+    assert(logged[0] == "test: text 2 \"A{glyph 4005}\", unknown glyphs left out");
+    assert(a11y::spoken_game_text(nullptr, ntsc(), log, "test: text 3").empty());
+    assert(logged.size() == 1);
+}
+
 int main() {
     decode_trouble_names_what_went_wrong();
+    spoken_game_text_logs_trouble();
     shift_jis_name_tags_decode();
     skips_formatting_commands();
     line_commands_become_one_break();
