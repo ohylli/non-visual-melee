@@ -1,0 +1,29 @@
+# The unlock notices after the title screen's Start: with no memory card the
+# base port builds a save with everything unlocked and no notice seen
+# (gmmain_lib.c), so every run shows these eight, in the order of their
+# unlock numbers, then the trophies. Each is said in the game's words,
+# interrupting; the first adds "A for next.", the others not (run_level.py
+# counts it once). The scene's old placeholder, "Unlock notice. No speech
+# yet.", is never said (run_level.py fails on it). A after the last reaches
+# the main menu tree.
+#   python tools/a11y/drive.py tools/a11y/unlock_notices.drive
+
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+wait 'speak interrupt \(off\): "1-P All-Star mode is now open! Better practice up! A for next\."$'
+press A
+wait 'speak interrupt \(off\): "Random Stage Select is now available in Additional Rules!"$'
+press A
+wait 'speak interrupt \(off\): "Check out smashing sounds! Find Sound Test under Data\."$'
+press A
+wait "speak interrupt \(off\): \"You've unlocked all playable characters! Get to fighting!\"$"
+press A
+wait 'speak interrupt \(off\): "All stages are now open!"$'
+press A
+wait 'speak interrupt \(off\): "You got the Kirby Hat 4 trophy!"$'
+press A
+wait 'speak interrupt \(off\): "You got the Kirby Hat 5 trophy!"$'
+press A
+wait 'speak interrupt \(off\): "You got the Marin trophy!"$'
+press A
+wait '"Main Menu\. 1-P Mode\. Solo Smash!"$'

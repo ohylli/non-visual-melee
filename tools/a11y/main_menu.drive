@@ -6,6 +6,7 @@ wait "state 0 scene 0$"
 press Start until "boot scene: game mode"
 # Unlock notices come first: with no memory card the base port builds a save
 # with everything unlocked but no notice marked as seen (gmmain_lib.c), so
-# every run shows them. A dismisses each one; they take a press every 0.3 s,
-# where the default 1.5 s spent 11 s on the eight of them.
+# every run shows them, and each is said (unlock_notices.drive checks the
+# words). A dismisses each one; they take a press every 0.3 s, where the
+# default 1.5 s spent 11 s on the eight of them.
 press A until "boot scene: state 0 scene 1$" 20 0.3

@@ -1022,6 +1022,14 @@ const uint8_t* a11y_game_memcard_string(int number) {
     return a11y_game_string(A11Y_MEMCARD_FONT, pc_region_sis_index(symbol, number));
 }
 
+const uint8_t* a11y_game_prize_string(int number) {
+    const char* symbol = a11y_game_font_symbol(A11Y_PRIZE_FONT);
+    if (number < 0 || symbol == NULL || strcmp(symbol, "SIS_PrizeData") != 0) {
+        return NULL;
+    }
+    return a11y_game_string(A11Y_PRIZE_FONT, pc_region_sis_index(symbol, number));
+}
+
 /* The slot's main fighter, or NULL. The player slots are static and
  * survive every scene, so the fighter must also be on the live fighter
  * list, which is empty outside a match: a slot's pointer that outlived its

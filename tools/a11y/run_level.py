@@ -60,7 +60,8 @@ MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens
          "css_slots", "css_portraits", "css_steps", "results", "results_no_contest", "results_cpu4",
          "results_teams", "training_menu", "launcher_home",
          "launcher_settings", "launcher_a11y", "launcher_voices", "port_menu", "port_menu_a11y",
-         "port_menu_voices", "direct_hub", "memcard_no", "memcard_no_card", "memcard_corrupted"]
+         "port_menu_voices", "direct_hub", "memcard_no", "memcard_no_card", "memcard_corrupted",
+         "unlock_notices"]
 # drive.py options a script needs: the launcher's scripts open the launcher,
 # with accessibility on but muted, since its line reading needs the switch on,
 # as the port menu's does.
@@ -129,7 +130,9 @@ ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           # A one-minute match: its starting minute is never said.
           "match_time": re.compile(r'"\d+ minutes? left"'),
           # The prompts up for one frame only, replaced before they are said.
-          "memcard_create": ONE_FRAME_PROMPTS, "memcard_corrupted": ONE_FRAME_PROMPTS}
+          "memcard_create": ONE_FRAME_PROMPTS, "memcard_corrupted": ONE_FRAME_PROMPTS,
+          # The scene's placeholder, which its first notice replaces.
+          "unlock_notices": re.compile(r'"Unlock notice\. No speech yet\.')}
 # Lines a passing run must not log between an opening line and the closing
 # line after it: no cue starts or stops while the port menu is open, since
 # the game stands still then and the stops come just before the opening.
@@ -165,7 +168,9 @@ COUNT = {"match_gap": GAP_ONCE, "match_gap_battlefield": GAP_ONCE, "match_ledge"
          "match_ledge_battlefield": LEDGE_BATTLEFIELD, "training_menu": TRAINING_NUMBERS,
          "port_menu_voices": VOICE_SAMPLES, "launcher_voices": LAUNCHER_VOICE_SAMPLES,
          # One "No" for each Create Game Data? visit: Right at the end says nothing.
-         "memcard_no": [(re.compile(r'\[a11y\] speak \w+ \(off\): "No"$'), 2)]}
+         "memcard_no": [(re.compile(r'\[a11y\] speak \w+ \(off\): "No"$'), 2)],
+         # The key on the visit's first notice only.
+         "unlock_notices": [(re.compile(r'\[a11y\] speak .*A for next\."$'), 1)]}
 
 
 def threshold_crossings(lines, out):

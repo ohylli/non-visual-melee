@@ -115,6 +115,30 @@ void font_glyphs_are_marked() {
     assert(d.unknown_glyphs == 1);
 }
 
+void prize_font_glyph_decodes() {
+    /* "Pokémon" as SdPrize spells it, its é from the screen's own font. */
+    Bytes b;
+    add_text(b, "Pok");
+    b.insert(b.end(), {0x40, 0x00});
+    add_text(b, "mon");
+    b.push_back(0x00);
+    a11y::GameTextSource prize = ntsc();
+    prize.font_glyphs = a11y::prize_font_glyphs();
+    a11y::DecodedText d = a11y::decode_game_text(b.data(), prize);
+    assert(d.text == "Pokémon");
+    assert(d.unknown_glyphs == 0);
+    /* Kept to that table: elsewhere the glyph is still unknown. */
+    assert(a11y::decode_game_text(b.data(), ntsc()).text == "Pok{glyph 4000}mon");
+    /* "Ray Mk II", the numeral one glyph; the table's filler glyph and those
+     * past its known ones stay unknown. */
+    Bytes ray;
+    add_text(ray, "Ray Mk ");
+    ray.insert(ray.end(), {0x40, 0x02, 0x40, 0x01, 0x40, 0x03, 0x00});
+    d = a11y::decode_game_text(ray.data(), prize);
+    assert(d.text == "Ray Mk II{glyph 4001}{glyph 4003}");
+    assert(d.unknown_glyphs == 2);
+}
+
 void kana_and_kanji_decode() {
     /* The first hiragana and the last glyph of the atlas. */
     Bytes b = {0x20, 0x3E, 0x21, 0x1E, 0x00};
@@ -221,6 +245,7 @@ int main() {
     line_commands_become_one_break();
     follows_calls_and_jumps();
     font_glyphs_are_marked();
+    prize_font_glyph_decodes();
     kana_and_kanji_decode();
     pal_uses_one_byte_per_glyph();
     stops_on_what_it_cannot_follow();

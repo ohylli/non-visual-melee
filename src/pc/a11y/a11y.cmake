@@ -52,6 +52,7 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/results_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/results_names.cpp
         ${CMAKE_CURRENT_LIST_DIR}/memcard_speech.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/unlock_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/css_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/css_names.cpp
         ${CMAKE_CURRENT_LIST_DIR}/css_targets.cpp
@@ -370,6 +371,19 @@ if (TARGET unit_tests)
     add_test(NAME memcard_speech COMMAND memcard_speech_test)
     set_tests_properties(memcard_speech PROPERTIES LABELS melee)
     add_dependencies(unit_tests memcard_speech_test)
+
+    # Unlock notice speech against the hook's calls and a hand-written prize
+    # table; a fake bridge and its own pc_log_line.
+    add_executable(unlock_speech_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_unlock_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/unlock_speech.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/game_text.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
+    target_include_directories(unlock_speech_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(unlock_speech_test PRIVATE -UNDEBUG)
+    add_test(NAME unlock_speech COMMAND unlock_speech_test)
+    set_tests_properties(unlock_speech PROPERTIES LABELS melee)
+    add_dependencies(unit_tests unlock_speech_test)
 
     # Character select speech against hand-written snapshots of the screen;
     # a fake bridge and its own pc_log_line.

@@ -763,6 +763,15 @@ enum { A11Y_MEMCARD_FONT = 3 };
  * game's code uses, or NULL while its font slot holds another table. */
 const uint8_t* a11y_game_memcard_string(int number);
 
+/* The unlock notice scene keeps its strings (SdPrize) in this font slot
+ * (ifprize.c loads them there). */
+enum { A11Y_PRIZE_FONT = 2 };
+
+/* A string of the unlock notice scene's table by the number the game's code
+ * uses, or NULL while its font slot holds another table. A trophy notice
+ * composes its text into string 0x4A at run time. */
+const uint8_t* a11y_game_prize_string(int number);
+
 /* A match, read once a tick by the match cues (docs/a11y/cues.md, "The
  * match snapshot"), in world units: x grows to the right, y upwards. */
 

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -14,7 +15,17 @@ struct GameTextSource {
     /* Turns a jump target (a 32-bit disc pointer, as stored in the byte code)
      * into a host address, or nullptr when it resolves nowhere. */
     const std::uint8_t* (*resolve)(std::uint32_t slot) = nullptr;
+    /* NTSC-U glyphs from 0x4000 come from the screen's own font file, which
+     * has no character codes: the characters read from context for the
+     * table being decoded, from 0x4000 in order. Empty, or nullptr for a
+     * glyph, leaves them unknown; a table's own are given only where they
+     * are known to hold. */
+    std::span<const char* const> font_glyphs = {};
 };
+
+/* SdPrize's font glyphs (the unlock notices, SIS_PrizeData, on the US
+ * disc): 0x4000 is the é of "Pokémon", 0x4002 the numeral II. */
+std::span<const char* const> prize_font_glyphs();
 
 struct DecodedText {
     /* UTF-8. Line breaks are '\n'; glyphs with no known character appear as

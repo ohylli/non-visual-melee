@@ -109,6 +109,7 @@ void lookup_tells_silent_from_unknown() {
     assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_TOY_GALLERY)) == kGallery);
     assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_TRAINING)) == "");
     assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_RESULTS)) == "");
+    assert(a11y::scene_announcement(kind(a11y::SceneKind::GS_PRIZE_INTERFACE)) == "");
     assert(!a11y::scene_announcement(-1).has_value());
     assert(!a11y::scene_announcement(kind(a11y::SceneKind::GS_ONLINE_LOBBY) + 1).has_value());
 }

@@ -29,6 +29,7 @@
 #include <sysdolphin/baselib/sislib.h>
 #include <sysdolphin/baselib/synth.h>
 #include "pc/music_stream.h"
+#include "pc/a11y/a11y_hooks.h"
 
 /// .data
 /* 3F9A00 */ static int un_803F9A00[] = {
@@ -327,6 +328,7 @@ void un_802FE918(int a, int b, int c)
     text = &un_803F9D48.x24;
     HSD_SisLib_803A7664(*text);
     HSD_SisLib_803A6B98(*text, 320.0f, 316.0f, sp1C);
+    pc_a11y_unlock_notice(a == 0x3E ? 0x4A : un_803F9D48.x6);
 }
 
 void ifPrize_Scene_OnEnter(void* arg0_)

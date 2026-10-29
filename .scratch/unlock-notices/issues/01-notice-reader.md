@@ -1,6 +1,6 @@
 # 01 The unlock notice reader
 
-Status: ready-for-agent
+Status: resolved (2026-10-29)
 Type: task
 
 Spec: `.scratch/unlock-notices/spec.md`. Read it first, then `docs/a11y/native-menus.md` (game text) and `src/pc/a11y/results_speech.cpp` (the nearest reader of game text by number).
@@ -22,3 +22,17 @@ Spec: `.scratch/unlock-notices/spec.md`. Read it first, then `docs/a11y/native-m
 - `docs/a11y/native-menus.md` has the notice half of "Unlock notices and challengers in detail" (spec, "Docs").
 
 ## Comments
+
+### 2026-10-29, implementation (agent)
+
+Implemented as the spec has it: `unlock_speech.hpp/.cpp` (the reader), the hook `pc_a11y_unlock_notice(text_id)` at the end of `un_802FE918` gated by `game_hook_may_speak()`, `a11y_game_prize_string` in `game_access.c` (font slot 2, symbol `SIS_PrizeData`), the scene hook starting each visit, and `GS_PRIZE_INTERFACE` silent in `scene_speech.cpp`.
+
+- **The trophy text is there.** A driven run read string 0x4A at the hook as the whole message: "You got the Kirby Hat 4 trophy!", "…Kirby Hat 5…", "…Marin…". The hook passes 0x4A for unlock number 0x3E and the frame's bound string (`un_803F9D48.x6`) otherwise; the composition (`HSD_SisLib_803A6530`, `803A660C`) indexes the table directly, and `pc_region_sis_index` leaves `SIS_PrizeData` alone, so the two agree.
+- **Font glyphs, kept to this table.** `GameTextSource` gained `font_glyphs`, the characters of a screen's own font from 0x4000, a null entry leaving one unknown; only the unlock reader hands one over (`prize_font_glyphs()` in `game_text.cpp`), so every other table decodes as before. A dump of the table (`MELEE_A11Y_TEXT_DUMP=1`, which the hook now does for font slot 2) found three: 0x4000 é four times (Poké Floats' notice, Poké Ball, Pokémon Stadium), 0x4002 once, in the trophy name "Ray Mk {glyph 4002}", the numeral II as in SdMenu, and 0x4001 filling twelve three-glyph strings. Beyond the spec, 0x4002 is mapped to "II", so a Ray Mk II trophy notice is not said "Ray Mk"; 0x4001 stays unknown.
+- **A notice with no words** (no string at that number, or a wrong table) says the fork's "Unlock notice." in its place, with the key on a visit's first, logged once, so a press never meets silence. A text the decoder stops in is said up to where it stopped, logged once.
+- **Every notice interrupts**, the first too: it follows the title screen's or results' last line, never the proof-of-life announcement.
+- **Tests.** `unlock_speech` (new): each notice interrupting, the disc's double space, the key on the first of a visit only and again on the next visit, a trophy notice, the prize font's é in a decoded NTSC-U string, a missing and an undecodable text. `game_text`: 0x4000 and 0x4002 on the prize table, 0x4000 still unknown without it, 0x4001 and past the table unknown. `scene_speech`: the scene silent.
+- **Drive script.** `unlock_notices.drive`, in the menus level: the eight texts in order, the key on the first; `run_level.py` counts one "A for next." line and fails on the old placeholder. `main_menu.drive`'s comment says the notices are now said.
+- **Docs.** `docs/a11y/native-menus.md`: "Unlock notices and challengers in detail" with the notice half (the scene, the queue, the text and its glyphs, where the fork reads it), the screen inventory pointing to it, `SdPrize` in the game text archive list and the text dump. Issue 03 adds the New challenger screen's subsections there and extends its opening paragraph. The `verify` skill has the script, the `unlock_speech` suite and the challenger fight's notice as out of reach.
+- **Verification.** Menus level: build with the "Rollback sections" line, style, unit tests (all but `launcher_data`, known), and `run_level.py menus`, 32 of 32.
+- **Left open.** Only the US disc is checked. The results table's "Pokémon KO" bonus (SdRst 285) and SdMenu's Pokémon and Mushroom Kingdom II use the same codes and are still said without the é or the II ("Pokmon KO"); the decoder can now take their glyphs too, a choice for the maintainer. A notice after a challenger fight won is left to the play test (issue 04).

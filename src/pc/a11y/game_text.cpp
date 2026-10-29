@@ -84,7 +84,15 @@ void append_break(DecodedText& out) {
     }
 }
 
+/* Read from context in a dump of the table: "Pokémon" and the trophy "Ray
+ * Mk II"; 0x4001 fills twelve three-glyph strings of unknown use. */
+constexpr std::array<const char*, 3> k_prize_font = {"é", nullptr, "II"};
+
 }  // namespace
+
+std::span<const char* const> prize_font_glyphs() {
+    return k_prize_font;
+}
 
 /* Mirrors the command walk of the game's renderer, HSD_SisLib_803A84BC in
  * hsd_3A76.c: only commands that change which characters come next matter
@@ -192,8 +200,13 @@ DecodedText decode_game_text(const std::uint8_t* bytes, const GameTextSource& so
         unsigned code = (unsigned{p[0]} << 8) | p[1];
         if (code >= 0x2000 && code - 0x2000 < k_atlas.size()) {
             append_text(out, k_atlas[code - 0x2000]);
+        } else if (code >= 0x4000 && code - 0x4000 < source.font_glyphs.size() &&
+                   source.font_glyphs[code - 0x4000] != nullptr)
+        {
+            append_text(out, source.font_glyphs[code - 0x4000]);
         } else {
-            /* 0x4000 and up: a glyph from the screen's own font file. */
+            /* 0x4000 and up: a glyph from the screen's own font file, unknown
+             * unless the source names it. */
             append_unknown(out, code, 4);
         }
         p += 2;

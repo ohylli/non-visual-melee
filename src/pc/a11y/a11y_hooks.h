@@ -83,6 +83,12 @@ void pc_a11y_memcard_prompt(int kind, int text_id);
  * hovered, 0 the left one, 1 the right one. */
 void pc_a11y_memcard_frame(int hovered_choice);
 
+/* The unlock notice scene has set up a notice (the end of un_802FE918 in
+ * src/melee/if/ifprize.c), its first or the next after A or Start: text_id
+ * is the string bound to its message in the prize table (SdPrize), 0x4A
+ * for a trophy, whose text has just been composed there. */
+void pc_a11y_unlock_notice(int text_id);
+
 /* Once a frame of the main menu tree's scene (mnMain_Scene_OnFrame in
  * src/melee/mn/mnmain.c). Menu speech compares the tree's state with the last
  * frame here (docs/adr/0003-main-menu-tree-is-polled.md). */

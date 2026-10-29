@@ -23,7 +23,6 @@ constexpr SceneWords kScenes[] = {
     {SceneKind::GS_TOU_ALT, "Tournament bracket. No speech yet."},
     /* All but LAN play, whose lobby speaks its own opening. */
     {SceneKind::GS_ONLINE_LOBBY, "Online lobby. No speech yet."},
-    {SceneKind::GS_PRIZE_INTERFACE, "Unlock notice. No speech yet."},
     {SceneKind::GS_GAMEOVER, "Continue screen. No speech yet."},
     /* A notice shown before a Camera Mode match, not the match itself. */
     {SceneKind::GS_CAMERA_VS, "Camera Mode notice. No speech yet."},
@@ -65,6 +64,8 @@ constexpr SceneWords kScenes[] = {
     /* Passes unseen when the save loads, and its kind cannot tell; its
      * first prompt is its opening (memcard_speech.cpp). */
     {SceneKind::GS_MEMCARD, ""},
+    /* Its first notice is its opening (unlock_speech.cpp). */
+    {SceneKind::GS_PRIZE_INTERFACE, ""},
     {SceneKind::GS_PROG_SCAN, ""},
     {SceneKind::GS_DEBUG_MENU, ""},
     {SceneKind::GS_COMING_SOON, ""},

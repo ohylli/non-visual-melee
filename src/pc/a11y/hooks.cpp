@@ -26,6 +26,7 @@
 #include "sss_reader.hpp"
 #include "switches.hpp"
 #include "training_speech.hpp"
+#include "unlock_speech.hpp"
 #include "voice_settings.hpp"
 #include "voices.hpp"
 #include <SDL3/SDL.h>
@@ -54,6 +55,7 @@ std::unique_ptr<a11y::DirectSpeech> s_direct;
 std::unique_ptr<a11y::TrainingSpeech> s_training;
 std::unique_ptr<a11y::ResultsSpeech> s_results;
 std::unique_ptr<a11y::MemcardSpeech> s_memcard;
+std::unique_ptr<a11y::UnlockSpeech> s_unlock;
 /* The accessibility settings and their file, a11y.ini. */
 std::unique_ptr<a11y::AccessibilitySettings> s_settings;
 /* Accessibility, Speech and Steering, and the hierarchy over Cues. */
@@ -268,6 +270,7 @@ extern "C" void pc_a11y_init(void) {
     s_results = std::make_unique<a11y::ResultsSpeech>(*s_speech, game_text);
     s_memcard =
         std::make_unique<a11y::MemcardSpeech>(*s_speech, game_text, a11y_game_memcard_string);
+    s_unlock = std::make_unique<a11y::UnlockSpeech>(*s_speech, game_text, a11y_game_prize_string);
     s_match_announcer = std::make_unique<a11y::MatchAnnouncer>(*s_speech);
     s_settings = std::make_unique<a11y::AccessibilitySettings>(
         *s_speech, settings_file_path(config), config.log);
@@ -341,6 +344,7 @@ extern "C" void pc_a11y_shutdown(void) {
     s_match_announcer.reset();
     s_results.reset();
     s_memcard.reset();
+    s_unlock.reset();
     s_training.reset();
     s_lobby.reset();
     s_direct.reset();
@@ -443,6 +447,11 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
         /* Silent on entry: the scene's first prompt is its opening. */
         s_memcard->visit_started();
     }
+    if (s_unlock != nullptr && scene_kind == static_cast<int>(a11y::SceneKind::GS_PRIZE_INTERFACE))
+    {
+        /* Silent on entry: the scene's first notice is its opening. */
+        s_unlock->visit_started();
+    }
     announce_scene(previous_scene, css_exit, scene_kind);
     if (s_voice_settings != nullptr && game_hook_may_speak()) {
         /* Queued behind the first scene's announcement, which interrupts:
@@ -475,6 +484,14 @@ extern "C" void pc_a11y_memcard_frame(int hovered_choice) {
         return;
     }
     s_memcard->frame(hovered_choice);
+}
+
+extern "C" void pc_a11y_unlock_notice(int text_id) {
+    a11y::menu_text_dump_once(A11Y_PRIZE_FONT);
+    if (!game_hook_may_speak()) {
+        return;
+    }
+    s_unlock->notice(text_id);
 }
 
 extern "C" void pc_a11y_master_volume(float volume) {
