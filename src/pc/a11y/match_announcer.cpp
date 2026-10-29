@@ -2,6 +2,7 @@
 #include "match_announcer.hpp"
 #include "game_text.hpp"
 #include "pc/pc.h"
+#include "sentences.hpp"
 #include "speech.hpp"
 #include <algorithm>
 
@@ -258,8 +259,9 @@ std::string MatchAnnouncer::line(const Player& player, int figure) const {
 }
 
 std::string MatchAnnouncer::stock_line(const Player& player, int stocks) const {
-    std::string count = stocks == 1 ? "last stock" : std::to_string(stocks) + " stocks";
-    return player.label.empty() ? count : player.label + ", " + count;
+    std::string line = player.label;
+    add_part(line, stocks == 1 ? "last stock" : std::to_string(stocks) + " stocks");
+    return line;
 }
 
 }  // namespace a11y
