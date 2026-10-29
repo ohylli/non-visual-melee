@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "training_speech.hpp"
-#include "pc/pc.h"
-#include "speech.hpp"
 #include "training_names.hpp"
 
 namespace a11y {
@@ -92,8 +90,8 @@ void TrainingSpeech::opening(const A11yTrainingMenu& menu, Clock::time_point now
 std::optional<std::string> TrainingSpeech::row_text(int row, int value) {
     const TrainingRow* named = training_row(row);
     if (named == nullptr) {
-        log_once("[a11y] training menu row " + std::to_string(row) +
-                 ": not in the training menu names table");
+        m_log_once("[a11y] training menu row " + std::to_string(row) +
+                   ": not in the training menu names table");
         return std::nullopt;
     }
     std::string text(named->name);
@@ -111,15 +109,9 @@ std::string TrainingSpeech::value_text(int row, int value) {
             return *words;
         }
     }
-    log_once("[a11y] training menu row " + std::to_string(row) + ": value " +
-             std::to_string(value) + " not in the training menu names table");
+    m_log_once("[a11y] training menu row " + std::to_string(row) + ": value " +
+               std::to_string(value) + " not in the training menu names table");
     return std::to_string(value);
-}
-
-void TrainingSpeech::log_once(const std::string& line) {
-    if (m_logged.insert(line).second && log_enabled()) {
-        pc_log_line("%s", line.c_str());
-    }
 }
 
 }  // namespace a11y

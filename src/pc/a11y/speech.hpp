@@ -3,6 +3,7 @@
 #include "screen_reader_bridge.hpp"
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -86,6 +87,16 @@ Config config_from_environment();
 /* The speech log switch, read once, for features that log lines of their own
  * ("not in the menu names table"). */
 bool log_enabled();
+
+/* A feature's own log lines, each written the first time it comes: a gap in
+ * the words met every frame is logged once. Under the speech log switch. */
+class LogOnce {
+public:
+    void operator()(const std::string& line);
+
+private:
+    std::set<std::string> m_logged;
+};
 
 struct Announcement {
     std::string text;

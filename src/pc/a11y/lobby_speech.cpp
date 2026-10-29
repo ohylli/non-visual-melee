@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "lobby_speech.hpp"
 #include "scene_speech.hpp"
+#include "sentences.hpp"
 #include "speech.hpp"
 #include <algorithm>
 #include <string_view>
@@ -50,16 +51,6 @@ std::string status_sentence(const LobbyStatus& status) {
         return "Failed: " + status.reason + "." + (status.retry ? " Start to retry." : "");
     }
     return "";
-}
-
-void add(std::string& text, std::string_view sentence) {
-    if (sentence.empty()) {
-        return;
-    }
-    if (!text.empty()) {
-        text += ' ';
-    }
-    text += sentence;
 }
 
 std::string found_sentence(std::string_view name, bool other_version) {
@@ -162,43 +153,43 @@ void LobbySpeech::opening(const std::vector<Row>& rows, const LobbyStatus& statu
     std::string text;
     switch (m_arrival) {
     case LobbyArrival::from_menu:
-        add(text, kLanPlay);
+        add_sentence(text, kLanPlay);
         break;
     case LobbyArrival::backed_out:
-        add(text, kBackToLanPlay);
+        add_sentence(text, kBackToLanPlay);
         break;
     case LobbyArrival::connection_lost:
-        add(text, kConnectionLost);
-        add(text, kLanPlay);
+        add_sentence(text, kConnectionLost);
+        add_sentence(text, kLanPlay);
         break;
     }
     for (const Row& row : rows) {
-        add(text, found_sentence(row.name, row.other_version));
+        add_sentence(text, found_sentence(row.name, row.other_version));
     }
     if (status.kind == LobbyStatus::Kind::found && any_playable(rows)) {
-        add(text, kPressStart);
+        add_sentence(text, kPressStart);
     }
-    add(text, status_sentence(status));
-    add(text, kWayBack);
+    add_sentence(text, status_sentence(status));
+    add_sentence(text, kWayBack);
     m_speech.announce(text, Mode::interrupt);
 }
 
 void LobbySpeech::changes(const std::vector<Row>& rows, const LobbyStatus& status) {
     std::string text;
     for (const Row& row : missing_from(m_rows, rows)) {
-        add(text, row.name + " left.");
+        add_sentence(text, row.name + " left.");
     }
     for (const Row& row : missing_from(rows, m_rows)) {
-        add(text, found_sentence(row.name, row.other_version));
+        add_sentence(text, found_sentence(row.name, row.other_version));
     }
     if (status.kind == LobbyStatus::Kind::found && any_playable(rows) && !any_playable(m_rows)) {
-        add(text, kPressStart);
+        add_sentence(text, kPressStart);
     }
     /* A failure's retry hint comes and goes with the machines listed, which
      * are said by themselves. */
     bool changed = status.kind != m_status.kind || status.reason != m_status.reason;
     if (changed) {
-        add(text, status_sentence(status));
+        add_sentence(text, status_sentence(status));
     }
     if (!text.empty()) {
         m_speech.announce(text, Mode::queue);

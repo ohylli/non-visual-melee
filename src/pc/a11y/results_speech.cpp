@@ -1,9 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "results_speech.hpp"
 #include "css_names.hpp"
-#include "pc/pc.h"
 #include "results_names.hpp"
-#include "speech.hpp"
+#include "sentences.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <string_view>
@@ -15,32 +14,6 @@ namespace {
 bool has_port(const A11yResults& results, int port) {
     return port >= 0 && port < A11Y_RESULTS_PORTS &&
            results.players[port].slot != A11Y_RESULTS_EMPTY;
-}
-
-/* Parts of one announcement as sentences: "Stock Battle. Winner: DK." A
- * part that ends a sentence itself keeps its own mark. */
-void add_sentence(std::string& out, std::string_view part) {
-    if (part.empty()) {
-        return;
-    }
-    if (!out.empty()) {
-        char last = out.back();
-        if (last != '.' && last != '!' && last != '?') {
-            out += '.';
-        }
-        out += ' ';
-    }
-    out += part;
-}
-
-void add_part(std::string& out, std::string_view part) {
-    if (part.empty()) {
-        return;
-    }
-    if (!out.empty()) {
-        out += ", ";
-    }
-    out += part;
 }
 
 std::string character_word(const A11yResults& results, int port) {
@@ -72,13 +45,6 @@ std::string last_row(const A11yResults& results, const A11yResultsPlayer& player
         return results.cancelled ? "" : count_of(player.score, "point", "points");
     }
     return "";
-}
-
-/* Ends the text with a full stop unless it ends a sentence already. */
-void end_sentence(std::string& out) {
-    if (!out.empty() && out.back() != '.' && out.back() != '!' && out.back() != '?') {
-        out += '.';
-    }
 }
 
 /* The port whose panel the reader follows: controller 1's (yours, or a CPU
@@ -179,8 +145,8 @@ void ResultsSpeech::opening(const A11yResults& results) {
         if (team) {
             add_sentence(text, std::string(kWinner) + std::string(*team));
         } else {
-            log_once("[a11y] results: winning team " + std::to_string(results.winning_team) +
-                     " not in the results names table");
+            m_log_once("[a11y] results: winning team " + std::to_string(results.winning_team) +
+                       " not in the results names table");
         }
     } else if (has_port(results, results.winner)) {
         std::string name = character_word(results, results.winner);
@@ -191,8 +157,8 @@ void ResultsSpeech::opening(const A11yResults& results) {
     for (int port : results_order(results)) {
         const A11yResultsPlayer& player = results.players[port];
         if (player.character == A11Y_NO_CHARACTER) {
-            log_once("[a11y] results: port " + std::to_string(port) +
-                     ": character not in the character names table");
+            m_log_once("[a11y] results: port " + std::to_string(port) +
+                       ": character not in the character names table");
         }
         std::string line = results.cancelled ? "" : place_word(player.place) + " ";
         line += results_player_name(results, port);
@@ -215,7 +181,7 @@ void ResultsSpeech::opening(const A11yResults& results) {
 
 std::string ResultsSpeech::match_type(const A11yResults& results) {
     if (results.match_type_text == nullptr) {
-        log_once(
+        m_log_once(
             "[a11y] results: match type " + std::to_string(results.match_kind) + ": no game text");
         return "";
     }
@@ -296,7 +262,7 @@ std::string ResultsSpeech::page_announcement(const A11yResults& results) {
     if (std::optional<std::string_view> name = results_page_name(m_page)) {
         text = std::string(*name);
     } else {
-        log_once("[a11y] results: page " + std::to_string(m_page) + " has no name");
+        m_log_once("[a11y] results: page " + std::to_string(m_page) + " has no name");
     }
     std::vector<ResultsRow> list = rows(results, m_port, m_page);
     add_sentence(text, list.empty() ? std::string(kNoBonuses) : list.front().text());
@@ -415,10 +381,8 @@ std::string ResultsSpeech::opponent_name(
     std::string name;
     if (opponent.tag[0] != '\0') {
         DecodedText tag = decode_shift_jis(opponent.tag);
-        if (tag.unknown_glyphs > 0 || tag.malformed) {
-            log_once("[a11y] results: name tag \"" + tag.text + "\"" +
-                     (tag.unknown_glyphs > 0 ? ", unknown characters left out" : "") +
-                     (tag.malformed ? ", malformed" : ""));
+        if (std::string trouble = decode_trouble(tag); !trouble.empty()) {
+            m_log_once("[a11y] results: name tag " + trouble);
         }
         name = spoken_text(tag.text);
     }
@@ -444,7 +408,7 @@ std::vector<ResultsRow> ResultsSpeech::rows(const A11yResults& results, int port
     auto label = [this](const std::uint8_t* text, std::string_view fallback) {
         std::string words = game_words(text, std::string(fallback));
         if (words.empty()) {
-            log_once("[a11y] results: no game text for \"" + std::string(fallback) + "\"");
+            m_log_once("[a11y] results: no game text for \"" + std::string(fallback) + "\"");
             return std::string(fallback);
         }
         return words;
@@ -483,7 +447,7 @@ std::vector<ResultsRow> ResultsSpeech::rows(const A11yResults& results, int port
                 }
             }
             if (name.empty()) {
-                log_once("[a11y] results: stat " + std::to_string(i + 1) + " has no label");
+                m_log_once("[a11y] results: stat " + std::to_string(i + 1) + " has no label");
                 name = "Stat " + std::to_string(i + 1);
             }
             int value = player.stats[i];
@@ -509,18 +473,10 @@ std::string ResultsSpeech::game_words(const std::uint8_t* text, const std::strin
         return "";
     }
     DecodedText decoded = decode_game_text(text, m_text);
-    if (decoded.unknown_glyphs > 0 || decoded.malformed) {
-        log_once("[a11y] results: " + what + " \"" + one_line(decoded.text) + "\"" +
-                 (decoded.unknown_glyphs > 0 ? ", unknown glyphs left out" : "") +
-                 (decoded.malformed ? ", malformed" : ""));
+    if (std::string trouble = decode_trouble(decoded); !trouble.empty()) {
+        m_log_once("[a11y] results: " + what + " " + trouble);
     }
     return spoken_text(decoded.text);
-}
-
-void ResultsSpeech::log_once(const std::string& line) {
-    if (m_logged.insert(line).second && log_enabled()) {
-        pc_log_line("%s", line.c_str());
-    }
 }
 
 }  // namespace a11y

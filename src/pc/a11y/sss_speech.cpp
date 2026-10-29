@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "sss_speech.hpp"
 #include "pc/pc.h"
+#include "sentences.hpp"
 #include "speech.hpp"
 #include "sss_names.hpp"
 #include <optional>
@@ -8,17 +9,6 @@
 
 namespace a11y {
 namespace {
-
-/* Appends one part of an announcement as its own sentence. */
-void add(std::string& out, std::string_view part) {
-    if (part.empty()) {
-        return;
-    }
-    if (!out.empty()) {
-        out += out.back() == '.' ? " " : ". ";
-    }
-    out += part;
-}
 
 bool is_tile(int tile) {
     return tile >= 0 && tile < A11Y_SSS_TILES;
@@ -58,23 +48,23 @@ void SssSpeech::frame(const A11ySssState& state, const GlideState<int>& glide) {
     if (!state.online && picked && rolls(last.hovered) && is_tile(state.hovered)) {
         /* Offline the roll lands in the hovered index at once; online it
          * waits for the other player's pick. */
-        add(out, std::string(kRandom) + ": " + tile_words(state, state.hovered) + ".");
+        add_sentence(out, std::string(kRandom) + ": " + tile_words(state, state.hovered) + ".");
     } else if (picked && last.hovered != m_named) {
         /* A during a glide picks the tile crossed, not the one the step
          * named; online that may be Random, or Start before the first glide
          * reached a tile. */
         int tile = rolls(last.hovered) ? A11Y_SSS_RANDOM_TILE : last.hovered;
-        add(out, std::string(kPicked) + " " + tile_words(state, tile) + ".");
+        add_sentence(out, std::string(kPicked) + " " + tile_words(state, tile) + ".");
     }
     if (state.online && picked) {
         /* The other player's pick stays unsaid until the coin flip. */
-        add(out, kWaitingForOpponent);
+        add_sentence(out, kWaitingForOpponent);
     }
     bool pressed = state.pressed_a || state.pressed_start;
     if (!state.online && pressed && state.pick == A11Y_SSS_CHOOSING &&
         last.hovered < A11Y_SSS_RANDOM_TILE && state.tiles[last.hovered].state == A11Y_SSS_LOCKED)
     {
-        add(out, kLocked);
+        add_sentence(out, kLocked);
     }
     /* Once a pick is made the stage cursor is hidden, and the hovered index
      * holds what was picked. During a glide, and on the frame it has ended,
@@ -83,16 +73,17 @@ void SssSpeech::frame(const A11ySssState& state, const GlideState<int>& glide) {
     bool glide_ended = glide.phase == GlidePhase::ended || glide.phase == GlidePhase::failed;
     if (state.pick == A11Y_SSS_CHOOSING && glide_ended) {
         if (glide.phase == GlidePhase::failed) {
-            add(out, std::string(kCouldNotReach) + " " + tile_words(state, glide.destination));
+            add_sentence(
+                out, std::string(kCouldNotReach) + " " + tile_words(state, glide.destination));
         }
         if (state.hovered != glide.destination && is_tile(state.hovered)) {
-            add(out, hover_words(state, state.hovered));
+            add_sentence(out, hover_words(state, state.hovered));
             m_named = state.hovered;
         }
     } else if (state.pick == A11Y_SSS_CHOOSING && !gliding && state.hovered != last.hovered &&
                is_tile(state.hovered))
     {
-        add(out, hover_words(state, state.hovered));
+        add_sentence(out, hover_words(state, state.hovered));
         m_named = state.hovered;
     }
     if (!out.empty()) {

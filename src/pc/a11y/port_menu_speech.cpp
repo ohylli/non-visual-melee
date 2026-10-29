@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "port_menu_speech.hpp"
 #include "rmlui_reader.hpp"
+#include "sentences.hpp"
 #include "speech.hpp"
 #include <RmlUi/Core/Element.h>
 #include <RmlUi/Core/ElementDocument.h>
@@ -112,7 +113,7 @@ private:
         m_opening = false;
         std::string text = kHeading;
         if (focus != nullptr) {
-            append_sentence(text, remember_focus(*focus, true));
+            add_sentence(text, remember_focus(*focus, true));
         }
         say(text, Mode::interrupt);
     }

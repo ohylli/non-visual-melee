@@ -67,6 +67,12 @@ bool log_enabled() {
     return enabled;
 }
 
+void LogOnce::operator()(const std::string& line) {
+    if (m_logged.insert(line).second && log_enabled()) {
+        pc_log_line("%s", line.c_str());
+    }
+}
+
 Speech::Speech(Config config, std::unique_ptr<ScreenReaderBridge> bridge)
     : m_config(config), m_bridge(std::move(bridge)), m_on(config.speech) {}
 

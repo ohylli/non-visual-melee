@@ -43,6 +43,11 @@ DecodedText decode_shift_jis(const char* text);
  * glyphs left marked. */
 std::string one_line(std::string text);
 
+/* What went wrong in decoding, for a log line: the text as one_line shows it
+ * and what became of it ("\"Pok{glyph 4000}mon\", unknown glyphs left out");
+ * empty when it decoded cleanly. */
+std::string decode_trouble(const DecodedText& decoded);
+
 /* Decoded text as one spoken line: the lines of wrapped text joined by a
  * space, the marks of unknown glyphs ("{glyph 4000}", "{sjis 889F}") left
  * out. */

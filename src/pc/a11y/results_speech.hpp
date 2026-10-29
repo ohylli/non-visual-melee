@@ -27,7 +27,6 @@
 #include "game_text.hpp"
 #include "speech.hpp"
 #include <cstdint>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -98,7 +97,6 @@ private:
     std::string game_words(const std::uint8_t* text, const std::string& what);
     /* The match type's title in the game's words, or empty. */
     std::string match_type(const A11yResults& results);
-    void log_once(const std::string& line);
 
     Speech& m_speech;
     GameTextSource m_text;
@@ -116,7 +114,7 @@ private:
     int m_row = 0;
     /* Each panel's ready flag as last seen, from the panels' opening on. */
     bool m_ready[A11Y_RESULTS_PORTS] = {};
-    std::set<std::string> m_logged;
+    LogOnce m_log_once;
 };
 
 }  // namespace a11y

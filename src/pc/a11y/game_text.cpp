@@ -372,6 +372,15 @@ std::string one_line(std::string text) {
     return text;
 }
 
+std::string decode_trouble(const DecodedText& decoded) {
+    if (decoded.unknown_glyphs == 0 && !decoded.malformed) {
+        return "";
+    }
+    return "\"" + one_line(decoded.text) + "\"" +
+           (decoded.unknown_glyphs > 0 ? ", unknown glyphs left out" : "") +
+           (decoded.malformed ? ", malformed" : "");
+}
+
 std::string spoken_text(std::string_view text) {
     constexpr std::string_view kGlyphMark = "{glyph ";
     constexpr std::string_view kShiftJisMark = "{sjis ";

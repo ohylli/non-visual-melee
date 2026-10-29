@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "direct_speech.hpp"
+#include "sentences.hpp"
 #include "speech.hpp"
 #include <algorithm>
 #include <string_view>
@@ -18,14 +19,7 @@ constexpr std::string_view kBackHint = "B: back";
 std::string joined(std::initializer_list<std::string_view> parts) {
     std::string out;
     for (std::string_view part : parts) {
-        if (part.empty()) {
-            continue;
-        }
-        if (!out.empty()) {
-            char last = out.back();
-            out += last == '.' || last == '!' || last == '?' ? " " : ". ";
-        }
-        out += part;
+        add_sentence(out, part);
     }
     return out;
 }

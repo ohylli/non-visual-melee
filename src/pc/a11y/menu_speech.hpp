@@ -18,6 +18,7 @@
 #pragma once
 #include "game_access.h"
 #include "game_text.hpp"
+#include "speech.hpp"
 #include <cstdint>
 #include <optional>
 #include <set>
@@ -25,8 +26,6 @@
 #include <string_view>
 
 namespace a11y {
-
-class Speech;
 
 class MenuSpeech {
 public:
@@ -62,8 +61,6 @@ private:
      * from game text; where names it in log lines. */
     std::string description(
         const char* plain, const std::uint8_t* game_text, const std::string& where);
-    /* A log line for a gap in the words, once per text. */
-    void log_once(const std::string& line);
 
     Speech& m_speech;
     GameTextSource m_text;
@@ -75,7 +72,7 @@ private:
     std::optional<std::string> m_value;
     /* The rows' own hints said since the screen opened. */
     std::set<std::string_view> m_row_hints;
-    std::set<std::string> m_logged;
+    LogOnce m_log_once;
 };
 
 }  // namespace a11y

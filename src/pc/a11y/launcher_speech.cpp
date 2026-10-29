@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "launcher_speech.hpp"
 #include "rmlui_reader.hpp"
+#include "sentences.hpp"
 #include "speech.hpp"
 #include <RmlUi/Core/Element.h>
 #include <RmlUi/Core/ElementDocument.h>
@@ -87,7 +88,7 @@ private:
         if (const std::string info = text_of("disc-info"); !info.empty()) {
             disc += ", " + info;
         }
-        append_sentence(text, "Disc: " + disc);
+        add_sentence(text, "Disc: " + disc);
     }
 
     /* "Melee launcher. <status>. <focus announcement>", held until the status
@@ -103,9 +104,9 @@ private:
         m_opened = true;
         m_status.pending = false;
         std::string text = "Melee launcher";
-        append_sentence(text, m_status.seen);
+        add_sentence(text, m_status.seen);
         if (focus != nullptr) {
-            append_sentence(text, remember_focus(*focus));
+            add_sentence(text, remember_focus(*focus));
         }
         say(text, Mode::queue);
     }

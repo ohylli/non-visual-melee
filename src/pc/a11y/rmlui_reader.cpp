@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "rmlui_reader.hpp"
+#include "sentences.hpp"
 #include "speech.hpp"
 #include <RmlUi/Core/Context.h>
 #include <RmlUi/Core/Element.h>
@@ -112,9 +113,7 @@ std::string row_detail(const Rml::Element& row) {
     std::string text;
     for (const Rml::Element* detail : found) {
         const std::string part = detail->GetId().empty() ? "" : element_text(*detail);
-        if (!part.empty()) {
-            text += text.empty() ? part : ", " + part;
-        }
+        add_part(text, part);
     }
     return text;
 }
@@ -226,16 +225,11 @@ bool adds_to(std::string_view help, const Control& control) {
 /* The line of a row that has no control: its name and what it shows. */
 std::string row_line(const Rml::Element& row) {
     std::string line = row_name(row);
-    const auto add = [&line](const std::string& part) {
-        if (!part.empty()) {
-            line += line.empty() ? part : ", " + part;
-        }
-    };
-    add(row_detail(row));
+    add_part(line, row_detail(row));
     for (int i = 0; i < row.GetNumChildren(); ++i) {
         const Rml::Element* child = row.GetChild(i);
         if (child->IsVisible() && !child->IsClassSet("name")) {
-            add(element_text(*child));
+            add_part(line, element_text(*child));
         }
     }
     return line;
@@ -314,15 +308,6 @@ std::string field_value(const Control& control) {
 
 std::string focus_announcement(const Control& control, bool explain) {
     std::string text = control.name;
-    const auto add = [&text](std::string_view part) {
-        if (part.empty()) {
-            return;
-        }
-        if (!text.empty()) {
-            text += ", ";
-        }
-        text += part;
-    };
     std::string_view keys;  /* after a comma: "Vertical sync, On, Left and right to change" */
     std::string_view moves; /* a sentence of its own: "Left and right to adjust" */
     switch (control.role) {
@@ -331,24 +316,24 @@ std::string focus_announcement(const Control& control, bool explain) {
         if (control.value != control.name && !control.value.empty()) {
             text += ": " + control.value;
         }
-        add("button");
+        add_part(text, "button");
         break;
     case Role::setting:
-        add(control.value);
+        add_part(text, control.value);
         keys = "Left and right to change";
         break;
     case Role::binding:
-        add(control.value);
+        add_part(text, control.value);
         keys = "Enter to change";
         break;
     case Role::slider:
-        add("slider");
-        add(control.value);
+        add_part(text, "slider");
+        add_part(text, control.value);
         moves = "Left and right to adjust";
         break;
     case Role::edit:
-        add("edit");
-        add(field_value(control));
+        add_part(text, "edit");
+        add_part(text, field_value(control));
         break;
     case Role::category:
         if (explain) {
@@ -357,18 +342,18 @@ std::string focus_announcement(const Control& control, bool explain) {
         break;
     case Role::other:
         if (control.value != control.name) {
-            add(control.value);
+            add_part(text, control.value);
         }
         break;
     }
     if (control.disabled) {
-        add("unavailable");
+        add_part(text, "unavailable");
     } else {
-        add(keys);
-        append_sentence(text, moves);
+        add_part(text, keys);
+        add_sentence(text, moves);
     }
-    append_sentence(text, control.detail);
-    append_sentence(text, control.help);
+    add_sentence(text, control.detail);
+    add_sentence(text, control.help);
     return text;
 }
 
@@ -562,17 +547,6 @@ std::string clean_text(std::string_view text) {
     return out;
 }
 
-void append_sentence(std::string& announcement, std::string_view sentence) {
-    if (sentence.empty()) {
-        return;
-    }
-    if (!announcement.empty()) {
-        const char last = announcement.back();
-        announcement += (last == '.' || last == '!' || last == '?') ? " " : ". ";
-    }
-    announcement += sentence;
-}
-
 namespace {
 
 /* The percentage in a text such as "Verifying disc / 37%", and the text with
@@ -694,8 +668,8 @@ void PageReader::follow_focus(Rml::Element* focus, std::string_view prefix, bool
     if (focus != m_focus.get()) {
         stop_reading_lines();
         std::string text(prefix);
-        append_sentence(text, left_field_text());
-        append_sentence(text, remember_focus(*focus, explain));
+        add_sentence(text, left_field_text());
+        add_sentence(text, remember_focus(*focus, explain));
         say(text, Mode::interrupt);
         return;
     }

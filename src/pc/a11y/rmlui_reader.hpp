@@ -398,8 +398,4 @@ private:
  * announcement just before it is spoken. */
 std::string clean_text(std::string_view text);
 
-/* Appends a sentence to an announcement, adding ". " unless the text so far
- * already ends a sentence. */
-void append_sentence(std::string& announcement, std::string_view sentence);
-
 }  // namespace a11y

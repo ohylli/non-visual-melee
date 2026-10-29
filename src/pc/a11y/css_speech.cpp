@@ -2,6 +2,7 @@
 #include "css_speech.hpp"
 #include "css_names.hpp"
 #include "pc/pc.h"
+#include "sentences.hpp"
 #include "speech.hpp"
 #include <cctype>
 #include <initializer_list>
@@ -10,23 +11,6 @@
 
 namespace a11y {
 namespace {
-
-/* Whether the words already end a sentence, as the rules header's text does
- * ("2-minute KO fest!"). */
-bool ends_sentence(std::string_view words) {
-    return !words.empty() && (words.back() == '.' || words.back() == '!' || words.back() == '?');
-}
-
-/* Appends one part of an announcement as its own sentence. */
-void add(std::string& out, std::string_view part) {
-    if (part.empty()) {
-        return;
-    }
-    if (!out.empty()) {
-        out += ends_sentence(out) ? " " : ". ";
-    }
-    out += part;
-}
 
 /* The words with their first letter made a capital: "No character". */
 std::string capitalised(std::string_view words) {
@@ -171,7 +155,7 @@ void CssSpeech::frame(const A11yCssState& state, const GlideStatus& glide) {
      * the menu reader speaks for (hooks.cpp). */
     if (state.exit != last.exit && state.exit == A11Y_CSS_TO_NAME_ENTRY) {
         std::string out(kNameEntryScreen);
-        add(out, kNoSpeechYet);
+        add_sentence(out, kNoSpeechYet);
         m_speech.announce(out, Mode::interrupt);
     }
     if (state.exit != A11Y_CSS_STAYING) {
@@ -190,32 +174,33 @@ void CssSpeech::frame(const A11yCssState& state, const GlideStatus& glide) {
 
     std::string mine;
     std::string others;
-    add(mine, coin_announcement(last, state, quiet));
-    add(mine, slider_announcement(last, state, quiet));
+    add_sentence(mine, coin_announcement(last, state, quiet));
+    add_sentence(mine, slider_announcement(last, state, quiet));
     Target was = hovered(last);
     Target is = hovered(state);
-    add(mine, arrow_announcement(last, state, is));
+    add_sentence(mine, arrow_announcement(last, state, is));
     slot_announcements(last, state, was, is, mine, others);
     if (glide_ended) {
         if (glide.phase == GlideStatus::Phase::failed) {
-            add(mine, std::string(kCouldNotReach) + " " + target_words(state, glide.destination));
+            add_sentence(
+                mine, std::string(kCouldNotReach) + " " + target_words(state, glide.destination));
         }
         Target under = under_hand(state);
         if (under != glide.destination && under.kind != TargetKind::none) {
-            add(mine, target_words(state, under));
+            add_sentence(mine, target_words(state, under));
         }
     } else if (!quiet && is != was && is.kind != TargetKind::none) {
-        add(mine, target_words(state, is));
+        add_sentence(mine, target_words(state, is));
     }
     if (state.slots[state.local_slot].name_tags_open &&
         !last.slots[state.local_slot].name_tags_open)
     {
-        add(mine, kNameTagsWindow);
-        add(mine, kNoSpeechYet);
+        add_sentence(mine, kNameTagsWindow);
+        add_sentence(mine, kNoSpeechYet);
     }
     if (state.ready && !last.ready) {
         /* After whoever made it ready. */
-        add(mine.empty() && !others.empty() ? others : mine, kReadyToFight);
+        add_sentence(mine.empty() && !others.empty() ? others : mine, kReadyToFight);
     }
     if (!mine.empty()) {
         /* Behind the step's announcement while the glide runs. */
@@ -238,7 +223,7 @@ void CssSpeech::step(const A11yCssState& state, Target to) {
     if (carrying >= 0 && area(to) == Area::player_slots) {
         /* The coin goes back as the hand leaves the portraits, before it
          * gets there; said now, and not again as it happens. */
-        add(out, drop_words(state, carrying));
+        add_sentence(out, drop_words(state, carrying));
         m_drop_said = true;
     } else if (carrying >= 0 && area(to) == Area::top_bar) {
         add_clause(words, kNotWhileHoldingACoin);
@@ -248,7 +233,7 @@ void CssSpeech::step(const A11yCssState& state, Target to) {
             add_clause(words, coin_words(state, coin));
         }
     }
-    add(out, words);
+    add_sentence(out, words);
     m_speech.announce(out, Mode::interrupt);
 }
 
@@ -381,13 +366,14 @@ std::string CssSpeech::slider_announcement(
         int was = last.slots[before.slider_slot].*held->value;
         int is = now.slots[before.slider_slot].*held->value;
         if (is != was) {
-            add(out, std::string(slider_words(*held).held_word) + " " + std::to_string(is));
+            add_sentence(
+                out, std::string(slider_words(*held).held_word) + " " + std::to_string(is));
         }
     }
     if (after.slider != A11Y_CSS_NO_SLIDER && before.slider == A11Y_CSS_NO_SLIDER) {
-        add(out, kHoldingSlider);
+        add_sentence(out, kHoldingSlider);
     } else if (after.slider == A11Y_CSS_NO_SLIDER && before.slider != A11Y_CSS_NO_SLIDER) {
-        add(out, kReleased);
+        add_sentence(out, kReleased);
     }
     return out;
 }
@@ -413,33 +399,33 @@ void CssSpeech::slot_announcements(const A11yCssState& last, const A11yCssState&
         bool own = i == now.local_slot;
         if (after.kind != before.kind) {
             if (on(TargetKind::slot_button, i)) {
-                add(mine, slot_words(now, i));
+                add_sentence(mine, slot_words(now, i));
             } else if (!own) {
-                add(theirs, slot_words(now, i));
+                add_sentence(theirs, slot_words(now, i));
             }
             continue;
         }
         if (now.teams && last.teams && after.team != before.team) {
             std::string colour = team(after.team);
             if (on(TargetKind::team_button, i)) {
-                add(mine, capitalised(colour) + " " + std::string(kTeam));
+                add_sentence(mine, capitalised(colour) + " " + std::string(kTeam));
             } else {
-                add(theirs, slot_name(now, i) + " " + std::string(kTeam) + ": " + colour);
+                add_sentence(theirs, slot_name(now, i) + " " + std::string(kTeam) + ": " + colour);
             }
         }
         /* The local hand's choices, for itself or a CPU, are left to the
          * game's announcer. */
         A11yCharacter character = chosen(after);
         if (!own && !holds(i) && character != A11Y_NO_CHARACTER && character != chosen(before)) {
-            add(theirs, slot_name(now, i) + ": " + name(character));
+            add_sentence(theirs, slot_name(now, i) + ": " + name(character));
         }
     }
     if (now.teams != last.teams) {
         std::string words = target_words(now, Target{TargetKind::teams});
-        add(on(TargetKind::teams, -1) ? mine : theirs, words);
+        add_sentence(on(TargetKind::teams, -1) ? mine : theirs, words);
     }
     if (now.online) {
-        add(others, theirs);
+        add_sentence(others, theirs);
     }
 }
 

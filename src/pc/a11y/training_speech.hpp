@@ -17,14 +17,12 @@
  * match, does not stretch it. */
 #pragma once
 #include "game_access.h"
+#include "speech.hpp"
 #include <chrono>
 #include <optional>
-#include <set>
 #include <string>
 
 namespace a11y {
-
-class Speech;
 
 using Clock = std::chrono::steady_clock;
 
@@ -53,7 +51,6 @@ private:
     /* A value's words, or its number when the table lacks it. */
     std::string value_text(int row, int value);
     void opening(const A11yTrainingMenu& menu, Clock::time_point now);
-    void log_once(const std::string& line);
 
     Speech& m_speech;
     bool m_hint_due = true;
@@ -70,7 +67,7 @@ private:
     /* Nothing has been said since the opening: a change held back from it
      * is said after the opening instead of cutting it off. */
     bool m_after_opening = false;
-    std::set<std::string> m_logged;
+    LogOnce m_log_once;
 };
 
 }  // namespace a11y

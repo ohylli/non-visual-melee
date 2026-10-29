@@ -38,3 +38,7 @@ The review's fixes are in their own commit ("Results: review fixes"). Left for t
 ### 2026-10-28, another player's press (agent)
 
 The review's first point is fixed as recommended: the snapshot's `pressed_any` says whether the local port pressed anything on the panels' first tick, and the panels' opening interrupts only after your own press; after another player's it is queued behind what is being said. `results_net.drive` now checks both sides: interrupting on a, whose press it was, queued on b. "What to try" asks for it under Online.
+
+### 2026-10-29, shared sentence helpers (agent)
+
+The review's shared sentence helpers point is done now rather than at a third reader: the joiner had seven copies, not two. `sentences.hpp` holds `add_sentence`, `add_part` and `end_sentence` for every reader (menus, results, character select, stage select, the LAN lobby, Direct Connect and the RmlUi reader, whose `append_sentence` it replaces), `decode_trouble` in `game_text.cpp` builds the log line's account of a bad decode, and `LogOnce` beside `log_enabled` in `speech.hpp` replaces the menus', results' and Training menu's own `log_once`. Nothing spoken changes; a results name tag's trouble now says "unknown glyphs", as every other decode's does.
