@@ -276,6 +276,24 @@ _Avoid_: Confirmed, done, finished
 The fork's own place in a stats panel's page, which the D-pad moves row by row and from player to player while the game's panels keep their own pages and scroll.
 _Avoid_: Virtual cursor, review cursor, focus
 
+### Prompts and notices
+
+**Memory card prompt**:
+One message of the memory card scene, which the game shows at startup when the save cannot simply be loaded (a fresh install with no save data, a corrupted save, no card), and later if saving fails. Some prompts offer a choice; the rest wait for A.
+_Avoid_: Memory card dialog, save prompt, message box
+
+**Choice**:
+One of a memory card prompt's two buttons: Yes or No, OK or Try Again.
+_Avoid_: Option, button, entry (that belongs to a tree screen)
+
+**Unlock notice**:
+One message of the scene the game shows after the title screen, a VS match or a mode's end when something new was earned: a character, a stage, a mode, a rule, a milestone, or a trophy. Several queue up and show one at a time.
+_Avoid_: Unlock screen, prize, achievement, popup
+
+**Challenger**:
+A locked character who appears after a VS match or a mode's end and must be beaten in a one-stock fight to unlock. The screen that announces them, before the fight, is the **New challenger** screen; it shows the challenger only as a silhouette.
+_Avoid_: New foe, challenger approaching (those are the screen's words), unlockable
+
 ### Online play
 
 **Lobby**:
