@@ -175,7 +175,9 @@ COUNT = {"match_gap": GAP_ONCE, "match_gap_battlefield": GAP_ONCE, "match_ledge"
          # One "No" for each Create Game Data? visit: Right at the end says nothing.
          "memcard_no": [(re.compile(r'\[a11y\] speak \w+ \(off\): "No"$'), 2)],
          # The key on the visit's first notice only.
-         "unlock_notices": [(re.compile(r'\[a11y\] speak .*A for next\."$'), 1)]}
+         "unlock_notices": [(re.compile(r'\[a11y\] speak .*A for next\."$'), 1)],
+         # The save brings Jigglypuff, named once.
+         "challenger": [(re.compile(r'\[a11y\] speak .*A new foe has appeared: Jigglypuff\. A to fight\."$'), 1)]}
 
 
 def threshold_crossings(lines, out):

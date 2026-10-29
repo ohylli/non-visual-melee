@@ -33,7 +33,6 @@ constexpr SceneWords kScenes[] = {
     {SceneKind::GS_MOVIE_HOWTO, "How to play movie"},
     {SceneKind::GS_MOVIE_OMAKE15, "Special movie"},
     {SceneKind::GS_MOVIE_END, "Ending movie"},
-    {SceneKind::GS_APPROACH, "New challenger"},
     {SceneKind::GS_INTRO_EASY, "Stage intro"},
     {SceneKind::GS_INTRO_NORMAL, "Stage intro"},
     {SceneKind::GS_CUTSCENE_LUIGI, "Cutscene"},
@@ -66,6 +65,9 @@ constexpr SceneWords kScenes[] = {
     {SceneKind::GS_MEMCARD, ""},
     /* Its first notice is its opening (unlock_speech.cpp). */
     {SceneKind::GS_PRIZE_INTERFACE, ""},
+    /* Its line names the challenger, said by the unlock notice reader
+     * (unlock_speech.cpp) in this one's place. */
+    {SceneKind::GS_APPROACH, ""},
     {SceneKind::GS_PROG_SCAN, ""},
     {SceneKind::GS_DEBUG_MENU, ""},
     {SceneKind::GS_COMING_SOON, ""},

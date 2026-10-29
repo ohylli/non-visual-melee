@@ -772,6 +772,30 @@ enum { A11Y_PRIZE_FONT = 2 };
  * composes its text into string 0x4A at run time. */
 const uint8_t* a11y_game_prize_string(int number);
 
+/* The New challenger screen's challenger and whom it challenges, from the
+ * challenger data the mode filled before the screen (gm_InitChallengerData,
+ * gm_1736.c), which the screen itself reads (gm_ModeState_Approach_OnEnter). */
+typedef struct A11yChallenger {
+    /* The challenger; A11Y_NO_CHARACTER for a kind beyond the playable
+     * ones, whose number is in kind. */
+    A11yCharacter character;
+    int kind;
+    /* The challenged human's controller port, whose A or Start alone
+     * starts the fight. */
+    int port;
+    /* The challenged human's name tag, Shift-JIS with a terminator; empty
+     * for none. */
+    char tag[9];
+    /* Humans in the match that brought the challenger: the VS match's
+     * standings in VS and its special melees, 1 in a single-player mode. */
+    int humans;
+} A11yChallenger;
+
+/* Fills the snapshot. Meaningful on the New challenger screen alone, where
+ * the challenger data is the screen's; elsewhere it holds whatever the last
+ * challenger left. Reads only. */
+void a11y_game_challenger(A11yChallenger* out);
+
 /* A match, read once a tick by the match cues (docs/a11y/cues.md, "The
  * match snapshot"), in world units: x grows to the right, y upwards. */
 

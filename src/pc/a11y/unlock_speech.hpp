@@ -7,8 +7,13 @@
  * Each notice says its text, interrupting the one before; the first of a
  * visit adds the key. The date, the category icon and a count are left
  * out, and the scene itself stays silent: its first notice is its opening.
- * The reader touches no game state. */
+ *
+ * The New challenger screen, which leads to an unlock, says its words, the
+ * challenger its silhouette hides, and the key, with the challenged
+ * player's label before it when the match had two or more humans. The
+ * reader touches no game state. */
 #pragma once
+#include "game_access.h"
 #include "game_text.hpp"
 #include "speech.hpp"
 #include <cstdint>
@@ -32,6 +37,10 @@ public:
     /* The scene sets up a notice whose text is string text_id, the first or
      * the next after A or Start. */
     void notice(int text_id);
+
+    /* The New challenger screen was entered, with this challenger. A kind
+     * with no name is left out of the line and logged once. */
+    void challenger(const A11yChallenger& challenger);
 
 private:
     /* String number of the game's text made speakable, its trouble logged

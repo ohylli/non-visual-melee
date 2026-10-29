@@ -51,6 +51,6 @@ press Start
 wait '"KOs and falls\. '
 sleep 0.5
 press Start
-# The New challenger screen. Its line is the scene table's until the
-# screen gets a reader of its own.
-wait '"New challenger"$'
+# The New challenger screen names the challenger, whoever the save brings;
+# one human played, so no player label comes before the key.
+wait '"Warning! Challenger approaching! A new foe has appeared: [^"]+\. A to fight\."$'

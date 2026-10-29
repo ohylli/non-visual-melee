@@ -25,6 +25,7 @@
 #include <melee/gm/gmresult.h>
 #include <melee/gm/gmscene.h>
 #include <melee/gm/gmvs.h>
+#include <melee/gm/gmvsmelee.h>
 #include <melee/gm/types.h>
 #include <melee/gr/forward.h>
 #include <melee/gr/stage.h>
@@ -1028,6 +1029,31 @@ const uint8_t* a11y_game_prize_string(int number) {
         return NULL;
     }
     return a11y_game_string(A11Y_PRIZE_FONT, pc_region_sis_index(symbol, number));
+}
+
+void a11y_game_challenger(A11yChallenger* out) {
+    memset(out, 0, sizeof(*out));
+    const ChallengerData* data = gm_GetChallengerData();
+    out->kind = data->cpu_ckind;
+    out->character =
+        data->cpu_ckind < CKind_Playable_Count ? (A11yCharacter)data->cpu_ckind : A11Y_NO_CHARACTER;
+    out->port = data->human_slot;
+    copy_name_tag(data->human_nametag, out->tag);
+    if (gm_GetCurrentGameMode() == GM_CHALLENGER_APPROACH) {
+        /* A single-player mode hands over to a mode of the challenger's
+         * own (gmevent.c, gmgover.c, gmmultiman.c, gm_17C0.c). */
+        out->humans = 1;
+        return;
+    }
+    /* VS and its special melees choose the challenged human from the
+     * standings of the match just ended (gmVsMelee_ExitResults), which stay
+     * in the VS exit data until the next match. */
+    const MatchEnd* end = &gmVsMelee_VsExitInfo.match_end;
+    for (int i = 0; i < GM_MAX_PLAYERS; i++) {
+        if (end->player_standings[i].pkind == Gm_PKind_Human) {
+            out->humans++;
+        }
+    }
 }
 
 /* The slot's main fighter, or NULL. The player slots are static and

@@ -196,7 +196,7 @@ Every mode's character and stage select is the same screen: the mode is a `CSSMa
 ### After a match and between matches
 
 - **Results** (`src/melee/gm/gmresult.c`, `gmresultplayer.c`): the summary table, then per-player pages of statistics, game text (`SdRst`). The screen moves on when every human player has pressed Start. See [Results in detail](#results-in-detail).
-- **1P mode screens**: intro splashes (`SdIntro`), the Continue decision (`gmregclear.c`, `SdDec`), clear screens (`SdClr`), game over and "coming soon" scenes, "New Challenger" (`gmapproach.c`). Mostly sequences with one prompt.
+- **1P mode screens**: intro splashes (`SdIntro`), the Continue decision (`gmregclear.c`, `SdDec`), clear screens (`SdClr`), game over and "coming soon" scenes, "New Challenger" (`gmapproach.c`, see [Unlock notices and challengers in detail](#unlock-notices-and-challengers-in-detail)). Mostly sequences with one prompt.
 - **Unlock notice** (`src/melee/if/ifprize.c`, `GS_PRIZE_INTERFACE`): shown after the title screen's Start, a VS or Special Melee match, a challenger fight or a single-player mode that unlocked something, one notice at a time; game text (`SdPrize`). See [Unlock notices and challengers in detail](#unlock-notices-and-challengers-in-detail).
 - **Tournament** (`src/melee/gm/gmtou_0.c` for setup, `gmtou_1.c` for the bracket, `gmtou_2.c` for choices between rounds): cursor menus with game text. Large, only skimmed.
 - **Staff roll** (`src/melee/gm/gmstaffroll.c`): a free cursor that shoots floating names during the credits; ends on its own.
@@ -408,7 +408,7 @@ Font slot 3 holds `SIS_MessageData` (`SdMsgBox.usd`, loaded by `gm_801AEBB0`), 2
 
 ## Unlock notices and challengers in detail
 
-The unlock notice scene, `GS_PRIZE_INTERFACE` (`src/melee/if/ifprize.c`), shows what the player has just earned, one notice at a time, each in game text. The fork reads it in `unlock_speech.cpp`, from one hook in `ifprize.c`. A locked character comes first as a challenger, a fight that unlocks it when won; when one comes depends on the save: "The save file" gives its layout, and "Challengers and their thresholds" when each comes. The spec is `.scratch/unlock-notices/spec.md`.
+The unlock notice scene, `GS_PRIZE_INTERFACE` (`src/melee/if/ifprize.c`), shows what the player has just earned, one notice at a time, each in game text. The fork reads it in `unlock_speech.cpp`, from one hook in `ifprize.c`. A locked character comes first as a challenger, a fight that unlocks it when won; when one comes depends on the save: "The save file" gives its layout, and "Challengers and their thresholds" when each comes. "The New challenger screen" covers the screen that announces one, which the fork names from the scene hook. The spec is `.scratch/unlock-notices/spec.md`.
 
 ### The unlock notice scene
 
@@ -447,6 +447,17 @@ What unlocks a character, and so brings a challenger, is in the save, which a te
 - **The thresholds** (`lbl_803B7AD0`, `gm_16F1.c`), in VS matches played: Jigglypuff 50, Dr. Mario 100, Pichu 200, Falco 300, Marth 400, Young Link 500, Ganondorf 600, Mewtwo 700, Luigi 800, Roy 900, Mr. Game & Watch 1000.
 - **A quit match is not counted** (`gm_WasMatchCanceled` skips the count), so a save with every other character unlocked and the count at one's threshold brings that one after every VS match, quit or played to the end, run after run, until it is beaten. `make_save.py challenger NAME` makes that save from a fresh one, and `tools/a11y/challenger.drive` plays the quick VS match to the New challenger screen.
 - **Single-player modes and events** bring challengers by conditions of their own (`fn_80173098`, `gm_801732D8` in `gm_16F1.c`), not looked into.
+
+### The New challenger screen
+
+- **What it shows.** `GS_APPROACH` (`gmapproach.c`, the `NtAppro` archive): "A new foe has appeared!", the challenger's black silhouette in a panel, and "WARNING / CHALLENGER APPROACHING" with an exclamation icon, all pictures; the name appears nowhere. The approach music plays. A kind outside the eleven challengers shows Ganondorf's silhouette (`gm_Scene_Approach_OnEnter`), which no path of the game passes.
+- **Input.** After 180 frames (3 seconds), A or Start on the challenged human's controller alone (`gm_Scene_Approach_OnFrame`); an earlier press does nothing. Then the fight: one stock against the challenger on its stage. Won, the character is unlocked and the unlock notice scene follows; lost, back to the previous mode with no results.
+- **The challenger data** (`ChallengerData`, `gm_1736.c`) is filled by `gm_InitChallengerData` before the screen: the challenger (`cpu_ckind`), the challenged human's port (`human_slot`, the pad the screen reads), character, colour and name tag slot, and the mode to return to. `gm_ModeState_Approach_OnEnter` copies the challenger and port into the screen's enter data. It stays put until the next challenger, so it is readable on the screen and after.
+- **Who is challenged.** In VS and the special melees that share its exit (`gmVsMelee_ExitResults`), one human of the match just ended, picked by `findSmallestLoser`: the port is its index in the standings, `gmVsMelee_VsExitInfo.match_end`, which still hold that match. The single-player modes (the callers of `gm_InitChallengerData` in `gmevent.c`, `gmgover.c`, `gmmultiman.c` and `gm_17C0.c`) hand over to a mode of the challenger's own, `GM_CHALLENGER_APPROACH`, with their one player; the VS standings are then a stale match's.
+
+### Where the fork reads the challenger
+
+`pc_a11y_scene_entered` for `GS_APPROACH` reads `a11y_game_challenger` (`game_access.c`): the challenger data's challenger, port and name tag, and the humans of the match that brought it, counted in the VS standings unless the current mode is `GM_CHALLENGER_APPROACH`, where it is one. The scene speech table leaves the scene silent and the unlock notice reader (`unlock_speech.cpp`) says the line in its place: the screen's words, the challenger's name from character select's string table for the silhouette, and the key, with the challenged player's label before the key when two or more humans played (the name tag where there is one, else the port, as the match announcements make it). No hook in `gmapproach.c` is needed. A two-human run is out of the drivers' reach, which press only port 1, so the label is checked by the unit tests alone.
 
 ## Candidate hook points
 

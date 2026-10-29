@@ -239,6 +239,13 @@ void announce_scene(int previous_scene, int css_exit, int scene_kind) {
             return;
         }
     }
+    if (scene_kind == static_cast<int>(a11y::SceneKind::GS_APPROACH)) {
+        /* The New challenger screen names its challenger. */
+        A11yChallenger challenger;
+        a11y_game_challenger(&challenger);
+        s_unlock->challenger(challenger);
+        return;
+    }
     s_scene_speech->entered(scene_kind);
 }
 

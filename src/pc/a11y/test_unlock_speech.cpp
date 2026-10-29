@@ -2,9 +2,11 @@
 /* Unlock notice speech against the hook's calls as the unlock notice scene
  * makes them, over a fake screen reader bridge and a hand-written prize
  * table: each notice said and interrupting, the key on the first of a
- * visit, a trophy notice, the prize font's é and an undecodable text. Links
- * unlock_speech.cpp, game_text.cpp and speech.cpp only, so this file
- * supplies the pc_log_line that main.c normally provides. */
+ * visit, a trophy notice, the prize font's é and an undecodable text; and
+ * the New challenger line, with and without the challenged player's label,
+ * and for a kind with no name. Links unlock_speech.cpp, css_names.cpp,
+ * game_text.cpp and speech.cpp only, so this file supplies the pc_log_line
+ * that main.c normally provides. */
 #include "unlock_speech.hpp"
 #include "speech.hpp"
 #include <algorithm>
@@ -12,6 +14,7 @@
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -188,6 +191,56 @@ void an_undecodable_text_is_logged_once_and_the_notice_still_said() {
     }) == 1);
 }
 
+/* The challenger data as the New challenger screen finds it. */
+A11yChallenger challenger(A11yCharacter character, int port, int humans, const char* tag = "") {
+    A11yChallenger out{};
+    out.character = character;
+    out.kind = character;
+    out.port = port;
+    out.humans = humans;
+    std::strncpy(out.tag, tag, sizeof(out.tag) - 1);
+    return out;
+}
+
+const std::string kWarning = "Warning! Challenger approaching! ";
+
+void the_challenger_is_named_with_the_key() {
+    Fixture f;
+    f.reader.challenger(challenger(A11Y_CKind_Purin, 0, 1));
+    assert((f.outputs ==
+            Outputs{{kWarning + "A new foe has appeared: Jigglypuff. A to fight.", true}}));
+    f.outputs.clear();
+    /* A single-player mode's one human keeps no label, name tag or not. */
+    f.reader.challenger(challenger(A11Y_CKind_Mewtwo, 2, 1, "Bob"));
+    assert(
+        (f.outputs == Outputs{{kWarning + "A new foe has appeared: Mewtwo. A to fight.", true}}));
+    assert(s_lines.size() == 2);
+}
+
+void two_humans_hear_whom_it_challenges() {
+    Fixture f;
+    f.reader.challenger(challenger(A11Y_CKind_Purin, 1, 2));
+    assert((f.outputs ==
+            Outputs{{kWarning + "A new foe has appeared: Jigglypuff. P2, A to fight.", true}}));
+    f.outputs.clear();
+    /* The name tag where the challenged player has one. */
+    f.reader.challenger(challenger(A11Y_CKind_GameWatch, 3, 4, "Bob"));
+    assert((
+        f.outputs ==
+        Outputs{{kWarning + "A new foe has appeared: Mr. Game & Watch. Bob, A to fight.", true}}));
+}
+
+void an_unknown_challenger_is_left_out_and_logged_once() {
+    Fixture f;
+    A11yChallenger boss = challenger(A11Y_NO_CHARACTER, 0, 2);
+    boss.kind = 0x1B;
+    f.reader.challenger(boss);
+    f.reader.challenger(boss);
+    const Output said{kWarning + "A new foe has appeared! P1, A to fight.", true};
+    assert((f.outputs == Outputs{said, said}));
+    assert(count_logged("[a11y] new challenger: no name for character 27") == 1);
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -205,6 +258,9 @@ int main() {
     a_trophy_notice_says_the_composed_text();
     the_prize_fonts_e_is_said();
     an_undecodable_text_is_logged_once_and_the_notice_still_said();
+    the_challenger_is_named_with_the_key();
+    two_humans_hear_whom_it_challenges();
+    an_unknown_challenger_is_left_out_and_logged_once();
     std::cout << "unlock_speech: all tests passed\n";
     return 0;
 }
