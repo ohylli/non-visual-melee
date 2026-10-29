@@ -12,17 +12,20 @@ the failure lines of each run that failed. Exits 1 if any run failed.
   python tools/a11y/run_level.py css_steps sss_hover
 
 Arguments are groups or script names, run in that order, a group's runs
-side by side:
+side by side, the longest first by their last passing times, kept in
+times.json beside the transcripts:
 
   menus   the menu drive scripts (MENUS), the launcher's four and the
-          port menu's three among them
+          port menu's three among them; the match announcements' scripts
+          run by name
   online  css_net.drive at delay 0, delay 10 and over a 100 ms slow link,
           results_net.drive and match_net.drive (--muted), lan_lobby.drive
           (--lan), direct_call.drive, and direct_back.drive and
           direct_lost.drive (--direct), the last two one after the other
           since both use the ports the router forwards (with --base-b,
           drive_net.py sets the maintainer's recent opponents aside
-          around each)
+          around each, and direct_call, the fork's game alone, is left
+          out)
   NAME    an online run by its name (css_net-delay0, css_net-delay10,
           css_net-slow, results_net, match_net, lan_lobby, direct_back,
           direct_lost), else tools/a11y/NAME.drive through drive.py; the
@@ -38,7 +41,8 @@ Transcripts go to build/drive/level: NAME.log for drive.py, a directory
 NAME for drive_net.py.
 """
 import argparse
-import contextlib
+import json
+import math
 import os
 import re
 import subprocess
@@ -52,8 +56,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens", "sss_steps",
          "sss_skipped", "sss_glide_pick", "leaf_screens", "sss_hover", "css_classic", "css_training",
          "css_slots", "css_portraits", "css_steps", "results", "results_no_contest", "results_cpu4",
-         "results_teams", "match_damage", "match_thresholds", "match_stocks", "match_stock_steal",
-         "match_time", "training_menu", "launcher_home",
+         "results_teams", "training_menu", "launcher_home",
          "launcher_settings", "launcher_a11y", "launcher_voices", "port_menu", "port_menu_a11y",
          "port_menu_voices", "direct_hub"]
 # drive.py options a script needs: the launcher's scripts open the launcher,
@@ -187,9 +190,12 @@ NET = [("css_net-delay0", ["--delay", "0"]), ("css_net-delay10", ["--delay", "10
 # forward of UDP 42050 and 42051 to this machine (docs/a11y/netplay.md, "Two
 # copies on one machine"), so both take those ports and run one at a time.
 DIRECT = ["direct_back", "direct_lost"]
-FORWARDED_PORTS = threading.Lock()
+FORWARDED_PORTS = "forwarded"
 NET_RUNS = [name for name, _ in NET] + ["results_net", "match_net", "lan_lobby"] + DIRECT
 ONLINE = NET_RUNS + ["direct_call"]
+# Each run's time the last time it passed, kept beside the transcripts, so a
+# set starts its longest runs first and ends on short ones.
+TIMES = "times.json"
 # Failure lines worth repeating in the report.
 FAILURE = re.compile(r">> .*(FAILED|warning: no pad change)")
 
@@ -200,7 +206,7 @@ class Run:
 
     def __init__(self, name, cmd, out, slots, env=None, ports=None):
         self.name, self.cmd, self.out, self.slots, self.env = name, cmd, out, slots, env or {}
-        # A lock for ports no other run may use at the same time, or None.
+        # Ports no other run may use at the same time, or None.
         self.ports = ports
         self.seconds = 0.0
         self.code = None
@@ -256,41 +262,26 @@ def named_run(name, out_dir, base_b):
     return drive_run(name, out_dir)
 
 
-class Slots:
-    """The cache slots 1..jobs, handed out to runs as they start."""
-
-    def __init__(self, jobs):
-        self.free = [str(n) for n in range(1, jobs + 1)]
-        self.cond = threading.Condition()
-
-    def take(self, count):
-        with self.cond:
-            self.cond.wait_for(lambda: len(self.free) >= count)
-            taken, self.free = self.free[:count], self.free[count:]
-            return taken
-
-    def give(self, taken):
-        with self.cond:
-            self.free = sorted(self.free + taken, key=int)
-            self.cond.notify_all()
+def load_times(out_dir):
+    try:
+        with open(os.path.join(out_dir, TIMES), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
 
 
-def execute(run, slots, lock):
-    # The ports before the slots, so a run waiting for them holds no slots.
-    with run.ports or contextlib.nullcontext():
-        execute_held(run, slots, lock)
+def save_times(out_dir, times, runs):
+    times.update({run.name: round(run.seconds, 1) for run in runs if run.code == 0})
+    with open(os.path.join(out_dir, TIMES), "w", encoding="utf-8") as f:
+        json.dump(times, f, indent=1, sort_keys=True)
 
 
-def execute_held(run, slots, lock):
-    taken = slots.take(run.slots)
+def execute(run, taken, lock):
     cmd = run.cmd + (["--cache-slots", ",".join(taken)] if run.slots == 2 else ["--cache-slot", taken[0]])
     env = dict(os.environ, **run.env)
     started = time.monotonic()
-    try:
-        proc = subprocess.run(cmd, cwd=REPO, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                              stderr=subprocess.STDOUT)
-    finally:
-        slots.give(taken)
+    proc = subprocess.run(cmd, cwd=REPO, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT)
     run.seconds = time.monotonic() - started
     run.code = proc.returncode
     lines = proc.stdout.decode("utf-8", "replace").splitlines()
@@ -338,11 +329,39 @@ def execute_held(run, slots, lock):
         print(f"{'pass' if run.code == 0 else 'FAIL'}  {run.name:22} {run.seconds:5.1f} s  {run.out}", flush=True)
 
 
-def run_set(runs, jobs):
-    slots, lock = Slots(jobs), threading.Lock()
+def run_set(runs, jobs, times):
+    """Start each run once enough cache slots (1..jobs) and its ports are
+    free: the longest by its last passing time first, those never timed
+    before them in their given order, and a shorter run in a gap too small
+    for the next longer one."""
+    waiting = sorted(runs, key=lambda run: -times.get(run.name, math.inf))
+    free = [str(n) for n in range(1, jobs + 1)]
+    held = set()
+    cond = threading.Condition()
+
+    def startable():
+        return next((run for run in waiting if run.slots <= len(free) and run.ports not in held), None)
+
+    def execute_and_free(run, taken):
+        try:
+            execute(run, taken, cond)
+        finally:
+            with cond:
+                free.extend(taken)
+                free.sort(key=int)
+                held.discard(run.ports)
+                cond.notify_all()
+
     threads = []
-    for run in runs:
-        t = threading.Thread(target=execute, args=(run, slots, lock))
+    while waiting:
+        with cond:
+            run = cond.wait_for(startable)
+            waiting.remove(run)
+            taken = free[:run.slots]
+            del free[:run.slots]
+            if run.ports:
+                held.add(run.ports)
+        t = threading.Thread(target=execute_and_free, args=(run, taken))
         t.start()
         threads.append(t)
         time.sleep(0.05)
@@ -373,17 +392,23 @@ def main():
             if what == "menus":
                 sets.append([drive_run(n, args.out_dir) for n in MENUS])
             else:
-                sets.append([named_run(n, args.out_dir, args.base_b) for n in ONLINE])
+                if args.base_b:
+                    print("left out with --base-b: direct_call (one game, the fork's, as in the online "
+                          "level)", flush=True)
+                online = [n for n in ONLINE if not (args.base_b and n == "direct_call")]
+                sets.append([named_run(n, args.out_dir, args.base_b) for n in online])
         else:
             names.append(what)
     if names:
         sets.append([named_run(n, args.out_dir, args.base_b) for n in names])
 
     started = time.monotonic()
+    times = load_times(args.out_dir)
     every = []
     for runs in sets:
-        run_set(runs, args.jobs)
+        run_set(runs, args.jobs, times)
         every += runs
+    save_times(args.out_dir, times, every)
     failed = [run for run in every if run.code != 0]
     print(f"{len(every) - len(failed)} of {len(every)} passed in {time.monotonic() - started:.0f} s")
     for run in failed:

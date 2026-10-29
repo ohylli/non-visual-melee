@@ -53,7 +53,9 @@ b-fork wait '"Online\. LAN play\. '
 b-base sleep 1
 sleep 0.3
 b press A
-b wait "lobby: LAN: searching"
+# The lobby logs searching only while it has found no one, and b, coming
+# second, can find a by its first frame there.
+b wait "lobby: (LAN: searching|2 players found)"
 b-fork wait '"LAN play\. (Searching for players|Found [^."]+)\. .*B to go back\."'
 
 # Each finds the other over the machine's network interface, and the lobby

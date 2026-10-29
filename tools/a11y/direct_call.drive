@@ -1,8 +1,9 @@
 # Direct Connect's call, one instance: from the main menu through DIRECT
 # CONNECT's hub to the code keyboard, a made-up code typed with a delete,
 # the call to it with its opening, the status line changing as the online
-# network is joined, the reminders at 0:15 and 0:30, the base port's change
-# at 0:45, and B stopping the call for the Online screen.
+# network is joined, the first reminder at 0:15, and B stopping the call for
+# the Online screen. The later reminders and the base port's change at 0:45
+# are the direct_speech unit tests', which spare the run half a minute.
 #   python tools/a11y/drive.py --muted tools/a11y/direct_call.drive
 # It joins the public BitTorrent DHT, so it needs internet access; nobody
 # answers the code. No step presses Y: Y copies the code to the maintainer's
@@ -71,10 +72,8 @@ wait "lobby: direct connect calling '#AAAAAAAA'"
 wait '\[a11y\] speak interrupt.*: "Joining the online network\.\.\. 0:00\. Y: copy my code B: stop"$' 5
 wait '\[a11y\] speak queue.*: "Calling #AAA-AAA-AA 0:\d\d"$' 30
 
-# The reminders, queued, and the change at 0:45.
+# The first reminder, queued.
 wait '\[a11y\] speak queue.*: "Calling #AAA-AAA-AA 0:15"$' 20
-wait '\[a11y\] speak queue.*: "Calling #AAA-AAA-AA 0:30"$' 20
-wait '\[a11y\] speak queue.*: "#AAA-AAA-AA isn.t answering yet\. Still calling 0:45"$' 20
 sleep 0.5
 
 # B stops the call and leaves for the Online screen.
