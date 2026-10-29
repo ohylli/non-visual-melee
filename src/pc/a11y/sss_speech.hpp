@@ -20,7 +20,6 @@
 #pragma once
 #include "game_access.h"
 #include "steerer.hpp"
-#include <set>
 #include <string>
 
 namespace a11y {
@@ -74,8 +73,7 @@ private:
     int m_named = A11Y_SSS_NO_TILE;
     /* The online result was said this visit. */
     bool m_resolved = false;
-    /* The stages missing from the names table that were logged. */
-    std::set<A11yStage> m_logged_missing;
+    LogOnce m_log_once;
 };
 
 }  // namespace a11y

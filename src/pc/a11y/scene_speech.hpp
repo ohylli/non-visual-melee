@@ -7,13 +7,11 @@
  * "Scene announcements"). */
 #pragma once
 #include "scene_kinds.h"
+#include "speech.hpp"
 #include <optional>
-#include <set>
 #include <string_view>
 
 namespace a11y {
-
-class Speech;
 
 enum class SceneKind : int {
 #define A11Y_SCENE_KIND_ENUMERATOR(name, number) name = number,
@@ -38,7 +36,7 @@ public:
 
 private:
     Speech& m_speech;
-    std::set<int> m_unknown_logged;
+    LogOnce m_log_once;
 };
 
 }  // namespace a11y

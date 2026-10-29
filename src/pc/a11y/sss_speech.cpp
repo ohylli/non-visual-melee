@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "sss_speech.hpp"
-#include "pc/pc.h"
 #include "sentences.hpp"
 #include "speech.hpp"
 #include "sss_names.hpp"
@@ -124,7 +123,7 @@ std::string SssSpeech::hover_words(const A11ySssState& state, int tile) {
         return out;
     }
     if (std::optional<std::string_view> description = stage_description(state.tiles[tile].stage)) {
-        out += ". " + std::string(*description);
+        add_sentence(out, *description);
     }
     return out;
 }
@@ -173,9 +172,7 @@ std::string SssSpeech::name(A11yStage stage) {
     if (std::optional<std::string_view> known = stage_name(stage)) {
         return std::string(*known);
     }
-    if (m_logged_missing.insert(stage).second && log_enabled()) {
-        pc_log_line("[a11y] stage %d: not in the stage names table", stage);
-    }
+    m_log_once("[a11y] stage " + std::to_string(stage) + ": not in the stage names table");
     return std::string(kUnknownStage) + " " + std::to_string(stage);
 }
 

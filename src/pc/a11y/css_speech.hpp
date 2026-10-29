@@ -21,7 +21,6 @@
 #include "css_targets.hpp"
 #include "game_access.h"
 #include "steerer.hpp"
-#include <set>
 #include <string>
 
 namespace a11y {
@@ -99,8 +98,7 @@ private:
     /* A step said what the carried coin going back does. */
     bool m_drop_said = false;
     A11yCssState m_last{};
-    /* The characters missing from the names table that were logged. */
-    std::set<A11yCharacter> m_logged_missing;
+    LogOnce m_log_once;
 };
 
 }  // namespace a11y

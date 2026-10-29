@@ -41,7 +41,7 @@ The review's first point is fixed as recommended: the snapshot's `pressed_any` s
 
 ### 2026-10-29, shared sentence helpers (agent)
 
-The review's shared sentence helpers point is done now rather than at a third reader: the joiner had seven copies, not two. `sentences.hpp` holds `add_sentence`, `add_part` and `end_sentence` for every reader (menus, results, character select, stage select, the LAN lobby, Direct Connect and the RmlUi reader, whose `append_sentence` it replaces), `decode_trouble` in `game_text.cpp` builds the log line's account of a bad decode, and `LogOnce` beside `log_enabled` in `speech.hpp` replaces the menus', results' and Training menu's own `log_once`. Nothing spoken changes; a results name tag's trouble now says "unknown glyphs", as every other decode's does.
+The review's shared sentence helpers point is done now rather than at a third reader, for every reader ("A11y: share the readers' sentence helpers and log once"). Nothing spoken changes; a results name tag's trouble log line now says "unknown glyphs", as every other decode's does.
 
 ### 2026-10-29, play test by ear (maintainer)
 

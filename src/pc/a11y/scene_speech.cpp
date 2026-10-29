@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "scene_speech.hpp"
-#include "pc/pc.h"
 #include "speech.hpp"
 #include <iterator>
 
@@ -109,9 +108,8 @@ std::optional<std::string_view> scene_announcement(int scene_kind) {
 void SceneSpeech::entered(int scene_kind) {
     std::optional<std::string_view> words = scene_announcement(scene_kind);
     if (!words) {
-        if (m_unknown_logged.insert(scene_kind).second && log_enabled()) {
-            pc_log_line("[a11y] scene %d: not in the scene table, silent", scene_kind);
-        }
+        m_log_once(
+            "[a11y] scene " + std::to_string(scene_kind) + ": not in the scene table, silent");
         return;
     }
     if (!words->empty()) {

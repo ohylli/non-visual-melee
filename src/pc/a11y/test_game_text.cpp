@@ -180,7 +180,21 @@ void shift_jis_name_tags_decode() {
     assert(a11y::decode_shift_jis(nullptr).malformed);
 }
 
+/* A clean decode has no trouble; otherwise the text on one line and what
+ * became of it. */
+void decode_trouble_names_what_went_wrong() {
+    a11y::DecodedText clean{"Fine", 0, false};
+    assert(a11y::decode_trouble(clean).empty());
+    a11y::DecodedText glyphs{"Pok{glyph 4000}mon\nX", 1, false};
+    assert(a11y::decode_trouble(glyphs) == "\"Pok{glyph 4000}mon / X\", unknown glyphs left out");
+    a11y::DecodedText both{"A", 2, true};
+    assert(a11y::decode_trouble(both) == "\"A\", unknown glyphs left out, malformed");
+    a11y::DecodedText cut{"A", 0, true};
+    assert(a11y::decode_trouble(cut) == "\"A\", malformed");
+}
+
 int main() {
+    decode_trouble_names_what_went_wrong();
     shift_jis_name_tags_decode();
     skips_formatting_commands();
     line_commands_become_one_break();

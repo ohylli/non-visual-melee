@@ -89,7 +89,8 @@ Config config_from_environment();
 bool log_enabled();
 
 /* A feature's own log lines, each written the first time it comes: a gap in
- * the words met every frame is logged once. Under the speech log switch. */
+ * the words met every frame is logged once. Under the speech log switch. One
+ * per reader, used from one thread. */
 class LogOnce {
 public:
     void operator()(const std::string& line);

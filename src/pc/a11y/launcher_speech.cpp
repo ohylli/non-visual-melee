@@ -85,9 +85,7 @@ private:
             return;
         }
         std::string disc = text_of("disc-name");
-        if (const std::string info = text_of("disc-info"); !info.empty()) {
-            disc += ", " + info;
-        }
+        add_part(disc, text_of("disc-info"));
         add_sentence(text, "Disc: " + disc);
     }
 

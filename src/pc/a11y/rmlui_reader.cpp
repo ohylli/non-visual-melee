@@ -714,7 +714,7 @@ void PageReader::follow_value(const Rml::Element& focus, const Control& control)
          * means: "Port 2, No controller in this port.". Changing alone, it is
          * the page's news, which the page's watched regions speak. */
         if (control.detail != m_focus_detail && !control.detail.empty()) {
-            text += ", " + control.detail;
+            add_part(text, control.detail);
         }
         say(text, Mode::interrupt);
     }

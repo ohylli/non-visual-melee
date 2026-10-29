@@ -2,6 +2,8 @@
 /* Speech against a fake screen reader bridge. Links speech.cpp only, so this
  * file supplies the pc_log_line that main.c normally provides. */
 #include "speech.hpp"
+#include "sentences.hpp"
+#include <algorithm>
 #include <cassert>
 #include <cstdarg>
 #include <cstdio>
@@ -280,6 +282,49 @@ void voice_lines_are_logged_and_gated() {
     assert(muted_voices.said.size() == 1);
 }
 
+/* Each line is written the first time only, per instance. */
+void log_once_writes_each_line_once() {
+    a11y::LogOnce log_once;
+    log_once("[a11y] test gap A");
+    log_once("[a11y] test gap A");
+    log_once("[a11y] test gap B");
+    assert(std::count(s_lines.begin(), s_lines.end(), "[a11y] test gap A") == 1);
+    assert(logged("[a11y] test gap B"));
+    a11y::LogOnce other;
+    other("[a11y] test gap A");
+    assert(std::count(s_lines.begin(), s_lines.end(), "[a11y] test gap A") == 2);
+}
+
+/* Parts join as sentences or after a comma; an empty part is left out, and a
+ * part's own closing mark is kept. */
+void sentences_join_their_parts() {
+    std::string text;
+    a11y::add_sentence(text, "");
+    assert(text.empty());
+    a11y::add_sentence(text, "Main Menu");
+    a11y::add_sentence(text, "Solo Smash!");
+    a11y::add_sentence(text, "");
+    a11y::add_sentence(text, "Back");
+    assert(text == "Main Menu. Solo Smash! Back");
+    a11y::end_sentence(text);
+    a11y::end_sentence(text);
+    assert(text == "Main Menu. Solo Smash! Back.");
+
+    std::string list;
+    a11y::add_part(list, "");
+    a11y::add_part(list, "P2");
+    a11y::add_part(list, "");
+    a11y::add_part(list, "you");
+    assert(list == "P2, you");
+
+    std::string empty;
+    a11y::end_sentence(empty);
+    assert(empty.empty());
+    std::string asked = "Ready?";
+    a11y::end_sentence(asked);
+    assert(asked == "Ready?");
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -304,6 +349,8 @@ int main() {
     call_before_init_is_dropped();
     off_thread_call_is_dropped();
     voice_lines_are_logged_and_gated();
+    log_once_writes_each_line_once();
+    sentences_join_their_parts();
     std::cout << "speech: all tests passed\n";
     return 0;
 }

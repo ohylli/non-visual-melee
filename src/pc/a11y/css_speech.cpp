@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "css_speech.hpp"
 #include "css_names.hpp"
-#include "pc/pc.h"
 #include "sentences.hpp"
 #include "speech.hpp"
 #include <cctype>
@@ -321,7 +320,7 @@ std::string CssSpeech::holding(const A11yCssState& now, int coin, bool quiet) {
     std::string out = std::string(kHolding) + " " + coin_words(now, coin);
     int over = now.slots[coin].over_portrait;
     if (over >= 0 && !quiet) {
-        out += ". " + name(now.portraits[over].character);
+        add_sentence(out, name(now.portraits[over].character));
     }
     return out;
 }
@@ -482,9 +481,8 @@ std::string CssSpeech::name(A11yCharacter character) {
     if (std::optional<std::string_view> known = character_name(character)) {
         return std::string(*known);
     }
-    if (m_logged_missing.insert(character).second && log_enabled()) {
-        pc_log_line("[a11y] character %d: not in the character names table", character);
-    }
+    m_log_once(
+        "[a11y] character " + std::to_string(character) + ": not in the character names table");
     return std::string(kUnknownCharacter) + " " + std::to_string(character);
 }
 
