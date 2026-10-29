@@ -89,7 +89,15 @@ void gm_801B927C(GameModeState* state)
         *vs = sss->vs;
 
         lbAudioAx_80026F2C(0x18);
+#ifdef TARGET_PC
+        /* The original reads force_stage_id, which is -1 unless the rules
+         * forced a stage. GCC makes StKind unsigned, so the -1 indexes
+         * gigabytes past stage_id_map and the stage pick crashes. Use the
+         * picked stage, as gmVsMelee_ExitSss does. */
+        lbAudioAx_8002702C(8, lbAudioAx_80026EBC(vs->start.rules.stkind));
+#else
         lbAudioAx_8002702C(8, lbAudioAx_80026EBC(sss->force_stage_id));
+#endif
         lbAudioAx_80027168();
         return;
     }
