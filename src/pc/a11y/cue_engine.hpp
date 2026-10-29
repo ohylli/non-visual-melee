@@ -44,9 +44,11 @@ enum class VoiceMode {
  * value over a few milliseconds, except the interval, which the next pulse
  * takes as it is. */
 struct VoiceTargets {
-    float pan = 0.0f;      /* -1 full left, 1 full right */
-    float pitch = 1.0f;    /* playback rate: 2 is an octave up */
-    float gain = 1.0f;     /* 0 to 1: the voice's own factor of the volume chain */
+    float pan = 0.0f;   /* -1 full left, 1 full right */
+    float pitch = 1.0f; /* playback rate: 2 is an octave up */
+    /* The voice's own factor of the volume chain: 0 to 1 for a cue's voice,
+     * up to CueEngine::kMostBoost for a once voice, whose boost it carries. */
+    float gain = 1.0f;
     float interval = 0.5f; /* pulsed: seconds from one pulse's start to the next's */
 };
 

@@ -117,8 +117,9 @@ public:
     /* 0 to 1, kNormalRate the voice's normal speed: from the next line
      * rendered. */
     void set_rate(Voice voice, float rate);
-    /* 0 to 1, at once, the line playing included: the voice's factor of
-     * the cue engine's chain, under the master volume. */
+    /* The voice's volume, 0 to 1, times its boost, 1 to
+     * CueEngine::kMostBoost, at once, the line playing included: the
+     * voice's factor of the cue engine's chain, under the master volume. */
     void set_volume(Voice voice, float volume);
     /* A line in this voice plays or waits to. */
     bool speaking(Voice voice) const;

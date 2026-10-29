@@ -319,6 +319,11 @@ void the_volume_chain_multiplies() {
     engine.set_targets(voice, at(0.0f, 0.5f, 0.6f));
     out = render(engine, kCueRate / 10);
     assert(near(out[out.size() - 2], 0.5 * 0.8 * 0.5 * 2.0 * 0.6 * kCentredFull, 1e-4));
+    /* A cue's voice takes its gain up to 1: the boost is its cue level's. */
+    engine.set_targets(voice, at(0.0f, 0.5f, 2.0f));
+    out = render(engine, kCueRate / 10);
+    assert(near(out[out.size() - 2], 0.5 * 0.8 * 0.5 * 2.0 * kCentredFull, 1e-4));
+    engine.set_targets(voice, at(0.0f, 0.5f, 0.6f));
 
     engine.set_cue_level(0, CueLevel{false, 0.5f, 2.0f});
     out = render(engine, kCueRate / 10);
@@ -510,8 +515,9 @@ void a_once_voice_cuts_with_a_ramp() {
     assert(!engine.playing(voice));
 }
 
-/* A voice's chain is master volume × its own gain (the voice's Volume): the
- * cue volume, the cue switches and any cue's level leave it alone. */
+/* A voice's chain is master volume × its own gain (the voice's Volume and
+ * boost): the cue volume, the cue switches and any cue's level leave it
+ * alone. */
 void a_once_voice_takes_master_and_its_own_volume() {
     CueEngine engine;
     int voice = engine.add_voice(once("your voice"));
@@ -526,6 +532,15 @@ void a_once_voice_takes_master_and_its_own_volume() {
     engine.set_targets(voice, at(0.0f, 0.5f, 1.0f));
     out = render(engine, 4800);
     assert(near(out[out.size() - 2], 0.5 * kCentredFull, 1e-4));
+    /* A boost lifts it past 1, up to the most boost; a cue's voice stops
+     * at 1. */
+    engine.set_targets(voice, at(0.0f, 0.5f, 2.0f));
+    out = render(engine, 4800);
+    assert(near(out[out.size() - 2], kCentredFull, 1e-4));
+    engine.set_targets(voice, at(0.0f, 0.5f, 100.0f));
+    engine.play(voice, constant(0.01f, kCueRate));
+    out = render(engine, 4800);
+    assert(near(out[out.size() - 2], 0.5 * 0.01 * CueEngine::kMostBoost * kCentredFull, 1e-4));
     engine.set_master_volume(0.0f);
     render(engine, 4800);
     assert(peak(render(engine, 4800)) < 1e-5f);

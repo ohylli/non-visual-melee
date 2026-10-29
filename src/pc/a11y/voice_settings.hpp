@@ -4,10 +4,11 @@
  * docs/a11y/speech.md, "Voices"): for your voice and then the opponents'
  * voice, a Voice row (a choice of the installed OneCore voices, saved by
  * display name), a Rate and a Volume slider, and Preview, right after the
- * Speech switch. Every change reaches the voices at once, from a row in
- * either host or a hand edit of a11y.ini, and a change to a voice's Voice,
- * Rate or Volume plays a sample in it a moment later, one for a quick run
- * of changes; Preview plays it at once.
+ * Speech switch, and a boost under the volume, a tuning value. Every change
+ * reaches the voices at once, from a row in either host or a hand edit of
+ * a11y.ini, and a change to a voice's Voice, Rate, Volume or boost plays a
+ * sample in it a moment later, one for a quick run of changes; Preview
+ * plays it at once.
  *
  * A saved voice that is not installed stays in the file; the voice in use is
  * then the Windows default voice, which the row shows, and the screen reader
@@ -44,8 +45,9 @@ public:
      * take every value as it stands, with no sample. */
     void attach(Voices& voices);
     /* Every change to the settings after the load: the voices follow, and
-     * a voice whose Voice, Rate or Volume changed waits for its sample. A
-     * voice not installed, which only a hand edit can name, is said. */
+     * a voice whose Voice, Rate, Volume or boost changed waits for its
+     * sample. A voice not installed, which only a hand edit can name, is
+     * said. */
     void changed(const std::vector<const NamedValue*>& changed, Clock::time_point now);
     /* A Preview row's press, by its action's group: true for a voice's,
      * whose sample plays at once. */
@@ -66,6 +68,7 @@ public:
     Choice voice(Voice voice) const { return rows(voice).voice; }
     Number rate(Voice voice) const { return rows(voice).rate; }
     Number volume(Voice voice) const { return rows(voice).volume; }
+    Number boost(Voice voice) const { return rows(voice).boost; }
     /* The sample's wait after a change, a tuning value in seconds. */
     float sample_delay() const { return m_sample_delay.value(); }
 
@@ -74,6 +77,7 @@ private:
         Choice voice;
         Number rate;
         Number volume;
+        Number boost;      /* a factor, 1 to CueEngine::kMostBoost */
         std::string group; /* the Preview action's group: the rows' group id */
         std::string sample;
         std::optional<Clock::time_point> sample_at;

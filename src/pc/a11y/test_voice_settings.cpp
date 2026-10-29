@@ -16,7 +16,9 @@
 #include "voice_names.hpp"
 #include "voice_settings.hpp"
 #include "voices.hpp"
+#include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <filesystem>
@@ -118,6 +120,8 @@ struct Game {
     Clock::time_point now = Clock::now();
     /* The frames are the launcher's; false, the game's. */
     bool launcher = true;
+    /* The loudest sample the engine has rendered since it was last reset. */
+    float loudest = 0.0f;
 
     explicit Game(const char* name, const std::string& file = "",
         std::vector<a11y::VoiceInfo> installed = a11y::test::several_languages(),
@@ -161,6 +165,9 @@ struct Game {
             rows->frame(now, launcher);
             std::vector<float> block(800 * 2);
             engine.render(block.data(), 800);
+            for (float s : block) {
+                loudest = std::max(loudest, std::fabs(s));
+            }
             now += std::chrono::microseconds(16667);
         }
     }
@@ -220,6 +227,7 @@ void the_rows_follow_speech() {
     assert(game.named("your_voice.rate").value == 50.0f);
     assert(game.named("opponents_voice.volume").value == 100.0f);
     assert(!game.named("speech.voice_sample_delay").shown);
+    assert(!game.named("your_voice.boost").shown && !game.named("opponents_voice.boost").shown);
     const std::string file = game.file();
     const size_t speech = file.find("\nspeech.on = on\n");
     const size_t delay = file.find("\nspeech.voice_sample_delay = ");
@@ -232,6 +240,7 @@ void the_rows_follow_speech() {
     assert(has_line(file, "opponents_voice.voice = Mark"));
     assert(has_line(file, "your_voice.rate = 50"));
     assert(has_line(file, "opponents_voice.volume = 100"));
+    assert(has_line(file, "your_voice.boost = 3"));
 }
 
 void languages_are_named() {
@@ -343,6 +352,26 @@ void a_change_plays_a_sample() {
         std::lock_guard<std::mutex> lock(game.calls.mutex);
         assert(game.calls.set_rates.back() == std::make_pair(0, 0.3f));
     }
+}
+
+/* The boost, a tuning value, lifts the voice under its volume, and a hand
+ * edit of it plays a sample like a row's change. */
+void the_boost_lifts_the_voice() {
+    Game game("boost.ini", "your_voice.volume = 50\n");
+    game.frames(1);
+    const double delay = game.rows->sample_delay();
+    assert(game.rows->preview("your_voice"));
+    game.seconds(2.0);
+    const float plain = game.loudest;
+    assert(plain > 0.1f);
+
+    s_lines.clear();
+    game.loudest = 0.0f;
+    game.edit("your_voice.boost = 3", "your_voice.boost = 1.5");
+    game.seconds(delay * 1.2);
+    assert(count(kSample) == 1);
+    game.seconds(2.0);
+    assert(std::fabs(game.loudest - 0.5f * plain) < 0.01f);
 }
 
 /* The file's values reach the voices at the start, with no sample. */
@@ -462,6 +491,7 @@ int main(int argc, char** argv) {
     languages_are_named();
     the_options_are_the_installed_voices();
     a_change_plays_a_sample();
+    the_boost_lifts_the_voice();
     the_saved_values_apply_at_the_start();
     a_missing_voice_falls_back();
     unavailable_voices_use_the_screen_reader();

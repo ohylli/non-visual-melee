@@ -179,7 +179,8 @@ void CueEngine::write_targets(Voice& v, const VoiceTargets& targets) {
     VoiceTargets& t = v.targets;
     t.pan = clamped(targets.pan, -1.0f, 1.0f, 0.0f);
     t.pitch = clamped(targets.pitch, v.spec.lowest_pitch, kHighestPitch, 1.0f);
-    t.gain = clamped(targets.gain, 0.0f, 1.0f, 0.0f);
+    const float most_gain = v.spec.mode == VoiceMode::once ? kMostBoost : 1.0f;
+    t.gain = clamped(targets.gain, 0.0f, most_gain, 0.0f);
     t.interval =
         clamped(targets.interval, v.spec.fastest_interval, kLongestInterval, kLongestInterval);
     v.pan.store(t.pan, std::memory_order_relaxed);

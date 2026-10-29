@@ -79,7 +79,7 @@ The match announcements (`match_announcer.cpp`, read from the tick hook; spec `.
 ### Rendering and playing
 
 - **One worker thread** (`Voices::work`) starts the first time speech is on, opens both instances, lists the installed voices and renders a test line, then renders each line as it is asked for: `prism_backend_speak_to_memory`, which returns once the whole line is synthesized. The game thread hands it text and never waits; each frame it takes back what was rendered.
-- **Evening out.** OneCore's loudness varies from word to word (found in the maintainer's grimdark mod), so every line is raised or lowered to one peak (`kVoicePeak`, set by ear) after it is mixed down to mono and resampled to the cue engine's 48 kHz with miniaudio's resampler. A voice's volume is applied after that, by the cue engine, never by Prism's own volume, which the evening out would undo.
+- **Evening out.** OneCore's loudness varies from word to word (found in the maintainer's grimdark mod), so every line is raised or lowered to one peak (`kVoicePeak`, set by ear) after it is mixed down to mono and resampled to the cue engine's 48 kHz with miniaudio's resampler. A voice's volume and boost are applied after that, by the cue engine, never by Prism's own volume, which the evening out would undo.
 - **Playing.** Each voice has a once voice in the cue engine (`docs/a11y/cues.md`), which plays a buffer handed to it at run time, centred, with the engine's ramps, in a volume chain of its own (`docs/a11y/cues.md`, "The once voice").
 - **Rate** is Prism's 0 to 1, 0.5 the voice's normal speed, set on the instance before the next line is rendered.
 

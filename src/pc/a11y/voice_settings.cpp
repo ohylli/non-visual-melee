@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "voice_settings.hpp"
+#include "cue_engine.hpp"
 #include "voice_names.hpp"
 #include <algorithm>
 #include <cctype>
@@ -8,6 +9,11 @@
 
 namespace a11y {
 namespace {
+
+/* A voice's boost to start with, for both voices: a tuning value, set by
+ * ear against the game's sounds at full volume. Its loudest moments reach
+ * the mix's soft limit. */
+constexpr float kVoiceBoost = 3.0f;
 
 bool touches(const std::vector<const NamedValue*>& changed, const NamedValue& named) {
     return std::find(changed.begin(), changed.end(), &named) != changed.end();
@@ -77,7 +83,10 @@ VoiceSettings::Rows VoiceSettings::add_rows(ValueModel& model, const char* id, c
     lowered[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(lowered[0])));
     group.add_action(ActionSpec{"preview", "Preview " + lowered,
         "Says \"" + name + "\" in " + inside + ", at its rate and volume."});
-    return Rows{voice, rate, volume, id, name, std::nullopt};
+    Number boost = group.add_number(NumberSpec{"boost", name + " boost",
+        "Lifts " + inside + " under its volume, for a voice that reads quieter than the game.",
+        "times", kVoiceBoost, 1.0f, CueEngine::kMostBoost, 0.1f});
+    return Rows{voice, rate, volume, boost, id, name, std::nullopt};
 }
 
 void VoiceSettings::attach(Voices& voices) {
@@ -91,7 +100,7 @@ void VoiceSettings::apply(Voice voice) {
     const Rows& r = rows(voice);
     m_voices->set_voice(voice, r.voice.saved());
     m_voices->set_rate(voice, bridge_rate(r.rate));
-    m_voices->set_volume(voice, r.volume.value() / 100.0f);
+    m_voices->set_volume(voice, r.volume.value() / 100.0f * r.boost.value());
 }
 
 void VoiceSettings::changed(const std::vector<const NamedValue*>& changed, Clock::time_point now) {
@@ -104,7 +113,7 @@ void VoiceSettings::changed(const std::vector<const NamedValue*>& changed, Clock
         Rows& r = rows(voice);
         const bool voice_changed = touches(changed, r.voice.named());
         if (!voice_changed && !touches(changed, r.rate.named()) &&
-            !touches(changed, r.volume.named()))
+            !touches(changed, r.volume.named()) && !touches(changed, r.boost.named()))
         {
             continue;
         }
