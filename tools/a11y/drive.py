@@ -103,6 +103,28 @@ settings: saved <key> = <value>", so after a wait for that line
   ini '^cues\.volume = 95$'
 finds the new line at once.
 
+A run has no memory card (--no-card): the game builds a save with
+everything unlocked, and its memory card scene, reached with --scene "",
+says only "There is no Memory Card in Slot A." --card gives it a card
+instead, the run's own: aurora keeps slot A as a folder of save files,
+<settings folder>/USA/Card A, never the maintainer's. Empty, as each run
+starts it, it is a fresh install's card, and the memory card scene asks
+"Create Game Data?". --card GCI first copies the save file GCI there, named
+as aurora reads it (maker-game-name.gci, from the file's own entry, so any
+name will do): a corrupted save, a challenger's. The file is read before
+the settings folder is emptied, so it may be the last run's own save. A
+save the game made stays in the folder until the next run with the same
+--out, in build/drive/last.log.settings/USA/Card A by default (the US
+disc's 01-GALE-SuperSmashBros0110290334.gci).
+
+--card runs only from the memory card scene, --scene "", which is then
+the default: the scene shows only at a real start, which a boot scene
+skips. A boot scene would also skip loading the card, and the game's first
+save would write its default save over the card's file, so --card with
+any other scene is refused. A save that loads plays no prompt and goes on
+to the opening movie ("Opening movie. Press Start to skip."). A script
+written for the title screen starts with Start through the movie.
+
 The shader caches come from build/drive/cache/SLOT (--cache-slot, default
 1), first copied from the player's own: games running at once each need a
 slot of their own.
@@ -221,6 +243,60 @@ def fresh_settings_dir(out):
     path = settings_dir(out)
     shutil.rmtree(path, ignore_errors=True)
     os.makedirs(path)
+    return path
+
+
+# A GCI file, the emulated card's save file (aurora's lib/card/File.hpp,
+# big-endian): a 0x40-byte directory entry, then the file's 0x2000-byte
+# blocks, the count at 0x38.
+GCI_ENTRY = 0x40
+GCI_BLOCK = 0x2000
+GCI_BLOCK_COUNT = 0x38
+
+
+def card_save_place(data):
+    """Where aurora's card folder looks for the save whose GCI bytes are
+    data: (region, file name), the folder <user dir>/<region>/Card A. aurora
+    reads only a file named from its own entry, maker-game-name.gci
+    (gci_filename in CardGciFolder.cpp), so a save keeps that name whatever
+    it was called. The region is the game code's last letter's, as
+    get_card_region (dolphin/card.cpp) gives it for the disc. ValueError
+    for bytes that are no GCI file."""
+    if len(data) < GCI_ENTRY:
+        raise ValueError(f"{len(data)} bytes, shorter than a GCI file's 0x40-byte entry")
+    blocks = struct.unpack_from(">H", data, GCI_BLOCK_COUNT)[0]
+    if blocks == 0 or len(data) != GCI_ENTRY + blocks * GCI_BLOCK:
+        raise ValueError(f"{len(data)} bytes, not a GCI file's 0x40 plus 0x2000 per block "
+                         f"for the {blocks} block(s) its entry names")
+    game, maker, name = data[0:4], data[4:6], data[8:0x28].split(b"\0")[0]
+    if b"\0" in game + maker or not name:
+        raise ValueError("its entry names no game, maker or file")
+    canonical = f"{maker.decode('latin-1')}-{game.decode('latin-1')}-{name.decode('latin-1')}"
+    canonical = "".join("_" if ord(c) < 32 or c in '<>:"/\\|?*' else c for c in canonical)
+    region = {"P": "EUR", "J": "JAP"}.get(chr(game[3]), "USA")
+    return region, canonical + ".gci"
+
+
+def read_card_save(path):
+    """The GCI file at path, read and checked; ScriptError if it is none."""
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        card_save_place(data)
+    except (OSError, ValueError) as e:
+        raise ScriptError(f"--card {path}: {e.strerror if isinstance(e, OSError) else e}")
+    return data
+
+
+def put_card_save(user_dir, data):
+    """The save's GCI bytes into the card folder under user_dir, as the
+    game's own save is kept; its path."""
+    region, name = card_save_place(data)
+    folder = os.path.join(user_dir, region, "Card A")
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, name)
+    with open(path, "wb") as f:
+        f.write(data)
     return path
 
 
@@ -639,10 +715,18 @@ class Game:
         disc = os.path.join(REPO, args.disc)
         self.launcher = getattr(args, "launcher", False)
 
+        # The memory card: None for none (--no-card), "" for the run's own
+        # empty card, or a save's path. The save is read before the
+        # settings folder is emptied, so it may be the last run's.
+        card = getattr(args, "card", None)
+        card_save = read_card_save(card) if card else None
+
         os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
         # The settings folder of this run alone (a base port build without
-        # MELEE_USER_DIR ignores it and takes the maintainer's).
+        # MELEE_USER_DIR ignores it and takes the maintainer's). The card
+        # lives in it too, under <region>/Card A.
         self.settings_dir = fresh_settings_dir(out)
+        self.card_save = put_card_save(self.settings_dir, card_save) if card_save else None
         full_env["MELEE_USER_DIR"] = self.settings_dir
         if not full_env.get("MELEE_A11Y_SETTINGS"):
             # The accessibility settings in the run's folder too, named
@@ -656,8 +740,10 @@ class Game:
         self.pipe = Pipe(pipe_name, "key pipe")
         self.event_pipe = Pipe(event_pipe_name, "event pipe", " (a base port build has none)")
         self.out_file = open(out, "w", encoding="utf-8")
+        if self.card_save:
+            self.note(f"card save: {self.card_save}")
         # No disc argument opens the launcher (src/pc/main.c).
-        command = [exe, "--no-card"] + ([] if self.launcher else [disc])
+        command = [exe] + ([] if card is not None else ["--no-card"]) + ([] if self.launcher else [disc])
         self.proc = subprocess.Popen(command, cwd=REPO, env=full_env,
                                      stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.output = Output(self.proc, self.out_file, None if args.all else DEFAULT_SHOW,
@@ -841,7 +927,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("script", nargs="?", help="script file ('-' for stdin)")
     ap.add_argument("-c", dest="inline", help="script text instead of a file")
-    ap.add_argument("--scene", default="title", help="MELEE_BOOT_SCENE (default title)")
+    ap.add_argument("--scene", help='MELEE_BOOT_SCENE (default title, or "" with --card)')
+    ap.add_argument("--card", nargs="?", const="", metavar="GCI",
+                    help="run with a memory card, the run's own (below), instead of --no-card; with GCI, "
+                         "a save copied onto it first. Only with --scene \"\", its default then")
     ap.add_argument("--disc", default="melee.iso", help="disc image, relative to the repo root")
     ap.add_argument("--launcher", action="store_true",
                     help="open the launcher, with the disc remembered, instead of starting the disc")
@@ -870,6 +959,21 @@ def main():
         ap.error("Windows only; on Linux use MELEE_KEY_FIFO with a mkfifo pipe")
     if args.speech and args.muted:
         ap.error("--speech and --muted contradict each other")
+    if args.card is not None:
+        if args.scene:
+            # A boot scene skips loading the card, and the game's first
+            # save then writes its default save over the card's file
+            # (.scratch/boot-scene/issues/01-boot-scene-overwrites-save.md).
+            ap.error(f"--card runs only with --scene \"\": boot scene {args.scene!r} would skip loading the card "
+                     "and later overwrite its save")
+        if args.card:
+            try:
+                read_card_save(args.card)
+            except ScriptError as e:
+                ap.error(f"{e}" + (" (--card took the script file as its save: put the script first, "
+                                   "or write --card=GCI)" if args.card.endswith(".drive") else ""))
+    if args.scene is None:
+        args.scene = "" if args.card is not None else "title"
     if (args.script is None) == (args.inline is None):
         ap.error("give a script file or -c TEXT, not both")
     if args.inline is not None:
