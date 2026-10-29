@@ -57,10 +57,12 @@ b-base wait 'boot scene: state \d+ scene 8$'
 sleep 2
 
 # Holding B on character select backs out: both return to the hub, its top
-# row now the other as a recent opponent.
+# row now the other as a recent opponent. a says b's player name, the
+# default PLAYER for a fork b but the maintainer's own name for a base port
+# b, which reads the maintainer's settings.
 a press B 1500
 a wait "lobby: direct connect hub, 1 recent" 30
 b wait "lobby: direct connect hub, 1 recent, clipboard -$" 30
-a wait '\[a11y\] speak interrupt.*: "Back to DIRECT CONNECT\. PLAYER#[A-Z2-7-]+ played 0m ago"$' 5
+a wait '\[a11y\] speak interrupt.*: "Back to DIRECT CONNECT\. [^"#]+#[A-Z2-7-]+ played 0m ago"$' 5
 b-fork wait '\[a11y\] speak interrupt.*: "Back to DIRECT CONNECT\. PLAYER#[A-Z2-7-]+ played 0m ago"$' 5
 sleep 1

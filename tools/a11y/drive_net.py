@@ -30,10 +30,12 @@ With --base-b, instance b is a base port build, the one in that build
 directory, so it logs no [a11y] lines. A base port build lacks MELEE_USER_DIR
 (unless the base port has taken it since), so b then starts from the
 maintainer's own settings in %APPDATA%\melee-pc and may write them, while a
-starts from the defaults. A step addressed to b-fork runs only
-when b is the fork's build and one addressed to b-base only when it is the
-base port's, so one script can wait on b's speech in the one case and wait
-otherwise in the other:
+starts from the defaults. With --direct as well, the base port build keeps
+its recent opponents there, in contacts.txt: the run sets the maintainer's
+file aside while it runs, so b starts with none, and puts it back after. A
+step addressed to b-fork runs only when b is the fork's build and one
+addressed to b-base only when it is the base port's, so one script can wait
+on b's speech in the one case and wait otherwise in the other:
 
   b-fork wait '"Holding your coin'
   b-base sleep 1
@@ -104,6 +106,13 @@ CODE_KEYS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 CODE_COLS = 8
 CODE_ROWS = len(CODE_KEYS) // CODE_COLS
 WAITING = re.compile(r"lobby: direct connect waiting as '[^']*#([A-Z2-7]{8})'")
+# A base port build lacks MELEE_USER_DIR, so with --direct it reads and
+# writes the maintainer's recent opponents in SDL's pref path. The run moves
+# the file aside, or leaves a marker where there was none, and undoes that
+# after, first undoing any a killed run left.
+CONTACTS = os.path.join(os.environ.get("APPDATA", ""), "melee-pc", "contacts.txt")
+CONTACTS_ASIDE = CONTACTS + ".drive_net-aside"
+CONTACTS_NONE = CONTACTS + ".drive_net-none"
 
 
 def records(path):
@@ -196,6 +205,24 @@ def check_logs(games):
     return problems
 
 
+def set_contacts_aside():
+    restore_contacts()
+    if os.path.exists(CONTACTS):
+        os.replace(CONTACTS, CONTACTS_ASIDE)
+    else:
+        open(CONTACTS_NONE, "w").close()
+    print(f">> {CONTACTS} set aside while b runs", flush=True)
+
+
+def restore_contacts():
+    if os.path.exists(CONTACTS_ASIDE):
+        os.replace(CONTACTS_ASIDE, CONTACTS)
+    elif os.path.exists(CONTACTS_NONE):
+        if os.path.exists(CONTACTS):
+            os.remove(CONTACTS)
+        os.remove(CONTACTS_NONE)
+
+
 def run(args, steps):
     common = {"MELEE_SEED": args.seed, "MELEE_NET_DELAY": args.delay}
     if not args.lan and not args.direct:
@@ -210,6 +237,9 @@ def run(args, steps):
             os.remove(out[name] + ".rec")
     if args.base_b:
         print(f">> b is the base port build in {args.base_b}", flush=True)
+    contacts = args.base_b and args.direct
+    if contacts:
+        set_contacts_aside()
     games = {}
     failed = False
     try:
@@ -245,6 +275,8 @@ def run(args, steps):
         failed = True
     finally:
         codes = {name: game.close() for name, game in games.items()}
+        if contacts:
+            restore_contacts()
     problems = [f"{name} exited with code {code}" for name, code in codes.items() if code != 0]
     try:
         problems += check_logs(games)
@@ -277,7 +309,8 @@ def main():
     ap.add_argument("--seed", default="7", help="MELEE_SEED, shared by both")
     ap.add_argument("--base-b", metavar="BUILD_DIR",
                     help="run instance b from a base port build directory, such as a worktree's build; "
-                         "it uses the maintainer's own settings folder")
+                         "it uses the maintainer's own settings folder, its recent opponents set aside "
+                         "with --direct")
     ap.add_argument("--muted", action="store_true",
                     help="accessibility on in both, as for a player, with nothing sent to the screen "
                          "reader, as drive.py --muted")

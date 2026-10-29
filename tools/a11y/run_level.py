@@ -20,9 +20,9 @@ side by side:
           results_net.drive and match_net.drive (--muted), lan_lobby.drive
           (--lan), direct_call.drive, and direct_back.drive and
           direct_lost.drive (--direct), the last two one after the other
-          since both use the ports the router forwards; with --base-b the
-          two are left out, since the base port build would write the
-          maintainer's recent opponents
+          since both use the ports the router forwards (with --base-b,
+          drive_net.py sets the maintainer's recent opponents aside
+          around each)
   NAME    an online run by its name (css_net-delay0, css_net-delay10,
           css_net-slow, results_net, match_net, lan_lobby, direct_back,
           direct_lost), else tools/a11y/NAME.drive through drive.py; the
@@ -373,11 +373,7 @@ def main():
             if what == "menus":
                 sets.append([drive_run(n, args.out_dir) for n in MENUS])
             else:
-                online = [n for n in ONLINE if not (args.base_b and n in DIRECT)]
-                if args.base_b:
-                    print(f"left out with --base-b: {', '.join(DIRECT)} (the base port build would write "
-                          "the maintainer's recent opponents)", flush=True)
-                sets.append([named_run(n, args.out_dir, args.base_b) for n in online])
+                sets.append([named_run(n, args.out_dir, args.base_b) for n in ONLINE])
         else:
             names.append(what)
     if names:
