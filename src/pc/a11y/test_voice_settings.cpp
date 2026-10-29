@@ -397,7 +397,7 @@ void a_missing_voice_falls_back() {
     Game game("missing.ini", "your_voice.voice = Hazel\n");
     assert(game.spoken.size() == 0);
     game.frames(1);
-    assert((game.spoken == Spoken{{"Hazel not installed, using Microsoft George.", false}}));
+    assert((game.spoken == Spoken{{"Voice Hazel not installed, using Microsoft George.", false}}));
     assert(game.rows->voice(Voice::yours).option() == "Microsoft George");
     assert(game.rows->voice(Voice::yours).saved() == "Hazel");
     assert(game.voices->voice_in_use(Voice::yours) == "Microsoft George");
@@ -414,8 +414,9 @@ void a_missing_voice_falls_back() {
     assert(has_line(game.file(), "your_voice.voice = Microsoft David"));
     /* A hand edit naming a voice not installed is said as it is read. */
     game.edit("your_voice.voice = Microsoft David", "your_voice.voice = Susan");
-    assert(game.spoken.back() ==
-           std::make_pair(std::string("Susan not installed, using Microsoft George."), false));
+    assert(
+        game.spoken.back() ==
+        std::make_pair(std::string("Voice Susan not installed, using Microsoft George."), false));
     assert(game.voices->voice_in_use(Voice::yours) == "Microsoft George");
 
     /* In the game, the news waits for the first scene's announcement, which
@@ -427,7 +428,7 @@ void a_missing_voice_falls_back() {
     in_game.speech->announce("Title screen. Press Start.", a11y::Mode::interrupt);
     in_game.rows->scene_announced();
     assert((in_game.spoken == Spoken{{"Title screen. Press Start.", true},
-                                  {"Susan not installed, using Microsoft George.", false}}));
+                                  {"Voice Susan not installed, using Microsoft George.", false}}));
     in_game.rows->scene_announced();
     assert(in_game.spoken.size() == 2);
 
@@ -436,7 +437,8 @@ void a_missing_voice_falls_back() {
         {{"Microsoft David", "en-US"}, {"Microsoft Hazel", "en-GB"}, {"Microsoft Heidi", "fi-FI"}},
         "");
     bare.frames(1);
-    assert((bare.spoken == Spoken{{"Zira and Mark not installed, using Microsoft Hazel.", false}}));
+    assert((bare.spoken ==
+            Spoken{{"Voices Zira and Mark not installed, using Microsoft Hazel.", false}}));
     assert(bare.rows->voice(Voice::opponents).option() == "Microsoft Hazel");
     assert(has_line(bare.file(), "your_voice.voice = Zira"));
 }

@@ -94,7 +94,7 @@ private:
      * find_voice gives it, so the row shows the voice that speaks. */
     std::string fallback(std::string_view saved, const ChoiceOptions& options) const;
     std::string none() const;
-    /* "Zira not installed, using Microsoft David.", for the voices given
+    /* "Voice Zira not installed, using Microsoft David.", for the voices given
      * whose saved voice is not installed; empty when each is. */
     std::string missing(const std::vector<Voice>& voices) const;
     void sample(Voice voice);

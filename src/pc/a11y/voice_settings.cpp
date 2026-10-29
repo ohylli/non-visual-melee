@@ -236,14 +236,15 @@ std::string VoiceSettings::missing(const std::vector<Voice>& voices) const {
     }
     /* Both fall back to the Windows default voice: one sentence. */
     if (saved.size() == 2 && in_use[0] == in_use[1]) {
-        return saved[0] + " and " + saved[1] + " not installed, using " + in_use[0] + ".";
+        return "Voices " + saved[0] + " and " + saved[1] + " not installed, using " + in_use[0] +
+               ".";
     }
     std::string said;
     for (size_t i = 0; i < saved.size(); i++) {
         if (!said.empty()) {
             said += " ";
         }
-        said += saved[i] + " not installed, using " + in_use[i] + ".";
+        said += "Voice " + saved[i] + " not installed, using " + in_use[i] + ".";
     }
     return said;
 }
