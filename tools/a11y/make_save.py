@@ -29,8 +29,6 @@ at "Create Game Data?", kept as build/drive/cache/fresh_save.gci. The first
 time it is needed, a drive.py --card run of memcard_create.drive makes it,
 silent and in the background, in the shader cache slot --cache-slot names.
 Delete it to have it made again, after a base merge that changes the save.
-No save is ever committed: its first block holds the game's banner and
-icons.
 
 --out names the edited save (default build/drive/challenger.gci for the
 challenger, overwritten each time). For a drive run:
@@ -51,16 +49,8 @@ test is not kept; the rest of the folder stays. An agent never runs
 --play: --dry-run makes the folder and prints the command, its folder and
 the environment it changes, instead of starting the game.
 
-Layout (src/sysdolphin/baselib/card.c, crypt.c; src/melee/lb/lbcardgame.c;
-src/melee/gm/types.h; docs/a11y/native-menus.md, "The save file"):
-- A GCI file is a 0x40-byte directory entry, then the file's 0x2000-byte
-  sectors. Sector 0 holds the comment, banner and icons.
-- Every other sector is one block: a 0x20-byte header (a 16-byte checksum,
-  the block id, a sequence number, a file table), then the payload,
-  checksummed and scrambled by HSD_Encrypt.
-- Block id 1 holds GmSaveData (0x1790 bytes) at payload offset 0, in host
-  byte order (little-endian on PC), in two copies on a fresh save; every
-  copy is edited.
+The save's layout and the challengers' thresholds: docs/a11y/native-menus.md,
+"The save file" and "Challengers and their thresholds".
 """
 import argparse
 import os
@@ -331,8 +321,14 @@ def play(data, disc, dry_run):
     changes = {"MELEE_USER_DIR": PLAY_DIR, "MELEE_CACHE_DIR": PLAY_DIR,
                "MELEE_LOG_FILE": os.path.join(PLAY_DIR, "melee-pc.log")}
     # Each would undo the test: a boot scene skips loading the card and
-    # later overwrites its save, and another a11y.ini than the copy.
-    removed = ("MELEE_BOOT_SCENE", "MELEE_A11Y_SETTINGS")
+    # later overwrites its save, another a11y.ini than the copy or a
+    # switch's override for the run would replace the maintainer's settings,
+    # and the drivers' switches (a shell left from a drive run) would make
+    # the game silent, keep its focus or wait on a pipe no one feeds.
+    removed = ("MELEE_BOOT_SCENE", "MELEE_A11Y_SETTINGS", "MELEE_A11Y", "MELEE_A11Y_STEER",
+               "MELEE_A11Y_CUES", "MELEE_A11Y_SCREEN_READER", "SDL_AUDIO_DRIVER",
+               "SDL_WINDOW_ACTIVATE_WHEN_SHOWN", "MELEE_KEY_FIFO", "MELEE_A11Y_EVENT_FIFO",
+               "MELEE_NO_ATTRACT", "MELEE_EXIT_AFTER_FRAMES")
     env = {k: v for k, v in os.environ.items() if k not in removed}
     env.update(changes)
     if dry_run:
@@ -342,7 +338,8 @@ def play(data, disc, dry_run):
         for k, v in changes.items():
             print(f"  set {k}={v}")
         for k in removed:
-            print(f"  unset {k}" + (" (was set)" if k in os.environ else ""))
+            if k in os.environ:
+                print(f"  unset {k} (was set)")
         return
     if not os.path.isfile(exe):
         sys.exit(f"no {exe}: build the game first")
@@ -394,7 +391,10 @@ def main():
     print(f"{name} comes after the next VS match ({describe(copy[PAYLOAD:PAYLOAD + SAVE_SIZE])}; "
           f"{copies} copies edited)")
     if args.play:
-        play(data, args.disc, args.dry_run)
+        try:
+            play(data, args.disc, args.dry_run)
+        except (OSError, ValueError) as e:
+            sys.exit(f">> FAILED: {e}")
         return
     out = args.out or os.path.join(REPO, "build", "drive", f"{args.what}.gci")
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)

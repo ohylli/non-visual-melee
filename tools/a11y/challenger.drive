@@ -2,8 +2,7 @@
 # loads from the run's card, the opening movie and title screen pass, and
 # VS Melee starts with Fox against a CPU on a random stage. The match is
 # quit from the pause at once, a no contest that still counts: results,
-# then the New challenger screen. The save is made beside the run, never
-# committed:
+# then the New challenger screen. The save is made first:
 #   python tools/a11y/make_save.py challenger jigglypuff
 #   python tools/a11y/drive.py tools/a11y/challenger.drive --card=build/drive/challenger.gci
 # For another challenger, name it to make_save.py (mewtwo, roy, ...); the

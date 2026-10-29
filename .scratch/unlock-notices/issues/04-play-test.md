@@ -18,3 +18,16 @@ The maintainer listens with NVDA and judges the wording of `.scratch/unlock-noti
 The maintainer's findings are recorded below, each either fixed or filed as its own issue, and `CLAUDE.md`'s status line says the unlock notices and the New challenger screen were play-tested.
 
 ## Comments
+
+### 2026-10-29, code review (agent)
+
+The review of issues 01 to 03 (`b7b6b410..0e1ed9ad`) fixed what was plainly the agent's in its own commit. The items below are left for the maintainer.
+
+- **Hear these in the play test.**
+  - "A for next." is said on a visit's only or last notice too, such as the one notice after a challenger fight won; A then ends the scene. Is the key right there, or would other words fit better (`unlock_speech.cpp`, `kNextKey`)?
+  - The challenged player's label ("… Jigglypuff. P2, A to fight.") is checked by unit tests alone, since the drivers press port 1 only. If two controllers are at hand, play a VS match with two humans and listen for it.
+  - After a challenger fight lost, the only sign is character select naming itself. Is that clear enough?
+  - The `--play` test folder starts on the default controller and keyboard bindings: only `a11y.ini` is copied, as issue 02 restricted. Should `keyboard_bindings.dat` and the `.controller` files be copied in too?
+- **The hook carries the trophy branch** (`src/melee/if/ifprize.c`, `pc_a11y_unlock_notice(a == 0x3E ? 0x4A : un_803F9D48.x6)`). This is the only hook argument in the decomp layer with a condition, and it copies the decomp's 0x3E / 0x4A knowledge into a base port file. Alternative: pass the raw `(a, un_803F9D48.x6)` and map 0x3E to 0x4A in fork code. This changes the hook's interface. Recommended: do it, since fork code should decide what to say.
+- **The player label is built in three places**: `unlock_speech.cpp` (`challenger`), `match_announcer.cpp` and `results_speech.cpp` with `results_names.cpp`, each as "name tag, else P and the port". They already differ: results logs trouble decoding a name tag, and the new line drops it silently. Alternative: one shared helper. This is a refactor across modules. Recommended: do it in its own commit when one of the three next changes.
+- **The prize glyphs ignore the language.** `UnlockSpeech` always hands the decoder SdPrize's glyphs (é, II). A US disc whose save holds Japanese as its language loads `SdPrize.dat` instead (`ifprize.c`, `setArchive`), whose font may put other characters at 0x4000 and 0x4002. Alternative: give the glyphs only while `lbLang_IsSavedLanguageUS()`, through a `game_access.c` query. Recommended: fold this into region work, since the spec leaves every setup but the US one unchecked.
