@@ -13,10 +13,6 @@
 namespace a11y {
 namespace {
 
-/* The main menu's strings sit in font slot 0 (mnMain_Scene_OnEnter in
- * mnmain.c loads SdMenu there), and character select's (SdSlChr) and
- * results' (SdRst) too. */
-constexpr int k_menu_font = 0;
 /* Far past the few hundred strings of any table, in case a table's end is
  * not followed by a word that resolves nowhere. */
 constexpr int k_max_strings = 4096;
@@ -40,14 +36,14 @@ std::string dump_line(const DecodedText& decoded) {
     return line;
 }
 
-void dump_table() {
-    const char* symbol = a11y_game_font_symbol(k_menu_font);
+void dump_table(int font) {
+    const char* symbol = a11y_game_font_symbol(font);
     GameTextSource source = game_source();
     int count = 0;
     int unknown = 0;
     int malformed = 0;
     for (; count < k_max_strings; count++) {
-        const std::uint8_t* entry = a11y_game_string(k_menu_font, count);
+        const std::uint8_t* entry = a11y_game_string(font, count);
         if (entry == nullptr) {
             break;
         }
@@ -62,7 +58,7 @@ void dump_table() {
 
 }  // namespace
 
-void menu_text_dump_once() {
+void menu_text_dump_once(int font) {
     static const bool wanted = [] {
         const char* dump = std::getenv("MELEE_A11Y_TEXT_DUMP");
         return dump != nullptr && std::strcmp(dump, "0") != 0;
@@ -70,11 +66,11 @@ void menu_text_dump_once() {
     if (!wanted || !log_enabled()) {
         return;
     }
-    const char* symbol = a11y_game_font_symbol(k_menu_font);
+    const char* symbol = a11y_game_font_symbol(font);
     if (symbol == nullptr || !s_dumped.insert(symbol).second) {
         return;
     }
-    dump_table();
+    dump_table(font);
 }
 
 }  // namespace a11y

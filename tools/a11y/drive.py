@@ -117,6 +117,11 @@ save the game made stays in the folder until the next run with the same
 --out, in build/drive/last.log.settings/USA/Card A by default (the US
 disc's 01-GALE-SuperSmashBros0110290334.gci).
 
+--corrupt, with --card GCI, flips a byte in each data block of the copy
+but the first (the banner and icons), which the game then finds corrupted:
+"The Game Data on the Memory Card in Slot A is corrupted. ..." One block
+spoilt is not enough; the game still loads the save.
+
 --card runs only from the memory card scene, --scene "", which is then
 the default: the scene shows only at a real start, which a boot scene
 skips. A boot scene would also skip loading the card, and the game's first
@@ -286,6 +291,17 @@ def read_card_save(path):
     except (OSError, ValueError) as e:
         raise ScriptError(f"--card {path}: {e.strerror if isinstance(e, OSError) else e}")
     return data
+
+
+def corrupted(data):
+    """The save's GCI bytes with byte 0x100 of every block but the first
+    flipped. Any one block, or a few, left the save loading in a run; all
+    of them gave the corrupted prompt."""
+    out = bytearray(data)
+    blocks = struct.unpack_from(">H", data, GCI_BLOCK_COUNT)[0]
+    for block in range(1, blocks):
+        out[GCI_ENTRY + block * GCI_BLOCK + 0x100] ^= 0xFF
+    return bytes(out)
 
 
 def put_card_save(user_dir, data):
@@ -720,6 +736,8 @@ class Game:
         # settings folder is emptied, so it may be the last run's.
         card = getattr(args, "card", None)
         card_save = read_card_save(card) if card else None
+        if card_save and getattr(args, "corrupt", False):
+            card_save = corrupted(card_save)
 
         os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
         # The settings folder of this run alone (a base port build without
@@ -741,7 +759,7 @@ class Game:
         self.event_pipe = Pipe(event_pipe_name, "event pipe", " (a base port build has none)")
         self.out_file = open(out, "w", encoding="utf-8")
         if self.card_save:
-            self.note(f"card save: {self.card_save}")
+            self.note(f"card save: {self.card_save}" + (" (corrupted)" if getattr(args, "corrupt", False) else ""))
         # No disc argument opens the launcher (src/pc/main.c).
         command = [exe] + ([] if card is not None else ["--no-card"]) + ([] if self.launcher else [disc])
         self.proc = subprocess.Popen(command, cwd=REPO, env=full_env,
@@ -931,6 +949,8 @@ def main():
     ap.add_argument("--card", nargs="?", const="", metavar="GCI",
                     help="run with a memory card, the run's own (below), instead of --no-card; with GCI, "
                          "a save copied onto it first. Only with --scene \"\", its default then")
+    ap.add_argument("--corrupt", action="store_true",
+                    help="with --card GCI, the copy corrupted (below), for the corrupted save's prompt")
     ap.add_argument("--disc", default="melee.iso", help="disc image, relative to the repo root")
     ap.add_argument("--launcher", action="store_true",
                     help="open the launcher, with the disc remembered, instead of starting the disc")
@@ -972,6 +992,8 @@ def main():
             except ScriptError as e:
                 ap.error(f"{e}" + (" (--card took the script file as its save: put the script first, "
                                    "or write --card=GCI)" if args.card.endswith(".drive") else ""))
+    if args.corrupt and not args.card:
+        ap.error("--corrupt corrupts the save --card GCI copies; give one")
     if args.scene is None:
         args.scene = "" if args.card is not None else "title"
     if (args.script is None) == (args.inline is None):

@@ -1,0 +1,26 @@
+# A fresh install's memory card prompt, No: "Create Game Data?" with Yes
+# hovered and the keys; Right says "No", and Right again at the end says
+# nothing (run_level.py counts the "No" lines). A on No asks "Continue
+# without saving or loading Game Data?" with OK hovered and no keys, said
+# once a run; Right says "Try Again", and A on it asks "Create Game Data?"
+# again, interrupting. No and OK then go on to the opening movie with no
+# save written.
+#   python tools/a11y/drive.py tools/a11y/memcard_no.drive --card
+
+wait 'speak queue \(off\): "The Memory Card in Slot A has no saved Game Data\. Create Game Data\? Yes\. Left and Right choose, A confirms\."$'
+press Right
+wait 'speak interrupt \(off\): "No"$'
+press Right
+sleep 0.5
+press A
+wait 'speak interrupt \(off\): "Continue without saving or loading Game Data\? OK\."$'
+press Right
+wait 'speak interrupt \(off\): "Try Again"$'
+press A
+wait 'speak interrupt \(off\): "The Memory Card in Slot A has no saved Game Data\. Create Game Data\? Yes\."$'
+press Right
+wait 'speak interrupt \(off\): "No"$'
+press A
+wait 'speak interrupt \(off\): "Continue without saving or loading Game Data\? OK\."$'
+press A
+wait '"Opening movie\. Press Start to skip\."$'

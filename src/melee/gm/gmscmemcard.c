@@ -2,6 +2,7 @@
 
 #include "gm_unsplit.h"
 #include "gmmain_lib.h"
+#include "pc/a11y/a11y_hooks.h"
 #include <melee/db/db.h>
 #include <melee/lb/lb_00B0.h>
 #include <melee/lb/lbcardgame.h>
@@ -73,6 +74,7 @@ static enterData enter_data;
 void gm_801AEE6C(int arg0, int arg1, int arg2)
 {
     float scale = 1.12F;
+    pc_a11y_memcard_prompt(arg0, arg1);
     switch (arg0) {
     case 0:
         gm_801AE848(0);
@@ -270,6 +272,7 @@ void gm_Scene_MemCard_OnFrame(void)
     int temp_r29;
     u8 _[0x14];
 
+    pc_a11y_memcard_frame(enter_data.unk1C);
     if (DbLevel >= DbLKind_DebugRom && set_gm_804D6870_inline() != 0) {
         if (HSD_PadCopyStatus->trigger & HSD_PAD_L) {
             if (gm_804D6872 > 6) {

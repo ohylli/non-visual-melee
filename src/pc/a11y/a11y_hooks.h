@@ -71,6 +71,18 @@ bool pc_a11y_port_menu_step(int direction);
  * GameSceneKind. */
 void pc_a11y_scene_entered(int mode_kind, int scene_kind);
 
+/* The memory card scene shows a prompt (gm_801AEE6C in
+ * src/melee/gm/gmscmemcard.c): kind 0 a message, 1 Yes and No, 2 OK and
+ * Try Again; text_id is its string in the message window's table (SdMsgBox).
+ * Nothing is said here: the frame hook says it once it has stayed up a
+ * whole frame, so a prompt replaced on the next frame stays silent. */
+void pc_a11y_memcard_prompt(int kind, int text_id);
+
+/* Once a frame of the memory card scene (gm_Scene_MemCard_OnFrame), before
+ * the frame reads input: hovered_choice is the choice the prompt shows
+ * hovered, 0 the left one, 1 the right one. */
+void pc_a11y_memcard_frame(int hovered_choice);
+
 /* Once a frame of the main menu tree's scene (mnMain_Scene_OnFrame in
  * src/melee/mn/mnmain.c). Menu speech compares the tree's state with the last
  * frame here (docs/adr/0003-main-menu-tree-is-polled.md). */

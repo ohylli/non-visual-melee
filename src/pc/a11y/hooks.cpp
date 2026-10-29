@@ -11,6 +11,7 @@
 #include "lobby_speech.hpp"
 #include "match_announcement_settings.hpp"
 #include "match_announcer.hpp"
+#include "memcard_speech.hpp"
 #include "menu_speech.hpp"
 #include "menu_text.hpp"
 #include "pc/net.h"
@@ -52,6 +53,7 @@ std::unique_ptr<a11y::LobbySpeech> s_lobby;
 std::unique_ptr<a11y::DirectSpeech> s_direct;
 std::unique_ptr<a11y::TrainingSpeech> s_training;
 std::unique_ptr<a11y::ResultsSpeech> s_results;
+std::unique_ptr<a11y::MemcardSpeech> s_memcard;
 /* The accessibility settings and their file, a11y.ini. */
 std::unique_ptr<a11y::AccessibilitySettings> s_settings;
 /* Accessibility, Speech and Steering, and the hierarchy over Cues. */
@@ -264,6 +266,8 @@ extern "C" void pc_a11y_init(void) {
     s_direct = std::make_unique<a11y::DirectSpeech>(*s_speech);
     s_training = std::make_unique<a11y::TrainingSpeech>(*s_speech);
     s_results = std::make_unique<a11y::ResultsSpeech>(*s_speech, game_text);
+    s_memcard =
+        std::make_unique<a11y::MemcardSpeech>(*s_speech, game_text, a11y_game_memcard_string);
     s_match_announcer = std::make_unique<a11y::MatchAnnouncer>(*s_speech);
     s_settings = std::make_unique<a11y::AccessibilitySettings>(
         *s_speech, settings_file_path(config), config.log);
@@ -336,6 +340,7 @@ extern "C" void pc_a11y_shutdown(void) {
     s_settings.reset();
     s_match_announcer.reset();
     s_results.reset();
+    s_memcard.reset();
     s_training.reset();
     s_lobby.reset();
     s_direct.reset();
@@ -434,6 +439,10 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
          * the winner. */
         s_results->visit_started();
     }
+    if (s_memcard != nullptr && scene_kind == static_cast<int>(a11y::SceneKind::GS_MEMCARD)) {
+        /* Silent on entry: the scene's first prompt is its opening. */
+        s_memcard->visit_started();
+    }
     announce_scene(previous_scene, css_exit, scene_kind);
     if (s_voice_settings != nullptr && game_hook_may_speak()) {
         /* Queued behind the first scene's announcement, which interrupts:
@@ -450,6 +459,23 @@ extern "C" void pc_a11y_scene_entered(int mode_kind, int scene_kind) {
          * still cuts it off. */
         s_settings->poll(a11y::Clock::now());
     }
+}
+
+extern "C" void pc_a11y_memcard_prompt(int kind, int text_id) {
+    if (!game_hook_may_speak()) {
+        return;
+    }
+    /* Said by a later frame, once it has stayed up a whole frame. */
+    s_memcard->prompt(kind, text_id);
+}
+
+extern "C" void pc_a11y_memcard_frame(int hovered_choice) {
+    /* The message window's table, SdMsgBox, in font slot 3. */
+    a11y::menu_text_dump_once(3);
+    if (!game_hook_may_speak()) {
+        return;
+    }
+    s_memcard->frame(hovered_choice);
 }
 
 extern "C" void pc_a11y_master_volume(float volume) {

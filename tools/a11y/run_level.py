@@ -17,7 +17,8 @@ times.json beside the transcripts:
 
   menus   the menu drive scripts (MENUS), the launcher's four and the
           port menu's three among them; the match announcements' scripts
-          run by name
+          run by name. memcard_corrupted runs memcard_create.drive first
+          and takes the save it makes, corrupted
   online  css_net.drive at delay 0, delay 10 and over a 100 ms slow link,
           results_net.drive and match_net.drive (--muted), lan_lobby.drive
           (--lan), direct_call.drive, and direct_back.drive and
@@ -58,7 +59,7 @@ MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens
          "css_slots", "css_portraits", "css_steps", "results", "results_no_contest", "results_cpu4",
          "results_teams", "training_menu", "launcher_home",
          "launcher_settings", "launcher_a11y", "launcher_voices", "port_menu", "port_menu_a11y",
-         "port_menu_voices", "direct_hub"]
+         "port_menu_voices", "direct_hub", "memcard_no", "memcard_no_card", "memcard_corrupted"]
 # drive.py options a script needs: the launcher's scripts open the launcher,
 # with accessibility on but muted, since its line reading needs the switch on,
 # as the port menu's does.
@@ -67,7 +68,16 @@ ARGS = {"launcher_home": ["--launcher", "--muted"], "launcher_settings": ["--lau
         "port_menu": ["--muted"], "port_menu_a11y": ["--muted"],
         "port_menu_voices": ["--muted"], "match_port_menu": ["--muted"], "direct_call": ["--muted"],
         "match_damage": ["--muted"], "match_thresholds": ["--muted"], "match_stocks": ["--muted"],
-        "match_stock_steal": ["--muted"], "match_time": ["--muted"]}
+        "match_stock_steal": ["--muted"], "match_time": ["--muted"],
+        # The memory card prompts: the run's own card, empty ("--card=", since
+        # the script follows and --card alone would take it as a save), or none.
+        "memcard_create": ["--card="], "memcard_no": ["--card="], "memcard_no_card": ["--scene", ""]}
+# A run that takes the save another script's run makes, corrupted as it is
+# copied in (drive.py --corrupt): that script runs first, in the same cache
+# slot, its transcript and save in the same folder. The save stays out of
+# git: its first block holds the game's banner and icons.
+CORRUPTED_SAVE_FROM = {"memcard_corrupted": "memcard_create"}
+US_SAVE = os.path.join("USA", "Card A", "01-GALE-SuperSmashBros0110290334.gci")
 # Settings a script needs from the environment. The Accessibility
 # category's scripts leave Steering and Cues to the run's a11y.ini, so their
 # rows show no "(environment)" whatever the caller exports.
@@ -98,6 +108,7 @@ NO_LOBBY_SPEECH = re.compile(r'"Online lobby\. No speech yet\.')
 # Results' ready lines: with one human, or none, readying ends results and
 # says nothing.
 READY = r'"(Ready, waiting|Not ready\.|P\d (not )?ready\.)'
+ONE_FRAME_PROMPTS = re.compile(r'\[a11y\] speak .*"(Creating new Game Data|Erasing the corrupted)')
 # Lines a passing run must not log; drive.py cannot fail on an absent line.
 ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           # The Training menu's hidden row, or a value the reader cannot name.
@@ -114,7 +125,9 @@ ABSENT = {"sss_skipped": re.compile(r'"Stage select\.'),
           # Four CPUs: nobody is "you", in speech or in your voice.
           "results_cpu4": re.compile(r'\[a11y\] speak .*, you\b|\[a11y\] voice yours\b|' + READY),
           # A one-minute match: its starting minute is never said.
-          "match_time": re.compile(r'"\d+ minutes? left"')}
+          "match_time": re.compile(r'"\d+ minutes? left"'),
+          # The prompts up for one frame only, replaced before they are said.
+          "memcard_create": ONE_FRAME_PROMPTS, "memcard_corrupted": ONE_FRAME_PROMPTS}
 # Lines a passing run must not log between an opening line and the closing
 # line after it: no cue starts or stops while the port menu is open, since
 # the game stands still then and the stops come just before the opening.
@@ -148,7 +161,9 @@ VOICE_SAMPLES = [(YOUR_SAMPLE, 6), (THEIR_SAMPLE, 2)]
 LAUNCHER_VOICE_SAMPLES = [(YOUR_SAMPLE, 5), (THEIR_SAMPLE, 1)]
 COUNT = {"match_gap": GAP_ONCE, "match_gap_battlefield": GAP_ONCE, "match_ledge": GAP_ONCE + LEDGE,
          "match_ledge_battlefield": LEDGE_BATTLEFIELD, "training_menu": TRAINING_NUMBERS,
-         "port_menu_voices": VOICE_SAMPLES, "launcher_voices": LAUNCHER_VOICE_SAMPLES}
+         "port_menu_voices": VOICE_SAMPLES, "launcher_voices": LAUNCHER_VOICE_SAMPLES,
+         # One "No" for each Create Game Data? visit: Right at the end says nothing.
+         "memcard_no": [(re.compile(r'\[a11y\] speak \w+ \(off\): "No"$'), 2)]}
 
 
 def threshold_crossings(lines, out):
@@ -204,8 +219,10 @@ class Run:
     """One drive.py or drive_net.py run: its command, its transcript (a
     file or a directory) and how many cache slots it takes, one a game."""
 
-    def __init__(self, name, cmd, out, slots, env=None, ports=None):
+    def __init__(self, name, cmd, out, slots, env=None, ports=None, before=None):
         self.name, self.cmd, self.out, self.slots, self.env = name, cmd, out, slots, env or {}
+        # Commands run first, in the same slots, each to pass.
+        self.before = before or []
         # Ports no other run may use at the same time, or None.
         self.ports = ports
         self.seconds = 0.0
@@ -218,8 +235,13 @@ def drive_run(name, out_dir):
     script = os.path.join(HERE, name + ".drive")
     if not os.path.isfile(script):
         sys.exit(f"no script {script}")
-    return Run(name, [sys.executable, os.path.join(HERE, "drive.py"), *ARGS.get(name, []), script, "--out", out],
-               out, 1, ENV.get(name))
+    args, before = ARGS.get(name, []), []
+    if name in CORRUPTED_SAVE_FROM:
+        maker = drive_run(CORRUPTED_SAVE_FROM[name], out_dir)
+        before = [maker.cmd]
+        args = [f"--card={os.path.join(maker.out + '.settings', US_SAVE)}", "--corrupt"]
+    return Run(name, [sys.executable, os.path.join(HERE, "drive.py"), *args, script, "--out", out],
+               out, 1, ENV.get(name), before=before)
 
 
 def net_run(name, out_dir, base_b):
@@ -280,11 +302,16 @@ def execute(run, taken, lock):
     cmd = run.cmd + (["--cache-slots", ",".join(taken)] if run.slots == 2 else ["--cache-slot", taken[0]])
     env = dict(os.environ, **run.env)
     started = time.monotonic()
-    proc = subprocess.run(cmd, cwd=REPO, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                          stderr=subprocess.STDOUT)
+    slot_args = cmd[len(run.cmd):]
+    lines = []
+    for step in [first + slot_args for first in run.before] + [cmd]:
+        proc = subprocess.run(step, cwd=REPO, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT)
+        lines += proc.stdout.decode("utf-8", "replace").splitlines()
+        if proc.returncode != 0:
+            break
     run.seconds = time.monotonic() - started
     run.code = proc.returncode
-    lines = proc.stdout.decode("utf-8", "replace").splitlines()
     run.failures = [line for line in lines if FAILURE.search(line)]
     absent = ABSENT.get(run.name)
     counts = COUNT.get(run.name, [])

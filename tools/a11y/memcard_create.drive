@@ -1,0 +1,14 @@
+# A fresh install's memory card prompt, Yes: the run's own empty card
+# (drive.py --card) brings "Create Game Data?" with Yes hovered, said with
+# the keys and queued behind the startup's ready line. A creates the save:
+# "Creating new Game Data." shows for one frame only and is never said, and
+# the result is said with its key. A again goes on to the opening movie.
+# The run leaves the new save in its settings folder, USA/Card A, from which
+# memcard_corrupted.drive's run takes it.
+#   python tools/a11y/drive.py tools/a11y/memcard_create.drive --card
+
+wait 'speak queue \(off\): "The Memory Card in Slot A has no saved Game Data\. Create Game Data\? Yes\. Left and Right choose, A confirms\."$'
+press A
+wait 'speak interrupt \(off\): "Game Data has been created\. This game saves data automatically while you play\. Please do not touch the Memory Card or POWER Button while saving or copying\. A to continue\."$'
+press A
+wait '"Opening movie\. Press Start to skip\."$'

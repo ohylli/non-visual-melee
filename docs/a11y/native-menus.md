@@ -106,7 +106,7 @@ Most game text passes through those three functions, but not all. `HSD_SisLib_80
 
 ### Decoding game text
 
-The first experiment decoded every string of `SdMenu.usd` on an NTSC-U disc, all 1604 of them, and the description line as the player moves through the main menu tree. Run it with `MELEE_A11Y_TEXT_DUMP=1` and a drive to the main menu; the whole table is logged on the menu scene's first frame, character select's (`SdSlChr`) on its first frame and results' (`SdRst`) on its first tick.
+The first experiment decoded every string of `SdMenu.usd` on an NTSC-U disc, all 1604 of them, and the description line as the player moves through the main menu tree. Run it with `MELEE_A11Y_TEXT_DUMP=1` and a drive to the main menu; the whole table is logged on the menu scene's first frame, character select's (`SdSlChr`) on its first frame, results' (`SdRst`) on its first tick and the memory card scene's message window (`SdMsgBox`, font slot 3) on its first frame (a `drive.py --card` run, or `--scene ""`).
 
 - **The English text decodes.** Every string came out as the screen shows it, with no command the decoder did not know; the decoder follows the jump and call commands and skips colour, scale, spacing, alignment and timing by their operand sizes, as the renderer (`HSD_SisLib_803A84BC`) does.
 - **The atlas table is exact.** The encoder's two tables (`lbl_8040C8C0`, Shift-JIS per entry, and `HSD_SisLib_8040C680`, glyph code per entry) pair up one to one over all 287 atlas glyphs: digits, Latin letters, kana, punctuation and 23 kanji. The decoder keeps its own copy, since PAL rewrites `HSD_SisLib_8040C680` at startup.
@@ -137,7 +137,7 @@ Grouped by where the player meets them. For each screen, the kind and where its 
 
 ### Boot and title
 
-- **Memory card prompts** (`src/melee/gm/gmscmemcard.c`, message window in `gm_1ADD.c`): prompts, each a Yes/No toggle; game text (`SdMsgBox`).
+- **Memory card prompts** (`src/melee/gm/gmscmemcard.c`, message window in `gm_1ADD.c`): prompts, a message or a choice of two (Yes and No, OK and Try Again); game text (`SdMsgBox`). See [Memory card prompts in detail](#memory-card-prompts-in-detail).
 - **Progressive scan prompt** (`src/melee/gm/gmprogressive.c`): a prompt, never shown on PC because the port reports no progressive-scan cable.
 - **Opening movie** (`src/melee/gm/gmopeningmode.c`, `GS_MOVIE_OPENING`): before the title screen on every normal launch; see [Scenes](#scenes-how-the-game-moves-between-screens) for how Start leaves it.
 - **Title screen** (`src/melee/gm/gmtitle.c`, `gmtitlemode.c`): "Press Start", no menu. Left alone for 600 frames it starts the attract loop: a demo fight, the title again, another demo fight, the how-to-play movie, the special movie.
@@ -354,6 +354,57 @@ The reader sees the local port's newly pressed D-pad directions and Z in `HSD_Pa
 ### Where the fork reads it
 
 The match's tick hook (`pc_a11y_match_tick`, [gameplay primer](gameplay-state.md), "The tick hook") hands results to the reader behind the usual speech gate, after the scene's own update; the scene hook marks each visit. "You" are controller 1's port offline and `pc_net_local_player()` online, and nobody when that port holds a CPU or nobody, as in the debug match with four CPUs. The reader follows the panel of that port, a CPU's included, which controller 1 then pages, or the first player's when the port is empty; the reading cursor starts on you, or on the first player by port when nobody is you.
+
+## Memory card prompts in detail
+
+The memory card scene, `GS_MEMCARD` (`gmscmemcard.c`), checks the card and shows a prompt in a message window (`gm_1ADD.c`) when the save cannot simply be loaded; a valid save loads with nothing shown and the opening movie starts. It runs at startup (`GM_BOOT`) and later as `GM_MEMCARD`, at a mode change after an autosave failed or the card folder appeared or disappeared. The fork reads it in `memcard_speech.cpp`, from two hooks in `gmscmemcard.c`.
+
+### The card on PC
+
+- **A folder of save files.** aurora emulates slot A as `<user dir>/USA/Card A/`, the user dir being `pc_get_pref_path()` (`%APPDATA%\melee-pc`, or `MELEE_USER_DIR`). A fresh user dir gets an empty, formatted card, so a new player meets "has no saved Game Data". The US save is `01-GALE-SuperSmashBros0110290334.gci`, 11 blocks.
+- **No card.** `--no-card` (`aurora_card_set_present(false)`, `src/pc/main.c`) means none at all: "There is no Memory Card in Slot A.", and `gmmain_lib.c` then builds a save with everything unlocked.
+- **Reaching it.** `MELEE_BOOT_SCENE` skips `GM_BOOT` and so the scene; a run that wants it starts with no boot scene (`drive.py --scene ""`, the default with `--card`).
+- **A corrupted save.** Spoiling one data block is not enough: the game loaded a fresh save with byte 0x100 flipped in its first data block, its banner block, or several single blocks. Flipping byte 0x100 of every data block but the banner (blocks 1 to 10, file offset `0x40 + n × 0x2000 + 0x100`) gave the corrupted prompt; `drive.py --corrupt` does that to the save it copies in.
+- **Noise.** Creating the save logs an aurora card error, a file it failed to close; the save is written whole and loads.
+
+### State and the prompt function
+
+- **State** is the file-static `enter_data`: `.decision` the scene's state, `.unk1C` the hovered choice (0 the left, Yes or OK; 1 the right, No or Try Again), `.unk0.unk0` 0 at startup and 1 in `GM_MEMCARD`.
+- **Every prompt** goes through `gm_801AEE6C(kind, text_id, line_count)`: kind 0 a message, A or Start continues; kind 1 Yes and No (strings 3 and 4); kind 2 OK and Try Again (strings 2 and 5). A prompt with a choice starts on the left one.
+- **Moved defaults.** `gm_801AF250` picks the prompt from the card check's result and, for some (Overwrite, Corrupted, Format), moves the hovered choice to the right just after `gm_801AEE6C` returns, in the same frame.
+- **Input.** Left and Right, on the D-pad or stick of any controller, move the choice with the move sound, stopping at the ends without a sound; A or Start confirms with the confirm sound; B does nothing.
+- **One-frame prompts.** The card calls are synchronous on PC, so "Erasing the corrupted data..." and "Creating new Game Data." are replaced on the next frame and never seen.
+
+### Game text
+
+Font slot 3 holds `SIS_MessageData` (`SdMsgBox.usd`, loaded by `gm_801AEBB0`), 25 strings on an NTSC-U disc, all decoding. The fork reads it by number through `a11y_game_memcard_string` in `game_access.c`, which checks the symbol; `pc_region_sis_index` has no PAL shift for it, unchecked. " / " marks the screen's line breaks:
+
+| Id | Text | Kind | Reachable on PC |
+|---|---|---|---|
+| 2 to 5 | OK, Yes, No, Try Again | choice names | |
+| 6 | The Memory Card in Slot A / has saved Game Data. / Overwrite this Game Data? | Yes/No, No hovered | after a failed autosave |
+| 7 | The Memory Card in Slot A / has saved Game Data. / Load from this Memory Card? | Yes/No | practically never |
+| 8 | The Game Data on the Memory Card / in Slot A is corrupted. Erase this / and create new Game Data? | Yes/No, No hovered | a corrupted save |
+| 9 | Erasing the corrupted data... / Do not touch the Memory Card / or POWER Button. | message | one frame |
+| 0xA | The Memory Card in Slot A / has no saved Game Data. / Create Game Data? | Yes/No | a fresh install |
+| 0xB | Creating new Game Data. / Do not touch the Memory Card / or POWER Button ! | message | one frame |
+| 0xC | Game Data has been created. / This game saves data automatically / while you play. Please do not / touch the Memory Card or POWER / Button while saving or copying. | message | after Yes on 8 or 0xA |
+| 0xD | Game Data could not / be created. | message | a disk write error |
+| 0xE to 0x15 | not enough space, no more files, must be formatted, formatted, could not format, could not be accessed, incompatible, damaged | mixed | practically never |
+| 0x16 | There is no Memory Card / in Slot A. | message | `--no-card` |
+| 0x17 | Continue without saving? | OK/Try Again | after a failed autosave |
+| 0x18 | Continue without saving / or loading Game Data? | OK/Try Again | after No |
+
+### Flow
+
+- Create Game Data? → Yes → Game Data has been created → the opening movie.
+- Create Game Data? → No → Continue without saving or loading Game Data? → OK → the opening movie, no save written; or Try Again → Create Game Data? again.
+- No Memory Card → Continue without saving or loading Game Data? → Try Again → No Memory Card again.
+- Corrupted → Yes → (Erasing, Creating) → Game Data has been created → the opening movie.
+
+### Where the fork reads it
+
+`pc_a11y_memcard_prompt(kind, text_id)` at the start of `gm_801AEE6C` records the prompt; `pc_a11y_memcard_frame(hovered_choice)` at the top of `gm_Scene_MemCard_OnFrame`, before the frame reads input, passes `enter_data.unk1C`. A prompt is said on the second frame start after the one that showed it: by then it has stayed up through a whole frame, which the one-frame prompts never do, and the default the game moved is the choice read. The scene hook marks each visit, so a frame before the visit's first prompt says nothing. The scene speech table leaves the scene silent: its first prompt is its opening.
 
 ## Candidate hook points
 

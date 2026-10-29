@@ -1,0 +1,19 @@
+# A corrupted save's memory card prompt: "Erase this and create new Game
+# Data?" with No hovered, the game's default, said with the keys. Left says
+# "Yes", and A on it erases the save and creates a new one: "Erasing the
+# corrupted data..." and "Creating new Game Data." each show for one frame
+# only and are never said, and the result is said with its key. A again
+# goes on to the opening movie.
+# The save is a fresh one (memcard_create.drive's), corrupted as it is
+# copied in (drive.py --corrupt), never committed:
+#   python tools/a11y/drive.py tools/a11y/memcard_create.drive --card --out build/drive/fresh.log
+#   python tools/a11y/drive.py tools/a11y/memcard_corrupted.drive --corrupt \
+#     "--card=build/drive/fresh.log.settings/USA/Card A/01-GALE-SuperSmashBros0110290334.gci"
+
+wait 'speak queue \(off\): "The Game Data on the Memory Card in Slot A is corrupted\. Erase this and create new Game Data\? No\. Left and Right choose, A confirms\."$'
+press Left
+wait 'speak interrupt \(off\): "Yes"$'
+press A
+wait 'speak interrupt \(off\): "Game Data has been created\. This game saves data automatically while you play\. Please do not touch the Memory Card or POWER Button while saving or copying\. A to continue\."$'
+press A
+wait '"Opening movie\. Press Start to skip\."$'
