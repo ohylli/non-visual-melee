@@ -1,6 +1,6 @@
 # 06 Play test by ear
 
-Status: ready-for-human
+Status: resolved (2026-10-29)
 Type: task
 Blocked by: 05
 
@@ -31,3 +31,7 @@ The review of issues 01 to 05 fixed what was plainly the code's own (its fix com
 - **Online, a KO that a rollback takes back leaves lines behind.** The stock line is said on its predicted tick (known in `docs/a11y/gameplay-state.md`, "Open questions"); after the rollback the count's return is said too ("3 stocks"), and the damage, zeroed by the KO, is said again once it settles. Options: take a rise outside a team match as said, silently, and zero the damage's last figure only once a stock is really gone; or hold stock lines a few ticks. Recommended: the silent rise, if it is ever heard.
 - **"Announcer" in the names.** `MatchAnnouncer` and `match_announcer.*` use the word `CONTEXT.md` avoids, since the game has its own announcer, and the same files speak of "the game's announcer". Options: rename to `MatchAnnouncements` (files, tests, the `verify` skill's test name, CLAUDE.md), or keep the spec's name. Recommended: rename when the feature is next touched.
 - **The player label's name tag duplicates results'.** `MatchAnnouncer::label` and `ResultsSpeech::opponent_name` both decode a tag and fall back to "P" and the port, and have drifted: results logs a tag with unknown characters or a malformed one, the match label drops them silently. Options: one shared helper from tag and port to a name, with the log; or leave it. Recommended: the helper, a small refactor across the two readers.
+
+### 2026-10-29, play test by ear (maintainer)
+
+Played with NVDA: matches with the announcements in both voices, with several opponents too, the settings adjusted along the way. No issues were noticed. The review's items above need no immediate action and stay as they stand, open for a later change if one is ever heard.

@@ -1,6 +1,6 @@
 # 05 Play test by ear
 
-Status: ready-for-human
+Status: resolved (2026-10-29)
 Type: task
 Blocked by: 04
 
@@ -32,3 +32,7 @@ Review of issues 01 to 04 (`dd1dd0c..10b0856`); the plain fixes are in their own
 - **The `after_speech` hand-off** (`Switches`, `hooks.cpp`) builds the voices' rows inside the switches' constructor so they land after Speech. It works, but the row order now hangs on a side effect, and the next feature wanting rows between switches needs another hand-off. Options: split the switches' registration in two steps, or let a group be registered after a named one. Recommendation: the two steps, when the match announcements add their rows.
 - **"Voice" has two meanings**: CONTEXT.md's voice (your voice, the opponents' voice) and the cue engine's playback voice ("once voice", `CueEngine::Voice`). A CONTEXT.md line for the engine's sense, or "engine voice" where both meet, would settle it.
 - **`NamedValue` carries the choice's six fields beside the number's**, and several functions switch on the kind; gathering a choice's fields into one member would show the kind-specific state in one place. A judgement call; it works as it is.
+
+### 2026-10-29, play test by ear (maintainer)
+
+Played with NVDA: the maintainer chose the voices and adjusted their settings in the Accessibility category, and heard them in matches, with several opponents too. No issues were noticed. The review's items above need no immediate action and stay as they stand, open for a later change if one is ever heard.
