@@ -408,7 +408,7 @@ Font slot 3 holds `SIS_MessageData` (`SdMsgBox.usd`, loaded by `gm_801AEBB0`), 2
 
 ## Unlock notices and challengers in detail
 
-The unlock notice scene, `GS_PRIZE_INTERFACE` (`src/melee/if/ifprize.c`), shows what the player has just earned, one notice at a time, each in game text. The fork reads it in `unlock_speech.cpp`, from one hook in `ifprize.c`. The spec is `.scratch/unlock-notices/spec.md`.
+The unlock notice scene, `GS_PRIZE_INTERFACE` (`src/melee/if/ifprize.c`), shows what the player has just earned, one notice at a time, each in game text. The fork reads it in `unlock_speech.cpp`, from one hook in `ifprize.c`. A locked character comes first as a challenger, a fight that unlocks it when won; when one comes depends on the save: "The save file" gives its layout, and "Challengers and their thresholds" when each comes. The spec is `.scratch/unlock-notices/spec.md`.
 
 ### The unlock notice scene
 
@@ -429,6 +429,24 @@ The unlock notice scene, `GS_PRIZE_INTERFACE` (`src/melee/if/ifprize.c`), shows 
 ### Where the fork reads the notices
 
 `pc_a11y_unlock_notice(text_id)` at the end of `un_802FE918` passes the string bound to the notice, 0x4A for a trophy, after the composition and the frame's other text are set. `a11y_game_prize_string` in `game_access.c` reads it by number from font slot 2, checking the symbol. Each notice is said as it comes, interrupting the one before, and the first of a visit adds the key; the scene hook marks each visit, and the scene speech table leaves the scene silent, since its first notice is its opening. Nothing is said as the scene closes. Netplay never reaches the scene: the online mode ends at results.
+
+### The save file
+
+What unlocks a character, and so brings a challenger, is in the save, which a test edits to bring one at once (`tools/a11y/make_save.py`, below). From `src/sysdolphin/baselib/card.c` and `crypt.c`, `src/melee/lb/lbcardgame.c` and `gm/types.h`, confirmed by edited saves that load:
+
+- **The file.** The US save (`01-GALE-SuperSmashBros0110290334.gci`, "The card on PC") is a GCI file: a 0x40-byte directory entry (big-endian; the game code, maker, file name, and the block count at 0x38), then 11 sectors of 0x2000 bytes.
+- **Sector 0** holds the comment, banner and icons: the game's own pictures, so **no save file is ever committed**, a test's included.
+- **Each other sector is one block**: a 0x20-byte header (a 16-byte checksum, the block id as a big-endian u16 at 0x10, a sequence number, a file table), then the payload. `HSD_Encrypt` seals a block from byte 16 on: the checksum, a running byte sum, of the rest into bytes 0 to 15, then each byte scrambled with the scrambled byte before it as its key. `HSD_Decrypt` rejects a block whose checksum fails.
+- **Block id 1** holds `GmSaveData` (0x1790 bytes) at payload offset 0, in two copies on a fresh save (sectors 1 and 10), in host byte order: little-endian on PC, unlike the console's. Offset 0x00 is the unlocked characters' bits (u16, one per character that can be unlocked, numbered as `lbl_803B78C8` in `gm_1601.c` numbers them), 0x08 the VS matches played (u32), 0x0C the VS play time in seconds (u32), 0x14 the characters played in VS (bits per `SelectableCharacterKind`).
+- **The save tool** ports the cipher. A port that stopped matching the game's would find no block whose checksum holds, and the tool then refuses the file rather than write one the game would call corrupted.
+
+### Challengers and their thresholds
+
+- **Only while a character is locked.** Each of the 11 comes in VS once enough matches are played, and some by other ways too (below); VS is the way a test reaches.
+- **After every VS match with a human**, a match quit from the pause included, `gmVsMelee_ExitResults` (`gmvsmelee.c`) looks for a challenger in turn, and the first found comes: by the VS match count (`gm_80172DD4`: the locked character with the lowest threshold at or below the count), then Mewtwo by VS play time (`gm_80172D78`, at 72000 seconds, 20 hours), then Marth once all 14 starting characters have been played in VS (`gm_80172E74`).
+- **The thresholds** (`lbl_803B7AD0`, `gm_16F1.c`), in VS matches played: Jigglypuff 50, Dr. Mario 100, Pichu 200, Falco 300, Marth 400, Young Link 500, Ganondorf 600, Mewtwo 700, Luigi 800, Roy 900, Mr. Game & Watch 1000.
+- **A quit match is not counted** (`gm_WasMatchCanceled` skips the count), so a save with every other character unlocked and the count at one's threshold brings that one after every VS match, quit or played to the end, run after run, until it is beaten. `make_save.py challenger NAME` makes that save from a fresh one, and `tools/a11y/challenger.drive` plays the quick VS match to the New challenger screen.
+- **Single-player modes and events** bring challengers by conditions of their own (`fn_80173098`, `gm_801732D8` in `gm_16F1.c`), not looked into.
 
 ## Candidate hook points
 

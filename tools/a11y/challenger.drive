@@ -1,0 +1,56 @@
+# A challenger after a VS match: a save that brings one (make_save.py)
+# loads from the run's card, the opening movie and title screen pass, and
+# VS Melee starts with Fox against a CPU on a random stage. The match is
+# quit from the pause at once, a no contest that still counts: results,
+# then the New challenger screen. The save is made beside the run, never
+# committed:
+#   python tools/a11y/make_save.py challenger jigglypuff
+#   python tools/a11y/drive.py tools/a11y/challenger.drive --card=build/drive/challenger.gci
+# For another challenger, name it to make_save.py (mewtwo, roy, ...); the
+# script is the same.
+
+wait '"Opening movie\. Press Start to skip\."' 60
+press Start until '"Title screen\. Press Start\."' 20 1
+sleep 1
+press Start until '"Main Menu\. ' 20 1
+sleep 1
+press Down
+wait '"VS\. Mode\. '
+press A
+wait '"VS\. Mode\. Melee\. '
+sleep 0.3
+press A
+wait '"Character select\. Player 1, no character\.'
+sleep 1
+# Fox for player 1.
+press DUp
+wait ': "Player 1: closed"$'
+press DUp
+wait ': "Pichu"$'
+press DUp
+wait ': "Fox"$'
+wait 'glide to "Fox" ended after \d+ frames: arrived'
+press A
+sleep 1
+# Player 2 a CPU.
+search ': "Player 2: closed"$' DDown*2 DRight*3 DLeft*3
+wait 'glide to "Player 2: closed" ended'
+press A until 'Ready to fight\. Press Start\.'
+sleep 0.5
+# Random stage, then quit from the pause: L, R, A and Start held together.
+press Start
+wait '"Stage select\. '
+sleep 1
+press Start
+sleep 8
+press Start
+sleep 1
+press L+R+A+Start 1000
+press Start until '"Time Battle\. No contest\. ' 5 2
+press Start
+wait '"KOs and falls\. '
+sleep 0.5
+press Start
+# The New challenger screen. Its line is the scene table's until the
+# screen gets a reader of its own.
+wait '"New challenger"$'

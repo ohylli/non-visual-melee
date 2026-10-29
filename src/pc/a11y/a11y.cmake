@@ -504,6 +504,9 @@ if (TARGET unit_tests)
         add_test(NAME cue_dump_analysis COMMAND ${MELEE_PYTHON}
                 ${PROJECT_SOURCE_DIR}/tools/a11y/test_cue_dump.py ${CMAKE_BINARY_DIR}/cue_pulse_train.f32)
         set_tests_properties(cue_dump_analysis PROPERTIES LABELS melee FIXTURES_REQUIRED cue_dump)
+        # The save tool's card cipher and edits, on a hand-made save file.
+        add_test(NAME make_save COMMAND ${MELEE_PYTHON} ${PROJECT_SOURCE_DIR}/tools/a11y/test_make_save.py)
+        set_tests_properties(make_save PROPERTIES LABELS melee)
     endif ()
 
     # The accessibility settings: the value model, its file against files in

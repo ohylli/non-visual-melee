@@ -18,7 +18,8 @@ times.json beside the transcripts:
   menus   the menu drive scripts (MENUS), the launcher's four and the
           port menu's three among them; the match announcements' scripts
           run by name. memcard_corrupted runs memcard_create.drive first
-          and takes the save it makes, corrupted
+          and takes the save it makes, corrupted; challenger runs
+          make_save.py first for a save that brings Jigglypuff
   online  css_net.drive at delay 0, delay 10 and over a 100 ms slow link,
           results_net.drive and match_net.drive (--muted), lan_lobby.drive
           (--lan), direct_call.drive, and direct_back.drive and
@@ -61,7 +62,7 @@ MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens
          "results_teams", "training_menu", "launcher_home",
          "launcher_settings", "launcher_a11y", "launcher_voices", "port_menu", "port_menu_a11y",
          "port_menu_voices", "direct_hub", "memcard_no", "memcard_no_card", "memcard_corrupted",
-         "unlock_notices"]
+         "unlock_notices", "challenger"]
 # drive.py options a script needs: the launcher's scripts open the launcher,
 # with accessibility on but muted, since its line reading needs the switch on,
 # as the port menu's does.
@@ -80,6 +81,10 @@ ARGS = {"launcher_home": ["--launcher", "--muted"], "launcher_settings": ["--lau
 # runs the script by name keeps the two apart), checked as the script's. The
 # save stays out of git: its first block holds the game's banner and icons.
 CORRUPTED_SAVE_FROM = {"memcard_corrupted": "memcard_create"}
+# A run that takes a save make_save.py edits, made first in the same cache
+# slot (which also makes the fresh save it edits, the first time) and
+# written beside the transcript (<run>.gci).
+SAVE_EDIT = {"challenger": ["challenger", "jigglypuff"]}
 US_SAVE = os.path.join("USA", "Card A", "01-GALE-SuperSmashBros0110290334.gci")
 # Settings a script needs from the environment. The Accessibility
 # category's scripts leave Steering and Cues to the run's a11y.ini, so their
@@ -255,6 +260,11 @@ def drive_run(name, out_dir, out=None):
         maker = drive_run(maker_name, out_dir, os.path.join(out_dir, f"{name}.{maker_name}.log"))
         before = [maker]
         args = [f"--card={os.path.join(maker.out + '.settings', US_SAVE)}", "--corrupt"]
+    if name in SAVE_EDIT:
+        save = os.path.splitext(out)[0] + ".gci"
+        before = [Run(f"{name}.make_save", [sys.executable, os.path.join(HERE, "make_save.py"), *SAVE_EDIT[name],
+                                            "--out", save], save, 1)]
+        args = [f"--card={save}"]
     return Run(name, [sys.executable, os.path.join(HERE, "drive.py"), *args, script, "--out", out],
                out, 1, ENV.get(name), before=before)
 
