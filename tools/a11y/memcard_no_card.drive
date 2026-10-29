@@ -1,6 +1,6 @@
 # The memory card prompts with no card at all (drive.py's default
 # --no-card), from the memory card scene: "There is no Memory Card in Slot
-# A." with its key, queued behind the startup's ready line; A asks
+# A." with its key, queued behind the startup's own lines; A asks
 # "Continue without saving or loading Game Data?" with OK hovered and the
 # keys, the run's first prompt with a choice; Right says "Try Again", and A
 # on it says the missing card again. A and OK then go on to the opening

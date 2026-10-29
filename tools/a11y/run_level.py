@@ -42,6 +42,7 @@ Transcripts go to build/drive/level: NAME.log for drive.py, a directory
 NAME for drive_net.py.
 """
 import argparse
+import glob
 import json
 import math
 import os
@@ -74,8 +75,9 @@ ARGS = {"launcher_home": ["--launcher", "--muted"], "launcher_settings": ["--lau
         "memcard_create": ["--card="], "memcard_no": ["--card="], "memcard_no_card": ["--scene", ""]}
 # A run that takes the save another script's run makes, corrupted as it is
 # copied in (drive.py --corrupt): that script runs first, in the same cache
-# slot, its transcript and save in the same folder. The save stays out of
-# git: its first block holds the game's banner and icons.
+# slot, with a transcript of its own (<run>.<script>.log, so a set that also
+# runs the script by name keeps the two apart), checked as the script's. The
+# save stays out of git: its first block holds the game's banner and icons.
 CORRUPTED_SAVE_FROM = {"memcard_corrupted": "memcard_create"}
 US_SAVE = os.path.join("USA", "Card A", "01-GALE-SuperSmashBros0110290334.gci")
 # Settings a script needs from the environment. The Accessibility
@@ -196,9 +198,16 @@ def threshold_crossings(lines, out):
     return failures
 
 
+def no_card_save(lines, out):
+    """Failure lines if the run's card holds a save."""
+    saves = glob.glob(os.path.join(glob.escape(out + ".settings"), "*", "Card A", "*.gci"))
+    return [f">> FAILED: a save was written: {path}" for path in saves]
+
+
 # Checks of a transcript, each giving its failure lines: Thresholds says a
-# figure only once it has crossed a multiple of the interval.
-CHECK = {"match_thresholds": threshold_crossings}
+# figure only once it has crossed a multiple of the interval; No and OK on
+# the memory card prompts write no save.
+CHECK = {"match_thresholds": threshold_crossings, "memcard_no": no_card_save}
 NET = [("css_net-delay0", ["--delay", "0"]), ("css_net-delay10", ["--delay", "10"]),
        ("css_net-slow", ["--sim-delay-ms", "100"])]
 # Direct Connect's two-copy runs meet over the internet through the router's
@@ -221,7 +230,7 @@ class Run:
 
     def __init__(self, name, cmd, out, slots, env=None, ports=None, before=None):
         self.name, self.cmd, self.out, self.slots, self.env = name, cmd, out, slots, env or {}
-        # Commands run first, in the same slots, each to pass.
+        # Runs made first, in the same slots, each to pass its own checks.
         self.before = before or []
         # Ports no other run may use at the same time, or None.
         self.ports = ports
@@ -230,15 +239,16 @@ class Run:
         self.failures = []
 
 
-def drive_run(name, out_dir):
-    out = os.path.join(out_dir, name + ".log")
+def drive_run(name, out_dir, out=None):
+    out = out or os.path.join(out_dir, name + ".log")
     script = os.path.join(HERE, name + ".drive")
     if not os.path.isfile(script):
         sys.exit(f"no script {script}")
     args, before = ARGS.get(name, []), []
     if name in CORRUPTED_SAVE_FROM:
-        maker = drive_run(CORRUPTED_SAVE_FROM[name], out_dir)
-        before = [maker.cmd]
+        maker_name = CORRUPTED_SAVE_FROM[name]
+        maker = drive_run(maker_name, out_dir, os.path.join(out_dir, f"{name}.{maker_name}.log"))
+        before = [maker]
         args = [f"--card={os.path.join(maker.out + '.settings', US_SAVE)}", "--corrupt"]
     return Run(name, [sys.executable, os.path.join(HERE, "drive.py"), *args, script, "--out", out],
                out, 1, ENV.get(name), before=before)
@@ -298,38 +308,24 @@ def save_times(out_dir, times, runs):
         json.dump(times, f, indent=1, sort_keys=True)
 
 
-def execute(run, taken, lock):
-    cmd = run.cmd + (["--cache-slots", ",".join(taken)] if run.slots == 2 else ["--cache-slot", taken[0]])
-    env = dict(os.environ, **run.env)
-    started = time.monotonic()
-    slot_args = cmd[len(run.cmd):]
-    lines = []
-    for step in [first + slot_args for first in run.before] + [cmd]:
-        proc = subprocess.run(step, cwd=REPO, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                              stderr=subprocess.STDOUT)
-        lines += proc.stdout.decode("utf-8", "replace").splitlines()
-        if proc.returncode != 0:
-            break
-    run.seconds = time.monotonic() - started
-    run.code = proc.returncode
-    run.failures = [line for line in lines if FAILURE.search(line)]
-    absent = ABSENT.get(run.name)
-    counts = COUNT.get(run.name, [])
-    between = BETWEEN.get(run.name)
-    check = CHECK.get(run.name)
-    logged_lines = []
-    if absent or counts or between or check:
-        try:
-            with open(run.out, encoding="utf-8", errors="replace") as f:
-                logged_lines = [line.rstrip("\n") for line in f]
-        except OSError as e:
-            run.code = run.code or 1
-            run.failures.append(f">> FAILED: transcript unreadable: {e}")
+def transcript_failures(name, out):
+    """The failure lines of the checks the script called name has, read
+    from its transcript out."""
+    absent = ABSENT.get(name)
+    counts = COUNT.get(name, [])
+    between = BETWEEN.get(name)
+    check = CHECK.get(name)
+    if not (absent or counts or between or check):
+        return []
+    try:
+        with open(out, encoding="utf-8", errors="replace") as f:
+            logged_lines = [line.rstrip("\n") for line in f]
+    except OSError as e:
+        return [f">> FAILED: transcript unreadable: {e}"]
+    failures = []
     if absent:
-        found = [line for line in logged_lines if absent.search(line)]
-        if found:
-            run.code = run.code or 1
-            run.failures += [f">> FAILED: logged {absent.pattern!r}: {line}" for line in found]
+        failures += [f">> FAILED: logged {absent.pattern!r}: {line}" for line in logged_lines
+                     if absent.search(line)]
     if between:
         opening, closing, banned, when = between
         inside = False
@@ -339,19 +335,35 @@ def execute(run, taken, lock):
             elif closing.search(line):
                 inside = False
             elif inside and banned.search(line):
-                run.code = run.code or 1
-                run.failures.append(f">> FAILED: logged {banned.pattern!r} {when}: {line}")
+                failures.append(f">> FAILED: logged {banned.pattern!r} {when}: {line}")
     if check:
-        found = check(logged_lines, run.out)
-        if found:
-            run.code = run.code or 1
-            run.failures += found
+        failures += check(logged_lines, out)
     for pattern, times in counts:
         logged = sum(1 for line in logged_lines if pattern.search(line))
         if logged not in (times if isinstance(times, range) else (times,)):
-            run.code = run.code or 1
             expected = f"{times.start} to {times.stop - 1}" if isinstance(times, range) else times
-            run.failures.append(f">> FAILED: logged {pattern.pattern!r} {logged} times, not {expected}")
+            failures.append(f">> FAILED: logged {pattern.pattern!r} {logged} times, not {expected}")
+    return failures
+
+
+def execute(run, taken, lock):
+    slot_args = ["--cache-slots", ",".join(taken)] if run.slots == 2 else ["--cache-slot", taken[0]]
+    env = dict(os.environ, **run.env)
+    started = time.monotonic()
+    for step in run.before + [run]:
+        proc = subprocess.run(step.cmd + slot_args, cwd=REPO, env=env, stdin=subprocess.DEVNULL,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        lines = proc.stdout.decode("utf-8", "replace").splitlines()
+        failures = [line for line in lines if FAILURE.search(line)]
+        checked = transcript_failures(step.name, step.out)
+        run.code = proc.returncode or (1 if checked else 0)
+        if step is not run and run.code != 0:
+            # The report names the main run's transcript.
+            run.failures.append(f">> FAILED: {step.name} first, {step.out}")
+        run.failures += failures + checked
+        if run.code != 0:
+            break
+    run.seconds = time.monotonic() - started
     with lock:
         print(f"{'pass' if run.code == 0 else 'FAIL'}  {run.name:22} {run.seconds:5.1f} s  {run.out}", flush=True)
 

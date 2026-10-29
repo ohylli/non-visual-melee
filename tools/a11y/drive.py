@@ -264,9 +264,10 @@ def card_save_place(data):
     data: (region, file name), the folder <user dir>/<region>/Card A. aurora
     reads only a file named from its own entry, maker-game-name.gci
     (gci_filename in CardGciFolder.cpp), so a save keeps that name whatever
-    it was called. The region is the game code's last letter's, as
-    get_card_region (dolphin/card.cpp) gives it for the disc. ValueError
-    for bytes that are no GCI file."""
+    it was called. The region is the save's own, from its game code's last
+    letter as get_card_region (dolphin/card.cpp) reads a disc's, so a save
+    from another region's disc lands in a folder this disc never reads.
+    ValueError for bytes that are no GCI file."""
     if len(data) < GCI_ENTRY:
         raise ValueError(f"{len(data)} bytes, shorter than a GCI file's 0x40-byte entry")
     blocks = struct.unpack_from(">H", data, GCI_BLOCK_COUNT)[0]
@@ -296,9 +297,12 @@ def read_card_save(path):
 def corrupted(data):
     """The save's GCI bytes with byte 0x100 of every block but the first
     flipped. Any one block, or a few, left the save loading in a run; all
-    of them gave the corrupted prompt."""
+    of them gave the corrupted prompt. ScriptError for a one-block save,
+    which has nothing but its banner to spoil."""
     out = bytearray(data)
     blocks = struct.unpack_from(">H", data, GCI_BLOCK_COUNT)[0]
+    if blocks < 2:
+        raise ScriptError("--corrupt: a one-block save has no block to spoil but its banner")
     for block in range(1, blocks):
         out[GCI_ENTRY + block * GCI_BLOCK + 0x100] ^= 0xFF
     return bytes(out)
@@ -988,7 +992,9 @@ def main():
                      "and later overwrite its save")
         if args.card:
             try:
-                read_card_save(args.card)
+                save = read_card_save(args.card)
+                if args.corrupt:
+                    corrupted(save)
             except ScriptError as e:
                 ap.error(f"{e}" + (" (--card took the script file as its save: put the script first, "
                                    "or write --card=GCI)" if args.card.endswith(".drive") else ""))

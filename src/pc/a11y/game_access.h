@@ -755,9 +755,12 @@ typedef struct A11yResults {
  * only. */
 void a11y_game_results(int local_port, A11yResults* out);
 
-/* A string of the memory card scene's message window (SdMsgBox, font slot
- * 3) by the number the game's code uses, or NULL while slot 3 holds another
- * table. */
+/* The memory card scene's message window keeps its strings (SdMsgBox) in
+ * this font slot (gm_801AEBB0 in gm_1ADD.c loads them there). */
+enum { A11Y_MEMCARD_FONT = 3 };
+
+/* A string of the memory card scene's message window by the number the
+ * game's code uses, or NULL while its font slot holds another table. */
 const uint8_t* a11y_game_memcard_string(int number);
 
 /* A match, read once a tick by the match cues (docs/a11y/cues.md, "The

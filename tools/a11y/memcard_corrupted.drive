@@ -6,9 +6,9 @@
 # goes on to the opening movie.
 # The save is a fresh one (memcard_create.drive's), corrupted as it is
 # copied in (drive.py --corrupt), never committed:
-#   python tools/a11y/drive.py tools/a11y/memcard_create.drive --card --out build/drive/fresh.log
+#   python tools/a11y/drive.py tools/a11y/memcard_create.drive --card
 #   python tools/a11y/drive.py tools/a11y/memcard_corrupted.drive --corrupt \
-#     "--card=build/drive/fresh.log.settings/USA/Card A/01-GALE-SuperSmashBros0110290334.gci"
+#     "--card=build/drive/last.log.settings/USA/Card A/01-GALE-SuperSmashBros0110290334.gci"
 
 wait 'speak queue \(off\): "The Game Data on the Memory Card in Slot A is corrupted\. Erase this and create new Game Data\? No\. Left and Right choose, A confirms\."$'
 press Left

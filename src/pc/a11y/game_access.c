@@ -1014,10 +1014,6 @@ void a11y_game_results(int local_port, A11yResults* out) {
     }
 }
 
-/* The message window's strings sit in font slot 3 (gm_801AEBB0 in
- * gm_1ADD.c loads SdMsgBox there). */
-enum { A11Y_MEMCARD_FONT = 3 };
-
 const uint8_t* a11y_game_memcard_string(int number) {
     const char* symbol = a11y_game_font_symbol(A11Y_MEMCARD_FONT);
     if (number < 0 || symbol == NULL || strcmp(symbol, "SIS_MessageData") != 0) {

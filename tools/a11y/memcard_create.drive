@@ -1,6 +1,6 @@
 # A fresh install's memory card prompt, Yes: the run's own empty card
 # (drive.py --card) brings "Create Game Data?" with Yes hovered, said with
-# the keys and queued behind the startup's ready line. A creates the save:
+# the keys and queued behind the startup's own lines. A creates the save:
 # "Creating new Game Data." shows for one frame only and is never said, and
 # the result is said with its key. A again goes on to the opening movie.
 # The run leaves the new save in its settings folder, USA/Card A, from which

@@ -470,8 +470,7 @@ extern "C" void pc_a11y_memcard_prompt(int kind, int text_id) {
 }
 
 extern "C" void pc_a11y_memcard_frame(int hovered_choice) {
-    /* The message window's table, SdMsgBox, in font slot 3. */
-    a11y::menu_text_dump_once(3);
+    a11y::menu_text_dump_once(A11Y_MEMCARD_FONT);
     if (!game_hook_may_speak()) {
         return;
     }

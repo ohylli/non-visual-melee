@@ -62,7 +62,7 @@ private:
     MemcardStrings m_strings;
     /* The prompt last shown, and whether one is up in this visit. */
     bool m_shown = false;
-    int m_kind = 0;
+    MemcardKind m_kind = MemcardKind::message;
     int m_text_id = 0;
     /* The frames that have started since it was shown. */
     int m_frames = 0;

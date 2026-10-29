@@ -20,8 +20,8 @@ constexpr Choice kYesNo[2] = {{3, "Yes"}, {4, "No"}};
 constexpr Choice kOkRetry[2] = {{2, "OK"}, {5, "Try Again"}};
 
 /* The choices of a kind of prompt, or nullptr for a message. */
-const Choice* choices_of(int kind) {
-    switch (static_cast<MemcardKind>(kind)) {
+const Choice* choices_of(MemcardKind kind) {
+    switch (kind) {
     case MemcardKind::yes_no:
         return kYesNo;
     case MemcardKind::ok_retry:
@@ -40,7 +40,7 @@ void MemcardSpeech::visit_started() {
 
 void MemcardSpeech::prompt(int kind, int text_id) {
     m_shown = true;
-    m_kind = kind;
+    m_kind = static_cast<MemcardKind>(kind);
     m_text_id = text_id;
     m_frames = 0;
     m_said = false;
@@ -77,9 +77,9 @@ void MemcardSpeech::say_prompt(int choice) {
             add_sentence(text, kChoiceKeys);
         }
     } else {
-        if (m_kind != static_cast<int>(MemcardKind::message)) {
-            m_log_once(
-                "[a11y] memory card: prompt kind " + std::to_string(m_kind) + " said as a message");
+        if (m_kind != MemcardKind::message) {
+            m_log_once("[a11y] memory card: prompt kind " +
+                       std::to_string(static_cast<int>(m_kind)) + " said as a message");
         }
         add_sentence(text, kContinueKey);
     }

@@ -62,8 +62,8 @@ constexpr SceneWords kScenes[] = {
     {SceneKind::GS_VS, ""},
     {SceneKind::GS_SUDDEN_DEATH, ""},
     {SceneKind::GS_TRAINING, ""},
-    /* Passes unseen when the save loads, and its kind cannot tell; reading
-     * its prompts is a later feature. */
+    /* Passes unseen when the save loads, and its kind cannot tell; its
+     * first prompt is its opening (memcard_speech.cpp). */
     {SceneKind::GS_MEMCARD, ""},
     {SceneKind::GS_PROG_SCAN, ""},
     {SceneKind::GS_DEBUG_MENU, ""},
