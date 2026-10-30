@@ -378,17 +378,7 @@ void ResultsSpeech::ready_changes(const A11yResults& results) {
 
 std::string ResultsSpeech::opponent_name(
     const A11yResults& results, const A11yResultsOpponent& opponent) {
-    std::string name;
-    if (opponent.tag[0] != '\0') {
-        DecodedText tag = decode_shift_jis(opponent.tag);
-        if (std::string trouble = decode_trouble(tag); !trouble.empty()) {
-            m_log_once("[a11y] results: name tag " + trouble);
-        }
-        name = spoken_text(tag.text);
-    }
-    if (name.empty()) {
-        name = port_name(opponent.port);
-    }
+    std::string name = player_label(opponent.tag, opponent.port, m_log_once, "[a11y] results:");
     if (has_port(results, opponent.port)) {
         std::string character = character_word(results, opponent.port);
         if (!character.empty()) {

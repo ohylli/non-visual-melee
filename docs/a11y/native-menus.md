@@ -457,7 +457,7 @@ What unlocks a character, and so brings a challenger, is in the save, which a te
 
 ### Where the fork reads the challenger
 
-`pc_a11y_scene_entered` for `GS_APPROACH` reads `a11y_game_challenger` (`game_access.c`): the challenger data's challenger, port and name tag, and the humans of the match that brought it, counted in the VS standings unless the current mode is `GM_CHALLENGER_APPROACH`, where it is one. The scene speech table leaves the scene silent and the unlock notice reader (`unlock_speech.cpp`) says the line in its place, the challenger named from character select's string table and the challenged player's label made as the match announcements make it. No hook in `gmapproach.c` is needed.
+`pc_a11y_scene_entered` for `GS_APPROACH` reads `a11y_game_challenger` (`game_access.c`): the challenger data's challenger, port and name tag, and the humans of the match that brought it, counted in the VS standings unless the current mode is `GM_CHALLENGER_APPROACH`, where it is one. The scene speech table leaves the scene silent and the unlock notice reader (`unlock_speech.cpp`) says the line in its place, the challenger named from character select's string table and the challenged player's label made by `player_label` (`game_text.hpp`), as results and the match announcements make theirs. No hook in `gmapproach.c` is needed.
 
 ## Candidate hook points
 

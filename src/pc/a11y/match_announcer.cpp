@@ -134,18 +134,14 @@ void MatchAnnouncer::follow(const A11yMatchHud& hud, int slot, Clock::time_point
     player.label = player.yours || !m_labelled ? std::string() : label(hud, slot);
 }
 
-std::string MatchAnnouncer::label(const A11yMatchHud& hud, int slot) const {
+std::string MatchAnnouncer::label(const A11yMatchHud& hud, int slot) {
     const A11yMatchHudPlayer& seen = hud.players[slot];
-    std::string name;
-    if (seen.human && !hud.online && seen.tag[0] != '\0') {
-        /* Online each copy reads the tag from its own memory card. */
-        name = spoken_text(decode_shift_jis(seen.tag).text);
-    }
-    if (name.empty()) {
-        /* Over the fighter the game draws "2P", or "CP" with no number for
-         * every computer player, so a CPU goes by its slot. */
-        name = seen.human ? "P" + std::to_string(seen.port + 1) : "CPU " + std::to_string(slot + 1);
-    }
+    /* Over the fighter the game draws "2P", or "CP" with no number for every
+     * computer player, so a CPU goes by its slot. Online each copy reads the
+     * tag from its own memory card, so it is left out. */
+    std::string name = seen.human ? player_label(hud.online ? nullptr : seen.tag, seen.port,
+                                        m_log_once, "[a11y] match announcement:") :
+                                    "CPU " + std::to_string(slot + 1);
     return teammate(hud, slot) ? "teammate " + name : name;
 }
 

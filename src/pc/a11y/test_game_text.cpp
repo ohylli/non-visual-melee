@@ -237,9 +237,30 @@ void spoken_game_text_logs_trouble() {
     assert(logged.size() == 1);
 }
 
+/* The player label: the name tag where it has words, otherwise the port, and
+ * a tag's trouble logged under the reader's own words. */
+void player_label_is_the_tag_or_the_port() {
+    std::vector<std::string> logged;
+    auto log = [&logged](const std::string& line) { logged.push_back(line); };
+    /* A full-width tag as the name keyboard writes it. */
+    assert(a11y::player_label("\x82\x60\x82\x81", 1, log, "test:") == "Aa");
+    assert(a11y::player_label("", 1, log, "test:") == "P2");
+    assert(a11y::player_label(nullptr, 3, log, "test:") == "P4");
+    assert(logged.empty());
+    /* An unknown character is left out of the tag and logged. */
+    assert(a11y::player_label("A\x88\x9f", 0, log, "test:") == "A");
+    assert(logged.size() == 1);
+    assert(logged[0] == "test: name tag \"A{sjis 889F}\", unknown glyphs left out");
+    /* A tag with no words left goes by the port, its trouble logged. */
+    assert(a11y::player_label("\x88\x9f", 2, log, "test:") == "P3");
+    assert(logged.size() == 2);
+    assert(logged[1] == "test: name tag \"{sjis 889F}\", unknown glyphs left out");
+}
+
 int main() {
     decode_trouble_names_what_went_wrong();
     spoken_game_text_logs_trouble();
+    player_label_is_the_tag_or_the_port();
     shift_jis_name_tags_decode();
     skips_formatting_commands();
     line_commands_become_one_break();

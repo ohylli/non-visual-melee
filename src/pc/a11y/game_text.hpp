@@ -81,4 +81,25 @@ std::string spoken_game_text(
     return spoken_text(decoded.text);
 }
 
+/* A human player's label (CONTEXT.md, "Player label"), the readers' shared
+ * step: the name tag where the player has one with words in it, otherwise
+ * "P" and the port, "P2" for port 1. tag is the Shift-JIS name tag, empty or
+ * nullptr for none; a decoding problem is handed to log as "<what> name tag
+ * <trouble>" (a reader's LogOnce). A computer player's label, "teammate"
+ * and whether a tag counts (online each copy reads its own card) are the
+ * caller's. */
+template <typename Log>
+std::string player_label(const char* tag, int port, Log& log, const std::string& what) {
+    if (tag != nullptr && tag[0] != '\0') {
+        DecodedText decoded = decode_shift_jis(tag);
+        if (std::string trouble = decode_trouble(decoded); !trouble.empty()) {
+            log(what + " name tag " + trouble);
+        }
+        if (std::string name = spoken_text(decoded.text); !name.empty()) {
+            return name;
+        }
+    }
+    return "P" + std::to_string(port + 1);
+}
+
 }  // namespace a11y

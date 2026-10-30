@@ -62,9 +62,8 @@ void UnlockSpeech::challenger(const A11yChallenger& challenger) {
     }
     std::string key;
     if (challenger.humans >= 2) {
-        /* The player label, as the match announcements make it. */
-        std::string label = spoken_text(decode_shift_jis(challenger.tag).text);
-        add_part(key, label.empty() ? "P" + std::to_string(challenger.port + 1) : label);
+        add_part(key,
+            player_label(challenger.tag, challenger.port, m_log_once, "[a11y] new challenger:"));
     }
     add_part(key, kFightKey);
     add_sentence(line, key);

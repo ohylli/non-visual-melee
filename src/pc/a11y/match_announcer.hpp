@@ -33,14 +33,12 @@
  * own five-to-one countdown is left alone. Game thread only. */
 #pragma once
 #include "game_access.h"
+#include "speech.hpp"
 #include <array>
 #include <chrono>
 #include <string>
 
 namespace a11y {
-
-class Speech;
-enum class Voice;
 
 using Clock = std::chrono::steady_clock;
 
@@ -132,7 +130,7 @@ private:
     void follow(const A11yMatchHud& hud, int slot, Clock::time_point now);
     /* The player's label in the opponents' voice, decided at GO: empty for
      * one opponent and nobody else. */
-    std::string label(const A11yMatchHud& hud, int slot) const;
+    std::string label(const A11yMatchHud& hud, int slot);
     /* On your team in a team match. */
     static bool teammate(const A11yMatchHud& hud, int slot);
     /* Off for a teammate behind the Teammates switch. */
@@ -160,6 +158,7 @@ private:
     /* Lines in the opponents' voice start with the player's label: two or
      * more players besides you at GO, or no "you". */
     bool m_labelled = false;
+    LogOnce m_log_once;
     std::array<Player, A11Y_MATCH_SLOTS> m_players{};
     /* The countdown's time left last tick (countdown()). */
     int m_time_left = -1;
