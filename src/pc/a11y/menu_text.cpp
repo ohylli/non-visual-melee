@@ -20,6 +20,8 @@ constexpr int k_max_strings = 4096;
 /* The symbols of the tables dumped so far. */
 std::set<std::string> s_dumped;
 
+/* No font glyphs: a dump shows each table's own as their codes, which is
+ * how the readers' tables of them are found. */
 GameTextSource game_source() {
     GameTextSource source;
     source.pal = pc_region_pal;

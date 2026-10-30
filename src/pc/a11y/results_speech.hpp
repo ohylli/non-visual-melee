@@ -60,8 +60,11 @@ struct ResultsRow {
 
 class ResultsSpeech {
 public:
-    /* speech must outlive this; text decodes the game's text. */
-    ResultsSpeech(Speech& speech, GameTextSource text) : m_speech(speech), m_text(text) {}
+    /* speech must outlive this; text decodes the game's text, the results
+     * font's own glyphs added. */
+    ResultsSpeech(Speech& speech, GameTextSource text) : m_speech(speech), m_text(text) {
+        m_text.font_glyphs = results_font_glyphs();
+    }
 
     /* The results scene was entered: a new visit, whose opening is still to
      * come. */

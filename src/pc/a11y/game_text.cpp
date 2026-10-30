@@ -84,11 +84,26 @@ void append_break(DecodedText& out) {
     }
 }
 
-/* Read from context in a dump of the table: "Pokémon" and the trophy "Ray
- * Mk II"; 0x4001 fills twelve three-glyph strings of unknown use. */
+/* Each read from context in a dump of its table. SdMenu and SdSlChr:
+ * "Pokémon", "Mushroom Kingdom II"; 0x4001 fills twelve three-glyph strings
+ * of SdMenu of unknown use, and 0x4003 to 0x4006 end two Japanese stage
+ * names left in both. */
+constexpr std::array<const char*, 3> k_menu_font = {"é", nullptr, "II"};
+/* SdRst: "Pokémon KO"; 0x4001 to 0x4006 spell two Japanese match types. */
+constexpr std::array<const char*, 1> k_results_font = {"é"};
+/* SdPrize: "Pokémon" and the trophy "Ray Mk II"; 0x4001 fills twelve
+ * three-glyph strings of unknown use. */
 constexpr std::array<const char*, 3> k_prize_font = {"é", nullptr, "II"};
 
 }  // namespace
+
+std::span<const char* const> menu_font_glyphs() {
+    return k_menu_font;
+}
+
+std::span<const char* const> results_font_glyphs() {
+    return k_results_font;
+}
 
 std::span<const char* const> prize_font_glyphs() {
     return k_prize_font;

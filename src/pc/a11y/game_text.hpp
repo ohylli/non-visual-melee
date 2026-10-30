@@ -23,8 +23,20 @@ struct GameTextSource {
     std::span<const char* const> font_glyphs = {};
 };
 
-/* SdPrize's font glyphs (the unlock notices, SIS_PrizeData, on the US
- * disc): 0x4000 is the é of "Pokémon", 0x4002 the numeral II. */
+/* The font glyphs of a screen's string table on the US disc, each read from
+ * context in a dump of that table (docs/a11y/native-menus.md, "Decoding
+ * game text"); a reader hands over its table's own. The codes are the
+ * table's font's, so a glyph known in one table says nothing of another.
+ *
+ * SdMenu and SdSlChr (the main menu tree, character select and the rules
+ * screens in both): 0x4000 is the é of "Pokémon", 0x4002 the numeral II of
+ * "Mushroom Kingdom II". */
+std::span<const char* const> menu_font_glyphs();
+/* SdRst (results): 0x4000 is the é of "Pokémon KO"; its other font glyphs
+ * spell Japanese leftovers. */
+std::span<const char* const> results_font_glyphs();
+/* SdPrize (the unlock notices): 0x4000 is the é of "Pokémon", 0x4002 the
+ * numeral II of the trophy Ray Mk II. */
 std::span<const char* const> prize_font_glyphs();
 
 struct DecodedText {

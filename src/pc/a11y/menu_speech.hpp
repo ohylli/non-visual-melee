@@ -29,8 +29,11 @@ namespace a11y {
 
 class MenuSpeech {
 public:
-    /* speech must outlive this; text decodes the descriptions' game text. */
-    MenuSpeech(Speech& speech, GameTextSource text) : m_speech(speech), m_text(text) {}
+    /* speech must outlive this; text decodes the descriptions' game text,
+     * the menu font's own glyphs added. */
+    MenuSpeech(Speech& speech, GameTextSource text) : m_speech(speech), m_text(text) {
+        m_text.font_glyphs = menu_font_glyphs();
+    }
 
     /* A scene was entered: the next snapshot is an arrival, spoken as the
      * screen opening even when it matches the last one seen. */

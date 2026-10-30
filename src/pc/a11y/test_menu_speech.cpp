@@ -145,7 +145,9 @@ struct Leaf {
 using Bytes = std::vector<std::uint8_t>;
 
 /* NTSC-U game text for ASCII letters, digits, spaces and a few marks, a line
- * break where the text has '\n', and an unknown font glyph where it has '~'. */
+ * break where the text has '\n', SdMenu's font glyphs 0x4000 (é) where it
+ * has '@' and 0x4002 (II) where it has '#', and 0x4001, unknown, where it
+ * has '~'. */
 Bytes game_text(const char* text) {
     Bytes out;
     auto glyph = [&out](unsigned code) {
@@ -158,8 +160,12 @@ Bytes game_text(const char* text) {
             out.push_back(0x03);
         } else if (c == ' ') {
             out.push_back(0x1A);
-        } else if (c == '~') {
+        } else if (c == '@') {
             glyph(0x4000);
+        } else if (c == '~') {
+            glyph(0x4001);
+        } else if (c == '#') {
+            glyph(0x4002);
         } else if (c >= '0' && c <= '9') {
             glyph(0x2000 + (c - '0'));
         } else if (c >= 'A' && c <= 'Z') {
@@ -384,8 +390,16 @@ void unknown_glyphs_are_left_out_and_logged() {
     Fixture f;
     f.frame(kMain, 2, "Pok~mon trophies!");
     assert((f.spoken() == Texts{"Main Menu. Trophies. Pokmon trophies!"}));
-    assert(count_logged("[a11y] menu 0 entry 2: description \"Pok{glyph 4000}mon trophies!\", "
+    assert(count_logged("[a11y] menu 0 entry 2: description \"Pok{glyph 4001}mon trophies!\", "
                         "unknown glyphs left out") == 1);
+}
+
+/* The menu font's own glyphs, as SdMenu and SdSlChr hold them. */
+void the_menu_fonts_glyphs_are_said() {
+    Fixture f;
+    f.frame(kMain, 2, "Pok@mon and Mushroom Kingdom #!");
+    assert((f.spoken() == Texts{"Main Menu. Trophies. Pokémon and Mushroom Kingdom II!"}));
+    assert(s_lines.size() == 1);
 }
 
 void missing_description_speaks_the_name() {
@@ -961,6 +975,7 @@ int main() {
     missing_names_are_spoken_and_logged_once();
     description_lines_are_joined();
     unknown_glyphs_are_left_out_and_logged();
+    the_menu_fonts_glyphs_are_said();
     missing_description_speaks_the_name();
     sound_opens_on_the_channel_row();
     sound_row_changes_both_ways();

@@ -139,6 +139,27 @@ void prize_font_glyph_decodes() {
     assert(d.unknown_glyphs == 2);
 }
 
+void menu_and_results_font_glyphs_decode() {
+    /* SdMenu and SdSlChr: "Pokémon", "Mushroom Kingdom II"; the filler and
+     * the Japanese stage names' glyphs stay unknown. */
+    Bytes b;
+    add_text(b, "Pok");
+    b.insert(b.end(), {0x40, 0x00});
+    add_text(b, "mon ");
+    b.insert(b.end(), {0x40, 0x02, 0x40, 0x01, 0x40, 0x03, 0x00});
+    a11y::GameTextSource menu = ntsc();
+    menu.font_glyphs = a11y::menu_font_glyphs();
+    a11y::DecodedText d = a11y::decode_game_text(b.data(), menu);
+    assert(d.text == "Pokémon II{glyph 4001}{glyph 4003}");
+    assert(d.unknown_glyphs == 2);
+    /* SdRst: "Pokémon KO"; its 0x4002 is not the numeral. */
+    a11y::GameTextSource results = ntsc();
+    results.font_glyphs = a11y::results_font_glyphs();
+    d = a11y::decode_game_text(b.data(), results);
+    assert(d.text == "Pokémon {glyph 4002}{glyph 4001}{glyph 4003}");
+    assert(d.unknown_glyphs == 3);
+}
+
 void kana_and_kanji_decode() {
     /* The first hiragana and the last glyph of the atlas. */
     Bytes b = {0x20, 0x3E, 0x21, 0x1E, 0x00};
@@ -267,6 +288,7 @@ int main() {
     follows_calls_and_jumps();
     font_glyphs_are_marked();
     prize_font_glyph_decodes();
+    menu_and_results_font_glyphs_decode();
     kana_and_kanji_decode();
     pal_uses_one_byte_per_glyph();
     stops_on_what_it_cannot_follow();

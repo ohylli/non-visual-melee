@@ -49,7 +49,8 @@ private:
 
 using Bytes = std::vector<std::uint8_t>;
 
-/* NTSC-U game text for ASCII letters and spaces. */
+/* NTSC-U game text for ASCII letters and spaces, SdRst's font glyph 0x4000
+ * (é) where the text has '@' and 0x4002 where it has '~'. */
 Bytes game_text(const char* text) {
     Bytes out;
     auto glyph = [&out](unsigned code) {
@@ -60,6 +61,10 @@ Bytes game_text(const char* text) {
         char c = *text;
         if (c == ' ') {
             out.push_back(0x1A);
+        } else if (c == '@') {
+            glyph(0x4000);
+        } else if (c == '~') {
+            glyph(0x4002);
         } else if (c >= 'A' && c <= 'Z') {
             glyph(0x200A + (c - 'A'));
         } else if (c >= 'a' && c <= 'z') {
@@ -974,6 +979,21 @@ void the_dpad_is_the_cursors_while_speech_is_on() {
     assert(!off.takes_dpad());
 }
 
+/* SdRst's font glyph é is said; a code its font does not name is left out
+ * and logged once. */
+void the_results_fonts_e_is_said() {
+    static const Bytes pokemon_ko = game_text("Pok@mon KO");
+    static const Bytes unknown = game_text("Ray Mk ~");
+    PanelFixture f;
+    f.results.players[0].bonuses[0].name = pokemon_ko.data();
+    f.results.players[1].bonuses[0].name = unknown.data();
+    assert(f.open(A11Y_RESULTS_PAGE_BONUSES) ==
+           std::string("Bonuses. Pokémon KO, 12000.") + kStatsKeys);
+    assert(f.press(kRight) == "Mario, P2, Ray Mk, 300");
+    assert(count_logged("[a11y] results: Bonus 50 \"Ray Mk {glyph 4002}\", "
+                        "unknown glyphs left out") == 1);
+}
+
 void an_unknown_label_is_said_by_number_and_logged_once() {
     PanelFixture f;
     f.results.stat_labels[3][0] = nullptr;
@@ -1059,6 +1079,7 @@ int main() {
     online_the_other_human_is_your_opponent();
     ready_keeps_the_reading_cursor();
     the_dpad_is_the_cursors_while_speech_is_on();
+    the_results_fonts_e_is_said();
     an_unknown_label_is_said_by_number_and_logged_once();
     stat_labels_are_spaced();
     std::cout << "results_speech: all tests passed\n";
