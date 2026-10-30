@@ -13,6 +13,13 @@ namespace {
 constexpr std::string_view kNextKey = "A for next.";
 constexpr std::string_view kNoText = "Unlock notice.";
 
+/* A trophy's notice (unlock number 0x3E) is composed at run time into the
+ * prize table's placeholder string 0x4A (un_802FE918 in ifprize.c), which
+ * holds the whole message once the hook runs; the string the frame binds
+ * is then only its first part ("You got the "). */
+constexpr int kTrophyUnlock = 0x3E;
+constexpr int kTrophyText = 0x4A;
+
 /* The New challenger screen's words as drawn, "WARNING / CHALLENGER
  * APPROACHING" in normal capitalisation; the name stands in for the
  * silhouette after the colon; the key the screen does not show. */
@@ -32,8 +39,8 @@ void UnlockSpeech::visit_started() {
     m_key_due = true;
 }
 
-void UnlockSpeech::notice(int text_id) {
-    std::string text = game_words(text_id);
+void UnlockSpeech::notice(int unlock, int text_id) {
+    std::string text = game_words(unlock == kTrophyUnlock ? kTrophyText : text_id);
     if (text.empty()) {
         text = kNoText;
     }

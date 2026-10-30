@@ -493,12 +493,12 @@ extern "C" void pc_a11y_memcard_frame(int hovered_choice) {
     s_memcard->frame(hovered_choice);
 }
 
-extern "C" void pc_a11y_unlock_notice(int text_id) {
+extern "C" void pc_a11y_unlock_notice(int unlock, int text_id) {
     a11y::menu_text_dump_once(A11Y_PRIZE_FONT);
     if (!game_hook_may_speak()) {
         return;
     }
-    s_unlock->notice(text_id);
+    s_unlock->notice(unlock, text_id);
 }
 
 extern "C" void pc_a11y_master_volume(float volume) {

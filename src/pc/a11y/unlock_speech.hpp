@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Unlock notice speech: reads the unlock notice scene's notices aloud in the
  * game's own words (.scratch/unlock-notices/spec.md), from one hook: the
- * notice the scene sets up, by the number of its text in the prize table
- * (SdPrize), a trophy's composed into the table's placeholder first.
+ * notice the scene sets up, by its unlock number and the number of its text
+ * in the prize table (SdPrize); a trophy's text is composed into the
+ * table's placeholder instead.
  *
  * Each notice says its text, interrupting the one before; the first of a
  * visit adds the key. The date, the category icon and a count are left
@@ -34,9 +35,10 @@ public:
     /* The unlock notice scene was entered: its first notice says the key. */
     void visit_started();
 
-    /* The scene sets up a notice whose text is string text_id, the first or
-     * the next after A or Start. */
-    void notice(int text_id);
+    /* The scene sets up a notice, the first or the next after A or Start:
+     * unlock is its unlock number, text_id the string bound to its message,
+     * which a trophy's composed placeholder replaces. */
+    void notice(int unlock, int text_id);
 
     /* The New challenger screen was entered, with this challenger. A kind
      * with no name is left out of the line and logged once. */

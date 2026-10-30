@@ -428,7 +428,7 @@ The unlock notice scene, `GS_PRIZE_INTERFACE` (`src/melee/if/ifprize.c`), shows 
 
 ### Where the fork reads the notices
 
-`pc_a11y_unlock_notice(text_id)` at the end of `un_802FE918` passes the string bound to the notice, 0x4A for a trophy, after the composition and the frame's other text are set. `a11y_game_prize_string` in `game_access.c` reads it by number from font slot 2, checking the symbol. Each notice is said as it comes, interrupting the one before, and the first of a visit adds the key; the scene hook marks each visit, and the scene speech table leaves the scene silent, since its first notice is its opening. Nothing is said as the scene closes. Netplay never reaches the scene: the online mode ends at results.
+`pc_a11y_unlock_notice(unlock, text_id)` at the end of `un_802FE918` passes the unlock number and the string bound to the frame's message, after the composition and the frame's other text are set; the reader (`unlock_speech.cpp`) reads 0x4A in its place for a trophy, so the hook carries no knowledge of the table. `a11y_game_prize_string` in `game_access.c` reads it by number from font slot 2, checking the symbol. Each notice is said as it comes, interrupting the one before, and the first of a visit adds the key; the scene hook marks each visit, and the scene speech table leaves the scene silent, since its first notice is its opening. Nothing is said as the scene closes. Netplay never reaches the scene: the online mode ends at results.
 
 ### The save file
 

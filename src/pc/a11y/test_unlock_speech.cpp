@@ -82,12 +82,14 @@ Bytes ntsc_text(const char* text) {
 }
 
 /* SdPrize's strings as the US disc has them, line breaks and the double
- * spaces included; 0x4A as a trophy notice leaves it. */
+ * spaces included; 0x41 is a trophy notice's first part, 0x4A the whole
+ * notice as its composition leaves it. */
 const std::map<int, Bytes>& pal_table() {
     static const std::map<int, Bytes> strings = {
         {0x18, game_text("1-P All-Star mode is now open!\nBetter practice up!")},
         {0x1A, game_text("Random Stage Select is now\navailable in Additional Rules!")},
         {0x20, game_text("You've unlocked all playable\ncharacters!  Get to fighting!")},
+        {0x41, game_text("You got\nthe ")},
         {0x4A, game_text("You got\nthe Kirby Hat 4 trophy!")},
         /* A byte the decoder does not understand after "Bad". */
         {0x30, Bytes{'B', 'a', 'd', 0x1B, 0x00}},
@@ -113,7 +115,9 @@ const std::uint8_t* ntsc_strings(int number) {
     return find(ntsc_table(), number);
 }
 
-constexpr int kTrophy = 0x4A;
+/* A trophy's unlock number and the string the frame binds for it. */
+constexpr int kTrophyUnlock = 0x3E;
+constexpr int kTrophyFirstPart = 0x41;
 const std::string kAllStar = "1-P All-Star mode is now open! Better practice up!";
 const std::string kRandomStage = "Random Stage Select is now available in Additional Rules!";
 const std::string kCharacters = "You've unlocked all playable characters! Get to fighting!";
@@ -131,9 +135,11 @@ struct Fixture {
         reader.visit_started();
     }
 
-    /* The notice the scene sets up; returns what was said, clearing it. */
-    Outputs notice(int text_id) {
-        reader.notice(text_id);
+    /* The notice the scene sets up, by its unlock number or, as the game's
+     * table maps every notice but a trophy's, the string's number less 2;
+     * returns what was said, clearing it. */
+    Outputs notice(int text_id, int unlock = -1) {
+        reader.notice(unlock >= 0 ? unlock : text_id - 2, text_id);
         Outputs said = std::move(outputs);
         outputs.clear();
         return said;
@@ -166,7 +172,12 @@ void the_key_on_the_first_notice_of_a_visit_only() {
 void a_trophy_notice_says_the_composed_text() {
     Fixture f;
     f.notice(0x18);
-    assert(f.notice(kTrophy) == (Outputs{{"You got the Kirby Hat 4 trophy!", true}}));
+    /* The hook passes the string the frame binds, the first part alone; the
+     * composed placeholder is read in its place. */
+    assert(f.notice(kTrophyFirstPart, kTrophyUnlock) ==
+           (Outputs{{"You got the Kirby Hat 4 trophy!", true}}));
+    /* The first part is said as itself under any other unlock number. */
+    assert(f.notice(kTrophyFirstPart) == (Outputs{{"You got the", true}}));
 }
 
 void the_prize_fonts_e_is_said() {
