@@ -2,6 +2,7 @@
 #include "port_menu_speech.hpp"
 #include "rmlui_reader.hpp"
 #include "sentences.hpp"
+#include "settings_page.hpp"
 #include "speech.hpp"
 #include <RmlUi/Core/Element.h>
 #include <RmlUi/Core/ElementDocument.h>
@@ -43,6 +44,8 @@ public:
     PortMenuReader(Rml::ElementDocument& document, Speech& speech) : PageReader(document, speech) {}
 
     void frame(bool open, bool quitting, Clock::time_point now) {
+        /* Every frame, so a submenu is said as entered only once. */
+        const std::string submenu = m_submenu.frame(document());
         if (!open) {
             if (m_open) {
                 m_open = false;
@@ -72,7 +75,9 @@ public:
             observe_regions(focus, true, now);
             return;
         }
-        follow_focus(focus, "");
+        /* Entering a submenu of the Accessibility category: its name, before
+         * its first row. */
+        follow_focus(focus, submenu);
         const SpokenOnce spoken = observe_regions(focus, true, now);
         for (const std::string& text : spoken.texts()) {
             say(text, Mode::queue);
@@ -136,6 +141,7 @@ private:
     bool m_open = false;
     bool m_opening = false; /* open, the opening not yet spoken */
     Clock::time_point m_opened_at;
+    SubmenuEntry m_submenu;
     WatchedText m_status{"menu-status", {"Saved."}};
     WatchedText m_update_status{"port-update-status"};
 };

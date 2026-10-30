@@ -274,6 +274,10 @@ Control describe_control(const Rml::Element& element) {
         } else if (control.name.empty()) {
             control.role = Role::button;
             control.name = control.value;
+        } else if (element.IsClassSet("submenu")) {
+            /* Named by its row alone: its label ("Open") is for the eye, and
+             * the hint says what it does. */
+            control.role = Role::submenu;
         } else if (element.IsClassSet("action")) {
             control.role = Role::button;
         } else {
@@ -325,6 +329,9 @@ std::string focus_announcement(const Control& control, bool explain) {
     case Role::binding:
         add_part(text, control.value);
         keys = "Enter to change";
+        break;
+    case Role::submenu:
+        keys = "Enter to open";
         break;
     case Role::slider:
         add_part(text, "slider");

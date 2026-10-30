@@ -789,16 +789,29 @@ void speech_back_on_announces_the_focused_row(Rml::Context& context) {
     assert(menu.take() == none());
 }
 
-/* Until the reader has a form of its own for them (issue 02), a row opening
- * a submenu reads as a button in a row. */
+/* A row opening a submenu: its name, how to open it and its description,
+ * with no role word. */
 constexpr const char* kCueSettingsRow =
-    "Cue settings: Open, button. Cue volume, and each cue's switch, volume and preview.";
+    "Cue settings, Enter to open. Cue volume, and each cue's switch, volume and preview.";
 constexpr const char* kAnnouncementSettingsRow =
-    "Match announcement settings: Open, button. The voices, and what is announced: damage, "
+    "Match announcement settings, Enter to open. The voices, and what is announced: damage, "
     "stocks, teammates and the time left.";
+constexpr const char* kVoiceSettingsRow =
+    "Voice settings, Enter to open. Your voice and the opponents' voice: each one's voice, rate, "
+    "volume and a preview.";
 constexpr const char* kCueVolumeRow =
     "Cue volume, slider, 100%. Left and right to adjust. The loudness of all cues together, "
     "under the master volume; the game's sound effect and music volumes leave cues alone.";
+constexpr const char* kLedgeDistanceRow =
+    "Ledge warning distance, slider, 40 units. Left and right to adjust. How far from the edge "
+    "the warning starts, in stage units.";
+constexpr const char* kTestPreviewRow =
+    "Preview test voice: Play, button. Says a line in the test voice.";
+
+/* Opening a submenu: its name, then its first row's announcement. */
+std::string opening(std::string_view submenu, std::string_view row) {
+    return std::string(submenu) + ". " + std::string(row);
+}
 
 /* The fork's category, last before Resume: the top level's rows, the master
  * switches each followed by the row opening its submenu, read as the menu's
@@ -854,15 +867,12 @@ void accessibility_submenu_moving(Rml::Context& context) {
     assert(rmlui_test::level_shown(menu.document(), rmlui_test::kCueRows));
     assert(rmlui_test::title_line(menu.document()) == "Cue settings");
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt(kCueVolumeRow)}));
+    assert(menu.take() == (std::vector<Output>{interrupt(opening("Cue settings", kCueVolumeRow))}));
     /* Round from the first to the last, and back. */
     menu.step(-1);
     assert(menu.focused() == menu.element("a11y-ledge_warning-distance"));
     menu.frame();
-    assert(menu.take() ==
-           (std::vector<Output>{interrupt(
-               "Ledge warning distance, slider, 40 units. Left and right to adjust. How far from "
-               "the edge the warning starts, in stage units.")}));
+    assert(menu.take() == (std::vector<Output>{interrupt(kLedgeDistanceRow)}));
     menu.step(1);
     assert(menu.focused() == menu.element("a11y-cues-volume"));
     for (std::size_t i = 1; i < rmlui_test::kCueRows.size(); ++i) {
@@ -954,6 +964,96 @@ void accessibility_nested_submenu(Rml::Context& context) {
     assert(rmlui_test::level_shown(menu.document(), rmlui_test::kTopRows));
 }
 
+/* What the submenus say: an opening row its name, how to open it and its
+ * description; opening one, by Enter or Right, its name and its first row,
+ * interrupting; going back, the opening row, as any move onto it. Up and Down
+ * go round the rows, each read as it is, the title line never a stop; the menu
+ * reopened after closing inside a submenu says no submenu's name. */
+void accessibility_submenu_words(Rml::Context& context) {
+    Menu menu(context);
+    menu.open_rows(kAccessibilityTab);
+    menu.focus("a11y-cues-settings");
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kCueSettingsRow)}));
+    menu.press();
+    assert(menu.take() == (std::vector<Output>{interrupt(opening("Cue settings", kCueVolumeRow))}));
+    /* Up from the first row: the last, not the title line above the first. */
+    menu.step(-1);
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kLedgeDistanceRow)}));
+    menu.step(1);
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kCueVolumeRow)}));
+    /* Round the whole submenu, each press onto the next row, said alone. */
+    const std::vector<std::string>& rows = rmlui_test::kCueRows;
+    for (std::size_t i = 1; i <= rows.size(); ++i) {
+        menu.step(1);
+        menu.frame();
+        assert(menu.focused() == menu.element(rows[i % rows.size()].c_str()));
+        const std::vector<Output> said = menu.take();
+        assert(said.size() == 1 && said[0].interrupt);
+        assert(said[0].text.rfind("Cue settings", 0) == std::string::npos);
+    }
+    assert(menu.focused() == menu.element("a11y-cues-volume"));
+    /* Escape or B: the opening row. */
+    menu.back();
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kCueSettingsRow)}));
+    /* Right opens too; Left on a Preview goes back. */
+    menu.horizontal(1);
+    assert(menu.take() == (std::vector<Output>{interrupt(opening("Cue settings", kCueVolumeRow))}));
+    menu.focus("a11y-gap_warning-preview");
+    menu.frame();
+    menu.take();
+    menu.horizontal(-1);
+    assert(menu.take() == (std::vector<Output>{interrupt(kCueSettingsRow)}));
+    /* Voice settings, two levels in: each level's name as it is entered,
+     * the inner one's alone; out, each opening row. */
+    menu.focus("a11y-match_announcements-settings");
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kAnnouncementSettingsRow)}));
+    menu.press();
+    assert(menu.take() == (std::vector<Output>{interrupt(
+                              opening("Match announcement settings", kVoiceSettingsRow))}));
+    menu.press();
+    assert(
+        menu.take() == (std::vector<Output>{interrupt(opening("Voice settings", kTestVoiceRow))}));
+    menu.step(-1);
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kTestPreviewRow)}));
+    menu.back();
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kVoiceSettingsRow)}));
+    /* In again from the submenu it is inside: its name again. */
+    menu.horizontal(1);
+    assert(
+        menu.take() == (std::vector<Output>{interrupt(opening("Voice settings", kTestVoiceRow))}));
+    menu.back();
+    menu.back();
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kAnnouncementSettingsRow)}));
+    /* Closed inside a submenu: the next opening is the top level's, and a
+     * submenu entered then says its name. */
+    menu.press();
+    menu.take();
+    menu.toggle();
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt("Back to game")}));
+    menu.toggle();
+    menu.frame();
+    const std::vector<Output> reopened = menu.take();
+    assert(reopened.size() == 1 && reopened[0].text.rfind("PC settings. Accessibility", 0) == 0);
+    menu.enter_rows();
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kAccessibilityRow)}));
+    menu.focus("a11y-match_announcements-settings");
+    menu.frame();
+    menu.take();
+    menu.press();
+    assert(menu.take() == (std::vector<Output>{interrupt(
+                              opening("Match announcement settings", kVoiceSettingsRow))}));
+}
+
 /* Into Voice settings, two levels down, what that says taken. */
 void into_voice_settings(Menu& menu) {
     menu.focus("a11y-match_announcements-settings");
@@ -1035,9 +1135,9 @@ void accessibility_switch(Rml::Context& context) {
     menu.open_rows(kAccessibilityTab);
     menu.focus("a11y-gap_warning-on");
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt(
+    assert(menu.take() == (std::vector<Output>{interrupt(opening("Cue settings",
                               "Gap warning, On, Left and right to change. Turns the gap warning "
-                              "on or off.")}));
+                              "on or off."))}));
     menu.a11y().take();
     menu.horizontal(-1);
     assert(menu.take() == (std::vector<Output>{interrupt("Off")}));
@@ -1059,10 +1159,7 @@ void accessibility_slider(Rml::Context& context) {
     menu.open_rows(kAccessibilityTab);
     menu.focus("a11y-cues-volume");
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt(
-                              "Cue volume, slider, 100%. Left and right to adjust. The loudness of "
-                              "all cues together, under the master volume; the game's sound "
-                              "effect and music volumes leave cues alone.")}));
+    assert(menu.take() == (std::vector<Output>{interrupt(opening("Cue settings", kCueVolumeRow))}));
     menu.a11y().take();
     menu.horizontal(-1);
     assert(menu.take() == (std::vector<Output>{interrupt("95%")}));
@@ -1082,9 +1179,12 @@ void accessibility_slider(Rml::Context& context) {
 void accessibility_choice(Rml::Context& context) {
     Menu menu(context);
     menu.open_rows(kAccessibilityTab);
+    /* Focus put straight on a row of a submenu, as only a test can, says
+     * the submenu's name too. */
     menu.focus("a11y-test-voice");
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt(kTestVoiceRow)}));
+    assert(
+        menu.take() == (std::vector<Output>{interrupt(opening("Voice settings", kTestVoiceRow))}));
     menu.a11y().take();
     menu.horizontal(-1);
     assert(menu.take() == (std::vector<Output>{interrupt("Microsoft David")}));
@@ -1109,9 +1209,9 @@ void accessibility_preview(Rml::Context& context) {
     menu.open_rows(kAccessibilityTab);
     menu.focus("a11y-ledge_warning-preview");
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt(
+    assert(menu.take() == (std::vector<Output>{interrupt(opening("Cue settings",
                               "Preview ledge warning: Play, button. Plays a short sample of the "
-                              "ledge warning, as it sounds in a match.")}));
+                              "ledge warning, as it sounds in a match."))}));
     menu.a11y().take();
     menu.press();
     assert(menu.take() == none());
@@ -1233,6 +1333,7 @@ int main(int argc, char** argv) {
     accessibility_submenu_moving(*context);
     accessibility_nested_submenu(*context);
     accessibility_submenu_left_by_closing(*context);
+    accessibility_submenu_words(*context);
     accessibility_submenus_with_speech_off(*context);
     accessibility_switch(*context);
     accessibility_slider(*context);

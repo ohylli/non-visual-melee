@@ -36,6 +36,7 @@ enum class Role {
     button,  /* acts when pressed: "Choose Disc"; in a row, named by row and label */
     setting, /* a button in a row whose label is the value; Left and Right step it */
     binding, /* a button in a row whose label is the value; Enter asks for a new one */
+    submenu, /* a button in a row (class "submenu") that opens the submenu the row names */
     slider,
     edit,
     category, /* a settings category in the sidebar; focusing it opens its page */
@@ -71,7 +72,8 @@ std::string field_value(const Control& control);
 
 /* "Choose Disc, button. <help>", "Vertical sync, On, Left and right to
  * change. <help>", "Master volume, slider, 80%. Left and right to adjust.
- * <help>", "Graphics. <help>". `explain` adds how to move to a category's
+ * <help>", "Cue settings, Enter to open. <help>", "Graphics. <help>".
+ * `explain` adds how to move to a category's
  * announcement, on arriving in the settings. */
 std::string focus_announcement(const Control& control, bool explain = false);
 

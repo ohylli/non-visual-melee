@@ -701,6 +701,22 @@ bool settings_pages_step(SettingsHost host, int direction) {
     return s_plugin.step(host, direction);
 }
 
+std::string SubmenuEntry::frame(const Rml::ElementDocument& document) {
+    const Page* page = s_plugin.page(&document);
+    const NamedMenu* open = page != nullptr ? page->open_menu() : nullptr;
+    const NamedMenu* was = std::exchange(m_open, open);
+    if (open == nullptr || open == was) {
+        return "";
+    }
+    /* Back up from a submenu inside it: not an entry. */
+    for (const NamedMenu* menu = was; menu != nullptr; menu = menu->parent) {
+        if (menu == open) {
+            return "";
+        }
+    }
+    return open->label;
+}
+
 }  // namespace a11y
 
 std::vector<std::string> pc_a11y_settings_rows() {

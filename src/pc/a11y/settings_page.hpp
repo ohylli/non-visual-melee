@@ -32,11 +32,16 @@
 #include <string>
 #include <string_view>
 
+namespace Rml {
+class ElementDocument;
+}
+
 namespace a11y {
 
 using Clock = std::chrono::steady_clock;
 
 class AccessibilitySettings;
+struct NamedMenu;
 struct ShownRow;
 
 /* The port menu's own sounds, numbered as Melee's menu bank plays them
@@ -91,5 +96,22 @@ void settings_pages_frame(SettingsHost host, bool open);
  * true; on the top level, false, and the page moves as it does. For the
  * port menu, whose column of rows is a copy of the top level's. */
 bool settings_pages_step(SettingsHost host, int direction);
+
+/* For a page's reader: the name of a submenu just entered, which the reader
+ * says before the announcement of its first row, where the page has put
+ * focus within the same press. Asked of the page rather than read off the
+ * title line, whose text is for the eye. */
+class SubmenuEntry {
+public:
+    /* Once a frame of the reader's: the label of the submenu the document's
+     * Accessibility category has gone into since the last call, from the
+     * top level or from the submenu it is inside: "Cue settings", "Voice
+     * settings". Empty when it has not, as on going back up, where the
+     * opening row's own announcement says where focus is. */
+    std::string frame(const Rml::ElementDocument& document);
+
+private:
+    const NamedMenu* m_open = nullptr; /* the submenu open at the last call */
+};
 
 }  // namespace a11y

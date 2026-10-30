@@ -2,6 +2,7 @@
 #include "launcher_speech.hpp"
 #include "rmlui_reader.hpp"
 #include "sentences.hpp"
+#include "settings_page.hpp"
 #include "speech.hpp"
 #include <RmlUi/Core/Element.h>
 #include <RmlUi/Core/ElementDocument.h>
@@ -23,15 +24,18 @@ public:
 
     void frame(Clock::time_point now) {
         Rml::Element* focus = focused_control();
+        /* Every frame, so a submenu is said as entered only once. */
+        const std::string submenu = m_submenu.frame(document());
         if (!m_opened) {
             open(focus, now);
             return;
         }
         const bool settings_shown = displayed("preferences");
         /* Entering Settings: its category's announcement says where the
-         * player is, and how to move there. */
+         * player is, and how to move there. Entering a submenu of the
+         * Accessibility category: its name, before its first row. */
         const bool entering = settings_shown && !m_settings_shown;
-        follow_focus(focus, entering ? "Settings" : "", entering);
+        follow_focus(focus, entering ? "Settings" : submenu, entering);
         m_settings_shown = settings_shown;
 
         SpokenOnce spoken;
@@ -112,6 +116,7 @@ private:
     bool m_opened = false;
     bool m_update_shown = false;
     bool m_settings_shown = false;
+    SubmenuEntry m_submenu;
     WatchedText m_status{"status"};
     WatchedText m_settings_status{"settings-status"};
     WatchedText m_check_status{"check-status"};
