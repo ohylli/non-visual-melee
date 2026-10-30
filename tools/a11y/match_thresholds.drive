@@ -15,9 +15,11 @@
 #     python tools/a11y/drive.py --muted tools/a11y/match_thresholds.drive
 
 # The port menu on the title screen: Up past Quit game and Resume to
-# Accessibility, the last category, then down its rows past Speech and the
-# voices' eight and the Match announcements switch to the damage rows, each
-# a step Right from Every change to Thresholds, saved by the option's name.
+# Accessibility, the last category, then down its top level to Match
+# announcement settings, opened with Right, and down past Voice settings to
+# the damage rows, each a step Right from Every change to Thresholds, saved
+# by the option's name. Escape three times: back to the top level, the
+# category, then closed.
 wait "state 0 scene 0$"
 sleep 1
 key F1
@@ -26,7 +28,11 @@ key Up Up Up
 wait '"Accessibility"$'
 key Right
 wait '"Accessibility, On, Left and right to change\. '
-key Down Down Down Down Down Down Down Down Down Down Down
+key Down Down Down Down Down Down
+wait '"Match announcement settings, Enter to open\. '
+key Right
+wait '"Match announcement settings\. Voice settings, Enter to open\. '
+key Down
 wait '"Your damage, Every change, Left and right to change\. '
 key Right
 wait '\[a11y\] accessibility settings: saved match_announcements\.your_damage = Thresholds$'
@@ -36,7 +42,11 @@ wait "\"Opponents' damage, Every change, Left and right to change\. "
 key Right
 wait '\[a11y\] accessibility settings: saved match_announcements\.opponents_damage = Thresholds$'
 ini '^match_announcements\.opponents_damage = Thresholds$'
-key Escape Escape
+key Escape
+wait '"Match announcement settings, Enter to open\. '
+key Escape
+wait '"Accessibility"$'
+key Escape
 wait '"Back to game"$'
 sleep 1
 

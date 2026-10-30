@@ -1,6 +1,8 @@
-# The voices' rows in the launcher's Accessibility category: Your voice a
-# step Right and back, Your voice volume a step down and back, Preview your
-# voice and Preview opponents' voice pressed with Enter. Each step on a
+# The voices' rows in the launcher's Accessibility category, in Voice
+# settings inside Match announcement settings: Your voice a step Right and
+# back, Your voice volume a step down and back, Preview your voice and
+# Preview opponents' voice pressed with Enter, and Escape back a level at a
+# time to Home. Each step on a
 # Voice or Volume row logs the saved value and the reader's new value, then
 # a moment later the sample in that voice and its "plays" line; Preview
 # plays at once. With the screen reader muted the voices still render and
@@ -23,9 +25,15 @@ wait '"Accessibility\. Speech, steering and the audio cues of Non-Visual Melee\.
 key Right
 wait '"Accessibility, On, Left and right to change\. '
 
-# Your voice, right after Speech, the voice in use not pinned.
-key Down Down
-wait '"Your voice, (?P<yours>[^",]+)(, [^"]+)?, Left and right to change\. The Windows voice that says what happens to you in a match\."$'
+# Match announcement settings, then Voice settings, its first row, each
+# opened with Enter; Your voice is the first row there, the voice in use not
+# pinned.
+key Down Down Down Down Down Down
+wait '"Match announcement settings, Enter to open\. '
+key Return
+wait '"Match announcement settings\. Voice settings, Enter to open\. '
+key Return
+wait '"Voice settings\. Your voice, (?P<yours>[^",]+)(, [^"]+)?, Left and right to change\. The Windows voice that says what happens to you in a match\."$'
 
 # A step Right: the next voice, saved by its display name, said alone, and a
 # moment later its sample; then Left back to the voice the run started on.
@@ -72,7 +80,12 @@ key Return
 wait "\[a11y\] voice opponents: \"Opponents' voice\"$" 0.3
 wait "\[a11y\] voice opponents plays: \"Opponents' voice\" "
 
-# Escape twice: the category, then Home.
+# Escape four times: back a level to Voice settings' row, again to Match
+# announcement settings' row, then the category and Home.
+key Escape
+wait '"Voice settings, Enter to open\. '
+key Escape
+wait '"Match announcement settings, Enter to open\. '
 key Escape
 wait '"Accessibility\. Speech, steering '
 key Escape

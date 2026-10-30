@@ -1,13 +1,18 @@
-# The launcher's Accessibility category: every row read in its turn and
-# round to the first, Steering off and on again, Your damage a step to
-# Thresholds and back, Cue volume a step down and back, Ledge warning
-# distance a step up and back, Preview ledge warning played to its end,
-# pressed again and stopped by moving off it, and
-# Accessibility turned off and on again from its own row, with the run's
-# a11y.ini checked after each change. Waits on each announcement, so a
-# missing or changed line fails the run. Run in launcher mode, with
-# accessibility on but muted, and with Steering and Cues left to the run's
-# a11y.ini, so their rows show no "(environment)" (as run_level.py runs it):
+# The launcher's Accessibility category: the top level read in its turn and
+# round to the first, Steering off and on again there; Cue settings opened
+# by Enter, every row read and round to the first, Cue volume a step down
+# and back, Up past its first row to Ledge warning distance, a step up and
+# back, Preview ledge warning played to its end, pressed again and stopped
+# by Left, which goes back to the opening row; Match announcement settings
+# opened by Right, every row read and round, Your damage a step to
+# Thresholds and back; Voice settings inside it opened by Enter, every row
+# read and round, left by Escape, then Left on its opening row back to the
+# top level; and Accessibility turned off and on again from its own row,
+# with the run's a11y.ini checked after each change. Waits on each
+# announcement, so a missing or changed line fails the run. Run in launcher
+# mode, with accessibility on but muted, and with Steering and Cues left to
+# the run's a11y.ini, so their rows show no "(environment)" (as
+# run_level.py runs it):
 #   MELEE_A11Y_STEER= MELEE_A11Y_CUES= python tools/a11y/drive.py --launcher --muted tools/a11y/launcher_a11y.drive
 # The run's a11y.ini starts from the defaults.
 
@@ -19,49 +24,44 @@ wait '"Settings\. Graphics\. '
 key Down Down Down Down Down
 wait '"Accessibility\. Speech, steering and the audio cues of Non-Visual Melee\."$'
 
-# Every row, in the model's order, and round to the first.
+# The top level: the master switches, each followed by the row opening its
+# submenu, and round to the first.
 key Right
 wait '"Accessibility, On, Left and right to change\. Turns everything Non-Visual Melee adds on or off: speech, steering and the cues\."$'
 key Down
 wait '"Speech, On, Left and right to change\. Turns speech on or off, through the screen reader and the voices\."$'
 key Down
-wait '"Your voice, [^",]+(, [^"]+)?, Left and right to change\. The Windows voice that says what happens to you in a match\."$'
-key Down
-wait "\"Your voice rate, slider, 50\. Left and right to adjust\. How fast your voice speaks, 50 being the voice's normal speed\.\"$"
-key Down
-wait '"Your voice volume, slider, 100%\. Left and right to adjust\. The loudness of your voice, under the master volume\."$'
-key Down
-wait '"Preview your voice: Play, button\. Says "Your voice" in your voice, at its rate and volume\."$'
-key Down
-wait "\"Opponents' voice, [^\",]+(, [^\"]+)?, Left and right to change\. The Windows voice that says what happens to everyone else, teammates included, in a match\.\"$"
-key Down
-wait "\"Opponents' voice rate, slider, 50\. Left and right to adjust\. How fast the opponents' voice speaks, 50 being the voice's normal speed\.\"$"
-key Down
-wait "\"Opponents' voice volume, slider, 100%\. Left and right to adjust\. The loudness of the opponents' voice, under the master volume\.\"$"
-key Down
-wait "\"Preview opponents' voice: Play, button\. Says \"Opponents' voice\" in the opponents' voice, at its rate and volume\.\"$"
-key Down
-wait '"Match announcements, On, Left and right to change\. Says what the HUD shows during a match: your damage and stocks in your voice, everyone else.s in the opponents. voice, and the time left on the screen reader\."$'
-key Down
-wait '"Your damage, Every change, Left and right to change\. How your damage is said: Every change says each new figure once it stops changing; Thresholds, only once it passes a multiple of the damage interval\."$'
-key Down
-wait "\"Opponents' damage, Every change, Left and right to change\. How everyone else's damage is said, teammates included: Every change says each new figure once it stops changing; Thresholds, only once it passes a multiple of the damage interval\.\"$"
-key Down
-wait '"Damage interval, slider, 20%\. Left and right to adjust\. The spacing of the damage thresholds: with Thresholds, damage is said once it passes a multiple of this\."$'
-key Down
-wait '"Your stocks, On, Left and right to change\. Says your stocks left each time they change, in a match that counts stocks\."$'
-key Down
-wait "\"Opponents' stocks, On, Left and right to change\. Says everyone else's stocks left each time they change, teammates included\.\"$"
-key Down
-wait "\"Teammates, On, Left and right to change\. Says your teammates' damage and stocks in a team match, as the opponents' rows set\. Off, teammates are left out\.\"$"
-key Down
-wait '"Time left, On, Left and right to change\. Says the time left at each whole minute and at 30 seconds, in a match whose timer counts down\."$'
-key Down
 wait '"Steering, On, Left and right to change\. The D-pad steps the hand on character select and the cursor on stage select\. Off, the D-pad does what the game makes of it, quick chat included\."$'
 key Down
 wait '"Cues, On, Left and right to change\. Turns every cue on or off\."$'
 key Down
-wait "\"Cue volume, slider, 100%\. Left and right to adjust\. The loudness of all cues together, under the master volume; the game's sound effect and music volumes leave cues alone\.\"$"
+wait "\"Cue settings, Enter to open\. Cue volume, and each cue's switch, volume and preview\.\"$"
+key Down
+wait '"Match announcements, On, Left and right to change\. Says what the HUD shows during a match: your damage and stocks in your voice, everyone else.s in the opponents. voice, and the time left on the screen reader\."$'
+key Down
+wait '"Match announcement settings, Enter to open\. The voices, and what is announced: damage, stocks, teammates and the time left\."$'
+key Down
+wait '"Accessibility, On, Left and right to change\. '
+
+# Steering off with Right and on again with Enter: the new value alone,
+# each saved to its own line.
+key Down Down
+wait '"Steering, On, Left and right to change\. '
+key Right
+wait '\[a11y\] accessibility settings: saved steering\.on = off$'
+wait '"Off"$'
+ini '^steering\.on = off$'
+key Return
+wait '\[a11y\] accessibility settings: saved steering\.on = on$'
+wait '"On"$'
+ini '^steering\.on = on$'
+
+# Cue settings opened with Enter: its name, then its first row; every row
+# in turn, and round to the first, said without the name.
+key Down Down
+wait '"Cue settings, Enter to open\. '
+key Return
+wait "\"Cue settings\. Cue volume, slider, 100%\. Left and right to adjust\. The loudness of all cues together, under the master volume; the game's sound effect and music volumes leave cues alone\.\"$"
 key Down
 wait '"Your position cue, On, Left and right to change\. A tick that pans with where you are across the stage, rises in pitch the higher you are, and speeds up as the nearest opponent gets closer\."$'
 key Down
@@ -93,37 +93,9 @@ wait '"Preview ledge warning: Play, button\. Plays a short sample of the ledge w
 key Down
 wait '"Ledge warning distance, slider, 40 units\. Left and right to adjust\. How far from the edge the warning starts, in stage units\. Final Destination is about 170 wide\."$'
 key Down
-wait '"Accessibility, On, Left and right to change\. '
-
-# Steering off with Right and on again with Enter: the new value alone,
-# each saved to its own line.
-key Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
-wait '"Steering, On, Left and right to change\. '
-key Right
-wait '\[a11y\] accessibility settings: saved steering\.on = off$'
-wait '"Off"$'
-ini '^steering\.on = off$'
-key Return
-wait '\[a11y\] accessibility settings: saved steering\.on = on$'
-wait '"On"$'
-ini '^steering\.on = on$'
-
-# Your damage a step Right to Thresholds and Left back, each saved by the
-# option's name.
-key Up Up Up Up Up Up Up
-wait '"Your damage, Every change, Left and right to change\. '
-key Right
-wait '\[a11y\] accessibility settings: saved match_announcements\.your_damage = Thresholds$'
-wait '"Thresholds"$'
-ini '^match_announcements\.your_damage = Thresholds$'
-key Left
-wait '\[a11y\] accessibility settings: saved match_announcements\.your_damage = Every change$'
-wait '"Every change"$'
-ini '^match_announcements\.your_damage = Every change$'
+wait '"Cue volume, slider, 100%\. '
 
 # Cue volume a step down and back up.
-key Down Down Down Down Down Down Down Down Down
-wait '"Cue volume, slider, 100%\. '
 key Left
 wait '\[a11y\] accessibility settings: saved cues\.volume = 95$'
 wait '"95%"$'
@@ -133,9 +105,9 @@ wait '\[a11y\] accessibility settings: saved cues\.volume = 100$'
 wait '"100%"$'
 ini '^cues\.volume = 100$'
 
-# Up past the first row wraps to the last, Ledge warning distance: a step
-# up and back down.
-key Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up Up
+# Up past the submenu's first row wraps to its last, Ledge warning distance:
+# a step up and back down.
+key Up
 wait '"Ledge warning distance, slider, 40 units\. '
 key Right
 wait '\[a11y\] accessibility settings: saved ledge_warning\.distance = 41$'
@@ -147,7 +119,8 @@ wait '"40 units"$'
 ini '^ledge_warning\.distance = 40$'
 
 # Preview ledge warning: played to its end, left then right; pressed again,
-# it plays from the start, and moving off the row stops it.
+# it plays from the start, and Left, which goes back to the row that opened
+# the submenu, stops it.
 key Up
 wait '"Preview ledge warning: Play, button\. '
 key Return
@@ -158,14 +131,81 @@ wait '\[a11y\] cue ledge right preview stop '
 key Return
 wait '\[a11y\] cue preview: ledge_warning$'
 wait '\[a11y\] cue ledge left preview start '
-key Up
+key Left
 wait '\[a11y\] cue ledge left preview stop '
-wait '"Ledge warning volume, slider, 100%\. '
+wait "\"Cue settings, Enter to open\. Cue volume, and each cue's switch, volume and preview\.\"$"
+
+# Match announcement settings opened with Right: its name, then Voice
+# settings, the row opening the submenu inside it; every row in turn, and
+# round to the first.
+key Down Down
+wait '"Match announcement settings, Enter to open\. '
+key Right
+wait "\"Match announcement settings\. Voice settings, Enter to open\. Your voice and the opponents' voice: each one's voice, rate, volume and a preview\.\"$"
+key Down
+wait '"Your damage, Every change, Left and right to change\. How your damage is said: Every change says each new figure once it stops changing; Thresholds, only once it passes a multiple of the damage interval\."$'
+key Down
+wait "\"Opponents' damage, Every change, Left and right to change\. How everyone else's damage is said, teammates included: Every change says each new figure once it stops changing; Thresholds, only once it passes a multiple of the damage interval\.\"$"
+key Down
+wait '"Damage interval, slider, 20%\. Left and right to adjust\. The spacing of the damage thresholds: with Thresholds, damage is said once it passes a multiple of this\."$'
+key Down
+wait '"Your stocks, On, Left and right to change\. Says your stocks left each time they change, in a match that counts stocks\."$'
+key Down
+wait "\"Opponents' stocks, On, Left and right to change\. Says everyone else's stocks left each time they change, teammates included\.\"$"
+key Down
+wait "\"Teammates, On, Left and right to change\. Says your teammates' damage and stocks in a team match, as the opponents' rows set\. Off, teammates are left out\.\"$"
+key Down
+wait '"Time left, On, Left and right to change\. Says the time left at each whole minute and at 30 seconds, in a match whose timer counts down\."$'
+key Down
+wait '"Voice settings, Enter to open\. '
+
+# Your damage a step Right to Thresholds and Left back, each saved by the
+# option's name.
+key Down
+wait '"Your damage, Every change, Left and right to change\. '
+key Right
+wait '\[a11y\] accessibility settings: saved match_announcements\.your_damage = Thresholds$'
+wait '"Thresholds"$'
+ini '^match_announcements\.your_damage = Thresholds$'
+key Left
+wait '\[a11y\] accessibility settings: saved match_announcements\.your_damage = Every change$'
+wait '"Every change"$'
+ini '^match_announcements\.your_damage = Every change$'
+
+# Voice settings, inside Match announcement settings, opened with Enter: its
+# own name alone, then its first row; every row in turn, and round.
+key Up
+wait '"Voice settings, Enter to open\. '
+key Return
+wait '"Voice settings\. Your voice, [^",]+(, [^"]+)?, Left and right to change\. The Windows voice that says what happens to you in a match\."$'
+key Down
+wait "\"Your voice rate, slider, 50\. Left and right to adjust\. How fast your voice speaks, 50 being the voice's normal speed\.\"$"
+key Down
+wait '"Your voice volume, slider, 100%\. Left and right to adjust\. The loudness of your voice, under the master volume\."$'
+key Down
+wait '"Preview your voice: Play, button\. Says "Your voice" in your voice, at its rate and volume\."$'
+key Down
+wait "\"Opponents' voice, [^\",]+(, [^\"]+)?, Left and right to change\. The Windows voice that says what happens to everyone else, teammates included, in a match\.\"$"
+key Down
+wait "\"Opponents' voice rate, slider, 50\. Left and right to adjust\. How fast the opponents' voice speaks, 50 being the voice's normal speed\.\"$"
+key Down
+wait "\"Opponents' voice volume, slider, 100%\. Left and right to adjust\. The loudness of the opponents' voice, under the master volume\.\"$"
+key Down
+wait "\"Preview opponents' voice: Play, button\. Says \"Opponents' voice\" in the opponents' voice, at its rate and volume\.\"$"
+key Down
+wait '"Your voice, [^",]+(, [^"]+)?, Left and right to change\. '
+
+# Escape goes back one level, to Voice settings' row; Left on that row, which
+# holds no value, goes back one more, to the top level.
+key Escape
+wait "\"Voice settings, Enter to open\. Your voice and the opponents' voice: each one's voice, rate, volume and a preview\.\"$"
+key Left
+wait '"Match announcement settings, Enter to open\. The voices, and what is announced: damage, stocks, teammates and the time left\."$'
 
 # Accessibility off and on again from its own row: "Accessibility off" is
 # the last thing said, the row's new value logged unheard after it, and the
 # row's press turns it back on, saying "Accessibility on" and the row again.
-key Down Down Down
+key Down
 wait '"Accessibility, On, Left and right to change\. '
 key Return
 wait '\[a11y\] accessibility settings: saved accessibility\.on = off$'

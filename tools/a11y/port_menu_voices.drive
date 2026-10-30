@@ -1,17 +1,20 @@
 # The voices' rows in the port menu's Accessibility category, from the main
-# menu: Your voice a step Right, a quick run of two steps Left that plays one
-# sample, and a step Right back to the voice it started on; Your voice rate a
-# step down and back; Preview your voice by the gamepad's A, which plays at
-# once; Opponents' voice a step Right and back; and the opponents' four rows
-# read down past the match announcements' rows to Steering. Each step on a
+# menu, in Voice settings inside Match announcement settings, each opened
+# with Right: Your voice a step Right, a quick run of two steps Left that
+# plays one sample, and a step Right back to the voice it started on; Your
+# voice rate a step down and back; Preview your voice by the gamepad's A,
+# which plays at once; Opponents' voice a step Right and back; the
+# opponents' other rows read and round to Your voice; and Escape back to
+# Voice settings' row, then down the match announcements' rows and round to
+# it. Each step on a
 # Voice, Rate or Volume row logs the saved value and the reader's new value,
 # then a moment later the sample in that voice and its "plays" line; with
 # the screen reader muted the voices still render and play, into SDL's
 # dummy driver. Expects the voices ready by the time the menu opens, and at
 # least two voices installed. The run's a11y.ini starts from the defaults.
 # Run with accessibility on but muted, and with Steering and Cues left to
-# the run's a11y.ini, so Steering's row shows no "(environment)" (as
-# run_level.py runs it):
+# the run's a11y.ini, so no row shows "(environment)" (as run_level.py runs
+# it):
 #   MELEE_A11Y_STEER= MELEE_A11Y_CUES= python tools/a11y/drive.py --muted tools/a11y/port_menu_voices.drive
 # run_level.py also counts the samples: six in your voice and two in the
 # opponents' voice, one for each settled run of steps and one for Preview.
@@ -31,10 +34,16 @@ wait '"Accessibility"$'
 key Right
 wait '"Accessibility, On, Left and right to change\. '
 
-# Your voice, right after Speech: the voice in use, by its display name and,
-# when the voices installed span more than one language, the language.
-key Down Down
-wait '"Your voice, (?P<yours>[^",]+)(, [^"]+)?, Left and right to change\. The Windows voice that says what happens to you in a match\."$'
+# Match announcement settings, then Voice settings, its first row, each
+# opened with Right; Your voice is the first row there: the voice in use, by
+# its display name and, when the voices installed span more than one
+# language, the language.
+key Down Down Down Down Down Down
+wait '"Match announcement settings, Enter to open\. '
+key Right
+wait '"Match announcement settings\. Voice settings, Enter to open\. '
+key Right
+wait '"Voice settings\. Your voice, (?P<yours>[^",]+)(, [^"]+)?, Left and right to change\. The Windows voice that says what happens to you in a match\."$'
 
 # A step Right: the next voice, saved by its display name, said alone, and a
 # moment later its sample.
@@ -98,7 +107,8 @@ wait "\[a11y\] voice opponents: \"Opponents' voice\"$"
 wait "\[a11y\] voice opponents plays: \"Opponents' voice\" "
 ini '^opponents_voice\.voice = %theirs%$'
 
-# The opponents' other rows, the match announcements' rows, then Steering.
+# The opponents' other rows and round to Your voice; Escape back to Voice
+# settings' row, then the match announcements' rows and round to it.
 key Down
 wait "\"Opponents' voice rate, slider, 50\. Left and right to adjust\. How fast the opponents' voice speaks, 50 being the voice's normal speed\.\"$"
 key Down
@@ -106,7 +116,9 @@ wait "\"Opponents' voice volume, slider, 100%\. Left and right to adjust\. The l
 key Down
 wait "\"Preview opponents' voice: Play, button\. Says \"Opponents' voice\" in the opponents' voice, at its rate and volume\.\"$"
 key Down
-wait '"Match announcements, On, Left and right to change\. '
+wait '"Your voice, [^",]+(, [^"]+)?, Left and right to change\. '
+key Escape
+wait '"Voice settings, Enter to open\. '
 key Down
 wait '"Your damage, Every change, Left and right to change\. '
 key Down
@@ -122,5 +134,5 @@ wait '"Teammates, On, Left and right to change\. '
 key Down
 wait '"Time left, On, Left and right to change\. '
 key Down
-wait '"Steering, On, Left and right to change\. '
+wait '"Voice settings, Enter to open\. '
 quit

@@ -78,9 +78,16 @@ A value registered with `shown` set is a setting: a row of the launcher's and th
 
 To show a tuning value, set `shown` where it is registered; to move a row, move its registration. The menus have no group headings, so a shown value's label names what it is about ("Ledge warning distance", not "Distance").
 
+### Where a row goes
+
+The rows are in submenus (`CONTEXT.md`; ADR-0009): the category's top level holds the master switches, each followed by the row opening its submenu, Cue settings after Cues and Match announcement settings after Match announcements, with Voice settings first inside the latter. A submenu is a `NamedMenu` (key, label, description, the submenu it is in), never in the file.
+
+- **A value names its submenu through its group handle.** `ValueGroup::in(menu)` gives the same group, its shown rows going into that submenu, and `ValueGroup::add_menu` registers a row opening a submenu where it is called, in the handle's own submenu, so a submenu nests by being added through a handle already inside one. A handle handed on keeps its submenu: `CueSettings` registers Cues on the top level, then Cue settings, and hands out every cue's group (`add_cue`) and every shared group (`add_shared`) already inside Cue settings, so a new cue, or a value a cue shows, lands there with no other change. `MatchAnnouncementSettings` registers its switch, Match announcement settings, then Voice settings as that submenu's first row, and gives the voices that submenu (`voice_menu()`); `VoiceSettings` takes it as the menu its rows go into.
+- **Each level's rows are in registration order**, the order `ValueModel::shown` lists them in, each entry with the submenu it is in (`ShownRow::menu`) and, for an opening row, the submenu it opens (`ShownRow::opens`). The top level's order is the order in which `pc_a11y_init` creates the features: the switches, the cue system, the match announcements, then the voices. The file follows registration order too, so a fresh `a11y.ini` lists the groups in that order; an existing file keeps its own, as the line edit keeps it.
+
 ### The cues' values
 
-`cue_settings.hpp` registers the values for all cues (a switch and the cue volume, 0 to 100%, both shown) and gives every cue the same three of its own through `add_cue`: a switch, described by what the cue does, and its volume, both shown and followed by the cue's Preview action, and its boost (a factor of 1 to 8 under the volume, for a short click that reads quieter than a held tone), a tuning value. A cue registered with `add_cue` so appears in the menus with no other change. `add_cue` also hands out the cue's number in the engine. The cue then adds its mapping values to the group it got back, as tuning values unless one is worth a row:
+`cue_settings.hpp` registers the values for all cues (a switch on the top level and the cue volume, 0 to 100%, first in Cue settings, both shown) and gives every cue the same three of its own through `add_cue`: a switch, described by what the cue does, and its volume, both shown and followed by the cue's Preview action, and its boost (a factor of 1 to 8 under the volume, for a short click that reads quieter than a held tone), a tuning value. A cue registered with `add_cue` so appears in Cue settings with no other change. `add_cue` also hands out the cue's number in the engine. The cue then adds its mapping values to the group it got back, as tuning values unless one is worth a row:
 
 ```cpp
 a11y::CueGroup cue = cue_settings.add_cue("your_position", "Your position cue",
