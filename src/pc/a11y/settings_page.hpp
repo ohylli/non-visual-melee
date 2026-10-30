@@ -21,11 +21,11 @@
  * readers leave it out of the lines they read). A row opening a submenu is a
  * button of the class "submenu". Enter, A, a click or Right on it opens the
  * submenu on its first row; Back (pc_a11y_settings_back), or Left on a row
- * holding no value, goes back to it; and focus anywhere outside the open
- * level's rows, or the page hidden, shows the top level again. The launcher
- * walks the open level's rows by itself, pc_a11y_settings_rows listing them;
- * the port menu copies its column once, so inside a submenu
- * settings_pages_step moves for it. Game thread only. */
+ * holding no value, goes back to it; and focus outside the page, or the
+ * page hidden, shows the top level again. The launcher walks the open
+ * level's rows by itself, pc_a11y_settings_rows listing them; the port menu
+ * copies its column once, so inside a submenu settings_pages_focus_step
+ * moves for it. Game thread only. */
 #pragma once
 #include <chrono>
 #include <functional>
@@ -95,7 +95,7 @@ void settings_pages_frame(SettingsHost host, bool open);
  * itself: inside a submenu, focus goes round its rows and this returns
  * true; on the top level, false, and the page moves as it does. For the
  * port menu, whose column of rows is a copy of the top level's. */
-bool settings_pages_step(SettingsHost host, int direction);
+bool settings_pages_focus_step(SettingsHost host, int direction);
 
 /* For a page's reader: the name of a submenu just entered, which the reader
  * says before the announcement of its first row, where the page has put

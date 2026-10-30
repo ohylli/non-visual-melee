@@ -35,10 +35,10 @@ ChoiceOptions voice_options(const std::vector<VoiceInfo>& voices);
 
 class VoiceSettings {
 public:
-    /* Registers both voices' rows into `menu` (null: the top level),
-     * Voice settings in the game (MatchAnnouncementSettings::voice_menu),
-     * and the samples' delay with the Speech switch's group. */
-    VoiceSettings(ValueModel& model, Speech& speech, const NamedMenu* menu = nullptr);
+    /* Registers both voices' rows into `menu`, Voice settings
+     * (MatchAnnouncementSettings::voice_menu), and the samples' delay with
+     * the Speech switch's group. */
+    VoiceSettings(ValueModel& model, Speech& speech, const NamedMenu* menu);
     VoiceSettings(const VoiceSettings&) = delete;
     VoiceSettings& operator=(const VoiceSettings&) = delete;
 

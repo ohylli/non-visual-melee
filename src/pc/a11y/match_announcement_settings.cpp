@@ -51,9 +51,8 @@ MatchAnnouncementSettings::MatchAnnouncementSettings(ValueModel& model)
           "everyone else's damage is said, teammates included")),
       m_interval(group(model, &m_menu)
               .add_number(NumberSpec{"damage_interval", "Damage interval",
-                  "The spacing of the damage thresholds: with Thresholds, damage is said once it "
-                  "passes "
-                  "a multiple of this.",
+                  "The spacing of the damage thresholds: with Thresholds, damage is said once "
+                  "it passes a multiple of this.",
                   "%", 20.0f, 10.0f, 100.0f, 10.0f, true})),
       m_your_stocks(group(model, &m_menu)
               .add_switch(SwitchSpec{"your_stocks", "Your stocks",
@@ -65,15 +64,13 @@ MatchAnnouncementSettings::MatchAnnouncementSettings(ValueModel& model)
                   true, true})),
       m_teammates(group(model, &m_menu)
               .add_switch(SwitchSpec{"teammates", "Teammates",
-                  "Says your teammates' damage and stocks in a team match, as the opponents' rows "
-                  "set. "
-                  "Off, teammates are left out.",
+                  "Says your teammates' damage and stocks in a team match, as the opponents' "
+                  "rows set. Off, teammates are left out.",
                   true, true})),
       m_time_left(group(model, &m_menu)
               .add_switch(SwitchSpec{"time_left", "Time left",
-                  "Says the time left at each whole minute and at 30 seconds, in a match whose "
-                  "timer "
-                  "counts down.",
+                  "Says the time left at each whole minute and at 30 seconds, in a match "
+                  "whose timer counts down.",
                   true, true})),
       m_settle(group(model).add_number(NumberSpec{"damage_settle", "Damage settle time",
           "How long a player's damage must hold still before it is said, so a combo says only "

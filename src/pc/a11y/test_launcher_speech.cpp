@@ -1286,6 +1286,11 @@ void accessibility_submenu_left_by_leaving(Rml::Context& context) {
     page.press();
     page.focus("a11y-gap_warning-on");
     assert(rmlui_test::level_shown(page.document(), rmlui_test::kCueRows));
+    /* And so does one on the title line, or between the rows. */
+    page.focus("a11y-menu-title");
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kCueRows));
+    page.focus("page-accessibility");
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kCueRows));
 }
 
 /* With speech off, a sighted player moves through the submenus just the

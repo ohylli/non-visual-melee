@@ -193,7 +193,7 @@ public:
      * through PortMenu::show_tab's focus_ids, the category, the page's rows
      * (PortMenu::page_focus) as the category opened, Resume and Quit game. */
     void step(int direction) {
-        if (a11y::settings_pages_step(a11y::SettingsHost::port_menu, direction) ||
+        if (a11y::settings_pages_focus_step(a11y::SettingsHost::port_menu, direction) ||
             a11y::port_menu_speech_step(direction))
         {
             return;
@@ -1105,6 +1105,11 @@ void accessibility_submenu_left_by_closing(Rml::Context& context) {
     menu.enter_rows();
     into_voice_settings(menu);
     menu.focus("a11y-test-preview");
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kVoiceRows));
+    /* And so does one on the title line, or between the rows. */
+    menu.focus("a11y-menu-title");
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kVoiceRows));
+    menu.focus("page-accessibility");
     assert(rmlui_test::level_shown(menu.document(), rmlui_test::kVoiceRows));
 }
 

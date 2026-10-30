@@ -16,3 +16,7 @@ Check by ear:
 - Voice settings two levels down: in, out, and out again.
 - Closing the port menu from inside a submenu, and the next opening at the top level.
 - Whether any row's new place feels wrong, or a setting is hard to find.
+
+## Comments
+
+- 2026-10-30, code review of issues 01 to 03: in the port menu, opening a submenu and going back play only the menu's move sound, the same as a plain Up or Down, where entering a category plays its confirm sound and a value's change its own. Speech says the difference; with Speech off, or for a player who goes by the sounds, nothing does. If the play test finds that wanting, the page can play `MenuSound::confirm` on opening and `MenuSound::back` on going back (the base port's move sound would still follow the focus move). Left as it is until heard.

@@ -100,16 +100,22 @@ bool is_slider(const ShownRow& row) {
     return row.value != nullptr && row.value->kind == ValueKind::number;
 }
 
-const std::string& label_of(const ShownRow& row) {
-    return row.value != nullptr  ? row.value->label :
-           row.action != nullptr ? row.action->label :
-                                   row.opens->label;
-}
+/* What names a row, whichever it holds: a value, an action or the submenu
+ * it opens. */
+struct RowWords {
+    const std::string& key;
+    const std::string& label;
+    const std::string& help;
+};
 
-const std::string& help_of(const ShownRow& row) {
-    return row.value != nullptr  ? row.value->description :
-           row.action != nullptr ? row.action->description :
-                                   row.opens->description;
+RowWords words_of(const ShownRow& row) {
+    if (row.value != nullptr) {
+        return RowWords{row.value->key, row.value->label, row.value->description};
+    }
+    if (row.action != nullptr) {
+        return RowWords{row.action->key, row.action->label, row.action->description};
+    }
+    return RowWords{row.opens->key, row.opens->label, row.opens->description};
 }
 
 /* The title line's markup, as each page heads a block of text of its own
@@ -139,9 +145,10 @@ std::string title_text(const NamedMenu& menu) {
  * menu's rows repeat the help under the name, as its own rows do. */
 std::string row_markup(const ShownRow& row, SettingsHost host) {
     const std::string id = settings_row_id(row);
-    const std::string& help = help_of(row);
+    const RowWords words = words_of(row);
+    const std::string& help = words.help;
     std::string rml = "<div class=\"row\" data-desc=\"" + escaped(help) +
-                      "\"><span class=\"name\">" + escaped(label_of(row));
+                      "\"><span class=\"name\">" + escaped(words.label);
     if (host == SettingsHost::port_menu) {
         rml += "<span class=\"detail\">" + escaped(help) + "</span>";
     }
@@ -167,7 +174,7 @@ std::string row_markup(const ShownRow& row, SettingsHost host) {
  * (docs/adr/0009-the-accessibility-settings-split-into-submenus-inside-the-one-category.md):
  * every level's rows are built at once, those of every level but the open
  * one hidden. The open level follows focus: a row taking focus shows its
- * own level, and focus anywhere else, or the page hidden, shows the top
+ * own level, and focus outside the page, or the page hidden, shows the top
  * level, so every way out of the category comes back to it. */
 class Page final : public Rml::EventListener {
 public:
@@ -184,6 +191,7 @@ public:
             m_rows.push_back(Row{&row, settings_row_id(row), {}, nullptr});
         }
         page->SetInnerRML(rml);
+        m_page = page;
         m_title = page->GetChild(0);
         for (std::size_t i = 0; i < m_rows.size(); ++i) {
             Row& row = m_rows[i];
@@ -309,7 +317,7 @@ public:
      * level's, copied as the category opens: inside a submenu, round its
      * own rows, from the last to the first and back. False on the top
      * level, which the menu moves through itself. */
-    bool step_focus(int direction) {
+    bool focus_step(int direction) {
         if (m_open == nullptr) {
             return false;
         }
@@ -404,8 +412,15 @@ public:
             show(nullptr);
             return;
         }
-        const Row* row = row_of(event.GetTargetElement());
-        show(row != nullptr ? row->shown->menu : nullptr);
+        const Rml::Element* target = event.GetTargetElement();
+        if (const Row* row = row_of(target)) {
+            show(row->shown->menu);
+        } else if (!inside_page(target)) {
+            show(nullptr);
+        }
+        /* Else a click on the page between its rows, or on the title line,
+         * which takes focus without leaving the category: the open level
+         * stays. */
     }
 
 private:
@@ -432,6 +447,16 @@ private:
             }
         }
         return nullptr;
+    }
+
+    /* Whether the element is the page or inside it. */
+    bool inside_page(const Rml::Element* element) const {
+        for (; element != nullptr; element = element->GetParentNode()) {
+            if (element == m_page) {
+                return true;
+            }
+        }
+        return false;
     }
 
     Rml::Element* focused() const {
@@ -546,6 +571,7 @@ private:
     AccessibilitySettings& m_settings;
     const SettingsPageGame& m_game;
     std::vector<Row> m_rows;
+    Rml::Element* m_page = nullptr;  /* #page-accessibility, null with no page */
     Rml::Element* m_title = nullptr; /* the title line, null with no page */
     const NamedMenu* m_open = nullptr;
     const Row* m_preview = nullptr; /* the Preview row whose cue this page started */
@@ -630,9 +656,9 @@ public:
         }
     }
 
-    bool step(SettingsHost host, int direction) {
+    bool focus_step(SettingsHost host, int direction) {
         for (const std::unique_ptr<Page>& page : m_pages) {
-            if (page->host() == host && page->step_focus(direction)) {
+            if (page->host() == host && page->focus_step(direction)) {
                 return true;
             }
         }
@@ -677,10 +703,7 @@ PagesPlugin s_plugin;
 }  // namespace
 
 std::string settings_row_id(const ShownRow& row) {
-    const std::string& key = row.value != nullptr  ? row.value->key :
-                             row.action != nullptr ? row.action->key :
-                                                     row.opens->key;
-    std::string id = "a11y-" + key;
+    std::string id = "a11y-" + words_of(row).key;
     std::replace(id.begin(), id.end(), '.', '-');
     return id;
 }
@@ -697,8 +720,8 @@ void settings_pages_frame(SettingsHost host, bool open) {
     s_plugin.frame(host, open);
 }
 
-bool settings_pages_step(SettingsHost host, int direction) {
-    return s_plugin.step(host, direction);
+bool settings_pages_focus_step(SettingsHost host, int direction) {
+    return s_plugin.focus_step(host, direction);
 }
 
 std::string SubmenuEntry::frame(const Rml::ElementDocument& document) {

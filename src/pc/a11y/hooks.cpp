@@ -431,7 +431,7 @@ extern "C" bool pc_a11y_port_menu_step(int direction) {
     /* Before the gate, and before the reader's lines: a submenu of the
      * Accessibility category moves round its own rows with speech off too,
      * and the reader says where focus lands from its frame. */
-    if (a11y::settings_pages_step(a11y::SettingsHost::port_menu, direction)) {
+    if (a11y::settings_pages_focus_step(a11y::SettingsHost::port_menu, direction)) {
         return true;
     }
     return game_hook_may_speak() && a11y::port_menu_speech_step(direction);
