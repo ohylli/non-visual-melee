@@ -128,6 +128,10 @@ _Avoid_: Cue settings, a11y config, options, the ini (that is only the model's f
 A value of the accessibility settings that no menu shows, changed only by editing the file; meant for developers setting the cues by ear.
 _Avoid_: Hidden setting, developer setting, advanced option
 
+**Submenu**:
+A list of the accessibility settings opened from a row of the Accessibility category, or of another submenu, in the launcher and the port menu alike: Cue settings, Match announcement settings, and Voice settings within it. The Accessibility category's own rows are the master switches, each followed by the row opening its submenu. Up and Down go round the submenu's own rows, and going back returns to the row that opened it.
+_Avoid_: Section, settings page, category (that is the base port's sidebar), entry (that belongs to a tree screen)
+
 ### Native menus
 
 **Scene**:
