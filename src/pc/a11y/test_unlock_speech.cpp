@@ -231,14 +231,15 @@ void the_challenger_is_named_with_the_key() {
 void two_humans_hear_whom_it_challenges() {
     Fixture f;
     f.reader.challenger(challenger(A11Y_CKind_Purin, 1, 2));
-    assert((f.outputs ==
-            Outputs{{kWarning + "A new foe has appeared: Jigglypuff. P2, A to fight.", true}}));
+    assert((
+        f.outputs ==
+        Outputs{{kWarning + "A new foe has appeared: Jigglypuff. P2 fights. A to fight.", true}}));
     f.outputs.clear();
     /* The name tag where the challenged player has one. */
     f.reader.challenger(challenger(A11Y_CKind_GameWatch, 3, 4, "Bob"));
-    assert((
-        f.outputs ==
-        Outputs{{kWarning + "A new foe has appeared: Mr. Game & Watch. Bob, A to fight.", true}}));
+    assert((f.outputs ==
+            Outputs{{kWarning + "A new foe has appeared: Mr. Game & Watch. Bob fights. A to fight.",
+                true}}));
 }
 
 void an_unknown_challenger_is_left_out_and_logged_once() {
@@ -247,7 +248,7 @@ void an_unknown_challenger_is_left_out_and_logged_once() {
     boss.kind = 0x1B;
     f.reader.challenger(boss);
     f.reader.challenger(boss);
-    const Output said{kWarning + "A new foe has appeared! P1, A to fight.", true};
+    const Output said{kWarning + "A new foe has appeared! P1 fights. A to fight.", true};
     assert((f.outputs == Outputs{said, said}));
     assert(count_logged("[a11y] new challenger: no name for character 27") == 1);
 }

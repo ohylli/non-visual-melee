@@ -27,6 +27,8 @@ constexpr std::string_view kWarning = "Warning! Challenger approaching!";
 constexpr std::string_view kNewFoe = "A new foe has appeared!";
 constexpr std::string_view kNewFoeNamed = "A new foe has appeared: ";
 constexpr std::string_view kFightKey = "A to fight";
+/* After the challenged player's label when two or more humans played. */
+constexpr std::string_view kFights = " fights";
 
 }  // namespace
 
@@ -60,13 +62,12 @@ void UnlockSpeech::challenger(const A11yChallenger& challenger) {
             "[a11y] new challenger: no name for character " + std::to_string(challenger.kind));
         add_sentence(line, kNewFoe);
     }
-    std::string key;
     if (challenger.humans >= 2) {
-        add_part(key,
-            player_label(challenger.tag, challenger.port, m_log_once, "[a11y] new challenger:"));
+        add_sentence(line,
+            player_label(challenger.tag, challenger.port, m_log_once, "[a11y] new challenger:") +
+                std::string(kFights));
     }
-    add_part(key, kFightKey);
-    add_sentence(line, key);
+    add_sentence(line, kFightKey);
     end_sentence(line);
     m_speech.announce(line, Mode::interrupt);
 }

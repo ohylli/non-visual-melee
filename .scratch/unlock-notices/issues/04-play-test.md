@@ -1,6 +1,6 @@
 # 04 Play test by ear
 
-Status: ready-for-human
+Status: resolved (2026-10-30)
 Type: task
 Blocked by: 01, 03
 
@@ -41,3 +41,7 @@ The maintainer asked for three of the review's items to be fixed as recommended:
 - **Font glyphs on other tables** (`29d1ea6b`). A dump of each table found SdMenu and SdSlChr with 0x4000 é and 0x4002 II, SdRst with 0x4000 é alone (its 0x4001 to 0x4006 spell Japanese match types), and SdMsgBox with none. The main menu tree's reader (the rules screens in both hosts too) and results each hand over their table's; character select, stage select and training decode no game text. Results now says "Pokémon KO". No drive script reaches a string with these glyphs, so the unit tests carry them; no expected line in the `verify` skill changed. Two Sound Test song names in SdMenu (259, 260) put the II straight after "Kingdom", unread so far.
 
 The language item (the prize glyphs given whatever the saved language) stays for region work, and applies now to the menu and results glyphs as well.
+
+### 2026-10-30, play test (maintainer)
+
+The maintainer played the challenger launch, the fight and the unlock notices, with a second controller too: everything was fine and worked well. One wording change: with two or more humans, the challenged player's label became its own sentence, "… Jigglypuff. P2 fights. A to fight.", in place of "P2, A to fight.", to say who fights. Unit tests updated; `challenger.drive` (one human) unchanged and passing.
