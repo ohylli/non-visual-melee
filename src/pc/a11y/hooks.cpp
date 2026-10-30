@@ -281,13 +281,17 @@ extern "C" void pc_a11y_init(void) {
     s_match_announcer = std::make_unique<a11y::MatchAnnouncer>(*s_speech);
     s_settings = std::make_unique<a11y::AccessibilitySettings>(
         *s_speech, settings_file_path(config), config.log);
-    /* The switches first: the first rows and the file's first groups, the
-     * voices' rows after Speech, and the match announcements' after them. */
-    s_switches = std::make_unique<a11y::Switches>(s_settings->model(), *s_speech, config.log, [] {
-        s_voice_settings = std::make_unique<a11y::VoiceSettings>(s_settings->model(), *s_speech);
-        s_match_settings = std::make_unique<a11y::MatchAnnouncementSettings>(s_settings->model());
-    });
+    /* In the order of the Accessibility category's top level
+     * (.scratch/accessibility-submenus/spec.md, "The layout"), each level's
+     * rows being in registration order: the switches first, the first rows
+     * and the file's first groups; then the cues, with Cue settings; then
+     * the match announcements, with Match announcement settings, whose Voice
+     * settings the voices' rows fill. */
+    s_switches = std::make_unique<a11y::Switches>(s_settings->model(), *s_speech, config.log);
     s_cue_system = a11y::CueSystem::open(config, *s_speech, *s_settings, s_master_volume);
+    s_match_settings = std::make_unique<a11y::MatchAnnouncementSettings>(s_settings->model());
+    s_voice_settings = std::make_unique<a11y::VoiceSettings>(
+        s_settings->model(), *s_speech, &s_match_settings->voice_menu());
     /* Attached to speech before the switches turn it on, which starts the
      * voices' worker. */
     s_voices = std::make_unique<a11y::Voices>(*s_speech, s_cue_system->engine(),
@@ -424,6 +428,12 @@ extern "C" void pc_a11y_port_menu_frame(bool open) {
 }
 
 extern "C" bool pc_a11y_port_menu_step(int direction) {
+    /* Before the gate, and before the reader's lines: a submenu of the
+     * Accessibility category moves round its own rows with speech off too,
+     * and the reader says where focus lands from its frame. */
+    if (a11y::settings_pages_step(a11y::SettingsHost::port_menu, direction)) {
+        return true;
+    }
     return game_hook_may_speak() && a11y::port_menu_speech_step(direction);
 }
 

@@ -32,8 +32,9 @@ struct CueGroup {
 
 class CueSettings {
 public:
-    /* Registers the values for all cues, both shown: the switch and the cue
-     * volume. */
+    /* Registers the values for all cues, both shown: the switch, on the
+     * top level, then the row opening Cue settings, the submenu that holds
+     * the cue volume and every cue's rows. */
     explicit CueSettings(ValueModel& model);
 
     /* Registers a cue's group, titled as the file heads it and the menus
@@ -41,11 +42,12 @@ public:
      * cue does, its volume and the boost it starts with, and gives it the
      * next cue number. The switch and the volume are shown, followed by an
      * action, Preview, whose group is the cue's id; the boost is a tuning
-     * value. */
+     * value. The group is in Cue settings, so a value the cue shows lands
+     * there too. */
     CueGroup add_cue(const std::string& id, const std::string& title,
         const std::string& description, float default_boost);
     /* Registers a group for values several cues share, with no cue of its
-     * own: no switch, volume or cue number. */
+     * own: no switch, volume or cue number. In Cue settings too. */
     ValueGroup add_shared(const std::string& id, const std::string& title);
 
     /* Every level into the engine: once the settings are first read. */
@@ -60,10 +62,13 @@ public:
 
     CueLevel mix_level() const;
     const std::vector<CueValues>& cues() const { return m_cues; }
+    /* Cue settings. */
+    const NamedMenu& menu() const { return m_menu; }
 
 private:
     ValueModel& m_model;
     Switch m_on;
+    const NamedMenu& m_menu;
     Number m_volume;
     bool m_allowed = true;
     std::vector<CueValues> m_cues;

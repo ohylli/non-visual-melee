@@ -185,7 +185,8 @@ public:
 };
 
 /* The menus' rows, as the spec's Rows table has them, registered as the
- * game registers them: the switches first, then the cues. */
+ * game registers them: the switches first, then the cues, every cue's rows
+ * in Cue settings (.scratch/accessibility-submenus/spec.md, "The layout"). */
 void the_menus_rows_are_the_specs_rows() {
     a11y::Speech speech{a11y::Config{false, false}, std::make_unique<NoBridge>()};
     a11y::CueEngine engine{a11y::CueEngineOptions{false, "", ""}};
@@ -195,6 +196,16 @@ void the_menus_rows_are_the_specs_rows() {
     a11y::MatchCues match_cues{cues, engine};
     std::vector<std::string> rows;
     for (const a11y::ShownRow& row : model.shown()) {
+        if (row.opens != nullptr) {
+            assert(row.menu == nullptr && row.opens == &cues.menu());
+            rows.push_back("opens " + row.opens->key + " " + row.opens->label);
+            continue;
+        }
+        /* Only the master switches on the top level. */
+        const std::string key = row.value != nullptr ? row.value->key : row.action->key;
+        const bool top = key == "accessibility.on" || key == "speech.on" || key == "steering.on" ||
+                         key == "cues.on";
+        assert(row.menu == (top ? nullptr : &cues.menu()));
         rows.push_back(row.value != nullptr ?
                            row.value->key + " " + row.value->label :
                            "preview " + row.action->group + " " + row.action->label);
@@ -204,6 +215,7 @@ void the_menus_rows_are_the_specs_rows() {
                         "speech.on Speech",
                         "steering.on Steering",
                         "cues.on Cues",
+                        "opens cues.settings Cue settings",
                         "cues.volume Cue volume",
                         "your_position.on Your position cue",
                         "your_position.volume Your position cue volume",

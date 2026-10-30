@@ -919,7 +919,18 @@ void the_rows() {
     const a11y::NamedValue* on = model.find(a11y::MatchAnnouncementSettings::kOnKey);
     assert(on != nullptr && on->shown && on->kind == a11y::ValueKind::toggle);
     assert(on->label == "Match announcements" && on->default_value == 1.0f);
-    assert(model.shown()[0].value == on);
+    assert(model.shown()[0].value == on && model.shown()[0].menu == nullptr);
+    /* Then the row opening Match announcement settings, which holds the
+     * rest, Voice settings first. */
+    const a11y::NamedMenu& menu = settings.menu();
+    assert(model.shown()[1].opens == &menu && model.shown()[1].menu == nullptr);
+    assert(menu.label == "Match announcement settings" && menu.parent == nullptr);
+    assert(model.shown()[2].opens == &settings.voice_menu() && model.shown()[2].menu == &menu);
+    assert(
+        settings.voice_menu().label == "Voice settings" && settings.voice_menu().parent == &menu);
+    for (std::size_t i = 2; i < model.shown().size(); ++i) {
+        assert(model.shown()[i].menu == &menu);
+    }
     const a11y::NamedValue* settle = model.find("match_announcements.damage_settle");
     assert(settle != nullptr && !settle->shown);
     assert(settings.values().on);
@@ -942,8 +953,8 @@ void the_rows() {
     assert(interval != nullptr && interval->shown && interval->kind == a11y::ValueKind::number);
     assert(yours->label == "Your damage" && theirs->label == "Opponents' damage");
     assert(interval->label == "Damage interval");
-    assert(model.shown().size() == 8 && model.shown()[1].value == yours &&
-           model.shown()[2].value == theirs && model.shown()[3].value == interval);
+    assert(model.shown().size() == 10 && model.shown()[3].value == yours &&
+           model.shown()[4].value == theirs && model.shown()[5].value == interval);
     const a11y::ChoiceOptions modes = a11y::choice_options(*yours);
     assert(modes.size() == 3 && modes[0].shown() == "Off" && modes[1].shown() == "Every change" &&
            modes[2].shown() == "Thresholds");
@@ -991,7 +1002,7 @@ void the_rows() {
         const a11y::NamedValue* row = model.find(keys[i]);
         assert(row != nullptr && row->shown && row->kind == a11y::ValueKind::toggle);
         assert(row->label == labels[i] && row->default_value == 1.0f);
-        assert(model.shown()[4 + i].value == row);
+        assert(model.shown()[6 + i].value == row);
     }
     assert(text.find("match_announcements.teammates = ") < text.find("damage_settle = "));
     assert(settings.values().your_stocks && settings.values().opponents_stocks &&
@@ -1008,7 +1019,7 @@ void the_rows() {
     const a11y::NamedValue* time_left = model.find(a11y::MatchAnnouncementSettings::kTimeLeftKey);
     assert(time_left != nullptr && time_left->shown && time_left->kind == a11y::ValueKind::toggle);
     assert(time_left->label == "Time left" && time_left->default_value == 1.0f);
-    assert(model.shown()[7].value == time_left);
+    assert(model.shown()[9].value == time_left);
     assert(text.find("match_announcements.teammates = ") <
                text.find("match_announcements.time_left = ") &&
            text.find("match_announcements.time_left = ") < text.find("damage_settle = "));

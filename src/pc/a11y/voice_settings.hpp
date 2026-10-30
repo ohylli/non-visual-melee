@@ -3,8 +3,9 @@
  * "Choosing a voice", "The rows", "Missing voices"; primer
  * docs/a11y/speech.md, "Voices"): for your voice and then the opponents'
  * voice, a Voice row (a choice of the installed OneCore voices, saved by
- * display name), a Rate and a Volume slider, and Preview, right after the
- * Speech switch, and a boost under the volume, a tuning value. Every change
+ * display name), a Rate and a Volume slider, and Preview, in Voice settings
+ * inside Match announcement settings, and a boost under the volume, a tuning
+ * value. Every change
  * reaches the voices at once, from a row in either host or a hand edit of
  * a11y.ini, and a change to a voice's Voice, Rate, Volume or boost plays a
  * sample in it a moment later, one for a quick run of changes; Preview
@@ -34,10 +35,10 @@ ChoiceOptions voice_options(const std::vector<VoiceInfo>& voices);
 
 class VoiceSettings {
 public:
-    /* Registers both voices' rows, and the samples' delay with the Speech
-     * switch's group. Call right after the Speech switch is registered
-     * (Switches' after_speech), so the rows follow it. */
-    VoiceSettings(ValueModel& model, Speech& speech);
+    /* Registers both voices' rows into `menu` (null: the top level),
+     * Voice settings in the game (MatchAnnouncementSettings::voice_menu),
+     * and the samples' delay with the Speech switch's group. */
+    VoiceSettings(ValueModel& model, Speech& speech, const NamedMenu* menu = nullptr);
     VoiceSettings(const VoiceSettings&) = delete;
     VoiceSettings& operator=(const VoiceSettings&) = delete;
 
@@ -87,8 +88,8 @@ private:
     const Rows& rows(Voice voice) const { return m_rows[static_cast<size_t>(voice)]; }
     /* title as a row's name begins, in_sentence as it reads inside one
      * ("the opponents' voice"), about what the voice says. */
-    Rows add_rows(ValueModel& model, const char* id, const char* title, const char* in_sentence,
-        const char* default_voice, const char* about);
+    Rows add_rows(ValueModel& model, const NamedMenu* menu, const char* id, const char* title,
+        const char* in_sentence, const char* default_voice, const char* about);
     void apply(Voice voice);
     /* The option in use for a saved text the options hold none of: as
      * find_voice gives it, so the row shows the voice that speaks. */

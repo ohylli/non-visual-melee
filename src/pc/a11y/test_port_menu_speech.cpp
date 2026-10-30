@@ -146,7 +146,7 @@ public:
         }
     }
 
-    /* PortMenu::show_tab */
+    /* PortMenu::show_tab: the column of rows copied as the category opens. */
     void show_tab(int next) {
         m_tab = (next + kTabCount) % kTabCount;
         for (int i = 0; i < kTabCount; ++i) {
@@ -154,6 +154,12 @@ public:
             const std::string page = std::string("page-") + (kTabs[i] + 4);
             element(page.c_str())->SetClass("selected", i == m_tab);
         }
+        m_focus_ids = {kTabs[m_tab]};
+        for (const std::string& row : page_focus()) {
+            m_focus_ids.push_back(row);
+        }
+        m_focus_ids.push_back("resume");
+        m_focus_ids.push_back("quit-game");
         focus(kTabs[m_tab]);
     }
 
@@ -169,8 +175,11 @@ public:
         }
     }
 
-    /* PortMenu::back: Escape or B. */
+    /* PortMenu::back, with its hook: Escape or B. */
     void back() {
+        if (pc_a11y_settings_back(m_document)) {
+            return;
+        }
         if (focused() != nullptr && !is_sidebar(focused()->GetId())) {
             show_tab(m_tab);
         } else {
@@ -178,12 +187,15 @@ public:
         }
     }
 
-    /* PortMenu::focus_step with its hook: Up (-1) or Down (1), in the
+    /* PortMenu::focus_step with its hook (pc_a11y_port_menu_step: a
+     * submenu's step, then the reader's): Up (-1) or Down (1), in the
      * sidebar over the categories, Resume and Quit game, around; in the rows
      * through PortMenu::show_tab's focus_ids, the category, the page's rows
-     * (PortMenu::page_focus), Resume and Quit game. */
+     * (PortMenu::page_focus) as the category opened, Resume and Quit game. */
     void step(int direction) {
-        if (a11y::port_menu_speech_step(direction)) {
+        if (a11y::settings_pages_step(a11y::SettingsHost::port_menu, direction) ||
+            a11y::port_menu_speech_step(direction))
+        {
             return;
         }
         const Rml::String id = focused() != nullptr ? focused()->GetId() : "";
@@ -199,12 +211,7 @@ public:
             }
             return;
         }
-        std::vector<std::string> ids{kTabs[m_tab]};
-        for (const std::string& row : page_focus()) {
-            ids.push_back(row);
-        }
-        ids.push_back("resume");
-        ids.push_back("quit-game");
+        const std::vector<std::string>& ids = m_focus_ids;
         const int count = static_cast<int>(ids.size());
         int index = direction > 0 ? -1 : 0;
         for (int i = 0; i < count; ++i) {
@@ -370,6 +377,7 @@ private:
     Rml::Context& m_context;
     OnlineFilter m_filter;
     int m_tab = 0;
+    std::vector<std::string> m_focus_ids; /* PortMenu::focus_ids */
     bool m_open = false;
     bool m_quitting = false;
     std::vector<Output> m_outputs;
@@ -781,9 +789,21 @@ void speech_back_on_announces_the_focused_row(Rml::Context& context) {
     assert(menu.take() == none());
 }
 
-/* The fork's category, last before Resume: its rows read as the menu's own,
- * the description under each name left out; the column of rows ends at
- * Resume. */
+/* Until the reader has a form of its own for them (issue 02), a row opening
+ * a submenu reads as a button in a row. */
+constexpr const char* kCueSettingsRow =
+    "Cue settings: Open, button. Cue volume, and each cue's switch, volume and preview.";
+constexpr const char* kAnnouncementSettingsRow =
+    "Match announcement settings: Open, button. The voices, and what is announced: damage, "
+    "stocks, teammates and the time left.";
+constexpr const char* kCueVolumeRow =
+    "Cue volume, slider, 100%. Left and right to adjust. The loudness of all cues together, "
+    "under the master volume; the game's sound effect and music volumes leave cues alone.";
+
+/* The fork's category, last before Resume: the top level's rows, the master
+ * switches each followed by the row opening its submenu, read as the menu's
+ * own, the description under each name left out; the column of rows ends
+ * at Resume. */
 void accessibility_category_rows(Rml::Context& context) {
     Menu menu(context);
     menu.open();
@@ -797,21 +817,214 @@ void accessibility_category_rows(Rml::Context& context) {
     menu.enter_rows();
     menu.frame();
     assert(menu.take() == (std::vector<Output>{interrupt(kAccessibilityRow)}));
-    menu.step(1);
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kTopRows));
+    assert(rmlui_test::title_line(menu.document()).empty());
+    const std::vector<std::string> said{kSpeechRow,
+        "Steering, On, Left and right to change. The D-pad steps the hand on character select and "
+        "the cursor on stage select. Off, the D-pad does what the game makes of it, quick chat "
+        "included.",
+        "Cues, On, Left and right to change. Turns every cue on or off.", kCueSettingsRow,
+        "Match announcements, On, Left and right to change. Says what the HUD shows during a "
+        "match: your damage and stocks in your voice, everyone else's in the opponents' voice, "
+        "and the time left on the screen reader.",
+        kAnnouncementSettingsRow, kResume};
+    for (const std::string& text : said) {
+        menu.step(1);
+        menu.frame();
+        assert(menu.take() == (std::vector<Output>{interrupt(text)}));
+    }
+}
+
+/* A submenu opens on its first row by Enter, A or a click, or by Right, its
+ * title line naming it, and only its rows shown; Up and Down go round them,
+ * never on to the category or Resume; Left and Right still step a value;
+ * Escape, B, or Left on a Preview go back to the row that opened it, and on
+ * the top level Escape goes on back to the category. */
+void accessibility_submenu_moving(Rml::Context& context) {
+    Menu menu(context);
+    menu.open_rows(kAccessibilityTab);
+    for (int i = 0; i < 4; ++i) {
+        menu.step(1);
+    }
+    assert(menu.focused() == menu.element("a11y-cues-settings"));
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt(kSpeechRow)}));
-    menu.focus("a11y-ledge_warning-distance");
+    menu.take();
+    menu.press();
+    assert(menu.focused() == menu.element("a11y-cues-volume"));
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kCueRows));
+    assert(rmlui_test::title_line(menu.document()) == "Cue settings");
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt(kCueVolumeRow)}));
+    /* Round from the first to the last, and back. */
+    menu.step(-1);
+    assert(menu.focused() == menu.element("a11y-ledge_warning-distance"));
     menu.frame();
     assert(menu.take() ==
            (std::vector<Output>{interrupt(
                "Ledge warning distance, slider, 40 units. Left and right to adjust. How far from "
                "the edge the warning starts, in stage units.")}));
     menu.step(1);
-    menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt(kTestVoiceRow)}));
+    assert(menu.focused() == menu.element("a11y-cues-volume"));
+    for (std::size_t i = 1; i < rmlui_test::kCueRows.size(); ++i) {
+        menu.step(1);
+        assert(menu.focused() == menu.element(rmlui_test::kCueRows[i].c_str()));
+    }
     menu.step(1);
+    assert(menu.focused() == menu.element("a11y-cues-volume"));
+    /* A value still steps either way. */
+    menu.horizontal(-1);
+    assert(menu.a11y().value("cues.volume").value == 95.0f);
+    menu.horizontal(1);
+    assert(menu.a11y().value("cues.volume").value == 100.0f);
+    assert(menu.focused() == menu.element("a11y-cues-volume"));
+    /* Left on a Preview: back, and Right opens again. */
+    menu.focus("a11y-gap_warning-preview");
+    menu.horizontal(-1);
+    assert(menu.focused() == menu.element("a11y-cues-settings"));
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kTopRows));
+    assert(rmlui_test::title_line(menu.document()).empty());
+    menu.horizontal(1);
+    assert(menu.focused() == menu.element("a11y-cues-volume"));
+    menu.take();
+    /* Right on a Preview is the menu's: nothing. */
+    menu.focus("a11y-gap_warning-preview");
+    assert(!pc_a11y_settings_step(&menu.document(), "a11y-gap_warning-preview", 1));
+    /* Escape or B: back, then on to the category. */
+    menu.back();
+    assert(menu.focused() == menu.element("a11y-cues-settings"));
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kTopRows));
     menu.frame();
-    assert(menu.take() == (std::vector<Output>{interrupt(kResume)}));
+    assert(menu.take() == (std::vector<Output>{interrupt(kCueSettingsRow)}));
+    /* The top level moves as the category does. */
+    menu.step(1);
+    menu.step(1);
+    menu.step(1);
+    assert(menu.focused() == menu.element("resume"));
+    menu.focus("a11y-cues-settings");
+    menu.back();
+    assert(menu.focused() == menu.element("tab-accessibility"));
+    assert(!pc_a11y_settings_step(&menu.document(), "a11y-cues-settings", -1));
+}
+
+/* Voice settings, inside Match announcement settings: two levels in, and
+ * out by Left on a row holding no value and by Escape. */
+void accessibility_nested_submenu(Rml::Context& context) {
+    Menu menu(context);
+    menu.open_rows(kAccessibilityTab);
+    menu.focus("a11y-match_announcements-settings");
+    menu.press();
+    assert(menu.focused() == menu.element("a11y-match_announcements-voices"));
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kAnnouncementRows));
+    assert(rmlui_test::title_line(menu.document()) == "Match announcement settings");
+    menu.step(-1);
+    assert(menu.focused() == menu.element("a11y-match_announcements-time_left"));
+    menu.step(1);
+    menu.press();
+    assert(menu.focused() == menu.element("a11y-test-voice"));
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kVoiceRows));
+    assert(
+        rmlui_test::title_line(menu.document()) == "Match announcement settings / Voice settings");
+    menu.step(1);
+    assert(menu.focused() == menu.element("a11y-test-preview"));
+    menu.step(1);
+    assert(menu.focused() == menu.element("a11y-test-voice"));
+    menu.step(-1);
+    assert(menu.focused() == menu.element("a11y-test-preview"));
+    menu.a11y().take();
+    menu.press();
+    assert(menu.a11y().take() == (std::vector<std::string>{"preview test"}));
+    /* Left on the Preview: one level up, onto Voice settings, the preview
+     * stopped as its row lost focus. */
+    menu.horizontal(-1);
+    assert(menu.focused() == menu.element("a11y-match_announcements-voices"));
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kAnnouncementRows));
+    assert(menu.a11y().take() == (std::vector<std::string>{"stop"}));
+    /* Left on the row opening Voice settings: up to the top level. */
+    menu.horizontal(-1);
+    assert(menu.focused() == menu.element("a11y-match_announcements-settings"));
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kTopRows));
+    /* In by Right twice, out by Escape twice. */
+    menu.horizontal(1);
+    menu.horizontal(1);
+    assert(menu.focused() == menu.element("a11y-test-voice"));
+    menu.back();
+    assert(menu.focused() == menu.element("a11y-match_announcements-voices"));
+    menu.back();
+    assert(menu.focused() == menu.element("a11y-match_announcements-settings"));
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kTopRows));
+}
+
+/* Into Voice settings, two levels down, what that says taken. */
+void into_voice_settings(Menu& menu) {
+    menu.focus("a11y-match_announcements-settings");
+    menu.press();
+    menu.press();
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kVoiceRows));
+    menu.take();
+}
+
+/* Every way the menu closes from inside a submenu, and the categories taken
+ * by a shoulder button or a click, bring the category back to its top
+ * level: the next opening is there, Down from its last row on to Resume. */
+void accessibility_submenu_left_by_closing(Rml::Context& context) {
+    Menu menu(context);
+    menu.open_rows(kAccessibilityTab);
+    into_voice_settings(menu);
+    menu.toggle(); /* F1, Start, the menu button, Resume */
+    menu.frame();
+    assert(menu.take() == (std::vector<Output>{interrupt("Back to game")}));
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kTopRows));
+    menu.toggle();
+    assert(menu.focused() == menu.element("tab-accessibility"));
+    menu.enter_rows();
+    assert(menu.focused() == menu.element("a11y-accessibility-on"));
+    menu.focus("a11y-match_announcements-settings");
+    menu.step(1);
+    assert(menu.focused() == menu.element("resume"));
+    /* Quit game. */
+    menu.show_tab(kAccessibilityTab);
+    menu.enter_rows();
+    into_voice_settings(menu);
+    menu.toggle(true);
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kTopRows));
+    menu.toggle();
+    menu.frame();
+    menu.take();
+    /* A shoulder button, or a click on a category. */
+    menu.enter_rows();
+    into_voice_settings(menu);
+    menu.show_tab(0);
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kTopRows));
+    menu.show_tab(kAccessibilityTab);
+    menu.enter_rows();
+    into_voice_settings(menu);
+    menu.focus("tab-audio");
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kTopRows));
+    /* A click inside the open submenu stays in it. */
+    menu.show_tab(kAccessibilityTab);
+    menu.enter_rows();
+    into_voice_settings(menu);
+    menu.focus("a11y-test-preview");
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kVoiceRows));
+}
+
+/* With speech off, a sighted player moves through the submenus just the
+ * same: the submenu's step is ahead of the reader's. */
+void accessibility_submenus_with_speech_off(Rml::Context& context) {
+    Menu menu(context, false);
+    menu.open_rows(kAccessibilityTab);
+    menu.focus("a11y-cues-settings");
+    menu.press();
+    assert(menu.focused() == menu.element("a11y-cues-volume"));
+    menu.step(-1);
+    assert(menu.focused() == menu.element("a11y-ledge_warning-distance"));
+    menu.step(1);
+    assert(menu.focused() == menu.element("a11y-cues-volume"));
+    menu.back();
+    assert(menu.focused() == menu.element("a11y-cues-settings"));
+    assert(rmlui_test::level_shown(menu.document(), rmlui_test::kTopRows));
+    menu.run(a11y::kSettleTime * 2);
+    assert(menu.take() == none());
 }
 
 /* A switch flips with Left, Right, Enter or A and says its new value; the
@@ -1017,6 +1230,10 @@ int main(int argc, char** argv) {
     speech_off_leaves_the_keys_alone(*context);
     speech_back_on_announces_the_focused_row(*context);
     accessibility_category_rows(*context);
+    accessibility_submenu_moving(*context);
+    accessibility_nested_submenu(*context);
+    accessibility_submenu_left_by_closing(*context);
+    accessibility_submenus_with_speech_off(*context);
     accessibility_switch(*context);
     accessibility_slider(*context);
     accessibility_choice(*context);

@@ -97,10 +97,23 @@ struct NamedAction {
     std::string description;
 };
 
-/* One row of the menus, in registration order: a value or an action. */
+/* A submenu of the menus (ADR-0009): its own rows, one level below the row
+ * that opens it, which sits among the rows of the level above. Never in the
+ * file. */
+struct NamedMenu {
+    std::string key;   /* "cues.settings": the group's id, a dot, the name */
+    std::string label; /* the opening row's name and the submenu's title: "Cue settings" */
+    std::string description;
+    const NamedMenu* parent = nullptr; /* the submenu it is in; null on the top level */
+};
+
+/* One row of the menus, in registration order: a value, an action, or a row
+ * that opens a submenu; and the submenu it is in. */
 struct ShownRow {
     const NamedValue* value = nullptr;   /* a switch or a slider, by its kind */
     const NamedAction* action = nullptr; /* a button */
+    const NamedMenu* opens = nullptr;    /* a row that opens this submenu */
+    const NamedMenu* menu = nullptr;     /* the submenu the row is in; null on the top level */
 };
 
 struct SwitchSpec {
@@ -142,6 +155,12 @@ struct ChoiceSpec {
 
 struct ActionSpec {
     std::string name; /* the key's last part: "preview" */
+    std::string label;
+    std::string description;
+};
+
+struct MenuSpec {
+    std::string name; /* the key's last part: "settings" */
     std::string label;
     std::string description;
 };
@@ -200,19 +219,32 @@ class ValueModel;
 
 /* Registers values under one group: its id prefixes their keys, its title
  * heads them in the file. The menus have no headings: each shown row's label
- * names what it is about. */
+ * names what it is about. The shown rows a group registers go into the
+ * group's submenu, the top level unless in() names another, in the order
+ * they are registered; a group handed on keeps its submenu, so whatever a
+ * feature adds to it lands there too. */
 class ValueGroup {
 public:
-    ValueGroup(ValueModel& model, std::size_t index) : m_model(&model), m_index(index) {}
+    ValueGroup(ValueModel& model, std::size_t index, const NamedMenu* menu = nullptr)
+        : m_model(&model), m_index(index), m_menu(menu) {}
+    /* The same group, its shown rows going into `menu` (null: the top
+     * level). */
+    ValueGroup in(const NamedMenu* menu) const { return ValueGroup(*m_model, m_index, menu); }
+    const NamedMenu* menu() const { return m_menu; }
+
     Switch add_switch(const SwitchSpec& spec);
     Number add_number(const NumberSpec& spec);
     Choice add_choice(const ChoiceSpec& spec);
     /* A button, always shown. */
     const NamedAction& add_action(const ActionSpec& spec);
+    /* A submenu inside this group's: its opening row, shown here. Its own
+     * rows are registered through in(). */
+    const NamedMenu& add_menu(const MenuSpec& spec);
 
 private:
     ValueModel* m_model;
     std::size_t m_index;
+    const NamedMenu* m_menu;
 };
 
 /* What reading a text did. */
@@ -250,9 +282,11 @@ public:
     ValueGroup group(std::string_view id, std::string_view title);
     const std::vector<Group>& groups() const { return m_groups; }
     const NamedValue* find(std::string_view key) const;
-    /* The menus' rows: the shown values and the actions, in the order they
-     * were registered, which is the file's order too. A front end walks
-     * this list and needs none of its own. */
+    /* The menus' rows: the shown values, the actions and the rows that
+     * open a submenu, in the order they were registered, which is the
+     * file's order too; each level's rows are those whose `menu` is that
+     * level, in this order. A front end walks this list and needs none of
+     * its own. */
     const std::vector<ShownRow>& shown() const { return m_shown; }
 
     /* A front end's change: held to the range. True when the value
@@ -295,13 +329,14 @@ public:
 
 private:
     friend class ValueGroup;
-    NamedValue& add(std::size_t group, NamedValue named);
+    NamedValue& add(std::size_t group, const NamedMenu* menu, NamedValue named);
     NamedValue* find_mutable(std::string_view key);
     const Group* group_of(const NamedValue& named) const;
     std::string write(const std::vector<const NamedValue*>& only, bool at_defaults) const;
 
     std::deque<NamedValue> m_values; /* a deque, so handles stay valid */
     std::deque<NamedAction> m_actions;
+    std::deque<NamedMenu> m_menus;
     std::vector<Group> m_groups;
     std::vector<ShownRow> m_shown;
     std::map<std::string, std::string> m_unknown;

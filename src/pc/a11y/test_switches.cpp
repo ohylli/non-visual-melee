@@ -144,7 +144,10 @@ void the_switches_are_the_first_rows() {
     assert(rows[0].value->key == "accessibility.on" && rows[0].value->label == "Accessibility");
     assert(rows[1].value->key == "speech.on" && rows[1].value->label == "Speech");
     assert(rows[2].value->key == "steering.on" && rows[2].value->label == "Steering");
-    assert(rows[3].value->key == "cues.on" && rows[4].value->key == "cues.volume");
+    assert(rows[3].value->key == "cues.on" && rows[4].opens->label == "Cue settings");
+    for (int i = 0; i < 4; ++i) {
+        assert(rows[i].menu == nullptr);
+    }
     for (int i = 0; i < 3; ++i) {
         assert(rows[i].value->kind == a11y::ValueKind::toggle);
         assert(rows[i].value->default_value == 1.0f && !rows[i].value->description.empty());

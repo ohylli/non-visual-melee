@@ -37,19 +37,23 @@ CueSettings::CueSettings(ValueModel& model)
     : m_model(model),
       m_on(model.group(kGroup, "All cues")
               .add_switch(SwitchSpec{"on", "Cues", "Turns every cue on or off.", true, true})),
+      m_menu(model.group(kGroup, "All cues")
+              .add_menu(MenuSpec{"settings", "Cue settings",
+                  "Cue volume, and each cue's switch, volume and preview."})),
       m_volume(model.group(kGroup, "All cues")
+              .in(&m_menu)
               .add_number(NumberSpec{"volume", "Cue volume",
                   "The loudness of all cues together, under the master volume; the game's "
                   "sound effect and music volumes leave cues alone.",
                   "%", 100.0f, 0.0f, 100.0f, 5.0f, true})) {}
 
 ValueGroup CueSettings::add_shared(const std::string& id, const std::string& title) {
-    return m_model.group(id, title);
+    return m_model.group(id, title).in(&m_menu);
 }
 
 CueGroup CueSettings::add_cue(const std::string& id, const std::string& title,
     const std::string& description, float default_boost) {
-    ValueGroup group = m_model.group(id, title);
+    ValueGroup group = m_model.group(id, title).in(&m_menu);
     std::string name = in_sentence(title);
     /* Its three rows in the menus: the switch, the volume and Preview. */
     Switch on = group.add_switch(SwitchSpec{"on", title, description, true, true});

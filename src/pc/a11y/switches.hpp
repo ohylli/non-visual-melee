@@ -15,7 +15,6 @@
  * focus. Game thread only. */
 #pragma once
 #include "value_model.hpp"
-#include <functional>
 #include <string>
 
 namespace a11y {
@@ -40,11 +39,8 @@ class Switches {
 public:
     /* Registers accessibility.on, speech.on and steering.on, all shown,
      * each in a group of its own. Call before any other feature registers,
-     * so they are the first rows and the file's first groups. after_speech
-     * registers what belongs under Speech, the voices' rows, between it and
-     * Steering. */
-    Switches(ValueModel& model, Speech& speech, bool log,
-        const std::function<void()>& after_speech = {});
+     * so they are the first rows and the file's first groups. */
+    Switches(ValueModel& model, Speech& speech, bool log);
 
     /* The environment's overrides, once every value is registered and
      * before the settings are loaded: cues.on is the cue settings'. */

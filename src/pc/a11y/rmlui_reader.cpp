@@ -466,7 +466,7 @@ std::vector<PageStop> page_stops(const Rml::Element& page) {
     std::vector<PageStop> stops;
     for (int i = 0; i < page.GetNumChildren(); ++i) {
         const Rml::Element* row = page.GetChild(i);
-        if (!row->IsVisible()) {
+        if (!row->IsVisible() || row->GetAttribute<Rml::String>("aria-hidden", "") == "true") {
             continue;
         }
         if (const Rml::Element* control = first_control(*row)) {

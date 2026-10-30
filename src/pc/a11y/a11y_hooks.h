@@ -242,4 +242,10 @@ bool pc_a11y_settings_press(Rml::ElementDocument* document, const std::string& i
 bool pc_a11y_settings_step(Rml::ElementDocument* document, const std::string& id, int direction);
 /* A Change event on the document: a slider stepped by RmlUi or dragged. */
 bool pc_a11y_settings_change(Rml::Event& event);
+/* Escape or B in the document, before the page goes back (Launcher::back,
+ * PortMenu::back): out of the open submenu of the fork's rows, one level up,
+ * onto the row that opens it
+ * (docs/adr/0009-the-accessibility-settings-split-into-submenus-inside-the-one-category.md).
+ * False on the top level and outside the fork's rows. */
+bool pc_a11y_settings_back(Rml::ElementDocument* document);
 #endif

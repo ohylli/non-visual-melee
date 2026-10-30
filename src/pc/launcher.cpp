@@ -517,6 +517,8 @@ class Launcher final : public Rml::EventListener {
     }
     // B or Escape: rows to categories, categories to the main menu.
     void back() {
+        if (pc_a11y_settings_back(document))  // a11y: out of a submenu of the fork's rows
+            return;                           // a11y
         if (pc_a11y_launcher_back())
             return;
         if (!settings) {
@@ -1657,6 +1659,8 @@ public:
         }
     }
     void back() {
+        if (pc_a11y_settings_back(document))  // a11y: out of a submenu of the fork's rows
+            return;                           // a11y
         auto* focus = document->GetContext()->GetFocusElement();
         if (focus && !is_sidebar(focus->GetId()))
             show_tab(tab);

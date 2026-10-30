@@ -12,7 +12,20 @@
  * the pages' styles and the readers apply unchanged; a new cue or a newly
  * shown tuning value changes nothing here. The rows write their own values,
  * save through the settings, play the port menu's own sounds as its rows do,
- * and play and stop a cue's preview. Game thread only. */
+ * and play and stop a cue's preview.
+ *
+ * The rows are in submenus
+ * (docs/adr/0009-the-accessibility-settings-split-into-submenus-inside-the-one-category.md):
+ * every level is built at once, only the open one shown, with a title line
+ * naming it at the top of the page (#a11y-menu-title, aria-hidden, so the
+ * readers leave it out of the lines they read). A row opening a submenu is a
+ * button of the class "submenu". Enter, A, a click or Right on it opens the
+ * submenu on its first row; Back (pc_a11y_settings_back), or Left on a row
+ * holding no value, goes back to it; and focus anywhere outside the open
+ * level's rows, or the page hidden, shows the top level again. The launcher
+ * walks the open level's rows by itself, pc_a11y_settings_rows listing them;
+ * the port menu copies its column once, so inside a submenu
+ * settings_pages_step moves for it. Game thread only. */
 #pragma once
 #include <chrono>
 #include <functional>
@@ -56,8 +69,9 @@ enum class SettingsHost {
 };
 
 /* A row's control id: "a11y-", then the row's key with its dots as dashes:
- * "a11y-cues-volume", "a11y-gap_warning-preview". A slider's shown value is
- * beside it, as the base port's are, at the id and "-val". */
+ * "a11y-cues-volume", "a11y-gap_warning-preview", "a11y-cues-settings". A
+ * slider's shown value is beside it, as the base port's are, at the id and
+ * "-val". */
 std::string settings_row_id(const ShownRow& row);
 
 /* Registers the plugin; the settings and the game's functions must outlive
@@ -72,5 +86,10 @@ void settings_pages_stop();
  * lifted), and a cue's preview a row started stops once that row has lost focus,
  * the page has gone, or the port menu is closed (`open` false). */
 void settings_pages_frame(SettingsHost host, bool open);
+/* Up (-1) or Down (1) in the host's page, before the page moves focus
+ * itself: inside a submenu, focus goes round its rows and this returns
+ * true; on the top level, false, and the page moves as it does. For the
+ * port menu, whose column of rows is a copy of the top level's. */
+bool settings_pages_step(SettingsHost host, int direction);
 
 }  // namespace a11y

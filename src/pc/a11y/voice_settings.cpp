@@ -41,7 +41,7 @@ ChoiceOptions voice_options(const std::vector<VoiceInfo>& voices) {
     return options;
 }
 
-VoiceSettings::VoiceSettings(ValueModel& model, Speech& speech)
+VoiceSettings::VoiceSettings(ValueModel& model, Speech& speech, const NamedMenu* menu)
     : m_speech(speech),
       m_sample_delay(model.group("speech", "Speech")
               .add_number(NumberSpec{"voice_sample_delay", "Voice sample delay",
@@ -50,14 +50,16 @@ VoiceSettings::VoiceSettings(ValueModel& model, Speech& speech)
                   "through; a quicker run of changes plays one sample.",
                   "s", 0.6f, 0.0f, 3.0f, 0.1f})),
       m_rows{
-          add_rows(model, "your_voice", "Your voice", "your voice", "Zira", "what happens to you"),
-          add_rows(model, "opponents_voice", "Opponents' voice", "the opponents' voice", "Mark",
-              "what happens to everyone else, teammates included,"),
+          add_rows(
+              model, menu, "your_voice", "Your voice", "your voice", "Zira", "what happens to you"),
+          add_rows(model, menu, "opponents_voice", "Opponents' voice", "the opponents' voice",
+              "Mark", "what happens to everyone else, teammates included,"),
       } {}
 
-VoiceSettings::Rows VoiceSettings::add_rows(ValueModel& model, const char* id, const char* title,
-    const char* in_sentence, const char* default_voice, const char* about) {
-    ValueGroup group = model.group(id, title);
+VoiceSettings::Rows VoiceSettings::add_rows(ValueModel& model, const NamedMenu* menu,
+    const char* id, const char* title, const char* in_sentence, const char* default_voice,
+    const char* about) {
+    ValueGroup group = model.group(id, title).in(menu);
     const std::string name = title;
     const std::string inside = in_sentence;
     Choice voice = group.add_choice(ChoiceSpec{

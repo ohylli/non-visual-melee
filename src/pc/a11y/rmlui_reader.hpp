@@ -95,7 +95,9 @@ const Rml::Element* category_page(const Rml::Element& category);
  * one line, the name and what the row shows beside it: "Your connect code,
  * PLAYER#1234". Other text is a line for each heading, and for each piece of
  * a paragraph between line breaks and " · " separators: "Keyboard", "WASD /
- * arrows Move", "X Attack". */
+ * arrows Move", "X Attack". A row marked aria-hidden="true" is left out: its
+ * words are said another way, as the Accessibility category's title line
+ * (settings_page.hpp) is. */
 std::vector<PageStop> page_stops(const Rml::Element& page);
 
 /* A reading position on a line of a page, kept beside focus, which stays on

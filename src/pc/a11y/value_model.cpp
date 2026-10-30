@@ -239,7 +239,7 @@ Switch ValueGroup::add_switch(const SwitchSpec& spec) {
     named.max = 1.0f;
     named.step = 1.0f;
     named.shown = spec.shown;
-    return Switch(m_model->add(m_index, std::move(named)));
+    return Switch(m_model->add(m_index, m_menu, std::move(named)));
 }
 
 Number ValueGroup::add_number(const NumberSpec& spec) {
@@ -254,7 +254,7 @@ Number ValueGroup::add_number(const NumberSpec& spec) {
     named.default_value = std::clamp(spec.default_value, spec.min, spec.max);
     named.step = spec.step;
     named.shown = spec.shown;
-    return Number(m_model->add(m_index, std::move(named)));
+    return Number(m_model->add(m_index, m_menu, std::move(named)));
 }
 
 Choice ValueGroup::add_choice(const ChoiceSpec& spec) {
@@ -273,14 +273,22 @@ Choice ValueGroup::add_choice(const ChoiceSpec& spec) {
     named.fallback = spec.fallback;
     named.none = spec.none;
     named.shown = spec.shown;
-    return Choice(m_model->add(m_index, std::move(named)));
+    return Choice(m_model->add(m_index, m_menu, std::move(named)));
 }
 
 const NamedAction& ValueGroup::add_action(const ActionSpec& spec) {
     const ValueModel::Group& owner = m_model->m_groups[m_index];
     NamedAction& added = m_model->m_actions.emplace_back(
         NamedAction{owner.id + "." + spec.name, owner.id, spec.label, spec.description});
-    m_model->m_shown.push_back(ShownRow{nullptr, &added});
+    m_model->m_shown.push_back(ShownRow{nullptr, &added, nullptr, m_menu});
+    return added;
+}
+
+const NamedMenu& ValueGroup::add_menu(const MenuSpec& spec) {
+    const ValueModel::Group& owner = m_model->m_groups[m_index];
+    NamedMenu& added = m_model->m_menus.emplace_back(
+        NamedMenu{owner.id + "." + spec.name, spec.label, spec.description, m_menu});
+    m_model->m_shown.push_back(ShownRow{nullptr, nullptr, &added, m_menu});
     return added;
 }
 
@@ -294,7 +302,7 @@ ValueGroup ValueModel::group(std::string_view id, std::string_view title) {
     return ValueGroup(*this, m_groups.size() - 1);
 }
 
-NamedValue& ValueModel::add(std::size_t group, NamedValue named) {
+NamedValue& ValueModel::add(std::size_t group, const NamedMenu* menu, NamedValue named) {
     Group& owner = m_groups[group];
     named.key = owner.id + "." + named.key;
     named.value = named.default_value;
@@ -307,7 +315,7 @@ NamedValue& ValueModel::add(std::size_t group, NamedValue named) {
     NamedValue& added = m_values.emplace_back(std::move(named));
     owner.values.push_back(&added);
     if (added.shown) {
-        m_shown.push_back(ShownRow{&added, nullptr});
+        m_shown.push_back(ShownRow{&added, nullptr, nullptr, menu});
     }
     return added;
 }

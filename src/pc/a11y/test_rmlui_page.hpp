@@ -7,12 +7,15 @@
 #include "a11y_hooks.h"
 #include "accessibility_settings.hpp"
 #include "cue_settings.hpp"
+#include "match_announcement_settings.hpp"
+#include "rmlui_reader.hpp"
 #include "settings_page.hpp"
 #include "speech.hpp"
 #include "switches.hpp"
 #include <RmlUi/Core.h>
 #include <chrono>
 #include <cstdlib>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -116,12 +119,15 @@ public:
 };
 
 /* The accessibility settings as pc_a11y_init wires them, enough for the
- * Accessibility category: the switches first, the cues' shared values, the
- * gap warning and the ledge warning with its distance, and no file; last a
- * choice of the tests' own, whose options, `voices`, are asked at run time
- * as the Voice rows' installed voices will be. The listener tells the
- * switches, as the hooks' does. What the rows ask of the game is recorded in
- * `asked`: "preview <cue>", "stop", "sound <n>". */
+ * Accessibility category and its submenus, and no file: the switches first;
+ * the cues, their shared values in Cue settings with the gap warning and the
+ * ledge warning with its distance; the match announcements, with Match
+ * announcement settings and Voice settings in it, which holds, in place of
+ * the voices' rows, a choice of the tests' own, whose options, `voices`, are
+ * asked at run time as the Voice rows' installed voices are, and a Preview
+ * of the tests' own. The listener tells the switches, as the hooks' does.
+ * What the rows ask of the game is recorded in `asked`: "preview <cue>",
+ * "stop", "sound <n>". */
 class A11ySettings {
 public:
     explicit A11ySettings(a11y::Speech& speech)
@@ -133,16 +139,19 @@ public:
         ledge.group.add_number(a11y::NumberSpec{"distance", "Ledge warning distance",
             "How far from the edge the warning starts, in stage units.", "units", 40.0f, 5.0f,
             100.0f, 1.0f, true});
-        settings.model()
-            .group("test", "Tests")
-            .add_choice(a11y::ChoiceSpec{
-                .name = "voice",
-                .label = "Test voice",
-                .description = "A choice of the tests' own.",
-                .default_option = "Microsoft Mark",
-                .list = [this] { return voices; },
-                .shown = true,
-            });
+        announcements = std::make_unique<a11y::MatchAnnouncementSettings>(settings.model());
+        a11y::ValueGroup test =
+            settings.model().group("test", "Tests").in(&announcements->voice_menu());
+        test.add_choice(a11y::ChoiceSpec{
+            .name = "voice",
+            .label = "Test voice",
+            .description = "A choice of the tests' own.",
+            .default_option = "Microsoft Mark",
+            .list = [this] { return voices; },
+            .shown = true,
+        });
+        test.add_action(
+            a11y::ActionSpec{"preview", "Preview test voice", "Says a line in the test voice."});
     }
 
     ~A11ySettings() { a11y::settings_pages_stop(); }
@@ -181,10 +190,63 @@ public:
     a11y::AccessibilitySettings settings;
     a11y::Switches switches;
     a11y::CueSettings cues;
+    std::unique_ptr<a11y::MatchAnnouncementSettings> announcements;
     std::vector<std::string> asked;
     a11y::ChoiceOptions voices{{"Microsoft David", ""}, {"Microsoft Mark", ""},
         {"Microsoft Zira", "Microsoft Zira, English (United States)"}};
 };
+
+/* The Accessibility category's levels as A11ySettings builds them, by the
+ * rows' ids. */
+inline const std::vector<std::string> kTopRows{"a11y-accessibility-on", "a11y-speech-on",
+    "a11y-steering-on", "a11y-cues-on", "a11y-cues-settings", "a11y-match_announcements-on",
+    "a11y-match_announcements-settings"};
+inline const std::vector<std::string> kCueRows{"a11y-cues-volume", "a11y-gap_warning-on",
+    "a11y-gap_warning-volume", "a11y-gap_warning-preview", "a11y-ledge_warning-on",
+    "a11y-ledge_warning-volume", "a11y-ledge_warning-preview", "a11y-ledge_warning-distance"};
+inline const std::vector<std::string> kAnnouncementRows{"a11y-match_announcements-voices",
+    "a11y-match_announcements-your_damage", "a11y-match_announcements-opponents_damage",
+    "a11y-match_announcements-damage_interval", "a11y-match_announcements-your_stocks",
+    "a11y-match_announcements-opponents_stocks", "a11y-match_announcements-teammates",
+    "a11y-match_announcements-time_left"};
+inline const std::vector<std::string> kVoiceRows{"a11y-test-voice", "a11y-test-preview"};
+
+/* Whether the Accessibility category's page shows the element, as the
+ * document now stands, whether or not the page itself is shown. */
+inline bool shown(Rml::ElementDocument& document, const std::string& id) {
+    document.UpdateDocument();
+    const Rml::Element* element = document.GetElementById(id);
+    for (; element != nullptr && element->GetId() != "page-accessibility";
+        element = element->GetParentNode())
+    {
+        if (!element->IsVisible(false)) {
+            return false;
+        }
+    }
+    return element != nullptr;
+}
+
+/* Each of the rows shown, and every other row of the category hidden. */
+inline bool level_shown(Rml::ElementDocument& document, const std::vector<std::string>& level) {
+    for (const std::vector<std::string>* rows :
+        {&kTopRows, &kCueRows, &kAnnouncementRows, &kVoiceRows})
+    {
+        for (const std::string& id : *rows) {
+            if (shown(document, id) != (rows == &level)) {
+                return false;
+            }
+        }
+    }
+    return pc_a11y_settings_rows() == level;
+}
+
+/* The title line's text, empty while it is hidden. */
+inline std::string title_line(Rml::ElementDocument& document) {
+    if (!shown(document, "a11y-menu-title")) {
+        return "";
+    }
+    return a11y::element_text(*document.GetElementById("a11y-menu-title"));
+}
 
 /* The base port's hand-off from its Change listener (Launcher::ProcessEvent,
  * PortMenu::ProcessEvent): a slider of the fork's stepped by RmlUi or

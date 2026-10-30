@@ -23,6 +23,14 @@ namespace {
 constexpr const char* kPageId = "page-accessibility";
 /* A Preview row's button. The row's name says what it plays. */
 constexpr const char* kPlay = "Play";
+/* The button of a row that opens a submenu. The row's name says which. */
+constexpr const char* kOpen = "Open";
+/* The line at the top of the page that names the open submenu, hidden on the
+ * top level. */
+constexpr const char* kTitleId = "a11y-menu-title";
+/* Between the names of the submenus a nested one is inside, on its title
+ * line, as the pages' own title bars join theirs: "Melee PC / Settings". */
+constexpr const char* kTitleSeparator = " / ";
 /* A choice with no options listed now and no words of its own for why
  * (ChoiceSpec::none). */
 constexpr const char* kNoOption = "None";
@@ -92,25 +100,55 @@ bool is_slider(const ShownRow& row) {
     return row.value != nullptr && row.value->kind == ValueKind::number;
 }
 
+const std::string& label_of(const ShownRow& row) {
+    return row.value != nullptr  ? row.value->label :
+           row.action != nullptr ? row.action->label :
+                                   row.opens->label;
+}
+
+const std::string& help_of(const ShownRow& row) {
+    return row.value != nullptr  ? row.value->description :
+           row.action != nullptr ? row.action->description :
+                                   row.opens->description;
+}
+
+/* The title line's markup, as each page heads a block of text of its own
+ * (an .info block's heading); its text is written as a submenu opens. It is
+ * for a sighted helper: the readers leave it out of the lines they read
+ * (page_stops), as opening a submenu has said its name. */
+std::string title_markup(SettingsHost host) {
+    const char* heading = host == SettingsHost::port_menu ? "h2" : "h3";
+    return std::string("<div id=\"") + kTitleId + "\" class=\"info\" aria-hidden=\"true\"><" +
+           heading + "></" + heading + "></div>";
+}
+
+/* The submenu's title line: the names of the submenus it is inside, then
+ * its own. */
+std::string title_text(const NamedMenu& menu) {
+    return menu.parent != nullptr ? title_text(*menu.parent) + kTitleSeparator + menu.label :
+                                    menu.label;
+}
+
 /* The rows' markup in the base port's classes (resources/launcher.rml and
  * port-menu.rml): a name beside a value button, a slider with its shown
  * value, or an action button; the help in data-desc, which both pages show
  * in their description bars and the readers read. A switch and a choice
  * share the value button, as the base port's two-state rows and its choice
- * rows (Aspect ratio, Post-processing) do. The port menu's rows repeat the
- * help under the name, as its own rows do. */
+ * rows (Aspect ratio, Post-processing) do. A row that opens a submenu is an
+ * action button too, marked as one with the class "submenu". The port
+ * menu's rows repeat the help under the name, as its own rows do. */
 std::string row_markup(const ShownRow& row, SettingsHost host) {
     const std::string id = settings_row_id(row);
-    const std::string& label = row.value != nullptr ? row.value->label : row.action->label;
-    const std::string& help =
-        row.value != nullptr ? row.value->description : row.action->description;
+    const std::string& help = help_of(row);
     std::string rml = "<div class=\"row\" data-desc=\"" + escaped(help) +
-                      "\"><span class=\"name\">" + escaped(label);
+                      "\"><span class=\"name\">" + escaped(label_of(row));
     if (host == SettingsHost::port_menu) {
         rml += "<span class=\"detail\">" + escaped(help) + "</span>";
     }
     rml += "</span>";
-    if (row.action != nullptr) {
+    if (row.opens != nullptr) {
+        rml += "<button id=\"" + id + "\" class=\"value action submenu\">" + kOpen + "</button>";
+    } else if (row.action != nullptr) {
         rml += "<button id=\"" + id + "\" class=\"value action\">" + kPlay + "</button>";
     } else if (is_slider(row)) {
         const NamedValue& named = *row.value;
@@ -125,8 +163,13 @@ std::string row_markup(const ShownRow& row, SettingsHost host) {
     return rml + "</div>";
 }
 
-/* The category's rows in one document. */
-class Page {
+/* The category's rows in one document, and its submenus
+ * (docs/adr/0009-the-accessibility-settings-split-into-submenus-inside-the-one-category.md):
+ * every level's rows are built at once, those of every level but the open
+ * one hidden. The open level follows focus: a row taking focus shows its
+ * own level, and focus anywhere else, or the page hidden, shows the top
+ * level, so every way out of the category comes back to it. */
+class Page final : public Rml::EventListener {
 public:
     Page(Rml::ElementDocument& document, SettingsHost host, AccessibilitySettings& settings,
         const SettingsPageGame& game)
@@ -135,38 +178,70 @@ public:
         if (page == nullptr) {
             return; /* a base merge took the page away: nothing to build into */
         }
-        std::string rml;
+        std::string rml = title_markup(host);
         for (const ShownRow& row : settings.shown()) {
             rml += row_markup(row, host);
-            m_rows.push_back(Row{&row, settings_row_id(row), {}});
+            m_rows.push_back(Row{&row, settings_row_id(row), {}, nullptr});
         }
         page->SetInnerRML(rml);
-        for (Row& row : m_rows) {
+        m_title = page->GetChild(0);
+        for (std::size_t i = 0; i < m_rows.size(); ++i) {
+            Row& row = m_rows[i];
+            row.element = page->GetChild(static_cast<int>(i) + 1);
             if (row.shown->value != nullptr) {
                 row.text = shown_value(*row.shown->value);
             }
         }
+        show(nullptr, true);
+        /* Focus does not bubble; the capture pass still reaches the
+         * document. */
+        document.AddEventListener(Rml::EventId::Focus, this, true);
+        document.AddEventListener(Rml::EventId::Hide, this);
+        m_listening = true;
     }
 
-    ~Page() { stop_preview(); }
+    /* The document is still loaded here: a page goes as its document
+     * unloads, or as the plugin stops, before RmlUi shuts down. */
+    ~Page() override {
+        stop_preview();
+        if (m_listening) {
+            m_document.RemoveEventListener(Rml::EventId::Focus, this, true);
+            m_document.RemoveEventListener(Rml::EventId::Hide, this);
+        }
+    }
     Page(const Page&) = delete;
     Page& operator=(const Page&) = delete;
 
     const Rml::ElementDocument& document() const { return m_document; }
     SettingsHost host() const { return m_host; }
+    /* The open submenu, null on the top level. */
+    const NamedMenu* open_menu() const { return m_open; }
+
+    /* The open level's rows' ids, in their order. */
+    std::vector<std::string> level_ids() const {
+        std::vector<std::string> ids;
+        for (const Row& row : m_rows) {
+            if (row.shown->menu == m_open) {
+                ids.push_back(row.id);
+            }
+        }
+        return ids;
+    }
 
     /* Enter, A or a click: a switch flips, a choice steps to its next
      * option, as the base port's choice rows do, Preview plays its cue,
-     * again from its start when pressed again. A slider stays as it is: Left
-     * and Right step it, and Enter wrapping it round from the top, as the
-     * base port's sliders do, would be a jump the player cannot hear
-     * coming. */
+     * again from its start when pressed again, a row opening a submenu
+     * opens it. A slider stays as it is: Left and Right step it, and Enter
+     * wrapping it round from the top, as the base port's sliders do, would
+     * be a jump the player cannot hear coming. */
     bool press(const std::string& id) {
         Row* row = find(id);
         if (row == nullptr) {
             return false;
         }
-        if (row->shown->action != nullptr) {
+        if (row->shown->opens != nullptr) {
+            open(*row->shown->opens);
+        } else if (row->shown->action != nullptr) {
             /* No sound of the menu's: the cue is the answer. */
             m_game.preview(row->shown->action->group);
             m_preview = row;
@@ -181,11 +256,23 @@ public:
     /* Left or Right: a switch flips either way, as the base port's
      * two-state settings do; a slider steps by its value's step; a choice
      * steps through its options, round from either end, as the base port's
-     * choice rows do. A Preview row's arrows are the page's, as on the base
-     * port's action buttons: Left goes back to the category. */
+     * choice rows do. On a row holding no value, Right opens a submenu and
+     * Left goes back a level (back); on the top level a Preview's arrows
+     * and an opening row's Left are the page's, as on the base port's
+     * action buttons: Left goes back to the category. */
     bool step(const std::string& id, int direction) {
         Row* row = find(id);
-        if (row == nullptr || row->shown->action != nullptr) {
+        if (row == nullptr) {
+            return false;
+        }
+        if (row->shown->value == nullptr) {
+            if (direction < 0) {
+                return back();
+            }
+            if (row->shown->opens != nullptr) {
+                open(*row->shown->opens);
+                return true;
+            }
             return false;
         }
         const NamedValue& named = *row->shown->value;
@@ -197,6 +284,52 @@ public:
             change(
                 named, named.value + static_cast<float>(direction) * named.step, MenuSound::move);
         }
+        return true;
+    }
+
+    /* Escape or B, and Left on a row holding no value: out of the open
+     * submenu, onto the row that opens it, one level up. False on the top
+     * level, where the page goes back to the category itself. */
+    bool back() {
+        if (m_open == nullptr) {
+            return false;
+        }
+        const NamedMenu& menu = *m_open;
+        show(menu.parent);
+        for (const Row& row : m_rows) {
+            if (row.shown->opens == &menu) {
+                focus(row);
+                break;
+            }
+        }
+        return true;
+    }
+
+    /* Up (-1) or Down (1) in the port menu, whose own column is the top
+     * level's, copied as the category opens: inside a submenu, round its
+     * own rows, from the last to the first and back. False on the top
+     * level, which the menu moves through itself. */
+    bool step_focus(int direction) {
+        if (m_open == nullptr) {
+            return false;
+        }
+        std::vector<const Row*> rows;
+        int at = direction > 0 ? -1 : 0;
+        const Rml::Element* control = focused();
+        for (const Row& row : m_rows) {
+            if (row.shown->menu != m_open) {
+                continue;
+            }
+            if (m_document.GetElementById(row.id) == control) {
+                at = static_cast<int>(rows.size());
+            }
+            rows.push_back(&row);
+        }
+        if (rows.empty()) {
+            return false;
+        }
+        const int count = static_cast<int>(rows.size());
+        focus(*rows[static_cast<std::size_t>((at + direction + count) % count)]);
         return true;
     }
 
@@ -222,6 +355,9 @@ public:
 
     void frame(bool open) {
         refresh();
+        if (!open) {
+            show(nullptr);
+        }
         if (m_preview != nullptr &&
             !(open && focused() == m_document.GetElementById(m_preview->id)))
         {
@@ -261,11 +397,23 @@ public:
         }
     }
 
+    /* Focus moved, or the page was hidden (the port menu closing): the
+     * level shown follows. */
+    void ProcessEvent(Rml::Event& event) override {
+        if (event.GetId() == Rml::EventId::Hide) {
+            show(nullptr);
+            return;
+        }
+        const Row* row = row_of(event.GetTargetElement());
+        show(row != nullptr ? row->shown->menu : nullptr);
+    }
+
 private:
     struct Row {
         const ShownRow* shown;
         std::string id;
-        std::string text; /* the value as last written, empty for a button */
+        std::string text;      /* the value as last written, empty for a button */
+        Rml::Element* element; /* the row, its control inside */
     };
 
     Row* find(const std::string& id) {
@@ -274,9 +422,77 @@ private:
         return it != m_rows.end() ? &*it : nullptr;
     }
 
+    /* The row the element is in, if it is in one. */
+    const Row* row_of(const Rml::Element* element) const {
+        for (; element != nullptr && element != &m_document; element = element->GetParentNode()) {
+            for (const Row& row : m_rows) {
+                if (row.element == element) {
+                    return &row;
+                }
+            }
+        }
+        return nullptr;
+    }
+
     Rml::Element* focused() const {
         Rml::Context* context = m_document.GetContext();
         return context != nullptr ? context->GetFocusElement() : nullptr;
+    }
+
+    /* Shows the rows of one level, null for the top, and hides the rest;
+     * the title line names a submenu. `force` writes every row, as the page
+     * is built. */
+    void show(const NamedMenu* menu, bool force = false) {
+        if (menu == m_open && !force) {
+            return;
+        }
+        m_open = menu;
+        for (const Row& row : m_rows) {
+            displayed(*row.element, row.shown->menu == menu);
+        }
+        if (m_title != nullptr) {
+            if (Rml::Element* heading = m_title->GetFirstChild()) {
+                heading->SetInnerRML("");
+                if (menu != nullptr) {
+                    heading->AppendChild(m_document.CreateTextNode(title_text(*menu)));
+                }
+            }
+            displayed(*m_title, menu != nullptr);
+        }
+    }
+
+    /* Into a submenu, on its first row, with the title line above it in
+     * view: scrolled to the row alone, a long page hides it. */
+    void open(const NamedMenu& menu) {
+        show(&menu);
+        for (const Row& row : m_rows) {
+            if (row.shown->menu == &menu) {
+                focus(row);
+                if (m_title != nullptr) {
+                    m_title->ScrollIntoView();
+                }
+                return;
+            }
+        }
+    }
+
+    /* As the base port moves focus onto a row: the page's display may just
+     * have changed, which RmlUi lays out only on update. */
+    void focus(const Row& row) {
+        m_document.UpdateDocument();
+        if (Rml::Element* control = m_document.GetElementById(row.id)) {
+            control->Focus();
+            control->ScrollIntoView();
+        }
+    }
+
+    /* The element's display as the page's style sheet sets it, or none. */
+    static void displayed(Rml::Element& element, bool shown) {
+        if (shown) {
+            element.RemoveProperty("display");
+        } else {
+            element.SetProperty("display", "none");
+        }
     }
 
     void flip(const NamedValue& named) {
@@ -330,8 +546,11 @@ private:
     AccessibilitySettings& m_settings;
     const SettingsPageGame& m_game;
     std::vector<Row> m_rows;
+    Rml::Element* m_title = nullptr; /* the title line, null with no page */
+    const NamedMenu* m_open = nullptr;
     const Row* m_preview = nullptr; /* the Preview row whose cue this page started */
     bool m_writing = false;
+    bool m_listening = false;
 };
 
 std::optional<SettingsHost> host_of(const Rml::ElementDocument& document) {
@@ -372,9 +591,11 @@ public:
     void start(AccessibilitySettings& settings, SettingsPageGame game) {
         m_settings = &settings;
         m_game = std::move(game);
-        m_ids.clear();
+        m_top_ids.clear();
         for (const ShownRow& row : settings.shown()) {
-            m_ids.push_back(settings_row_id(row));
+            if (row.menu == nullptr) {
+                m_top_ids.push_back(settings_row_id(row));
+            }
         }
         if (!m_registered) {
             Rml::RegisterPlugin(this);
@@ -389,7 +610,7 @@ public:
             m_registered = false;
         }
         m_settings = nullptr;
-        m_ids.clear();
+        m_top_ids.clear();
     }
 
     Page* page(const Rml::ElementDocument* document) const {
@@ -409,7 +630,27 @@ public:
         }
     }
 
-    const std::vector<std::string>& ids() const { return m_ids; }
+    bool step(SettingsHost host, int direction) {
+        for (const std::unique_ptr<Page>& page : m_pages) {
+            if (page->host() == host && page->step_focus(direction)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /* The rows of the page with a submenu open, else the top level's. The
+     * hook asking takes no document; one page at most has a submenu open,
+     * as the launcher's document is gone before the port menu's loads, and
+     * either shows its top level again once focus leaves its rows. */
+    std::vector<std::string> ids() const {
+        for (const std::unique_ptr<Page>& page : m_pages) {
+            if (page->open_menu() != nullptr) {
+                return page->level_ids();
+            }
+        }
+        return m_top_ids;
+    }
 
     bool slider(const std::string& id) const {
         if (m_settings == nullptr) {
@@ -426,7 +667,7 @@ public:
 private:
     AccessibilitySettings* m_settings = nullptr;
     SettingsPageGame m_game;
-    std::vector<std::string> m_ids; /* the rows' ids, in the rows' order */
+    std::vector<std::string> m_top_ids; /* the top level's rows' ids, in the rows' order */
     std::vector<std::unique_ptr<Page>> m_pages;
     bool m_registered = false;
 };
@@ -436,7 +677,10 @@ PagesPlugin s_plugin;
 }  // namespace
 
 std::string settings_row_id(const ShownRow& row) {
-    std::string id = "a11y-" + (row.value != nullptr ? row.value->key : row.action->key);
+    const std::string& key = row.value != nullptr  ? row.value->key :
+                             row.action != nullptr ? row.action->key :
+                                                     row.opens->key;
+    std::string id = "a11y-" + key;
     std::replace(id.begin(), id.end(), '.', '-');
     return id;
 }
@@ -451,6 +695,10 @@ void settings_pages_stop() {
 
 void settings_pages_frame(SettingsHost host, bool open) {
     s_plugin.frame(host, open);
+}
+
+bool settings_pages_step(SettingsHost host, int direction) {
+    return s_plugin.step(host, direction);
 }
 
 }  // namespace a11y
@@ -471,6 +719,11 @@ bool pc_a11y_settings_press(Rml::ElementDocument* document, const std::string& i
 bool pc_a11y_settings_step(Rml::ElementDocument* document, const std::string& id, int direction) {
     a11y::Page* page = a11y::s_plugin.page(document);
     return page != nullptr && page->step(id, direction);
+}
+
+bool pc_a11y_settings_back(Rml::ElementDocument* document) {
+    a11y::Page* page = a11y::s_plugin.page(document);
+    return page != nullptr && page->back();
 }
 
 bool pc_a11y_settings_change(Rml::Event& event) {

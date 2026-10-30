@@ -137,8 +137,13 @@ struct Game {
         speech = std::make_unique<a11y::Speech>(config, std::make_unique<FakeScreenReader>(spoken));
         speech->init();
         settings = std::make_unique<a11y::AccessibilitySettings>(*speech, path.string(), true);
-        switches = std::make_unique<a11y::Switches>(settings->model(), *speech, true,
-            [this] { rows = std::make_unique<a11y::VoiceSettings>(settings->model(), *speech); });
+        switches = std::make_unique<a11y::Switches>(settings->model(), *speech, true);
+        /* A submenu of the tests' own, in place of Voice settings. */
+        const a11y::NamedMenu& menu =
+            settings->model()
+                .group("test", "Tests")
+                .add_menu(a11y::MenuSpec{"voices", "Voice settings", "The voices."});
+        rows = std::make_unique<a11y::VoiceSettings>(settings->model(), *speech, &menu);
         voices = std::make_unique<a11y::Voices>(*speech, engine,
             std::make_unique<FakeVoiceBridge>(calls, std::move(open_error), std::move(installed)),
             true, false);
@@ -208,22 +213,27 @@ struct Game {
 const char* const kSample = "[a11y] voice yours: \"Your voice\"";
 const char* const kTheirSample = "[a11y] voice opponents: \"Opponents' voice\"";
 
-/* After the Speech switch, your voice's four first, then Steering; the
- * values in the file under their own headings, the samples' delay under
- * Speech's. */
-void the_rows_follow_speech() {
+/* In the submenu they are given, after the row that opens it, your voice's
+ * four first; the values in the file under their own headings, after
+ * Steering, the samples' delay under Speech's. */
+void the_rows_are_in_their_submenu() {
     Game game("rows.ini");
     std::vector<std::string> labels;
+    const a11y::NamedMenu* menu = nullptr;
     for (const a11y::ShownRow& row : game.settings->shown()) {
-        labels.push_back(row.value != nullptr ? row.value->label : row.action->label);
-        if (labels.size() == 11) {
-            break;
+        if (row.opens != nullptr) {
+            menu = row.opens;
+            labels.push_back("[" + row.opens->label + "]");
+            assert(row.menu == nullptr);
+            continue;
         }
+        labels.push_back(row.value != nullptr ? row.value->label : row.action->label);
+        assert(row.menu == (labels.size() > 4 ? menu : nullptr));
     }
-    assert((labels == std::vector<std::string>{"Accessibility", "Speech", "Your voice",
-                          "Your voice rate", "Your voice volume", "Preview your voice",
-                          "Opponents' voice", "Opponents' voice rate", "Opponents' voice volume",
-                          "Preview opponents' voice", "Steering"}));
+    assert((labels == std::vector<std::string>{"Accessibility", "Speech", "Steering",
+                          "[Voice settings]", "Your voice", "Your voice rate", "Your voice volume",
+                          "Preview your voice", "Opponents' voice", "Opponents' voice rate",
+                          "Opponents' voice volume", "Preview opponents' voice"}));
     assert(game.named("your_voice.rate").value == 50.0f);
     assert(game.named("opponents_voice.volume").value == 100.0f);
     assert(!game.named("speech.voice_sample_delay").shown);
@@ -234,8 +244,8 @@ void the_rows_follow_speech() {
     const size_t yours = file.find("\n# Your voice\n");
     const size_t theirs = file.find("\n# Opponents' voice\n");
     const size_t steering = file.find("\nsteering.on = on\n");
-    assert(speech != std::string::npos && speech < delay && delay < yours && yours < theirs &&
-           theirs < steering);
+    assert(speech != std::string::npos && speech < delay && delay < steering && steering < yours &&
+           yours < theirs);
     assert(has_line(file, "your_voice.voice = Zira"));
     assert(has_line(file, "opponents_voice.voice = Mark"));
     assert(has_line(file, "your_voice.rate = 50"));
@@ -489,7 +499,7 @@ extern "C" void pc_log_line(const char* fmt, ...) {
 int main(int argc, char** argv) {
     s_dir = argc > 1 ? fs::path(argv[1]) : fs::path("voice_settings_test");
     fs::create_directories(s_dir);
-    the_rows_follow_speech();
+    the_rows_are_in_their_submenu();
     languages_are_named();
     the_options_are_the_installed_voices();
     a_change_plays_a_sample();

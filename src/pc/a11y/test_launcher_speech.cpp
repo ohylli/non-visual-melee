@@ -186,8 +186,11 @@ public:
      * launcher itself does nothing. */
     void left() { a11y::launcher_speech_back(); }
 
-    /* Launcher::back, with its hook: Escape or B. */
+    /* Launcher::back, with its hooks: Escape or B. */
     void back() {
+        if (pc_a11y_settings_back(m_document)) {
+            return;
+        }
         if (a11y::launcher_speech_back()) {
             return;
         }
@@ -1000,6 +1003,20 @@ constexpr const char* kSpeechRow =
 constexpr const char* kTestVoiceRow =
     "Test voice, Microsoft Mark, Left and right to change. A choice of the tests' own.";
 
+/* Until the reader has a form of its own for them (issue 02), a row opening
+ * a submenu reads as a button in a row. */
+constexpr const char* kCueSettingsRow =
+    "Cue settings: Open, button. Cue volume, and each cue's switch, volume and preview.";
+constexpr const char* kAnnouncementSettingsRow =
+    "Match announcement settings: Open, button. The voices, and what is announced: damage, "
+    "stocks, teammates and the time left.";
+constexpr const char* kCueVolumeRow =
+    "Cue volume, slider, 100%. Left and right to adjust. The loudness of all cues together, "
+    "under the master volume; the game's sound effect and music volumes leave cues alone.";
+
+/* The top level: the master switches, each followed by the row opening its
+ * submenu, read as any page's rows are, from the first to the last and
+ * around. */
 void accessibility_category_rows(Rml::Context& context) {
     Page page(context);
     page.open_settings();
@@ -1009,33 +1026,17 @@ void accessibility_category_rows(Rml::Context& context) {
     page.enter_rows();
     page.frame();
     assert(page.take() == (std::vector<Output>{interrupt(kAccessibilityRow)}));
-    const std::vector<std::string> rows = pc_a11y_settings_rows();
-    assert(rows.size() == 13);
-    assert(rows.front() == "a11y-accessibility-on");
-    assert(rows[4] == "a11y-cues-volume");
-    assert(rows[7] == "a11y-gap_warning-preview");
-    assert(rows[11] == "a11y-ledge_warning-distance");
-    assert(rows.back() == "a11y-test-voice");
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kTopRows));
+    assert(rmlui_test::title_line(page.document()).empty());
     const std::vector<std::string> said{kSpeechRow,
         "Steering, On, Left and right to change. The D-pad steps the hand on character select and "
         "the cursor on stage select. Off, the D-pad does what the game makes of it, quick chat "
         "included.",
-        "Cues, On, Left and right to change. Turns every cue on or off.",
-        "Cue volume, slider, 100%. Left and right to adjust. The loudness of all cues together, "
-        "under the master volume; the game's sound effect and music volumes leave cues alone.",
-        "Gap warning, On, Left and right to change. Turns the gap warning on or off.",
-        "Gap warning volume, slider, 100%. Left and right to adjust. The loudness of the gap "
-        "warning, under the cue volume.",
-        "Preview gap warning: Play, button. Plays a short sample of the gap warning, as it sounds "
-        "in a match.",
-        "Ledge warning, On, Left and right to change. Turns the ledge warning on or off.",
-        "Ledge warning volume, slider, 100%. Left and right to adjust. The loudness of the ledge "
-        "warning, under the cue volume.",
-        "Preview ledge warning: Play, button. Plays a short sample of the ledge warning, as it "
-        "sounds in a match.",
-        "Ledge warning distance, slider, 40 units. Left and right to adjust. How far from the edge "
-        "the warning starts, in stage units.",
-        kTestVoiceRow, kAccessibilityRow};
+        "Cues, On, Left and right to change. Turns every cue on or off.", kCueSettingsRow,
+        "Match announcements, On, Left and right to change. Says what the HUD shows during a "
+        "match: your damage and stocks in your voice, everyone else's in the opponents' voice, "
+        "and the time left on the screen reader.",
+        kAnnouncementSettingsRow, kAccessibilityRow};
     for (const std::string& text : said) {
         page.step(1);
         page.frame();
@@ -1045,6 +1046,168 @@ void accessibility_category_rows(Rml::Context& context) {
     page.back();
     page.frame();
     assert(page.take() == (std::vector<Output>{interrupt(kAccessibility)}));
+}
+
+/* A submenu opens on its first row by Enter, A or a click, or by Right, its
+ * title line naming it, and only its rows shown; Up and Down go round them;
+ * Left and Right still step a value; Escape, B, or Left on a Preview go
+ * back to the row that opened it, and on the top level Escape goes on back
+ * to the category. */
+void accessibility_submenu_moving(Rml::Context& context) {
+    Page page(context);
+    page.open_rows(kAccessibilityTab);
+    page.focus("a11y-cues-settings");
+    page.frame();
+    page.take();
+    page.press();
+    assert(page.focused() == page.element("a11y-cues-volume"));
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kCueRows));
+    assert(rmlui_test::title_line(page.document()) == "Cue settings");
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(kCueVolumeRow)}));
+    /* Round from the first to the last, and back. */
+    page.step(-1);
+    assert(page.focused() == page.element("a11y-ledge_warning-distance"));
+    page.step(1);
+    assert(page.focused() == page.element("a11y-cues-volume"));
+    for (std::size_t i = 1; i < rmlui_test::kCueRows.size(); ++i) {
+        page.step(1);
+        assert(page.focused() == page.element(rmlui_test::kCueRows[i].c_str()));
+    }
+    page.step(1);
+    assert(page.focused() == page.element("a11y-cues-volume"));
+    /* A value still steps either way. */
+    page.horizontal(-1);
+    assert(page.a11y().value("cues.volume").value == 95.0f);
+    page.horizontal(1);
+    assert(page.a11y().value("cues.volume").value == 100.0f);
+    assert(page.focused() == page.element("a11y-cues-volume"));
+    /* Left on a Preview: back, and Right opens again. */
+    page.focus("a11y-gap_warning-preview");
+    page.horizontal(-1);
+    assert(page.focused() == page.element("a11y-cues-settings"));
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kTopRows));
+    assert(rmlui_test::title_line(page.document()).empty());
+    page.horizontal(1);
+    assert(page.focused() == page.element("a11y-cues-volume"));
+    page.take();
+    /* Right on a Preview is the page's: nothing. */
+    page.focus("a11y-gap_warning-preview");
+    assert(!pc_a11y_settings_step(&page.document(), "a11y-gap_warning-preview", 1));
+    /* Escape or B: back, then on to the category. */
+    page.back();
+    assert(page.focused() == page.element("a11y-cues-settings"));
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kTopRows));
+    page.frame();
+    assert(page.take() == (std::vector<Output>{interrupt(kCueSettingsRow)}));
+    page.back();
+    assert(page.focused() == page.element("tab-accessibility"));
+    /* Left on an opening row of the top level is the page's: back to the
+     * category. */
+    assert(!pc_a11y_settings_step(&page.document(), "a11y-cues-settings", -1));
+}
+
+/* Voice settings, inside Match announcement settings: two levels in, and
+ * out by Left on a row holding no value and by Escape. */
+void accessibility_nested_submenu(Rml::Context& context) {
+    Page page(context);
+    page.open_rows(kAccessibilityTab);
+    page.focus("a11y-match_announcements-settings");
+    page.press();
+    assert(page.focused() == page.element("a11y-match_announcements-voices"));
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kAnnouncementRows));
+    assert(rmlui_test::title_line(page.document()) == "Match announcement settings");
+    page.press();
+    assert(page.focused() == page.element("a11y-test-voice"));
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kVoiceRows));
+    assert(
+        rmlui_test::title_line(page.document()) == "Match announcement settings / Voice settings");
+    page.step(1);
+    assert(page.focused() == page.element("a11y-test-preview"));
+    page.step(1);
+    assert(page.focused() == page.element("a11y-test-voice"));
+    page.step(-1);
+    assert(page.focused() == page.element("a11y-test-preview"));
+    page.press();
+    assert(page.a11y().take() == (std::vector<std::string>{"preview test"}));
+    /* Left on the Preview: one level up, onto Voice settings, the preview
+     * stopped as its row lost focus. */
+    page.horizontal(-1);
+    assert(page.focused() == page.element("a11y-match_announcements-voices"));
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kAnnouncementRows));
+    assert(page.a11y().take() == (std::vector<std::string>{"stop"}));
+    /* Left on the row opening Voice settings: up to the top level. */
+    page.horizontal(-1);
+    assert(page.focused() == page.element("a11y-match_announcements-settings"));
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kTopRows));
+    /* In by Right twice, out by Escape twice. */
+    page.horizontal(1);
+    page.horizontal(1);
+    assert(page.focused() == page.element("a11y-test-voice"));
+    page.back();
+    assert(page.focused() == page.element("a11y-match_announcements-voices"));
+    page.back();
+    assert(page.focused() == page.element("a11y-match_announcements-settings"));
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kTopRows));
+}
+
+/* Leaving Settings from inside a submenu, or the pointer taking focus out of
+ * the page, brings the category back to its top level: the next opening
+ * is there. */
+void accessibility_submenu_left_by_leaving(Rml::Context& context) {
+    Page page(context);
+    page.open_rows(kAccessibilityTab);
+    page.focus("a11y-match_announcements-settings");
+    page.press();
+    page.press();
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kVoiceRows));
+    page.show_settings(false);
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kTopRows));
+    page.show_settings(true);
+    assert(page.focused() == page.element("tab-accessibility"));
+    page.enter_rows();
+    assert(page.focused() == page.element("a11y-accessibility-on"));
+    /* The pointer onto Back, or a click on a category. */
+    page.focus("a11y-cues-settings");
+    page.press();
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kCueRows));
+    page.focus("back");
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kTopRows));
+    page.focus("a11y-cues-settings");
+    page.press();
+    page.show_tab(0);
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kTopRows));
+    /* A click inside the open submenu stays in it. */
+    page.show_tab(kAccessibilityTab);
+    page.enter_rows();
+    page.focus("a11y-cues-settings");
+    page.press();
+    page.focus("a11y-gap_warning-on");
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kCueRows));
+}
+
+/* With speech off, a sighted player moves through the submenus just the
+ * same. */
+void accessibility_submenus_with_speech_off(Rml::Context& context) {
+    Page page(context, "launcher.rml", false);
+    page.enabled("play", false);
+    page.enabled("verify", false);
+    page.focus("choose");
+    page.run(a11y::kSettleTime * 2);
+    page.show_settings(true);
+    page.show_tab(kAccessibilityTab);
+    page.enter_rows();
+    page.focus("a11y-cues-settings");
+    page.press();
+    assert(page.focused() == page.element("a11y-cues-volume"));
+    page.step(-1);
+    assert(page.focused() == page.element("a11y-ledge_warning-distance"));
+    page.step(1);
+    assert(page.focused() == page.element("a11y-cues-volume"));
+    page.back();
+    assert(page.focused() == page.element("a11y-cues-settings"));
+    assert(rmlui_test::level_shown(page.document(), rmlui_test::kTopRows));
+    assert(page.take().empty());
 }
 
 /* A switch flips with Left, Right, Enter or A, and says its new value, as
@@ -1151,7 +1314,7 @@ void accessibility_choice(Rml::Context& context) {
 
 /* Preview plays its cue on Enter or A, again from its start when pressed
  * again, and says nothing: the cue is the answer. Leaving the row stops it.
- * Its arrows are the page's: Left goes back to the category. */
+ * Its Left goes back a level (accessibility_submenu_moving). */
 void accessibility_preview(Rml::Context& context) {
     Page page(context);
     page.open_rows(kAccessibilityTab);
@@ -1165,7 +1328,6 @@ void accessibility_preview(Rml::Context& context) {
     assert(page.a11y().take().empty());
     page.press();
     assert(page.a11y().take() == (std::vector<std::string>{"preview gap_warning"}));
-    assert(!pc_a11y_settings_step(&page.document(), "a11y-gap_warning-preview", -1));
     page.step(1);
     page.frame();
     a11y::settings_pages_frame(a11y::SettingsHost::launcher, true);
@@ -1298,6 +1460,10 @@ int main(int argc, char** argv) {
     settings_status_messages(*context);
     update_check_is_spoken_once(*context);
     accessibility_category_rows(*context);
+    accessibility_submenu_moving(*context);
+    accessibility_nested_submenu(*context);
+    accessibility_submenu_left_by_leaving(*context);
+    accessibility_submenus_with_speech_off(*context);
     accessibility_switch(*context);
     accessibility_slider(*context);
     accessibility_choice(*context);

@@ -533,7 +533,9 @@ void a_hand_edit_not_yet_polled_survives_a_menu_change() {
 }
 
 std::string row_name(const a11y::ShownRow& row) {
-    return row.value != nullptr ? row.value->label : "[" + row.action->label + "]";
+    return row.value != nullptr  ? row.value->label :
+           row.action != nullptr ? "[" + row.action->label + "]" :
+                                   "<" + row.opens->label + ">";
 }
 
 void the_shown_rows_list_in_order_with_each_cues_three() {
@@ -552,26 +554,68 @@ void the_shown_rows_list_in_order_with_each_cues_three() {
         "Ledge warning distance", "How far.", "units", 30.0f, 5.0f, 100.0f, 1.0f, true});
     std::vector<std::string> names;
     for (const a11y::ShownRow& row : model.shown()) {
-        assert((row.value == nullptr) != (row.action == nullptr));
+        assert((row.value != nullptr) + (row.action != nullptr) + (row.opens != nullptr) == 1);
         names.push_back(row_name(row));
     }
     assert((
-        names == std::vector<std::string>{"Cues", "Cue volume", "Gap warning", "Gap warning volume",
-                     "[Preview gap warning]", "Wide pan", "Ledge warning", "Ledge warning volume",
-                     "[Preview ledge warning]", "Ledge warning distance"}));
+        names == std::vector<std::string>{"Cues", "<Cue settings>", "Cue volume", "Gap warning",
+                     "Gap warning volume", "[Preview gap warning]", "Wide pan", "Ledge warning",
+                     "Ledge warning volume", "[Preview ledge warning]", "Ledge warning distance"}));
     const std::vector<a11y::ShownRow>& rows = model.shown();
-    assert(rows[2].value == &gap.values.on.named() && rows[3].value == &gap.values.volume.named());
-    assert(rows[4].action->group == "gap" && rows[4].action->key == "gap.preview");
-    assert(rows[4].action->description == "Plays a short sample of the gap warning, as it sounds "
+    /* Cues on the top level, then the row opening Cue settings, which holds
+     * the rest: those a cue's group registers and the shared group's. */
+    assert(rows[0].menu == nullptr && rows[1].menu == nullptr && rows[1].opens == &cues.menu());
+    assert(cues.menu().key == "cues.settings" && cues.menu().parent == nullptr);
+    for (std::size_t i = 2; i < rows.size(); ++i) {
+        assert(rows[i].menu == &cues.menu());
+    }
+    assert(rows[3].value == &gap.values.on.named() && rows[4].value == &gap.values.volume.named());
+    assert(rows[5].action->group == "gap" && rows[5].action->key == "gap.preview");
+    assert(rows[5].action->description == "Plays a short sample of the gap warning, as it sounds "
                                           "in a match.");
-    assert(rows[5].value == &wide.named() && rows[8].action->group == "ledge");
-    assert(rows[9].value == &distance.named());
+    assert(rows[6].value == &wide.named() && rows[9].action->group == "ledge");
+    assert(rows[10].value == &distance.named());
     /* The rest are tuning values: in the file, not in the menus. */
     assert(!gap.values.boost.named().shown && !hold.named().shown);
     assert(model.find("gap.preview") == nullptr);
     const std::string text = model.to_text();
     assert(text.find("gap.hold = 4\n") != std::string::npos);
     assert(text.find("preview") == std::string::npos && text.find("Preview") == std::string::npos);
+    assert(text.find("cues.settings") == std::string::npos);
+}
+
+/* A submenu inside a submenu: each level's rows in registration order, in
+ * the submenu of the group handle that registered them, the nested one's
+ * parent the submenu it is in; no submenu in the file. */
+void submenus_nest() {
+    ValueModel model;
+    a11y::ValueGroup group = model.group("a", "A");
+    a11y::Switch on = group.add_switch(a11y::SwitchSpec{"on", "A", "Turns A on.", true, true});
+    const a11y::NamedMenu& menu =
+        group.add_menu(a11y::MenuSpec{"settings", "A settings", "The rest of A."});
+    a11y::ValueGroup inside = group.in(&menu);
+    const a11y::NamedMenu& nested =
+        inside.add_menu(a11y::MenuSpec{"more", "More settings", "Even more of A."});
+    const a11y::NamedAction& action =
+        inside.in(&nested).add_action(a11y::ActionSpec{"preview", "Preview A", "Plays A."});
+    a11y::Number level = inside.add_number(
+        a11y::NumberSpec{"level", "Level", "A's level.", "%", 50.0f, 0.0f, 100.0f, 5.0f, true});
+    a11y::Number hidden = inside.add_number(
+        a11y::NumberSpec{"hidden", "Hidden", "A tuning value.", "", 1.0f, 0.0f, 2.0f, 0.1f});
+    assert(inside.menu() == &menu && group.menu() == nullptr);
+    assert(menu.key == "a.settings" && menu.label == "A settings" && menu.parent == nullptr);
+    assert(nested.key == "a.more" && nested.parent == &menu);
+    const std::vector<a11y::ShownRow>& rows = model.shown();
+    assert(rows.size() == 5);
+    assert(rows[0].value == &on.named() && rows[0].menu == nullptr);
+    assert(rows[1].opens == &menu && rows[1].menu == nullptr);
+    assert(rows[2].opens == &nested && rows[2].menu == &menu);
+    assert(rows[3].action == &action && rows[3].menu == &nested);
+    assert(rows[4].value == &level.named() && rows[4].menu == &menu);
+    assert(!hidden.named().shown);
+    const std::string text = model.to_text();
+    assert(text.find("a.level = 50\n") != std::string::npos);
+    assert(text.find("settings") == std::string::npos && text.find("more") == std::string::npos);
 }
 
 void the_settings_tell_their_listener_every_change() {
@@ -596,7 +640,7 @@ void the_settings_tell_their_listener_every_change() {
     settings.load(now);
     assert(heard.empty() && fs::exists(path));
     assert(read_file(path).rfind("# Accessibility settings for Non-Visual Melee.\n", 0) == 0);
-    assert(settings.shown().size() == 5);
+    assert(settings.shown().size() == 6);
     /* A menu's change. */
     assert(settings.set(gap.values.volume.named(), 20.0f, now));
     assert((heard == std::vector<std::string>{"gap.volume = 20"}));
@@ -962,6 +1006,7 @@ int main(int argc, char** argv) {
     the_games_own_write_is_polled_back_silently();
     a_hand_edit_not_yet_polled_survives_a_menu_change();
     the_shown_rows_list_in_order_with_each_cues_three();
+    submenus_nest();
     the_settings_tell_their_listener_every_change();
     an_override_holds_for_the_run_and_is_never_written();
     an_override_of_a_key_the_file_lacks_is_not_appended();
