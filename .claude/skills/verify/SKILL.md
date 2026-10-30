@@ -47,7 +47,7 @@ A bounded run boots straight into a scene and exits after a fixed frame count:
 
 - Capture stdout too: the `boot scene:` progress lines go there, not to the log file.
 - The `vs` scene reaches the match within 600 frames; the evidence is `boot scene: state 1 scene 2` in stdout (the fight scene was entered). The other scenes' evidence lines are in the `SCENES` table of `tools/smoke_test.py`.
-- A `title` run's expected `[a11y]` lines are `speech backend: <name>`, `speak interrupt: "Non-Visual Melee ready"` and `speak interrupt: "Title screen. Press Start."`, ending with `speech shutdown`; with `MELEE_A11Y_SCREEN_READER=0` the first is `screen reader off (MELEE_A11Y_SCREEN_READER=0)` and each announcement is marked `(muted)`. Add `MELEE_NO_ATTRACT=1` to a `title` run longer than 600 frames, otherwise the title screen drops into the attract-mode demo fight.
+- A `title` run's expected `[a11y]` lines are `speech backend: <name>`, `speak interrupt: "Non-Visual Melee launching"` and `speak interrupt: "Title screen. Press Start."`, ending with `speech shutdown`; with `MELEE_A11Y_SCREEN_READER=0` the first is `screen reader off (MELEE_A11Y_SCREEN_READER=0)` and each announcement is marked `(muted)`. Add `MELEE_NO_ATTRACT=1` to a `title` run longer than 600 frames, otherwise the title screen drops into the attract-mode demo fight.
 - `credits` starts at Classic's trophy award and runs on into the staff roll; its evidence line is in the same table.
 - A `Device lost ... Device was destroyed` warning at exit is normal shutdown.
 - `MELEE_BOOT_SCENE` also accepts `unranked`, `direct` and `ranked`, which boot into the online lobby and need a peer.

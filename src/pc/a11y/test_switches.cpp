@@ -176,9 +176,9 @@ void speech_waits_for_the_switches() {
     assert(!off.speech->enabled() && off.bridge.inits == 0);
     assert(off.state() == state_of(false, false, false, false));
     assert(logged("[a11y] switches start: accessibility off, speech off, steering off, cues off"));
-    off.speech->announce("Non-Visual Melee ready", a11y::Mode::interrupt);
+    off.speech->announce("Non-Visual Melee launching", a11y::Mode::interrupt);
     assert(off.bridge.spoken.empty());
-    assert(logged("[a11y] speak interrupt (off): \"Non-Visual Melee ready\""));
+    assert(logged("[a11y] speak interrupt (off): \"Non-Visual Melee launching\""));
 }
 
 /* A higher switch off silences the ones below it and leaves their saved

@@ -305,7 +305,7 @@ extern "C" void pc_a11y_init(void) {
     s_settings->load(a11y::Clock::now());
     s_voice_settings->attach(*s_voices);
     apply_switches(s_switches->start());
-    s_speech->announce("Non-Visual Melee ready", a11y::Mode::interrupt);
+    s_speech->announce("Non-Visual Melee launching", a11y::Mode::interrupt);
     if (!s_cue_system->sounding()) {
         s_speech->announce("Audio cues could not start.", a11y::Mode::queue);
     }
