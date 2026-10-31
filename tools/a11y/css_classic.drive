@@ -28,13 +28,14 @@ sleep 1
 
 # Up from the hand's start: the nearest target above is the stock arrow
 # that lowers the count, then the level arrow above it, then the portrait
-# nearest in x in the bottom row; the coin jumps into the hand on the way.
+# nearest in x in the bottom row; the coin jumps into the hand on the way,
+# said at the press before the portrait.
 press DUp
 wait ': "Stock: 3, fewer"$'
 press DUp
 wait ': "Level: Very easy, lower"$'
 press DUp
-wait ': "Jigglypuff"$'
+wait ': "Holding your coin\. Jigglypuff"$'
 wait 'glide to "Jigglypuff" ended after \d+ frames: arrived'
 press A
 wait 'Ready to fight\. Press Start\.'

@@ -930,7 +930,9 @@ a11y::Target portrait(int index) {
 }
 
 void a_step_names_where_it_goes() {
+    /* With a character chosen, so no coin jumps into the hand on the way. */
     A11yCssState state = vs_screen();
+    choose(state, kMarthPortrait);
     Fixture f(state);
     f.css.step(state, portrait(kFoxPortrait));
     f.css.step(state, a11y::Target{});
@@ -1018,6 +1020,28 @@ void the_coin_jumping_in_during_a_glide_waits_behind_the_step() {
     carry_over(state, 0, kPichuPortrait);
     f.frame(state);
     assert((f.said() == std::vector<Output>{Output{"Holding your coin", false}}));
+}
+
+void a_step_up_from_ones_closed_slot_says_the_coin_first() {
+    /* The play test's way in: the hand on player 1's closed slot button,
+     * the slot opening and the coin jumping in as the glide reaches the
+     * portraits. The step says both; nothing follows. */
+    A11yCssState state = vs_screen();
+    state.slots[0].kind = A11Y_CSS_CLOSED;
+    move(state, -32.1f, -2.2f);
+    Fixture f(state);
+    f.css.step(state, portrait(kPichuPortrait));
+    f.glide_to(portrait(kPichuPortrait));
+    move(state, -31.0f, 1.0f);
+    state.slots[0].kind = A11Y_CSS_HUMAN;
+    pick_up(state, 0);
+    f.frame(state);
+    carry_over(state, 0, kPichuPortrait);
+    f.frame(state);
+    f.glide_ended(false);
+    f.frame(state);
+    f.frame(state);
+    assert((f.said() == std::vector<Output>{Output{"Holding your coin. Pichu", true}}));
 }
 
 void a_step_to_a_coin_says_whose_it_is() {
@@ -1236,6 +1260,7 @@ int main() {
     a_failed_glide_says_so();
     a_free_hand_gliding_over_a_button_says_nothing();
     the_coin_jumping_in_during_a_glide_waits_behind_the_step();
+    a_step_up_from_ones_closed_slot_says_the_coin_first();
     a_step_to_a_coin_says_whose_it_is();
     a_step_to_the_top_bar_with_a_coin_says_it_waits();
     a_step_down_with_ones_own_coin_clears_the_character_first();

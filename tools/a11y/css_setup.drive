@@ -31,7 +31,8 @@ sleep 1
 press DUp
 wait ': "Player 1: closed"$'
 press DUp
-wait ': "Pichu"$'
+wait ': "Holding your coin\. Pichu"$'
+wait 'glide to "Pichu" ended after \d+ frames: arrived'
 press DUp
 wait ': "Fox"$'
 wait 'glide to "Fox" ended after \d+ frames: arrived'

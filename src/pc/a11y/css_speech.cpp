@@ -108,6 +108,14 @@ SliderWords slider_words(const SliderKind& slider) {
                                                  SliderWords{kHandicapSlider, kHandicapHeld};
 }
 
+/* The local player's coin will jump into their free hand as it enters the
+ * portraits: the game puts it there while the slot has no portrait chosen
+ * (mnCharSel_CursorThink, opening a closed slot first). */
+bool coin_jumps_in(const A11yCssState& state) {
+    return state.hand.present && state.hand.coin < 0 && state.hand.slider == A11Y_CSS_NO_SLIDER &&
+           state.slots[state.local_slot].portrait < 0;
+}
+
 /* What the local hand is on, for hover announcements: the slider it holds,
  * or the button or knob under a free hand. A free hand over a portrait is
  * silent, and a carried coin speaks for itself. */
@@ -169,6 +177,7 @@ void CssSpeech::frame(const A11yCssState& state, const GlideStatus& glide) {
     bool quiet = gliding || glide_ended;
     if (glide.phase == GlideStatus::Phase::none) {
         m_drop_said = false;
+        m_pickup_said = false;
     }
 
     std::string mine;
@@ -212,6 +221,7 @@ void CssSpeech::frame(const A11yCssState& state, const GlideStatus& glide) {
 
 void CssSpeech::step(const A11yCssState& state, Target to) {
     m_drop_said = false;
+    m_pickup_said = false;
     if (to.kind == TargetKind::none) {
         m_speech.announce(kNothingThatWay, Mode::interrupt);
         return;
@@ -226,6 +236,12 @@ void CssSpeech::step(const A11yCssState& state, Target to) {
         m_drop_said = true;
     } else if (carrying >= 0 && area(to) == Area::top_bar) {
         add_clause(words, kNotWhileHoldingACoin);
+    } else if (to.kind == TargetKind::portrait && coin_jumps_in(state)) {
+        /* The coin jumps into the hand as it reaches the portraits, before
+         * it gets there; said now, ahead of the portrait, and not again as
+         * it happens. */
+        add_sentence(out, holding(state, state.local_slot, true));
+        m_pickup_said = true;
     } else if (to.kind == TargetKind::portrait) {
         int coin = pickable_coin(state, to.index);
         if (coin >= 0) {
@@ -289,7 +305,9 @@ std::string CssSpeech::coin_announcement(
     bool pickup_pending = m_pickup_pending;
     m_pickup_pending = false;
     if (pickup_pending && carrying >= 0) {
-        return holding(now, carrying, quiet);
+        bool said = m_pickup_said && carrying == now.local_slot;
+        m_pickup_said = false;
+        return said ? "" : holding(now, carrying, quiet);
     }
     if (was_carrying >= 0 && carrying < 0) {
         bool said = m_drop_said;
@@ -393,10 +411,16 @@ void CssSpeech::slot_announcements(const A11yCssState& last, const A11yCssState&
     for (int i = 0; i < A11Y_CSS_SLOTS; i++) {
         const A11yCssSlot& before = last.slots[i];
         const A11yCssSlot& after = now.slots[i];
-        /* The local player's own slot also opens as their hand first
-         * reaches the portraits, which the coin jumping in says. */
         bool own = i == now.local_slot;
         if (after.kind != before.kind) {
+            /* The local player's own slot also opens as their hand first
+             * reaches the portraits, its coin jumping into the hand on the
+             * same frame, which "Holding your coin" says. No button changes a
+             * slot whose coin or slider is in a hand, so this is never the
+             * hand's press, even fresh from the slot's button. */
+            if (holds(i)) {
+                continue;
+            }
             if (on(TargetKind::slot_button, i)) {
                 add_sentence(mine, slot_words(now, i));
             } else if (!own) {

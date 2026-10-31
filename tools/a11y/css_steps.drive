@@ -24,12 +24,13 @@ sleep 1
 
 # Up from the hand's start goes to the nearest target above it, player 1's
 # button, and Up again to the portrait nearest in x in the bottom row,
-# Pichu; the coin jumps into the hand on the way. Two more steps Up reach
-# the top row.
+# Pichu; the coin jumps into the hand on the way, said at the press before
+# the portrait, and the slot opening with it is silent. Two more steps Up
+# reach the top row.
 press DUp
 wait ': "Player 1: closed"$'
 press DUp
-wait ': "Pichu"$'
+wait ': "Holding your coin\. Pichu"$'
 wait 'glide to "Pichu" ended after \d+ frames: arrived'
 press DUp
 wait ': "Fox"$'

@@ -31,11 +31,12 @@ wait '"Training character select\. Player 1, no character\. CPU, (?P<cpu>.+)\."$
 sleep 1
 
 # Up from the hand's start to the portrait nearest in x in the bottom row,
-# where the coin jumps into the hand; A chooses, which is all Training
-# needs to be ready. Should the CPU's coin rest there too, the step names
-# it, and A still chooses with the coin already in the hand.
+# where the coin jumps into the hand, said at the press before the
+# portrait; A chooses, which is all Training needs to be ready. Should the
+# CPU's coin rest there too, the step leaves it out, since the hand
+# arrives holding its own, and A still chooses.
 press DUp
-wait ': "Pichu(, the CPU.s coin)?"$'
+wait ': "Holding your coin\. Pichu"$'
 wait 'glide to "Pichu[^"]*" ended after \d+ frames: arrived'
 press A
 wait 'Ready to fight\. Press Start\.'

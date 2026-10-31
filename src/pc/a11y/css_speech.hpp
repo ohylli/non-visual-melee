@@ -41,6 +41,7 @@ public:
         m_seen = false;
         m_pickup_pending = false;
         m_drop_said = false;
+        m_pickup_said = false;
     }
 
     /* The screen's state this frame, and the glide's. Speaks what changed
@@ -56,7 +57,9 @@ public:
      * that way. A portrait with a coin the hand may pick up says whose coin;
      * a top bar button, that it waits while the hand holds a coin. A step
      * down into the player slots with a coin in the hand first says what the
-     * coin going back does, which the drop then leaves unsaid. */
+     * coin going back does, which the drop then leaves unsaid; a free hand's
+     * step into the portraits that will catch the player's own coin first
+     * says "Holding your coin", which the pickup then leaves unsaid. */
     void step(const A11yCssState& state, Target to);
 
     /* A target with its value: "Player 2: CPU", "Teams: off". */
@@ -97,6 +100,8 @@ private:
     bool m_pickup_pending = false;
     /* A step said what the carried coin going back does. */
     bool m_drop_said = false;
+    /* A step said the player's own coin jumping into the hand. */
+    bool m_pickup_said = false;
     A11yCssState m_last{};
     LogOnce m_log_once;
 };
