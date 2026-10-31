@@ -235,9 +235,14 @@ void CssSpeech::step(const A11yCssState& state, Target to) {
     int carrying = state.hand.coin;
     if (carrying >= 0 && area(to) == Area::player_slots) {
         /* The coin goes back as the hand leaves the portraits, before it
-         * gets there; said now, and not again as it happens. */
+         * gets there; said now, and not again as it happens. Its own slot's
+         * button leaves the character to the drop's words: the coin is still
+         * in the hand, so the slot has none chosen yet. */
         add_sentence(out, drop_words(state, carrying));
         m_drop_said = true;
+        if (to == Target{TargetKind::slot_button, carrying}) {
+            words = slot_kind(state, carrying);
+        }
     } else if (carrying >= 0 && area(to) == Area::top_bar) {
         add_clause(words, kNotWhileHoldingACoin);
     } else if (to.kind == TargetKind::portrait && coin_jumps_in(state)) {
@@ -464,7 +469,7 @@ std::string CssSpeech::target_words(const A11yCssState& state, Target target) {
     case TargetKind::portrait:
         return name(state.portraits[i].character);
     case TargetKind::slot_button:
-        return slot_kind(state, i);
+        return slot_words(state, i);
     case TargetKind::team_button:
         return slot_name(state, i) + " " + std::string(kTeam) + ": " + team(state.slots[i].team);
     case TargetKind::cpu_level:

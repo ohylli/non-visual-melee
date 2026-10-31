@@ -677,9 +677,10 @@ void free_hand_enters_and_leaves_each_button() {
     f.frame(state);
     move(state, 16.0f, 24.0f);
     f.frame(state);
-    assert((f.spoken() == Texts{"Player 1 name tag", "Player 1 handicap: 9", "Player 1: human",
-                              "Player 2: CPU", "Player 2 CPU level: 1", "Teams: off",
-                              "Rules: 2-minute KO fest!", "Back"}));
+    assert((f.spoken() == Texts{"Player 1 name tag", "Player 1 handicap: 9",
+                              "Player 1: human, no character", "Player 2: CPU, Yoshi",
+                              "Player 2 CPU level: 1", "Teams: off", "Rules: 2-minute KO fest!",
+                              "Back"}));
 }
 
 void moving_within_a_button_says_it_once() {
@@ -689,7 +690,16 @@ void moving_within_a_button_says_it_once() {
         move(state, x, -2.0f);
         f.frame(state);
     }
-    assert((f.spoken() == Texts{"Player 2: CPU"}));
+    assert((f.spoken() == Texts{"Player 2: CPU, Yoshi"}));
+}
+
+void a_slot_button_names_the_character_chosen() {
+    A11yCssState state = vs_screen();
+    choose(state, kFoxPortrait);
+    Fixture f(state);
+    move(state, -32.0f, -2.0f);
+    f.frame(state);
+    assert((f.spoken() == Texts{"Player 1: human, Fox"}));
 }
 
 void slot_kinds_in_turn() {
@@ -1163,6 +1173,18 @@ void a_step_down_with_a_cpus_coin_puts_it_back_first() {
     assert((f.spoken() == Texts{"Back to Yoshi. Player 2: CPU"}));
 }
 
+void a_step_down_to_another_slots_button_names_its_character() {
+    /* Only the carried coin's own slot leaves its character to the drop. */
+    A11yCssState state = vs_screen();
+    state.hand.y = 5.0f;
+    choose(state, kFoxPortrait);
+    pick_up(state, 1);
+    carry_over(state, 1, kPichuPortrait);
+    Fixture f(state);
+    f.css.step(state, a11y::Target{a11y::TargetKind::slot_button, 0});
+    assert((f.spoken() == Texts{"Back to Yoshi. Player 1: human, Fox"}));
+}
+
 void a_drop_after_a_step_that_did_not_leave_the_portraits_is_said() {
     /* A step down said the coin goes back, then a step up turned the glide
      * before it did; B putting it back later is said. */
@@ -1286,6 +1308,7 @@ int main() {
     every_portrait_has_a_name();
     free_hand_enters_and_leaves_each_button();
     moving_within_a_button_says_it_once();
+    a_slot_button_names_the_character_chosen();
     slot_kinds_in_turn();
     ones_own_slot_opening_as_the_hand_reaches_the_portraits_says_only_the_coin();
     slider_grabbed_moved_and_released();
@@ -1314,6 +1337,7 @@ int main() {
     a_step_to_the_top_bar_with_a_coin_says_it_waits();
     a_step_down_with_ones_own_coin_clears_the_character_first();
     a_step_down_with_a_cpus_coin_puts_it_back_first();
+    a_step_down_to_another_slots_button_names_its_character();
     a_drop_after_a_step_that_did_not_leave_the_portraits_is_said();
     slider_steps_say_the_value_at_the_press_only();
     a_slider_glide_ending_on_another_value_says_it();
