@@ -235,12 +235,14 @@ void CssSpeech::step(const A11yCssState& state, Target to) {
     int carrying = state.hand.coin;
     if (carrying >= 0 && area(to) == Area::player_slots) {
         /* The coin goes back as the hand leaves the portraits, before it
-         * gets there; said now, and not again as it happens. Its own slot's
-         * button leaves the character to the drop's words: the coin is still
-         * in the hand, so the slot has none chosen yet. */
-        add_sentence(out, drop_words(state, carrying));
+         * gets there; said now, and not again as it happens. The button of
+         * the slot the coin belongs to leaves the character to the drop's
+         * words, when they name one: the coin is still in the hand, so the
+         * slot has none chosen yet. */
+        std::string drop = drop_words(state, carrying);
+        add_sentence(out, drop);
         m_drop_said = true;
-        if (to == Target{TargetKind::slot_button, carrying}) {
+        if (!drop.empty() && to == Target{TargetKind::slot_button, carrying}) {
             words = slot_kind(state, carrying);
         }
     } else if (carrying >= 0 && area(to) == Area::top_bar) {
@@ -270,9 +272,7 @@ std::string CssSpeech::opening(const A11yCssState& state) {
     for (int i = 0; i < A11Y_CSS_SLOTS; i++) {
         bool own = i == state.local_slot;
         if (own || (single_player(state) && i < state.slot_count)) {
-            A11yCharacter character = chosen(state.slots[i]);
-            out += ". " + slot_name(state, i) + ", " +
-                   (character != A11Y_NO_CHARACTER ? name(character) : std::string(kNoCharacter));
+            out += ". " + slot_name(state, i) + ", " + chosen_words(state.slots[i]);
         }
     }
     out += ".";
@@ -503,11 +503,14 @@ std::string CssSpeech::target_words(const A11yCssState& state, Target target) {
 std::string CssSpeech::slot_words(const A11yCssState& state, int slot) {
     std::string out = slot_kind(state, slot);
     if (state.slots[slot].kind != A11Y_CSS_CLOSED) {
-        A11yCharacter character = chosen(state.slots[slot]);
-        out +=
-            ", " + (character != A11Y_NO_CHARACTER ? name(character) : std::string(kNoCharacter));
+        out += ", " + chosen_words(state.slots[slot]);
     }
     return out;
+}
+
+std::string CssSpeech::chosen_words(const A11yCssSlot& slot) {
+    A11yCharacter character = chosen(slot);
+    return character != A11Y_NO_CHARACTER ? name(character) : std::string(kNoCharacter);
 }
 
 std::string CssSpeech::name(A11yCharacter character) {

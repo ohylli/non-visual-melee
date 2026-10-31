@@ -57,6 +57,7 @@ void choose(A11yCssState& state, int portrait) {
 void pick_up(A11yCssState& state, int slot) {
     state.hand.coin = slot;
     state.slots[slot].portrait = kPlaceholder;
+    state.slots[slot].carried = true;
 }
 
 /* The carried coin of a slot is over a portrait, or over none (-1). */
@@ -1185,6 +1186,18 @@ void a_step_down_to_another_slots_button_names_its_character() {
     assert((f.spoken() == Texts{"Back to Yoshi. Player 1: human, Fox"}));
 }
 
+void a_step_down_with_a_coin_of_no_character_says_none() {
+    /* The drop has no words to name a character, so the button does. */
+    A11yCssState state = vs_screen();
+    state.hand.y = 5.0f;
+    state.slots[1].character = A11Y_NO_CHARACTER;
+    pick_up(state, 1);
+    carry_over(state, 1, kPichuPortrait);
+    Fixture f(state);
+    f.css.step(state, a11y::Target{a11y::TargetKind::slot_button, 1});
+    assert((f.spoken() == Texts{"Player 2: CPU, no character"}));
+}
+
 void a_drop_after_a_step_that_did_not_leave_the_portraits_is_said() {
     /* A step down said the coin goes back, then a step up turned the glide
      * before it did; B putting it back later is said. */
@@ -1338,6 +1351,7 @@ int main() {
     a_step_down_with_ones_own_coin_clears_the_character_first();
     a_step_down_with_a_cpus_coin_puts_it_back_first();
     a_step_down_to_another_slots_button_names_its_character();
+    a_step_down_with_a_coin_of_no_character_says_none();
     a_drop_after_a_step_that_did_not_leave_the_portraits_is_said();
     slider_steps_say_the_value_at_the_press_only();
     a_slider_glide_ending_on_another_value_says_it();

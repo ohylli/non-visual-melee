@@ -91,6 +91,8 @@ private:
         Target is, std::string& mine, std::string& others);
     /* A player slot with its kind and character: "Player 2: CPU, Yoshi". */
     std::string slot_words(const A11yCssState& state, int slot);
+    /* The character a slot shows as chosen, or "no character". */
+    std::string chosen_words(const A11yCssSlot& slot);
     /* A character's name; a missing one is spoken by number and logged. */
     std::string name(A11yCharacter character);
 
