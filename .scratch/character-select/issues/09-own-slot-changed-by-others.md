@@ -35,3 +35,5 @@ Open for the maintainer:
 - Whether an unplugged controller should be said offline too.
 
 ## Comments
+
+2026-10-31: issue 10 added half of "A likely fix": `slot_announcements` now skips any slot whose coin or slider is in a hand before the `!own` check, with unit tests for the opening frame. `!own` now only silences other players' changes to the local slot; dropping it is what remains, with the questions above.

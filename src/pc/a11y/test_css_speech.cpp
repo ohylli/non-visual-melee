@@ -1044,6 +1044,52 @@ void a_step_up_from_ones_closed_slot_says_the_coin_first() {
     assert((f.said() == std::vector<Output>{Output{"Holding your coin. Pichu", true}}));
 }
 
+void the_coin_jumping_in_as_the_glide_ends_stays_unsaid() {
+    /* Seen on the glide's last frame, the pickup is said a frame later, with
+     * no glide running; the step has said it. */
+    A11yCssState state = vs_screen();
+    Fixture f(state);
+    f.css.step(state, portrait(kPichuPortrait));
+    f.glide_to(portrait(kPichuPortrait));
+    move(state, -28.0f, -1.0f);
+    f.frame(state);
+    move(state, -23.1f, 4.5f);
+    pick_up(state, 0);
+    f.glide_ended(false);
+    f.frame(state);
+    carry_over(state, 0, kPichuPortrait);
+    f.frame(state);
+    f.frame(state);
+    assert((f.said() == std::vector<Output>{Output{"Holding your coin. Pichu", true}}));
+}
+
+void the_stick_from_ones_closed_slot_says_only_the_coin() {
+    /* No step: the stick takes the hand from player 1's closed slot button
+     * into the portraits, where the slot opens and the coin jumps in. */
+    A11yCssState state = vs_screen();
+    state.slots[0].kind = A11Y_CSS_CLOSED;
+    move(state, -32.1f, -2.2f);
+    Fixture f(state);
+    move(state, -31.0f, 1.0f);
+    state.slots[0].kind = A11Y_CSS_HUMAN;
+    pick_up(state, 0);
+    f.frame(state);
+    carry_over(state, 0, kPichuPortrait);
+    f.frame(state);
+    f.frame(state);
+    assert((f.spoken() == Texts{"Holding your coin. Pichu"}));
+}
+
+void camera_modes_fourth_player_steps_to_a_portrait_without_a_coin() {
+    /* The game gives player 4's hand no coin in Camera mode. */
+    A11yCssState state = vs_screen();
+    state.match_type = A11Y_CSS_VS_CAMERA;
+    state.local_slot = 3;
+    Fixture f(state);
+    f.css.step(state, portrait(kPichuPortrait));
+    assert((f.spoken() == Texts{"Pichu"}));
+}
+
 void a_step_to_a_coin_says_whose_it_is() {
     /* Player 2's coin rests on Yoshi, player 1's own on Fox. */
     A11yCssState state = vs_screen();
@@ -1261,6 +1307,9 @@ int main() {
     a_free_hand_gliding_over_a_button_says_nothing();
     the_coin_jumping_in_during_a_glide_waits_behind_the_step();
     a_step_up_from_ones_closed_slot_says_the_coin_first();
+    the_coin_jumping_in_as_the_glide_ends_stays_unsaid();
+    the_stick_from_ones_closed_slot_says_only_the_coin();
+    camera_modes_fourth_player_steps_to_a_portrait_without_a_coin();
     a_step_to_a_coin_says_whose_it_is();
     a_step_to_the_top_bar_with_a_coin_says_it_waits();
     a_step_down_with_ones_own_coin_clears_the_character_first();

@@ -110,10 +110,12 @@ SliderWords slider_words(const SliderKind& slider) {
 
 /* The local player's coin will jump into their free hand as it enters the
  * portraits: the game puts it there while the slot has no portrait chosen
- * (mnCharSel_CursorThink, opening a closed slot first). */
+ * (mnCharSel_CursorThink, opening a closed slot first). Camera mode's fourth
+ * player never gets one. */
 bool coin_jumps_in(const A11yCssState& state) {
+    bool camera_fourth = state.match_type == A11Y_CSS_VS_CAMERA && state.local_slot == 3;
     return state.hand.present && state.hand.coin < 0 && state.hand.slider == A11Y_CSS_NO_SLIDER &&
-           state.slots[state.local_slot].portrait < 0;
+           state.slots[state.local_slot].portrait < 0 && !camera_fourth;
 }
 
 /* What the local hand is on, for hover announcements: the slider it holds,
@@ -175,14 +177,16 @@ void CssSpeech::frame(const A11yCssState& state, const GlideStatus& glide) {
     bool glide_ended =
         glide.phase == GlideStatus::Phase::ended || glide.phase == GlideStatus::Phase::failed;
     bool quiet = gliding || glide_ended;
-    if (glide.phase == GlideStatus::Phase::none) {
-        m_drop_said = false;
-        m_pickup_said = false;
-    }
 
     std::string mine;
     std::string others;
     add_sentence(mine, coin_announcement(last, state, quiet));
+    /* Cleared after the coin's announcement, which may be the pickup seen on
+     * the glide's last frame, said a frame later. */
+    if (glide.phase == GlideStatus::Phase::none) {
+        m_drop_said = false;
+        m_pickup_said = false;
+    }
     add_sentence(mine, slider_announcement(last, state, quiet));
     Target was = hovered(last);
     Target is = hovered(state);
