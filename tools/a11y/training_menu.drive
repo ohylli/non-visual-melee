@@ -41,7 +41,7 @@ sleep 1
 # Pichu, which makes the match ready (tools/a11y/css_training.drive), and
 # Start on stage select for a random stage.
 press DUp
-wait ': "Pichu(, the CPU.s coin)?"$'
+wait ': "Holding your coin\. Pichu"$'
 wait 'glide to "Pichu[^"]*" ended after \d+ frames: arrived'
 press A
 wait 'Ready to fight\. Press Start\.'

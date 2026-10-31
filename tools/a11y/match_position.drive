@@ -37,7 +37,7 @@ sleep 1
 
 # Pichu, which makes the match ready (tools/a11y/css_training.drive).
 press DUp
-wait ': "Pichu(, the CPU.s coin)?"$'
+wait ': "Holding your coin\. Pichu"$'
 wait 'glide to "Pichu[^"]*" ended after \d+ frames: arrived'
 press A
 wait 'Ready to fight\. Press Start\.'

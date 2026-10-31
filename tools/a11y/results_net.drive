@@ -40,7 +40,7 @@ sleep 1
 a press DUp
 a wait ': "Player 1: closed"$'
 a press DUp
-a wait ': "Pichu"$'
+a wait ': "Holding your coin\. Pichu"$'
 a wait 'glide to "Pichu" ended after \d+ frames: arrived'
 a press A
 sleep 1
