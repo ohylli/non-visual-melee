@@ -73,6 +73,24 @@ std::string coin_words(const A11yCssState& state, int coin) {
            std::string(kPlayersCoinAfter);
 }
 
+/* The coins resting on a portrait, the one a free hand would pick up first:
+ * "your coin, also player 2's coin"; without one, "player 3's coin". Empty
+ * when none rests there. */
+std::string resting_words(const A11yCssState& state, int portrait, std::optional<int> coin) {
+    std::string out = coin ? coin_words(state, *coin) : "";
+    std::string others;
+    for (int other : resting_coins(state, portrait)) {
+        if (other != coin) {
+            add_part(others, coin_words(state, other));
+        }
+    }
+    if (coin && !others.empty()) {
+        others = std::string(kAlso) + " " + others;
+    }
+    add_part(out, others);
+    return out;
+}
+
 /* A single-player mode's difficulty as the arrows' strip shows it:
  * "Normal". */
 std::string difficulty(int value) {
@@ -223,7 +241,7 @@ void CssSpeech::frame(const A11yCssState& state, const GlideStatus& glide) {
     }
 }
 
-void CssSpeech::step(const A11yCssState& state, Target to) {
+void CssSpeech::step(const A11yCssState& state, Target from, Target to) {
     m_drop_said = false;
     m_pickup_said = false;
     if (to.kind == TargetKind::none) {
@@ -253,11 +271,10 @@ void CssSpeech::step(const A11yCssState& state, Target to) {
          * it happens. */
         add_sentence(out, holding(state, state.local_slot, true));
         m_pickup_said = true;
-    } else if (to.kind == TargetKind::portrait) {
-        int coin = pickable_coin(state, to.index);
-        if (coin >= 0) {
-            add_clause(words, coin_words(state, coin));
-        }
+    } else if (to.coin && from.kind == TargetKind::portrait && from.index == to.index && from != to)
+    {
+        /* From coin to coin on one portrait: only the coin changed. */
+        words = coin_words(state, *to.coin);
     }
     add_sentence(out, words);
     m_speech.announce(out, Mode::interrupt);
@@ -331,7 +348,7 @@ std::string CssSpeech::coin_announcement(
         /* Leaving every portrait says nothing. Entering one also resets the
          * costume, which goes unsaid. */
         return after.over_portrait >= 0 && !quiet ?
-                   name(now.portraits[after.over_portrait].character) :
+                   target_words(now, Target{TargetKind::portrait, after.over_portrait}) :
                    "";
     }
     if (after.over_portrait >= 0 && after.over_portrait == before.over_portrait &&
@@ -347,7 +364,7 @@ std::string CssSpeech::holding(const A11yCssState& now, int coin, bool quiet) {
     std::string out = std::string(kHolding) + " " + coin_words(now, coin);
     int over = now.slots[coin].over_portrait;
     if (over >= 0 && !quiet) {
-        add_sentence(out, name(now.portraits[over].character));
+        add_sentence(out, target_words(now, Target{TargetKind::portrait, over}));
     }
     return out;
 }
@@ -466,8 +483,11 @@ std::string CssSpeech::target_words(const A11yCssState& state, Target target) {
     switch (target.kind) {
     case TargetKind::none:
         break;
-    case TargetKind::portrait:
-        return name(state.portraits[i].character);
+    case TargetKind::portrait: {
+        std::string out = name(state.portraits[i].character);
+        add_part(out, resting_words(state, i, target.coin));
+        return out;
+    }
     case TargetKind::slot_button:
         return slot_words(state, i);
     case TargetKind::team_button:

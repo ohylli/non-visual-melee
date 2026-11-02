@@ -41,6 +41,14 @@ constexpr float kAimTolerance = 0.05f;
 /* A sent stick not applied this many frames after the measured delay was
  * lost: a video frame that simulated nothing, or two that simulated one. */
 constexpr int kLateSlack = 2;
+/* A glide at its destination with nothing on its way watches the cursor this
+ * many frames more before it has arrived, steering back should it move. The
+ * game samples the pad on a timer that also runs mid-frame (deliver_pending
+ * in src/pc/os.c), so a push can be applied once more than counted, on the
+ * frame after the last, after a publish or in a second frame of one video
+ * frame; and two equal pushes in a row cannot be told apart, so a copy of
+ * one can be taken for the next, which then lands after it was counted. */
+constexpr int kSettleFrames = kLateSlack + 2;
 /* A glide longer than this has failed: the longest takes under 100 frames
  * at the longest input delay (test_steering.cpp). */
 constexpr int kGiveUpFrames = 180;
@@ -139,6 +147,7 @@ void Glide::start(Point destination) {
     m_destination = destination;
     m_active = true;
     m_started = m_now;
+    m_settled_since = -1;
 }
 
 GlideFrame Glide::frame(Point cursor, Stick applied) {
@@ -182,12 +191,20 @@ GlideFrame Glide::frame(Point cursor, Stick applied) {
     }
     Point left{m_destination.x - rest.x, m_destination.y - rest.y};
     if (std::hypot(left.x, left.y) < kAimTolerance) {
-        if (m_in_flight.empty()) {
+        if (!m_in_flight.empty()) {
+            m_settled_since = -1;
+            return GlideFrame{};
+        }
+        if (m_settled_since < 0) {
+            m_settled_since = m_now;
+        }
+        if (m_now - m_settled_since >= kSettleFrames) {
             m_active = false;
             return GlideFrame{Stick{}, GlideEnd::arrived};
         }
         return GlideFrame{};
     }
+    m_settled_since = -1;
     m_request = stick_for(left);
     m_request_waiting = true;
     return GlideFrame{m_request, GlideEnd::none};

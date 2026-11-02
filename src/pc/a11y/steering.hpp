@@ -56,7 +56,8 @@ extern const MovementRule kStageCursorMovement;
 /* How a glide ended, reported once by the frame it ended in. */
 enum class GlideEnd {
     none,
-    /* The cursor is at rest at the destination. */
+    /* The cursor is at rest at the destination, and stayed there while the
+     * glide watched a few frames more. */
     arrived,
     /* The cursor did not get there in time. */
     failed,
@@ -121,6 +122,9 @@ private:
     Point m_destination;
     int m_now = 0;
     int m_started = 0;
+    /* The frame since which the cursor has rested at the destination with
+     * nothing on its way, or -1. */
+    int m_settled_since = -1;
     /* Frames from asking for a stick to the game applying it, as last
      * measured. */
     int m_delay = kUnmeasuredDelay;

@@ -40,6 +40,10 @@ struct Target {
     /* A value of the slider the hand holds, 1 to 9, as a step's destination
      * or where the hand is; none for everything else, the knob included. */
     std::optional<int> level;
+    /* On a portrait, the player slot whose resting coin a free hand would
+     * pick up there; none for a portrait with no such coin, and everything
+     * else. */
+    std::optional<int> coin;
 
     bool operator==(const Target&) const = default;
 };
@@ -105,7 +109,8 @@ inline constexpr int kHighestLevel = 9;
 Target target_at(const A11yCssState& state, float x, float y);
 
 /* The targets a step reaches, in rows top to bottom, each left to right: the
- * top bar, the rows of unlocked portraits as drawn, and in VS modes the
+ * top bar, the rows of unlocked portraits as drawn, a portrait once for each
+ * coin pickable_coins() names on it, and in VS modes the
  * player slots, each slot's HMN/CPU button, then its team button, CPU level
  * knob and handicap knob where they exist; in single-player modes the
  * difficulty arrows and below them the stock arrows, where shown. Empty rows
@@ -114,20 +119,24 @@ std::vector<std::vector<Target>> target_rows(const A11yCssState& state);
 
 /* What among the rows the hand at (x, y) is on, by the areas the game tests,
  * whether or not it would react now (a hand carrying a coin, a slot whose
- * coin another hand carries): a portrait under where the coin sits, a button,
- * a knob within reach. A hand holding a slider is on its value. None
- * elsewhere. */
+ * coin another hand carries): the coin A would pick up there, on whatever
+ * portrait; else a portrait under where the coin sits, at its first coin to
+ * pick up if any; a button, a knob within reach. A hand holding a slider is
+ * on its value. None elsewhere. */
 Target locate(const A11yCssState& state, float x, float y);
 
-/* The player slot whose coin rests on the portrait where the local hand, free
- * of anything, may pick it up (its own or a CPU's), a CPU's before its own:
- * B calls one's own back from anywhere. -1 for none, and while the hand holds
- * anything. */
-int pickable_coin(const A11yCssState& state, int portrait);
+/* The player slots whose coins rest on the portrait, the local player's
+ * first, then by slot. */
+std::vector<int> resting_coins(const A11yCssState& state, int portrait);
+
+/* Those of resting_coins() the local hand, free of anything, may pick up:
+ * its own and CPUs'. None while the hand holds anything. */
+std::vector<int> pickable_coins(const A11yCssState& state, int portrait);
 
 /* Where the hand goes to be on a target. For a portrait, where the coin sits
- * at the portrait's centre; for a free hand, where A picks up the coin
- * resting there, if pickable_coin names one. For a button, its middle, the
+ * at the portrait's centre; with a coin, where A picks up that coin and no
+ * other: the game takes the nearest, and keeps resting coins apart. For a
+ * button, its middle, the
  * height A leaves the hand at; for a knob, the point it is grabbed from; for
  * a value of the held slider, the middle of that value's span. */
 Point aim_point(const A11yCssState& state, Target target);

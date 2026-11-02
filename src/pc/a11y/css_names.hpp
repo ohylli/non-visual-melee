@@ -89,6 +89,9 @@ inline constexpr std::string_view kYourCoin = "your coin";
 inline constexpr std::string_view kPlayersCoinBefore = "player ";
 inline constexpr std::string_view kPlayersCoinAfter = "'s coin";
 inline constexpr std::string_view kCpusCoin = "the CPU's coin";
+/* Before the other coins resting on a portrait after the one a step reaches
+ * ("Fox, your coin, also player 2's coin"). */
+inline constexpr std::string_view kAlso = "also";
 inline constexpr std::string_view kBackTo = "Back to";
 inline constexpr std::string_view kHoldingSlider = "Holding the slider";
 inline constexpr std::string_view kReleased = "Released";

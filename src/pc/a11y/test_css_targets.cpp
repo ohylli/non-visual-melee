@@ -30,6 +30,18 @@ Target portrait(int index) {
     return Target{TargetKind::portrait, index};
 }
 
+/* A portrait with the coin of a slot resting on it, to pick up. */
+Target coin_on(int index, int slot) {
+    return Target{TargetKind::portrait, index, std::nullopt, slot};
+}
+
+/* A portrait as the rows hold it for a free hand: at its first coin to pick
+ * up, if any. */
+Target reached(const A11yCssState& state, int index) {
+    std::vector<int> coins = a11y::pickable_coins(state, index);
+    return coins.empty() ? portrait(index) : coin_on(index, coins.front());
+}
+
 Target slot_button(int slot) {
     return Target{TargetKind::slot_button, slot};
 }
@@ -363,8 +375,8 @@ void steps_from_every_portrait() {
             bool leaves = (direction == Direction::up && row_of(from) == 0) ||
                           (direction == Direction::down && row_of(from) == 2);
             if (!leaves) {
-                assert(
-                    step_from(state, from, direction) == portrait(expected_step(from, direction)));
+                assert(step_from(state, reached(state, from), direction) ==
+                       reached(state, expected_step(from, direction)));
             }
         }
     }
@@ -545,9 +557,9 @@ void training_cpus_coin_is_pickable() {
     /* The CPU's coin rests on Dr. Mario; a free hand aims where A picks it
      * up. */
     A11yCssState state = training_screen();
-    assert(a11y::pickable_coin(state, kDrMarioPortrait) == 1);
-    assert(a11y::pickable_coin(state, kMarioPortrait) == -1);
-    Point aim = a11y::aim_point(state, portrait(kDrMarioPortrait));
+    assert(a11y::pickable_coins(state, kDrMarioPortrait) == std::vector<int>{1});
+    assert(a11y::pickable_coins(state, kMarioPortrait).empty());
+    Point aim = a11y::aim_point(state, coin_on(kDrMarioPortrait, 1));
     assert(std::fabs(aim.x - (state.slots[1].coin.x - 3.8f)) < 1e-4f);
 }
 
@@ -624,35 +636,38 @@ void locate_finds_what_does_not_react_now() {
 }
 
 void pickable_coins() {
+    using Coins = std::vector<int>;
     A11yCssState state = vs_screen();
     /* Player 2 is a CPU with Yoshi; player 1's own coin rests on Fox. */
     state.slots[0].portrait = kFoxPortrait;
     state.slots[0].character = kFox;
     state.slots[0].coin = coin_at_rest(kFoxPortrait);
-    assert(a11y::pickable_coin(state, kYoshiPortrait) == 1);
-    assert(a11y::pickable_coin(state, kFoxPortrait) == 0);
-    assert(a11y::pickable_coin(state, kNessPortrait) == -1);
-    /* Two on one portrait: the CPU's. */
+    assert(a11y::pickable_coins(state, kYoshiPortrait) == Coins{1});
+    assert(a11y::pickable_coins(state, kFoxPortrait) == Coins{0});
+    assert(a11y::pickable_coins(state, kNessPortrait).empty());
+    /* Two on one portrait: one's own first. */
     state.slots[0].portrait = kYoshiPortrait;
-    assert(a11y::pickable_coin(state, kYoshiPortrait) == 1);
-    /* Another human's coin is theirs. */
+    assert(a11y::pickable_coins(state, kYoshiPortrait) == (Coins{0, 1}));
+    /* Another human's coin rests there, theirs to pick up. */
     state.slots[1].kind = A11Y_CSS_HUMAN;
-    assert(a11y::pickable_coin(state, kYoshiPortrait) == 0);
+    assert(a11y::pickable_coins(state, kYoshiPortrait) == Coins{0});
+    assert(a11y::resting_coins(state, kYoshiPortrait) == (Coins{0, 1}));
     /* A hand carrying a coin, or holding a slider, picks up none. */
     state = vs_screen();
     state.hand.coin = 0;
-    assert(a11y::pickable_coin(state, kYoshiPortrait) == -1);
+    assert(a11y::pickable_coins(state, kYoshiPortrait).empty());
+    assert(a11y::resting_coins(state, kYoshiPortrait) == Coins{1});
     state = vs_screen();
     state.hand.slider = A11Y_CSS_CPU_LEVEL;
     state.hand.slider_slot = 1;
-    assert(a11y::pickable_coin(state, kYoshiPortrait) == -1);
+    assert(a11y::pickable_coins(state, kYoshiPortrait).empty());
     /* A closed slot's coin is not shown; a coin in another hand is taken. */
     state = vs_screen();
     state.slots[1].kind = A11Y_CSS_CLOSED;
-    assert(a11y::pickable_coin(state, kYoshiPortrait) == -1);
+    assert(a11y::resting_coins(state, kYoshiPortrait).empty());
     state = vs_screen();
     state.slots[1].carried = true;
-    assert(a11y::pickable_coin(state, kYoshiPortrait) == -1);
+    assert(a11y::resting_coins(state, kYoshiPortrait).empty());
 }
 
 /* A at the hand picks up the coin of a slot (mnCharSel_CursorThink): within
@@ -663,19 +678,115 @@ bool picks_up(const A11yCssState& state, Point hand, int slot) {
     return dx * dx + dy * dy < 9.0f && hand.y > 0.2f && hand.y < 22.0f;
 }
 
+/* How far past its aim a push may carry the hand and still pick up a coin
+ * at the very top of the top row, short of the top bar: nearly a full step
+ * of the hand (test_steering.cpp, kTopCoinMargin). */
+constexpr float kTopCoinStep = 1.15f;
+
 void a_step_to_a_coin_aims_where_a_picks_it_up() {
     A11yCssState state = vs_screen();
-    Point hand = a11y::aim_point(state, portrait(kYoshiPortrait));
+    Point hand = a11y::aim_point(state, coin_on(kYoshiPortrait, 1));
     assert(picks_up(state, hand, 1));
-    /* A coin drifted to the very top of its portrait: still in the band. */
+    /* A coin drifted to the very top of its portrait: still in the band,
+     * and nearly a full step of the hand further up too: the aim splits the
+     * room between the coin's reach and the top bar. */
     state.slots[1].coin.y = portrait_rect(kYoshiPortrait).top;
-    hand = a11y::aim_point(state, portrait(kYoshiPortrait));
+    hand = a11y::aim_point(state, coin_on(kYoshiPortrait, 1));
     assert(picks_up(state, hand, 1));
-    /* Carrying a coin, the portrait's centre. */
+    Point beyond{hand.x, hand.y + kTopCoinStep};
+    assert(picks_up(state, beyond, 1));
+    assert(a11y::area(target_at(state, beyond.x, beyond.y)) != a11y::Area::top_bar);
+    /* The portrait itself, as a carrying hand reaches it: its centre. */
     state.hand.coin = 0;
     hand = a11y::aim_point(state, portrait(kYoshiPortrait));
     A11yCssRect rect = portrait_rect(kYoshiPortrait);
     assert(std::fabs(hand.x + a11y::kCoinOffsetX - (rect.left + rect.right) / 2.0f) < 1e-4f);
+}
+
+/* Three coins on Yoshi, as the game spreads coins resting on one portrait:
+ * player 1's own, player 2's (a CPU) and player 3's (another human's). */
+A11yCssState three_coins_on_yoshi() {
+    A11yCssState state = vs_screen();
+    A11yCssRect yoshi = portrait_rect(kYoshiPortrait);
+    state.slots[0].portrait = kYoshiPortrait;
+    state.slots[0].character = kYoshi;
+    state.slots[0].coin = A11yCssCoinReport{true, yoshi.left + 1.5f, yoshi.top - 1.5f};
+    state.slots[1].coin = A11yCssCoinReport{true, yoshi.right - 1.5f, yoshi.top - 1.5f};
+    state.slots[2] = cpu(2, kYoshiPortrait);
+    state.slots[2].kind = A11Y_CSS_HUMAN;
+    state.slots[2].coin = A11yCssCoinReport{true, yoshi.left + 3.5f, yoshi.bottom + 1.5f};
+    return state;
+}
+
+void coins_on_one_portrait_are_stepped_through() {
+    /* One's own first, then the CPU's; another human's is not a target. */
+    A11yCssState state = three_coins_on_yoshi();
+    Target own = coin_on(kYoshiPortrait, 0);
+    Target cpus = coin_on(kYoshiPortrait, 1);
+    assert(step_from(state, kPeachPortrait, Direction::right) == own);
+    assert(step_from(state, own, Direction::right) == cpus);
+    assert(step_from(state, cpus, Direction::right) == portrait(kYoshiPortrait + 1));
+    assert(step_from(state, kYoshiPortrait + 1, Direction::left) == cpus);
+    assert(step_from(state, cpus, Direction::left) == own);
+    /* Up and Down land on the first. */
+    Target below = step_from(state, cpus, Direction::down);
+    assert(below.kind == TargetKind::portrait && below.index != kYoshiPortrait);
+    assert(step_from(state, below, Direction::up) == own);
+    /* A carrying hand reaches the portrait once. */
+    state.hand.coin = 0;
+    state.slots[0].carried = true;
+    assert(step_from(state, kPeachPortrait, Direction::right) == portrait(kYoshiPortrait));
+}
+
+void each_coin_on_a_portrait_is_picked_up_at_its_aim() {
+    /* The game picks up the nearest within reach; the hand at a coin's aim
+     * is on it. */
+    A11yCssState state = three_coins_on_yoshi();
+    for (int coin : {0, 1}) {
+        Point hand = a11y::aim_point(state, coin_on(kYoshiPortrait, coin));
+        assert(picks_up(state, hand, coin) && !picks_up(state, hand, 1 - coin));
+        assert(a11y::locate(state, hand.x, hand.y) == coin_on(kYoshiPortrait, coin));
+    }
+    /* Off every coin's reach, still on the portrait: its first coin. */
+    A11yCssRect yoshi = portrait_rect(kYoshiPortrait);
+    assert(a11y::locate(state, yoshi.left - a11y::kCoinOffsetX + 0.2f,
+               yoshi.bottom - a11y::kCoinOffsetY + 0.2f) == coin_on(kYoshiPortrait, 0));
+}
+
+void a_coin_at_its_portraits_left_edge_is_stepped_from() {
+    /* The game crowds coins apart until one rests on Yoshi's left edge.
+     * Where A picks it up, hovering is tested over Peach, yet the hand is on
+     * the coin, and Left goes to Yoshi's coin before it, not past Peach. */
+    A11yCssState state = three_coins_on_yoshi();
+    A11yCssRect yoshi = portrait_rect(kYoshiPortrait);
+    state.slots[1].coin = A11yCssCoinReport{true, yoshi.left, yoshi.top - 1.5f};
+    Target cpus = coin_on(kYoshiPortrait, 1);
+    Point hand = a11y::aim_point(state, cpus);
+    assert(a11y::target_at(state, hand.x, hand.y) == portrait(kPeachPortrait));
+    assert(a11y::locate(state, hand.x, hand.y) == cpus);
+    assert(
+        a11y::step(state, Target{}, hand.x, hand.y, Direction::left) == coin_on(kYoshiPortrait, 0));
+    assert(a11y::step(state, Target{}, hand.x, hand.y, Direction::right) ==
+           portrait(kYoshiPortrait + 1));
+}
+
+void three_coins_on_peach_one_at_its_top() {
+    /* As a play test found them: the game crowded player 2's coin into
+     * Peach's top left corner. Each coin's aim picks it up, and so would
+     * the hand nearly a full step up from it. */
+    A11yCssState state = vs_screen();
+    state.slots[0].portrait = kPeachPortrait;
+    state.slots[0].coin = A11yCssCoinReport{true, 2.1f, 14.5f};
+    state.slots[1] = cpu(1, kPeachPortrait);
+    state.slots[1].coin = A11yCssCoinReport{true, -1.9f, 20.0f};
+    state.slots[2] = cpu(2, kPeachPortrait);
+    state.slots[2].coin = A11yCssCoinReport{true, -0.38f, 16.0f};
+    for (int coin : {0, 1, 2}) {
+        Point hand = a11y::aim_point(state, coin_on(kPeachPortrait, coin));
+        assert(a11y::locate(state, hand.x, hand.y) == coin_on(kPeachPortrait, coin));
+        Point beyond{hand.x, hand.y + kTopCoinStep};
+        assert(a11y::locate(state, beyond.x, beyond.y) == coin_on(kPeachPortrait, coin));
+    }
 }
 
 void steps_between_rows_of_different_lengths() {
@@ -819,6 +930,10 @@ int main() {
     locate_finds_what_does_not_react_now();
     pickable_coins();
     a_step_to_a_coin_aims_where_a_picks_it_up();
+    coins_on_one_portrait_are_stepped_through();
+    each_coin_on_a_portrait_is_picked_up_at_its_aim();
+    a_coin_at_its_portraits_left_edge_is_stepped_from();
+    three_coins_on_peach_one_at_its_top();
     steps_between_rows_of_different_lengths();
     steps_skip_locked_portraits();
     a_row_with_every_portrait_locked_is_skipped();

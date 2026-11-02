@@ -142,6 +142,11 @@ struct Channel {
      * published; the first one's request is replaced before it is
      * published. */
     int repeat_at = -1;
+    /* The sample this simulated frame applies is applied again by the next
+     * one, and every later sample a frame late: the game's pad alarm, which
+     * also runs as the game thread re-enables interrupts mid-frame, took one
+     * pad twice, across a publish (src/pc/os.c, deliver_pending). */
+    int straddle_at = -1;
     /* A resting stick's drift on the same controller, merged as the pad
      * merges: each axis the one pushed further. */
     Stick drift;
@@ -166,7 +171,12 @@ int dominant(int a, int b) {
     return std::abs(a) > std::abs(b) ? a : b;
 }
 
-/* A glide of the cursor from the point from to the point to, until it ends.
+/* After a glide has arrived, the frames the cursor is still watched for:
+ * where it rests then is the run's end. */
+constexpr int kAfterArrival = 20;
+
+/* A glide of the cursor from the point from to the point to, until it ends,
+ * and after an arrival kAfterArrival frames more with nothing asked for.
  * restart_at turns it to restart_to in that video frame, as a press during
  * a glide does. */
 Run glide(const Cursor& cursor, Point from, Point to, const Channel& channel, int restart_at = -1,
@@ -177,8 +187,16 @@ Run glide(const Cursor& cursor, Point from, Point to, const Channel& channel, in
     std::map<int, Stick> samples;
     Stick request;
     int tick = 0;
+    /* Samples applied twice so far. */
+    int late = 0;
+    Run arrived;
+    int arrived_at = 0;
     glide.start(to);
     for (int frame = 1; frame <= 400; frame++) {
+        if (arrived.end != GlideEnd::none && frame > arrived_at + kAfterArrival) {
+            arrived.at = at;
+            return arrived;
+        }
         if (frame == restart_at) {
             glide.start(restart_to);
         }
@@ -188,8 +206,11 @@ Run glide(const Cursor& cursor, Point from, Point to, const Channel& channel, in
         for (int n = 0; n < (frame == channel.repeat_at ? 2 : 1); n++) {
             tick++;
             samples[tick] = pad;
-            Stick sent =
-                samples.count(tick - channel.delay) != 0 ? samples[tick - channel.delay] : Stick{};
+            int taken = tick - channel.delay - late;
+            Stick sent = samples.count(taken) != 0 ? samples[taken] : Stick{};
+            if (tick == channel.straddle_at) {
+                late++;
+            }
             Stick own = channel.player_from >= 0 && tick >= channel.player_from ? channel.player :
                                                                                   channel.drift;
             Stick applied = clamped(Stick{dominant(sent.x, own.x), dominant(sent.y, own.y)});
@@ -198,13 +219,14 @@ Run glide(const Cursor& cursor, Point from, Point to, const Channel& channel, in
                 at.y = channel.click_y;
             }
             GlideFrame out = glide.frame(at, applied);
-            if (out.end != GlideEnd::none) {
-                if (out.end == GlideEnd::arrived) {
-                    /* Nothing is still on its way. */
-                    for (int later = tick - channel.delay + 1; later <= tick; later++) {
-                        assert(samples[later] == Stick{});
-                    }
+            if (out.end == GlideEnd::arrived) {
+                /* Nothing is still on its way. */
+                for (int later = tick - channel.delay - late + 1; later <= tick; later++) {
+                    assert(samples[later] == Stick{});
                 }
+                arrived = Run{out.end, glide.frames(), at};
+                arrived_at = frame;
+            } else if (out.end != GlideEnd::none) {
                 return Run{out.end, glide.frames(), at};
             }
             request = out.stick;
@@ -349,6 +371,27 @@ void a_skipped_sample(const Cursor& cursor) {
     }
 }
 
+void a_sample_used_again_after_the_next_publish(const Cursor& cursor) {
+    /* Whichever push the game takes twice, the last one included, the
+     * cursor ends at the aim: a glide that has reached it watches on. */
+    int count = static_cast<int>(cursor.places.size());
+    for (int delay : {0, 2, 10}) {
+        for (int from = 0; from < count; from++) {
+            for (int to = (from % 3) + 1; to < count; to += 3) {
+                for (int straddle = 1; straddle <= 40; straddle++) {
+                    Channel channel;
+                    channel.delay = delay;
+                    channel.straddle_at = straddle;
+                    Point aim = cursor.places[to].aim;
+                    Run run = glide(cursor, cursor.places[from].aim, aim, channel);
+                    assert(run.end == GlideEnd::arrived);
+                    assert(std::hypot(run.at.x - aim.x, run.at.y - aim.y) < 0.1f);
+                }
+            }
+        }
+    }
+}
+
 void a_resting_stick_does_not_stop_it(const Cursor& cursor) {
     for (const Place& to : cursor.places) {
         Channel channel;
@@ -406,11 +449,16 @@ bool well_on(const A11yCssState& state, Target target, Point hand) {
 /* A at the hand picks up the coin of the slot (mnCharSel_CursorThink), even
  * a frame's movement away: within 3 units of the hand plus (3.8, -2.6), the
  * hand in the portrait band. */
-bool picks_up(const A11yCssState& state, Point hand, int slot) {
+bool picks_up(const A11yCssState& state, Point hand, int slot, float margin = kMargin) {
     float dx = hand.x + 3.8f - state.slots[slot].coin.x;
     float dy = hand.y - 2.6f - state.slots[slot].coin.y;
-    return std::sqrt(dx * dx + dy * dy) < 3.0f - kMargin && hand.y > 0.2f && hand.y < 22.0f;
+    return std::sqrt(dx * dx + dy * dy) < 3.0f - margin && hand.y > 0.2f && hand.y < 22.0f - margin;
 }
+
+/* A coin at the very top of the top row leaves about 2.4 units between its
+ * reach and the top bar, short of a full step on each side: the aim splits
+ * it. */
+constexpr float kTopCoinMargin = 1.15f;
 
 /* A team match with the handicap rule on: every kind of target in the rows.
  * Player 1 is human with a free hand, player 2 a CPU; their handicap knobs
@@ -455,10 +503,8 @@ int glides_among_the_rows(const A11yCssState& state) {
                 Run run =
                     glide(hand, a11y::aim_point(state, from), a11y::aim_point(state, to), channel);
                 assert(run.end == GlideEnd::arrived);
-                int coin =
-                    to.kind == TargetKind::portrait ? a11y::pickable_coin(state, to.index) : -1;
-                if (coin >= 0) {
-                    assert(picks_up(state, run.at, coin));
+                if (to.coin) {
+                    assert(picks_up(state, run.at, *to.coin));
                 } else if (to.kind == TargetKind::portrait) {
                     assert(well_inside(run.at, to.index));
                 } else {
@@ -510,13 +556,17 @@ void onto_a_coin_to_pick_up_at_each_delay() {
             state.slots[1].coin.y = coin.y;
             for (Point from : {kHome, Point{20.0f, 24.0f}, aim(kRoyPortrait)}) {
                 Run run = glide(hand, from,
-                    a11y::aim_point(state, Target{TargetKind::portrait, kYoshiPortrait}), channel);
+                    a11y::aim_point(
+                        state, Target{TargetKind::portrait, kYoshiPortrait, std::nullopt, 1}),
+                    channel);
                 assert(run.end == GlideEnd::arrived);
-                assert(picks_up(state, run.at, 1));
+                bool top = coin.y == yoshi.top;
+                assert(picks_up(state, run.at, 1, top ? kTopCoinMargin : kMargin));
             }
         }
         Run run = glide(hand, kHome,
-            a11y::aim_point(state, Target{TargetKind::portrait, kFoxPortrait}), channel);
+            a11y::aim_point(state, Target{TargetKind::portrait, kFoxPortrait, std::nullopt, 0}),
+            channel);
         assert(run.end == GlideEnd::arrived);
         assert(picks_up(state, run.at, 0));
     }
@@ -576,6 +626,7 @@ int main() {
         every_place_to_every_other_at_each_delay(cursor);
         a_repeated_sample(cursor);
         a_skipped_sample(cursor);
+        a_sample_used_again_after_the_next_publish(cursor);
         a_resting_stick_does_not_stop_it(cursor);
         the_players_stick_takes_over(cursor);
         a_new_destination_on_the_way(cursor);

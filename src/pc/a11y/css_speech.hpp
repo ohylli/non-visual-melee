@@ -53,16 +53,19 @@ public:
      * what the hand is on unless that is the destination. */
     void frame(const A11yCssState& state, const GlideStatus& glide);
 
-    /* A step: says where it goes, interrupting; to is none when nothing lies
-     * that way. A portrait with a coin the hand may pick up says whose coin;
-     * a top bar button, that it waits while the hand holds a coin. A step
+    /* A step from where the hand was going or was: says where it goes,
+     * interrupting; to is none when nothing lies that way. A portrait says
+     * the coins resting on it, the one the hand would pick up first; a step
+     * from coin to coin on one portrait, only the coin. A top bar button
+     * says that it waits while the hand holds a coin. A step
      * down into the player slots with a coin in the hand first says what the
      * coin going back does, which the drop then leaves unsaid; a free hand's
      * step into the portraits that will catch the player's own coin first
      * says "Holding your coin", which the pickup then leaves unsaid. */
-    void step(const A11yCssState& state, Target to);
+    void step(const A11yCssState& state, Target from, Target to);
 
-    /* A target with its value: "Player 2: CPU", "Teams: off". */
+    /* A target with its value: "Player 2: CPU", "Teams: off", "Fox, your
+     * coin". */
     std::string target_words(const A11yCssState& state, Target target);
 
 private:

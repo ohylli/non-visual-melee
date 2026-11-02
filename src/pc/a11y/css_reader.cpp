@@ -109,7 +109,7 @@ void CssReader::press(Direction direction, Point hand) {
     Target from =
         m_steerer.active() ? m_steerer.status().destination : locate(m_state, hand.x, hand.y);
     Target to = step(m_state, from, hand.x, hand.y, direction);
-    m_speech.step(m_state, to);
+    m_speech.step(m_state, from, to);
     /* At an edge the step names where the hand is, or is going. */
     if (to.kind == TargetKind::none || to == from) {
         return;

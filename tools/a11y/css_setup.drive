@@ -73,16 +73,17 @@ wait 'glide to "Player 2: closed" ended after \d+ frames: arrived'
 press A until ': "Player 2: CPU, (?P<cpu>[^"]+?)(\. Ready to fight\. Press Start\.)?"$'
 
 # Up into the bottom row, and over every portrait until a step names the
-# CPU's coin; the glide aims where A picks it up.
-search ': "%cpu%, player 2.s coin"$' DUp DLeft DRight*6 DUp DRight DLeft*8 DUp DRight*8
-wait 'glide to "%cpu%" ended after \d+ frames: arrived'
+# CPU's coin, and player 1's after it should the CPU have Fox too; the
+# glide aims where A picks the CPU's up.
+search ': "%cpu%, player 2.s coin(, also your coin)?"$' DUp DLeft DRight*6 DUp DRight DLeft*8 DUp DRight*8
+wait 'glide to "%cpu%, player 2.s coin[^"]*" ended after \d+ frames: arrived'
 press A
 wait ': "Holding player 2.s coin'
 sleep 0.5
 
 # One step to another portrait, Left or else Right, and A chooses for the
 # CPU; with player 1's Fox the match is ready.
-search ': "(?!%cpu%")[^"]+"$' DLeft DRight
+search ': "(?!%cpu%[",])[^"]+"$' DLeft DRight
 wait 'glide to "[^"]+" ended after \d+ frames: arrived'
 press A
 wait 'Ready to fight\. Press Start\.'

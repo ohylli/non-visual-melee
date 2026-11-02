@@ -24,12 +24,18 @@ constexpr float kHandTop = 25.0f;
 /* A free hand grabs a slider's knob within this squared distance. */
 constexpr float kGrabDistanceSquared = 5.0f;
 /* A on a free hand picks up the nearest coin within 3 units of the hand plus
- * (3.8, -2.6), if the hand is in the portrait band, below y 22. A coin
- * resting at the very top of the top row would put that point above the
- * band, so the aim stays below this, still within reach. */
+ * (3.8, -2.6), if the hand is in the portrait band, from y 0.2 to 22. A coin
+ * resting near the top of the top row would put that point near or above
+ * the band's top, where a push the game applies once more than the glide
+ * counted (two frames sampling one pad) carries the hand onto the top bar.
+ * So the aim stays this far below the top bar: for a coin at the very top,
+ * about as far as the coin's reach is from the aim, splitting the room
+ * between the two, which is just short of a full step of the hand each. */
 constexpr float kPickupOffsetX = 3.8f;
 constexpr float kPickupOffsetY = -2.6f;
-constexpr float kPickupAimTop = 21.0f;
+constexpr float kPickupAimBelowTopBar = 1.2f;
+constexpr float kPickupReachSquared = 9.0f;
+constexpr float kPortraitBandBottom = 0.2f;
 /* A held slider's value (updateGrabbedSlider): the knob's place along its 10
  * units, times 0.8, plus 0.5, truncated, plus 1. So value v is centred
  * (v - 1) * 1.25 units along and spans 1.25 units, the two ends' cut off by
@@ -204,6 +210,43 @@ Target first_at(const A11yCssState& state, const std::vector<Target>& targets, f
     return Target{};
 }
 
+/* The slot's coin rests on a portrait. */
+bool resting(const A11yCssState& state, int slot) {
+    const A11yCssSlot& coin = state.slots[slot];
+    return coin.kind != A11Y_CSS_CLOSED && !coin.carried && coin.coin.seen && coin.portrait >= 0;
+}
+
+/* The local hand, free of anything, may pick up the slot's coin where it
+ * rests: its own, or a CPU's. */
+bool pickable(const A11yCssState& state, int slot) {
+    return state.hand.coin < 0 && state.hand.slider == A11Y_CSS_NO_SLIDER &&
+           (slot == state.local_slot || state.slots[slot].kind == A11Y_CSS_CPU);
+}
+
+/* The coin A on a free hand at (x, y) picks up, as the game chooses it: of
+ * the coins pickable_coins() names, the nearest to the hand plus the pickup
+ * offset within reach, the first of two as near; -1 for none, and outside
+ * the portrait band. */
+int coin_picked_at(const A11yCssState& state, float x, float y) {
+    if (y < kPortraitBandBottom || y > kTopBarBottom) {
+        return -1;
+    }
+    int picked = -1;
+    float nearest = kPickupReachSquared;
+    for (int i = 0; i < A11Y_CSS_SLOTS; i++) {
+        if (!resting(state, i) || !pickable(state, i)) {
+            continue;
+        }
+        float dx = x + kPickupOffsetX - state.slots[i].coin.x;
+        float dy = y + kPickupOffsetY - state.slots[i].coin.y;
+        if (dx * dx + dy * dy < nearest) {
+            nearest = dx * dx + dy * dy;
+            picked = i;
+        }
+    }
+    return picked;
+}
+
 /* The top bar's buttons that exist, left to right. */
 std::vector<Target> top_bar_row(const A11yCssState& state) {
     std::vector<Target> row;
@@ -250,7 +293,13 @@ Rows portrait_rows(const A11yCssState& state) {
             rows.emplace_back();
             row_top = top;
         }
-        rows.back().push_back(portrait);
+        std::vector<int> coins = pickable_coins(state, portrait.index);
+        if (coins.empty()) {
+            rows.back().push_back(portrait);
+        }
+        for (int coin : coins) {
+            rows.back().push_back(Target{TargetKind::portrait, portrait.index, std::nullopt, coin});
+        }
     }
     return rows;
 }
@@ -411,6 +460,14 @@ Target locate(const A11yCssState& state, float x, float y) {
     if (state.hand.slider != A11Y_CSS_NO_SLIDER) {
         return held_slider(state);
     }
+    /* Where A picks a coin up, the hand is on it, whatever portrait it is
+     * over: A is tested further right than hovering, so the point that picks
+     * up a coin pushed to its portrait's left edge is over the neighbour.
+     * The portrait band holds no other target. */
+    int picked = coin_picked_at(state, x, y);
+    if (picked >= 0) {
+        return Target{TargetKind::portrait, state.slots[picked].portrait, std::nullopt, picked};
+    }
     for (const std::vector<Target>& row : target_rows(state)) {
         for (Target target : row) {
             if (contains(state, target, x, y)) {
@@ -421,25 +478,20 @@ Target locate(const A11yCssState& state, float x, float y) {
     return Target{};
 }
 
-int pickable_coin(const A11yCssState& state, int portrait) {
-    if (state.hand.coin >= 0 || state.hand.slider != A11Y_CSS_NO_SLIDER) {
-        return -1;
-    }
-    int own = -1;
+std::vector<int> resting_coins(const A11yCssState& state, int portrait) {
+    std::vector<int> coins;
     for (int i = 0; i < A11Y_CSS_SLOTS; i++) {
-        const A11yCssSlot& slot = state.slots[i];
-        bool mine = i == state.local_slot;
-        if (slot.kind == A11Y_CSS_CLOSED || slot.carried || !slot.coin.seen ||
-            slot.portrait != portrait || (slot.kind != A11Y_CSS_CPU && !mine))
-        {
-            continue;
+        if (resting(state, i) && state.slots[i].portrait == portrait) {
+            coins.insert(i == state.local_slot ? coins.begin() : coins.end(), i);
         }
-        if (!mine) {
-            return i;
-        }
-        own = i;
     }
-    return own;
+    return coins;
+}
+
+std::vector<int> pickable_coins(const A11yCssState& state, int portrait) {
+    std::vector<int> coins = resting_coins(state, portrait);
+    std::erase_if(coins, [&](int coin) { return !pickable(state, coin); });
+    return coins;
 }
 
 Point aim_point(const A11yCssState& state, Target target) {
@@ -447,13 +499,10 @@ Point aim_point(const A11yCssState& state, Target target) {
         const A11yCssKnob& knob = knob_of(state, target);
         return Point{knob.origin_x + level_middle(*target.level), knob.y};
     }
-    if (target.kind == TargetKind::portrait) {
-        int coin = pickable_coin(state, target.index);
-        if (coin >= 0) {
-            const A11yCssSlot& slot = state.slots[coin];
-            return Point{slot.coin.x - kPickupOffsetX,
-                std::min(slot.coin.y - kPickupOffsetY, kPickupAimTop)};
-        }
+    if (target.coin) {
+        const A11yCssSlot& slot = state.slots[*target.coin];
+        return Point{slot.coin.x - kPickupOffsetX,
+            std::min(slot.coin.y - kPickupOffsetY, kTopBarBottom - kPickupAimBelowTopBar)};
     }
     return step_anchor(state, target);
 }

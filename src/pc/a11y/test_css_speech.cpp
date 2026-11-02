@@ -574,8 +574,8 @@ void arrows_not_shown_say_nothing() {
 void a_step_onto_an_arrow_names_it() {
     A11yCssState state = classic_screen();
     Fixture f(state);
-    f.css.step(state, kFewerArrow);
-    f.css.step(state, kHigherArrow);
+    f.css.step(state, a11y::Target{}, kFewerArrow);
+    f.css.step(state, a11y::Target{}, kHigherArrow);
     assert((f.spoken() == Texts{"Stock: 3, fewer", "Level: Normal, higher"}));
 }
 
@@ -584,7 +584,7 @@ void a_step_down_to_the_arrows_with_ones_own_coin_clears_it() {
     pick_up(state, 0);
     carry_over(state, 0, kPichuPortrait);
     Fixture f(state);
-    f.css.step(state, kLowerArrow);
+    f.css.step(state, a11y::Target{}, kLowerArrow);
     assert((f.spoken() == Texts{"No character. Level: Normal, lower"}));
 }
 
@@ -597,7 +597,7 @@ void training_cpus_coin() {
     choose(state, kFoxPortrait);
     state.hand.coin = -1;
     Fixture f(state);
-    f.css.step(state, a11y::Target{a11y::TargetKind::portrait, 0});
+    f.css.step(state, a11y::Target{}, a11y::Target{a11y::TargetKind::portrait, 0});
     pick_up(state, 1);
     f.frame(state);
     carry_over(state, 1, 0);
@@ -636,10 +636,12 @@ void every_portrait_has_a_name() {
         carry_over(state, 0, i);
         f.frame(state);
     }
-    assert((f.spoken() == Texts{"Dr. Mario", "Mario", "Luigi", "Bowser", "Peach", "Yoshi", "DK",
-                              "C. Falcon", "Ganondorf", "Falco", "Fox", "Ness", "Ice Climbers",
-                              "Kirby", "Samus", "Zelda", "Link", "Young Link", "Pichu", "Pikachu",
-                              "Jigglypuff", "Mewtwo", "Mr. Game & Watch", "Marth", "Roy"}));
+    /* Player 2's coin rests on Yoshi. */
+    assert((f.spoken() == Texts{"Dr. Mario", "Mario", "Luigi", "Bowser", "Peach",
+                              "Yoshi, player 2's coin", "DK", "C. Falcon", "Ganondorf", "Falco",
+                              "Fox", "Ness", "Ice Climbers", "Kirby", "Samus", "Zelda", "Link",
+                              "Young Link", "Pichu", "Pikachu", "Jigglypuff", "Mewtwo",
+                              "Mr. Game & Watch", "Marth", "Roy"}));
     assert(s_lines.size() == A11Y_CSS_PORTRAITS); /* the speak lines alone */
 }
 
@@ -936,6 +938,11 @@ void name_tag_window_opening() {
     assert((f.spoken() == Texts{"Name tags. No speech yet."}));
 }
 
+/* A portrait with the coin of a slot resting on it, to pick up. */
+a11y::Target coin_on(int index, int slot) {
+    return a11y::Target{a11y::TargetKind::portrait, index, std::nullopt, slot};
+}
+
 a11y::Target portrait(int index) {
     return a11y::Target{a11y::TargetKind::portrait, index};
 }
@@ -945,8 +952,8 @@ void a_step_names_where_it_goes() {
     A11yCssState state = vs_screen();
     choose(state, kMarthPortrait);
     Fixture f(state);
-    f.css.step(state, portrait(kFoxPortrait));
-    f.css.step(state, a11y::Target{});
+    f.css.step(state, a11y::Target{}, portrait(kFoxPortrait));
+    f.css.step(state, a11y::Target{}, a11y::Target{});
     assert((f.spoken() == Texts{"Fox", "Nothing that way"}));
 }
 
@@ -1041,7 +1048,7 @@ void a_step_up_from_ones_closed_slot_says_the_coin_first() {
     state.slots[0].kind = A11Y_CSS_CLOSED;
     move(state, -32.1f, -2.2f);
     Fixture f(state);
-    f.css.step(state, portrait(kPichuPortrait));
+    f.css.step(state, a11y::Target{}, portrait(kPichuPortrait));
     f.glide_to(portrait(kPichuPortrait));
     move(state, -31.0f, 1.0f);
     state.slots[0].kind = A11Y_CSS_HUMAN;
@@ -1060,7 +1067,7 @@ void the_coin_jumping_in_as_the_glide_ends_stays_unsaid() {
      * no glide running; the step has said it. */
     A11yCssState state = vs_screen();
     Fixture f(state);
-    f.css.step(state, portrait(kPichuPortrait));
+    f.css.step(state, a11y::Target{}, portrait(kPichuPortrait));
     f.glide_to(portrait(kPichuPortrait));
     move(state, -28.0f, -1.0f);
     f.frame(state);
@@ -1097,7 +1104,7 @@ void camera_modes_fourth_player_steps_to_a_portrait_without_a_coin() {
     state.match_type = A11Y_CSS_VS_CAMERA;
     state.local_slot = 3;
     Fixture f(state);
-    f.css.step(state, portrait(kPichuPortrait));
+    f.css.step(state, a11y::Target{}, portrait(kPichuPortrait));
     assert((f.spoken() == Texts{"Pichu"}));
 }
 
@@ -1107,13 +1114,50 @@ void a_step_to_a_coin_says_whose_it_is() {
     choose(state, kFoxPortrait);
     state.slots[0].coin = coin_at_rest(kFoxPortrait);
     Fixture f(state);
-    f.css.step(state, portrait(kYoshiPortrait));
-    f.css.step(state, portrait(kFoxPortrait));
-    f.css.step(state, portrait(kNessPortrait));
-    /* Carrying a coin, a coin at rest is not for picking up. */
+    f.css.step(state, a11y::Target{}, coin_on(kYoshiPortrait, 1));
+    f.css.step(state, a11y::Target{}, coin_on(kFoxPortrait, 0));
+    f.css.step(state, a11y::Target{}, portrait(kNessPortrait));
+    /* Carrying a coin, the coin at rest is still said, though not for
+     * picking up. */
     pick_up(state, 0);
-    f.css.step(state, portrait(kYoshiPortrait));
-    assert((f.spoken() == Texts{"Yoshi, player 2's coin", "Fox, your coin", "Ness", "Yoshi"}));
+    f.css.step(state, a11y::Target{}, portrait(kYoshiPortrait));
+    assert((f.spoken() ==
+            Texts{"Yoshi, player 2's coin", "Fox, your coin", "Ness", "Yoshi, player 2's coin"}));
+}
+
+void a_step_among_coins_on_one_portrait() {
+    /* Player 1's own, player 2's (a CPU) and player 3's (another human's)
+     * coins rest on Yoshi. The first step says them all, the one the hand
+     * goes to first; from coin to coin, only the coin. */
+    A11yCssState state = vs_screen();
+    choose(state, kYoshiPortrait);
+    state.slots[0].coin = coin_at_rest(kYoshiPortrait);
+    state.slots[2] = cpu(2, kYoshiPortrait);
+    state.slots[2].kind = A11Y_CSS_HUMAN;
+    Fixture f(state);
+    f.css.step(state, portrait(kYoshiPortrait - 1), coin_on(kYoshiPortrait, 0));
+    f.css.step(state, coin_on(kYoshiPortrait, 0), coin_on(kYoshiPortrait, 1));
+    f.css.step(state, coin_on(kYoshiPortrait, 1), coin_on(kYoshiPortrait, 0));
+    /* At an edge, all again. */
+    f.css.step(state, coin_on(kYoshiPortrait, 0), coin_on(kYoshiPortrait, 0));
+    assert((f.spoken() == Texts{"Yoshi, your coin, also player 2's coin, player 3's coin",
+                              "player 2's coin", "your coin",
+                              "Yoshi, your coin, also player 2's coin, player 3's coin"}));
+}
+
+void a_carried_coin_over_a_portrait_says_the_coins_there() {
+    /* Issue 15: player 2's coin rests on Yoshi. */
+    A11yCssState state = vs_screen();
+    move(state, -31.0f, 1.0f);
+    Fixture f(state);
+    pick_up(state, 0);
+    f.frame(state);
+    carry_over(state, 0, kPichuPortrait);
+    f.frame(state);
+    f.frame(state);
+    carry_over(state, 0, kYoshiPortrait);
+    f.frame(state);
+    assert((f.spoken() == Texts{"Holding your coin. Pichu", "Yoshi, player 2's coin"}));
 }
 
 void a_step_to_the_top_bar_with_a_coin_says_it_waits() {
@@ -1122,9 +1166,9 @@ void a_step_to_the_top_bar_with_a_coin_says_it_waits() {
     pick_up(state, 0);
     carry_over(state, 0, 0); /* Dr. Mario */
     Fixture f(state);
-    f.css.step(state, a11y::Target{a11y::TargetKind::teams});
-    f.css.step(state, a11y::Target{a11y::TargetKind::back});
-    f.css.step(state, a11y::Target{a11y::TargetKind::rules});
+    f.css.step(state, a11y::Target{}, a11y::Target{a11y::TargetKind::teams});
+    f.css.step(state, a11y::Target{}, a11y::Target{a11y::TargetKind::back});
+    f.css.step(state, a11y::Target{}, a11y::Target{a11y::TargetKind::rules});
     assert((f.spoken() == Texts{"Teams: off, not available while holding a coin",
                               "Back, not available while holding a coin",
                               "Rules: 2-minute KO fest! Not available while holding a coin"}));
@@ -1140,7 +1184,7 @@ void a_step_down_with_ones_own_coin_clears_the_character_first() {
     carry_over(state, 0, kPichuPortrait);
     Fixture f(state);
     a11y::Target button{a11y::TargetKind::slot_button, 0};
-    f.css.step(state, button);
+    f.css.step(state, a11y::Target{}, button);
     f.glide_to(button);
     carry_over(state, 0, -1);
     f.frame(state);
@@ -1164,7 +1208,7 @@ void a_step_down_with_a_cpus_coin_puts_it_back_first() {
     carry_over(state, 1, kPichuPortrait);
     Fixture f(state);
     a11y::Target button{a11y::TargetKind::slot_button, 1};
-    f.css.step(state, button);
+    f.css.step(state, a11y::Target{}, button);
     f.glide_to(button);
     state.hand.coin = -1;
     state.slots[1] = cpu(1, kYoshiPortrait);
@@ -1182,7 +1226,7 @@ void a_step_down_to_another_slots_button_names_its_character() {
     pick_up(state, 1);
     carry_over(state, 1, kPichuPortrait);
     Fixture f(state);
-    f.css.step(state, a11y::Target{a11y::TargetKind::slot_button, 0});
+    f.css.step(state, a11y::Target{}, a11y::Target{a11y::TargetKind::slot_button, 0});
     assert((f.spoken() == Texts{"Back to Yoshi. Player 1: human, Fox"}));
 }
 
@@ -1194,7 +1238,7 @@ void a_step_down_with_a_coin_of_no_character_says_none() {
     pick_up(state, 1);
     carry_over(state, 1, kPichuPortrait);
     Fixture f(state);
-    f.css.step(state, a11y::Target{a11y::TargetKind::slot_button, 1});
+    f.css.step(state, a11y::Target{}, a11y::Target{a11y::TargetKind::slot_button, 1});
     assert((f.spoken() == Texts{"Player 2: CPU, no character"}));
 }
 
@@ -1207,10 +1251,10 @@ void a_drop_after_a_step_that_did_not_leave_the_portraits_is_said() {
     pick_up(state, 0);
     carry_over(state, 0, kPichuPortrait);
     Fixture f(state);
-    f.css.step(state, a11y::Target{a11y::TargetKind::slot_button, 0});
+    f.css.step(state, a11y::Target{}, a11y::Target{a11y::TargetKind::slot_button, 0});
     f.glide_to(a11y::Target{a11y::TargetKind::slot_button, 0});
     f.frame(state);
-    f.css.step(state, portrait(kPichuPortrait));
+    f.css.step(state, a11y::Target{}, portrait(kPichuPortrait));
     f.glide_to(portrait(kPichuPortrait));
     f.frame(state);
     f.glide_ended(false);
@@ -1241,9 +1285,9 @@ void slider_steps_say_the_value_at_the_press_only() {
     hold_cpu_level(state, 3);
     Fixture f(state);
     /* Two steps right; the value passes 4 on its way to 5. */
-    f.css.step(state, level(4));
+    f.css.step(state, a11y::Target{}, level(4));
     f.glide_to(level(4));
-    f.css.step(state, level(5));
+    f.css.step(state, a11y::Target{}, level(5));
     f.glide_to(level(5));
     hold_cpu_level(state, 4);
     f.frame(state);
@@ -1253,7 +1297,7 @@ void slider_steps_say_the_value_at_the_press_only() {
     f.frame(state);
     f.frame(state);
     /* Up keeps the value and says it again. */
-    f.css.step(state, level(5));
+    f.css.step(state, a11y::Target{}, level(5));
     assert((f.spoken() == Texts{"Level 4", "Level 5", "Level 5"}));
 }
 
@@ -1347,6 +1391,8 @@ int main() {
     the_stick_from_ones_closed_slot_says_only_the_coin();
     camera_modes_fourth_player_steps_to_a_portrait_without_a_coin();
     a_step_to_a_coin_says_whose_it_is();
+    a_step_among_coins_on_one_portrait();
+    a_carried_coin_over_a_portrait_says_the_coins_there();
     a_step_to_the_top_bar_with_a_coin_says_it_waits();
     a_step_down_with_ones_own_coin_clears_the_character_first();
     a_step_down_with_a_cpus_coin_puts_it_back_first();

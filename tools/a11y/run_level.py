@@ -58,7 +58,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 
 MENUS = ["rules_switches", "tree_walk", "css_rules", "css_setup", "rules_screens", "sss_steps",
          "sss_skipped", "sss_glide_pick", "leaf_screens", "sss_hover", "css_classic", "css_training",
-         "css_slots", "css_portraits", "css_steps", "results", "results_no_contest", "results_cpu4",
+         "css_coins", "css_slots", "css_portraits", "css_steps", "results", "results_no_contest", "results_cpu4",
          "results_teams", "training_menu", "launcher_home",
          "launcher_settings", "launcher_a11y", "launcher_voices", "port_menu", "port_menu_a11y",
          "port_menu_voices", "direct_hub", "memcard_no", "memcard_no_card", "memcard_corrupted",

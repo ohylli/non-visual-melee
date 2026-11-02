@@ -1,0 +1,74 @@
+# Two coins on one portrait in Training's character select, by D-pad and
+# buttons alone: the player's coin carried onto the CPU's character, where
+# the carrying hand hears the CPU's coin resting there, and chosen. Left
+# and Right then step through the two coins, each picked up in turn where
+# its step named it. The CPU's character is the game's random choice, so
+# which coin a step reaches first is read from the step's words.
+# Run with the default --scene title:
+#   python tools/a11y/drive.py tools/a11y/css_coins.drive
+# drive.py turns steering on (MELEE_A11Y_STEER=1). --no-card unlocks every
+# character.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$" 20 0.3
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# 1-P Mode, Training.
+press A
+wait '"1-P Mode\. Regular Match\. '
+sleep 0.3
+press Down
+wait '"Event Match\. '
+press Down
+wait '"Stadium\. '
+press Down
+wait '"Training\. '
+sleep 0.3
+press A
+wait '"Training character select\. Player 1, no character\. CPU, (?P<cpu>.+)\."$'
+sleep 1
+
+# Up into the portraits, where the player's coin jumps into the hand.
+press DUp
+wait ': "Holding your coin\. '
+wait 'glide to "[^"]+" ended after \d+ frames: arrived'
+sleep 0.3
+
+# Carried over the portraits until the step names the CPU's coin resting
+# there (issue 15), never Down out of the bottom row; A chooses the CPU's
+# character for the player too.
+search ': "(Holding your coin\. )?%cpu%, the CPU.s coin"$' DUp DUp DLeft DRight*8 DDown DLeft*8 DDown DRight*6
+wait 'glide to "%cpu%[^"]*" ended after \d+ frames: arrived'
+press A
+wait 'Ready to fight\. Press Start\.'
+# The game pushes coins resting together apart.
+sleep 1.5
+
+# Off the portrait, to a neighbour, and back onto it: the step names both
+# coins, the one it reaches first.
+search ': "(?!%cpu%)(?!your coin")(?!the CPU.s coin")[^"]+"$' DLeft*2 DRight*4
+wait 'glide to "[^"]+" ended after \d+ frames: arrived'
+search ': "%cpu%, (?P<first>your coin|the CPU.s coin), also (?P<second>your coin|the CPU.s coin)"$' DLeft DRight DRight
+wait 'glide to "%cpu%, [^"]+" ended after \d+ frames: arrived'
+
+# A picks up the coin the step named, and puts it back.
+press A
+wait ': "Holding %first%\. %cpu%, %second%"$'
+sleep 0.5
+press A
+wait 'Ready to fight\. Press Start\.'
+sleep 1.5
+
+# Left or Right to the other coin says that coin alone; A picks it up.
+search ': "%second%"$' DLeft DRight DRight
+wait 'glide to "%cpu%, %second%, also %first%" ended after \d+ frames: arrived'
+press A
+wait ': "Holding %second%\. %cpu%, %first%"$'
+sleep 0.5
+press A
+wait 'Ready to fight\. Press Start\.'
+sleep 0.5
+quit
