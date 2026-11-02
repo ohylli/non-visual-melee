@@ -1,6 +1,6 @@
 # 11 The CPU level slider is fiddly to move one level
 
-Status: needs-triage
+Status: resolved (2026-11-02)
 Type: task
 Blocked by:
 
@@ -9,3 +9,5 @@ Found in the play test of issue 08. Moving a held CPU level slider one level tak
 Details to settle when this is picked up.
 
 ## Comments
+
+- **Resolved by the base port.** A base port change some time ago adjusted stick sensitivity, and since then moving a held CPU level slider one level by D-pad is no longer fiddly, by the maintainer's ear. No fork change.
