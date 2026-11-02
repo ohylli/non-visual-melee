@@ -99,8 +99,9 @@ inline constexpr std::string_view kNoSpeechYet = "No speech yet.";
 inline constexpr std::string_view kNothingThatWay = "Nothing that way";
 inline constexpr std::string_view kCouldNotReach = "Could not reach";
 /* A step onto the top bar with a coin in the hand: its buttons do not react
- * to a hand that carries one ("Back, not while holding a coin"). */
-inline constexpr std::string_view kNotWhileHoldingACoin = "not while holding a coin";
+ * to a hand that carries one ("Back, not available while holding a coin"). */
+inline constexpr std::string_view kNotAvailableWhileHoldingACoin =
+    "not available while holding a coin";
 /* A single-player mode started from another controller: steering reaches
  * only controller 1's pad. */
 inline constexpr std::string_view kSteeringNeedsPort1 = "Steering needs controller 1.";

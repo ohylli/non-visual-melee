@@ -1125,9 +1125,9 @@ void a_step_to_the_top_bar_with_a_coin_says_it_waits() {
     f.css.step(state, a11y::Target{a11y::TargetKind::teams});
     f.css.step(state, a11y::Target{a11y::TargetKind::back});
     f.css.step(state, a11y::Target{a11y::TargetKind::rules});
-    assert((f.spoken() == Texts{"Teams: off, not while holding a coin",
-                              "Back, not while holding a coin",
-                              "Rules: 2-minute KO fest! Not while holding a coin"}));
+    assert((f.spoken() == Texts{"Teams: off, not available while holding a coin",
+                              "Back, not available while holding a coin",
+                              "Rules: 2-minute KO fest! Not available while holding a coin"}));
 }
 
 void a_step_down_with_ones_own_coin_clears_the_character_first() {

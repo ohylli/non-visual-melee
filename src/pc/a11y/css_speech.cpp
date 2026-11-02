@@ -20,9 +20,9 @@ std::string capitalised(std::string_view words) {
     return out;
 }
 
-/* Appends a clause to a target's words: "Teams: off, not while holding a
- * coin", or after words that end a sentence, as its own: "Rules: 2-minute KO
- * fest! Not while holding a coin". */
+/* Appends a clause to a target's words: "Teams: off, not available while
+ * holding a coin", or after words that end a sentence, as its own: "Rules:
+ * 2-minute KO fest! Not available while holding a coin". */
 void add_clause(std::string& words, std::string_view clause) {
     words += ends_sentence(words) ? " " + capitalised(clause) : ", " + std::string(clause);
 }
@@ -246,7 +246,7 @@ void CssSpeech::step(const A11yCssState& state, Target to) {
             words = slot_kind(state, carrying);
         }
     } else if (carrying >= 0 && area(to) == Area::top_bar) {
-        add_clause(words, kNotWhileHoldingACoin);
+        add_clause(words, kNotAvailableWhileHoldingACoin);
     } else if (to.kind == TargetKind::portrait && coin_jumps_in(state)) {
         /* The coin jumps into the hand as it reaches the portraits, before
          * it gets there; said now, ahead of the portrait, and not again as
