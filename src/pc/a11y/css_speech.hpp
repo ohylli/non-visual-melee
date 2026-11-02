@@ -57,11 +57,11 @@ public:
      * interrupting; to is none when nothing lies that way. A portrait says
      * the coins resting on it, the one the hand would pick up first; a step
      * from coin to coin on one portrait, only the coin. A top bar button
-     * says that it waits while the hand holds a coin. A step
-     * down into the player slots with a coin in the hand first says what the
-     * coin going back does, which the drop then leaves unsaid; a free hand's
-     * step into the portraits that will catch the player's own coin first
-     * says "Holding your coin", which the pickup then leaves unsaid. */
+     * says that it waits while the hand holds a coin. A step down into the
+     * player slots with a coin in the hand first says what the coin going
+     * back does, which the drop then leaves unsaid; a free hand's step into
+     * the portraits that will catch the player's own coin first says
+     * "Holding your coin", which the pickup then leaves unsaid. */
     void step(const A11yCssState& state, Target from, Target to);
 
     /* A target with its value: "Player 2: CPU", "Teams: off", "Fox, your

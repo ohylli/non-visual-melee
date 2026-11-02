@@ -136,9 +136,9 @@ std::vector<int> pickable_coins(const A11yCssState& state, int portrait);
 /* Where the hand goes to be on a target. For a portrait, where the coin sits
  * at the portrait's centre; with a coin, where A picks up that coin and no
  * other: the game takes the nearest, and keeps resting coins apart. For a
- * button, its middle, the
- * height A leaves the hand at; for a knob, the point it is grabbed from; for
- * a value of the held slider, the middle of that value's span. */
+ * button, its middle, the height A leaves the hand at; for a knob, the point
+ * it is grabbed from; for a value of the held slider, the middle of that
+ * value's span. */
 Point aim_point(const A11yCssState& state, Target target);
 
 /* A on the arrow would change nothing: its value is at that end of the

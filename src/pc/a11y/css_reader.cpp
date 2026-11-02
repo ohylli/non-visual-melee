@@ -76,6 +76,13 @@ void CssReader::follow_destination(const A11yCssState& state) {
         m_steerer.stop(holding ? "a slider was grabbed" : "the slider was let go", false);
         return;
     }
+    if (destination.coin && state.hand.coin >= 0) {
+        /* A picked the coin up before the glide arrived, or while it watched
+         * the hand settle: the game moved the hand onto the coin, and steering
+         * it back to the aim would carry the coin along. */
+        m_steerer.stop("the coin was picked up", false);
+        return;
+    }
     /* A knob moves with its value and a resting coin drifts. A target gone
      * from the rows (a slot closed, say) is aimed at where it was. */
     std::vector<std::vector<Target>> rows = target_rows(state);

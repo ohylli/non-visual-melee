@@ -195,7 +195,7 @@ A native menu where a cursor moves freely over a layout and what it points at is
 _Avoid_: Free cursor menu, pointer screen
 
 **Target**:
-Anything on a free-cursor screen that reacts to the cursor: a portrait, a button, a slider.
+Anything on a free-cursor screen that reacts to the cursor: a portrait, a coin a free hand may pick up there, a button, a slider.
 _Avoid_: Hotspot, item, element
 
 **Steering**:

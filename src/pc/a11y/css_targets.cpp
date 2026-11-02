@@ -224,9 +224,9 @@ bool pickable(const A11yCssState& state, int slot) {
 }
 
 /* The coin A on a free hand at (x, y) picks up, as the game chooses it: of
- * the coins pickable_coins() names, the nearest to the hand plus the pickup
- * offset within reach, the first of two as near; -1 for none, and outside
- * the portrait band. */
+ * the resting coins the hand may pick up, on any portrait, the nearest to
+ * the hand plus the pickup offset within reach, the first of two as near;
+ * -1 for none, and outside the portrait band. */
 int coin_picked_at(const A11yCssState& state, float x, float y) {
     if (y < kPortraitBandBottom || y > kTopBarBottom) {
         return -1;
