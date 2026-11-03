@@ -24,7 +24,7 @@ constexpr float kOpponentBoost = 3.0f;
 /* A held tone needs no lift. */
 constexpr float kGapBoost = 1.0f;
 /* The ledge warning's chord, as tuned by ear. */
-constexpr float kLedgeBoost = 2.0f;
+constexpr float kLedgeBoost = 1.6f;
 
 /* The tick of your position cue, the Star Fox 64 fork's aim click: a
  * 1500 Hz sine decaying fast over 20 ms, its last 3 ms faded to silence,
