@@ -733,6 +733,37 @@ void ones_own_slot_opening_as_the_hand_reaches_the_portraits_says_only_the_coin(
     assert((f.spoken() == Texts{"Holding your coin"}));
 }
 
+/* Another hand presses player 1's button, or player 1's controller comes
+ * out: said like one's own press, offline too, interrupting. */
+void ones_own_slot_changed_by_another_hand(bool online) {
+    A11yCssState state = vs_screen();
+    state.online = online;
+    choose(state, kFoxPortrait);
+    move(state, -8.0f, -10.0f);
+    Fixture f(state);
+    state.slots[0].kind = A11Y_CSS_CPU;
+    f.frame(state);
+    state.slots[0].kind = A11Y_CSS_CLOSED;
+    f.frame(state);
+    assert((f.spoken() == Texts{"Player 1: CPU, Fox", "Player 1: closed"}));
+}
+
+void ones_own_slot_changed_by_another_hand_is_said() {
+    ones_own_slot_changed_by_another_hand(false);
+    ones_own_slot_changed_by_another_hand(true);
+}
+
+void ones_own_press_on_ones_own_button_is_said_once() {
+    A11yCssState state = vs_screen();
+    state.online = true;
+    choose(state, kFoxPortrait);
+    move(state, -32.0f, -2.0f);
+    Fixture f(state);
+    state.slots[0].kind = A11Y_CSS_CPU;
+    f.frame(state);
+    assert((f.said() == std::vector<Output>{{"Player 1: CPU, Fox", true}}));
+}
+
 void slider_grabbed_moved_and_released() {
     A11yCssState state = vs_screen();
     move(state, -15.5f, -15.12f);
@@ -1368,6 +1399,8 @@ int main() {
     a_slot_button_names_the_character_chosen();
     slot_kinds_in_turn();
     ones_own_slot_opening_as_the_hand_reaches_the_portraits_says_only_the_coin();
+    ones_own_slot_changed_by_another_hand_is_said();
+    ones_own_press_on_ones_own_button_is_said_once();
     slider_grabbed_moved_and_released();
     handicap_slider_says_its_value();
     team_match_teams_button_and_team_button();

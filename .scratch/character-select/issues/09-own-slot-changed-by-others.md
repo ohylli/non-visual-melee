@@ -1,6 +1,6 @@
 # 09 Say when someone else changes your player slot
 
-Status: needs-triage
+Status: resolved (2026-11-03)
 Type: task
 Blocked by:
 
@@ -37,3 +37,7 @@ Open for the maintainer:
 ## Comments
 
 2026-10-31: issue 10 added half of "A likely fix": `slot_announcements` now skips any slot whose coin or slider is in a hand before the `!own` check, with unit tests for the opening frame. `!own` now only silences other players' changes to the local slot; dropping it is what remains, with the questions above.
+
+2026-11-03: `!own` is gone. A change to the local player's own slot that their hand did not make is said in their own sentences, interrupting, offline too, worded as any slot ("Player 1: CPU, Fox"): another hand's press, online or from a second local controller, and a controller coming out. Unit tests cover it offline and online, and that one's own press is said once. An online drive run (player 2's hand pressing player 1's button) heard "Player 1: CPU, Jigglypuff" on player 1's side, and found that a second press on a CPU slot whose human's controller is still in turns it back to human rather than closing it ("Player 1: human, Jigglypuff"), so another player cannot close your slot, and you can take it back with your own press. What remains is the play test by ear, online with two players or offline with two controllers.
+
+2026-11-03: play-tested by ear by the maintainer with two controllers offline: works.
