@@ -745,7 +745,8 @@ void ones_own_slot_changed_by_another_hand(bool online) {
     f.frame(state);
     state.slots[0].kind = A11Y_CSS_CLOSED;
     f.frame(state);
-    assert((f.spoken() == Texts{"Player 1: CPU, Fox", "Player 1: closed"}));
+    assert((
+        f.said() == std::vector<Output>{{"Player 1: CPU, Fox", true}, {"Player 1: closed", true}}));
 }
 
 void ones_own_slot_changed_by_another_hand_is_said() {

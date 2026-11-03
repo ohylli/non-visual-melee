@@ -425,7 +425,8 @@ void CssSpeech::slot_announcements(const A11yCssState& last, const A11yCssState&
     Target is, std::string& mine, std::string& others) {
     /* A change is the local hand's when the hand is on the button that makes
      * it, or holds the slot's coin or slider; any other is another
-     * player's, spoken only online, except to the local player's own slot. */
+     * player's, spoken only online; another hand's change to the local
+     * player's own slot kind is spoken as the local hand's, offline too. */
     auto on = [&](TargetKind kind, int slot) {
         return was == Target{kind, slot} || is == Target{kind, slot};
     };
@@ -448,9 +449,11 @@ void CssSpeech::slot_announcements(const A11yCssState& last, const A11yCssState&
                 continue;
             }
             /* Another hand's press on the local player's button, or their
-             * controller coming out, is said as their own press, offline
-             * too: losing one's slot matters more than the rest. */
-            add_sentence(on(TargetKind::slot_button, i) || own ? mine : theirs, slot_words(now, i));
+             * controller coming out, is said as the local player's own
+             * press, offline too: losing one's slot matters more than the
+             * rest. */
+            add_sentence(
+                (on(TargetKind::slot_button, i) || own) ? mine : theirs, slot_words(now, i));
             continue;
         }
         if (now.teams && last.teams && after.team != before.team) {
