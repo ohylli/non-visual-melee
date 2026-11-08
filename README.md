@@ -1,5 +1,12 @@
 # melee-pc
 
+> **This is Non-Visual Melee**, a fork of
+> [melee-pc](https://github.com/999sian/melee-pc) that aims to make Super Smash
+> Bros. Melee playable by blind players, through screen reader speech in the
+> menus and audio cues in matches. Its features, setup and status are in the
+> **[accessibility readme](ACCESSIBILITY.md)**. The rest of this file is
+> melee-pc's own readme, kept as it is.
+
 **Beta, for testing only.** "melee-pc" is a working name. Online play with
 rollback netcode is in development. This branch includes LAN, internet friend
 codes, Unranked matchmaking and ranked best-of-three sets. See

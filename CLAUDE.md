@@ -83,6 +83,8 @@ Fork code follows `CODING_STYLE.md` at the repo root. Before committing, run `py
 
 ## Docs
 
+`ACCESSIBILITY.md` at the repo root is the fork's user-facing documentation, for blind players: what is and is not accessible, requirements, getting started, controls and how the harder screens are laid out. `README.md` stays the base port's own, with a short note at its top pointing to it. Keep `ACCESSIBILITY.md` in step when a feature a player meets lands or changes.
+
 The code is the source of truth for what the fork does. A doc records what stays true as features land and what the code does not reveal without real digging: invariants, reasons, constraints from outside systems (Prism, rollback, the decomp), gotchas.
 
 - Primers that explain a subsystem in plain terms ("how native menus work", "the audio path") go in `docs/a11y/`, written as the knowledge is gained, each opening with a short mental model. They name files and functions and leave the details to the code: no line numbers, current call sites, log line formats or test lists. A short illustrative snippet is fine.
