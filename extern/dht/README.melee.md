@@ -6,7 +6,11 @@ Downloaded 2026-09-20 from:
 - https://github.com/clibs/sha1 (`master`, `sha1.c`, `sha1.h`), Steve Reid public-domain SHA-1, notice retained.
 
 Local patches: outgoing `announce_peer` includes canonical `implied_port=1`;
-SHA1 endian preprocessor checks require defined macros before comparing them.
+SHA1 endian preprocessor checks require defined macros before comparing them;
+`search_step` sends `announce_peer` with the node's own address length
+(`n->sslen`) instead of `sizeof(struct sockaddr_storage)`, which macOS refuses
+for an IPv4 socket with EINVAL, so a Mac's announces never left it and no
+friend could find it.
 
 `src/pc/net_dht.c` owns the IPv4 nonblocking UDP socket until `take_socket`.
 It passes public DHT packets to jech/dht and non-DHT packets to the pairing
