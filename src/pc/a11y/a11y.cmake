@@ -44,6 +44,13 @@ elseif (APPLE AND NOT (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS"))
     set(A11Y_PRISM_RUNTIME_LIB dynamic/release/lib/libprism.dylib)
     set_property(TARGET melee APPEND PROPERTY BUILD_RPATH "@executable_path")
     set(A11Y_VOICE_BACKEND PRISM_BACKEND_AV_SPEECH)
+    # AVSpeech's calls wait for the main thread, so its row in
+    # screen_reader_bridge.cpp has a turn: main_queue_mac.cpp runs the main
+    # thread's run loop through CoreFoundation, built here alone and named to
+    # the bridge by A11Y_MAIN_QUEUE_TURN.
+    target_sources(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR}/main_queue_mac.cpp)
+    target_compile_definitions(melee PRIVATE A11Y_MAIN_QUEUE_TURN)
+    target_link_libraries(melee PRIVATE "-framework CoreFoundation")
 endif ()
 
 target_sources(melee PRIVATE

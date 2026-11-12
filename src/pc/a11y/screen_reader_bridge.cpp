@@ -4,7 +4,9 @@
 /* Gated on the cmake-defined macros rather than the platform: Prism's C API
  * is the same everywhere it ships, so a new platform needs its a11y.cmake
  * branch and, for its voices, its backend's row in kVoiceBackends. Keep this
- * file free of platform headers and platform calls. */
+ * file free of platform headers and platform calls: a backend's turn that
+ * needs one lives in a file its platform's branch builds (main_queue_mac.cpp
+ * for AVSpeech). */
 #if defined(A11Y_HAVE_PRISM)
 #include <prism.h>
 #endif
@@ -39,6 +41,16 @@ constexpr VoiceBackend kNoVoiceBackend{};
 #if defined(A11Y_HAVE_PRISM)
 
 namespace a11y {
+
+#if defined(A11Y_MAIN_QUEUE_TURN)
+/* main_queue_mac.cpp, built by a11y.cmake's Mac branch alone: runs what
+ * AVSpeech's calls left on the main thread's queue, without waiting. */
+void run_main_queue();
+constexpr void (*kMainQueueTurn)() = run_main_queue;
+#else
+constexpr void (*kMainQueueTurn)() = nullptr;
+#endif
+
 namespace {
 
 /* The voice backends a platform's branch in a11y.cmake may name, by Prism
@@ -57,10 +69,12 @@ constexpr PrismVoiceBackend kVoiceBackends[] = {
     /* Windows. The defaults are grimdark's (.scratch/voices/spec.md,
      * "Defaults"): US English voices of every Windows 10 and 11 install. */
     {PRISM_BACKEND_ONE_CORE, {"OneCore", {{{"Zira", "en-US"}, {"Mark", "en-US"}}}}, nullptr},
-    /* macOS. Both voices use Apple's default voice (an empty name) until
-     * issue 07 (.scratch/macos-port/) picks two by ear and gives this row the
-     * turn that runs the main thread's queue. */
-    {PRISM_BACKEND_AV_SPEECH, {"AVSpeech", {{{"", ""}, {"", ""}}}}, nullptr},
+    /* macOS. Both voices use the backend's default voice (an empty name)
+     * until the play test (.scratch/macos-port/, issue 08) picks two by ear.
+     * Prism's AVSpeech takes for its default the first voice Apple lists in
+     * the system's language, not the Spoken Content setting's. Its calls wait
+     * for the main thread, hence the turn. */
+    {PRISM_BACKEND_AV_SPEECH, {"AVSpeech", {{{"", ""}, {"", ""}}}}, kMainQueueTurn},
 };
 
 constexpr const PrismVoiceBackend* find_backend(PrismBackendId id) {
@@ -139,12 +153,20 @@ std::string error_text(PrismError error) {
 }
 
 /* The voices' instances of the build's voice backend. Prism is started
- * here a second time, on the voices' worker thread: for OneCore, prism_init
- * initialises COM on the thread that calls it as a single-threaded
- * apartment, and OneCore's backend then moves its blocking WinRT calls to
- * the thread pool, so the worker needs nothing of its own. A context of its
- * own also keeps the screen reader's, on the game thread, out of the
- * worker's way. Measured with v0.18.2 in docs/a11y/speech.md, "Voices". */
+ * here a second time, on the voices' worker thread, and a context of its own
+ * keeps the screen reader's, on the game thread, out of the worker's way.
+ * - OneCore (Windows): prism_init initialises COM on the thread that calls
+ *   it as a single-threaded apartment, and OneCore's backend then moves its
+ *   blocking WinRT calls to the thread pool, so the worker needs nothing of
+ *   its own. Measured with v0.18.2 in docs/a11y/speech.md, "Voices".
+ * - AVSpeech (macOS): no apartment, but opening an instance, listing the
+ *   voices, rendering and freeing each send their work to the main thread
+ *   with dispatch_sync and wait for it, and a render then waits for the
+ *   synthesizer's buffers, which may come back through it too (setting a
+ *   voice or a rate does not wait). SDL's event pump runs
+ *   the main thread's queue once a frame, so a line waits up to a frame per
+ *   hop, and through any stall of the main thread; at quit the game thread's
+ *   turns run it (turn below). Read in v0.18.2's source, not yet run. */
 class PrismVoiceBridge final : public VoiceBridge {
 public:
     explicit PrismVoiceBridge(const PrismVoiceBackend& backend) : m_backend(backend) {}
@@ -172,10 +194,15 @@ public:
     }
 
     /* The context is left to the process's end, never shut down: the voices
-     * close only as the game exits, from its atexit handler, and there
-     * prism_shutdown on the worker never returned once a OneCore instance
-     * had rendered (v0.18.2; freeing the instances, or CoUninitialize alone,
-     * returns). OneCore's apartment on the worker ends with the thread. */
+     * close only as the game exits, from its atexit handler.
+     * - OneCore: there prism_shutdown on the worker never returned once an
+     *   instance had rendered (v0.18.2; freeing the instances, or
+     *   CoUninitialize alone, returns). Its apartment on the worker ends with
+     *   the thread.
+     * - AVSpeech: freeing an instance stops its synthesizers on the main
+     *   thread and waits for it, so this close waits for the game thread's
+     *   turns. prism_shutdown is left out here too: untried on a Mac, and
+     *   nothing at exit gains from it. */
     void close() override {
         for (PrismBackend* backend : m_instances) {
             prism_backend_free(backend);
@@ -243,15 +270,17 @@ public:
         }
         out = RenderedLine{};
         const std::string text(utf8);
-        /* OneCore calls back once, on this thread, before returning; Prism's
-         * documentation allows chunks, so they are appended. */
+        /* OneCore calls back once, on this thread, before returning, and
+         * AVSpeech too, once its buffers are all in (v0.18.2's source);
+         * Prism's documentation allows chunks, so they are appended. */
         const PrismError error =
             prism_backend_speak_to_memory(backend, text.c_str(), collect, &out);
         return error == PRISM_OK ? std::string() : error_text(error);
     }
 
     /* OneCore's calls run on the worker and the thread pool, never waiting
-     * for the main thread: its row has no turn. */
+     * for the main thread: its row has no turn. AVSpeech's wait for it: its
+     * row's turn runs the main thread's queue (main_queue_mac.cpp). */
     void turn() override {
         if (m_backend.turn != nullptr) {
             m_backend.turn();
