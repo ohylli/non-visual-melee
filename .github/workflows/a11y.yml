@@ -97,16 +97,26 @@ jobs:
 
   macos:
     name: macOS (${{ matrix.arch }})
+    # The oldest macOS the zip runs on is the highest minimum among melee
+    # and the dylibs bundled with it. The base port sets no deployment
+    # target, so its build gets the runner's macOS; here the fork's own
+    # binaries, SDL and the decomp aim at Prism's floor, macOS 11
+    # (MACOSX_DEPLOYMENT_TARGET, which CMake, clang and GCC all read).
+    # Homebrew's dylibs (libpng, freetype, brotli, libusb) are built for
+    # the macOS their runner has, so arm64 builds on macos-15 rather than
+    # the base port's macos-26: macOS 15 is then the zip's real minimum.
+    # "Check the zip" prints each binary's minimum.
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: arm64
-            runner: macos-26
+            runner: macos-15
           - arch: x86_64
             runner: macos-15-intel
     runs-on: ${{ matrix.runner }}
     env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
       # package_macos.sh's own default build directory, named here for the
       # steps after it.
       BUILD_DIR: ${{ github.workspace }}/build/macos
