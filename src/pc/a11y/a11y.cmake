@@ -45,7 +45,6 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/settings_page.cpp
         ${CMAKE_CURRENT_LIST_DIR}/scene_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/game_text.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/game_access.c
         ${CMAKE_CURRENT_LIST_DIR}/menu_speech.cpp
         ${CMAKE_CURRENT_LIST_DIR}/menu_names.cpp
         ${CMAKE_CURRENT_LIST_DIR}/item_names.cpp
@@ -85,12 +84,35 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/ledge_warning.cpp
         ${CMAKE_CURRENT_LIST_DIR}/match_cues.cpp)
 target_include_directories(melee PRIVATE ${CMAKE_CURRENT_LIST_DIR})
-# game_access.c reads the decomp's structs, so it lays out their bitfields as
-# the game's own files do (melee_game's options in CMakeLists.txt); MinGW's
+
+# game_access.c, the fork's C file that reads the decomp's structs, in a
+# library of its own so it is compiled as the game's files are. On a Mac the
+# melee target is Apple's clang, which lacks scalar_storage_order: the disc
+# structs' big-endian fields, the stage's line count among them, would read
+# byte-swapped (game_access.c stops a clang compile with an #error). So on a
+# Mac it goes through Homebrew GCC by tools/gcc_launcher.py, as melee_game
+# does. That launcher sends a file to GCC when an argument holds "melee_game",
+# here the object directory a11y_melee_game.dir: hence the name. Every
+# platform builds the same target, so the Windows build exercises it.
+# Rollback leaves it alone as before: cmake/*Snapshot.cmake wrap melee_game's
+# compiles alone, and the ELF linker script matches libmelee_game.a alone.
+add_library(a11y_melee_game STATIC ${CMAKE_CURRENT_LIST_DIR}/game_access.c)
+# melee_game's include directories and definitions, which melee gets the same
+# way, and the link order: the game's symbols resolve after this library.
+target_link_libraries(a11y_melee_game PRIVATE melee_game)
+target_include_directories(a11y_melee_game PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+# melee's floating-point flags. The decomp's bitfields laid out as the game's
+# own files lay them out (melee_game's options in CMakeLists.txt); MinGW's
 # default layout moves every field after one. The fighter's headers also bring
 # the big-endian disc structs, whose warning the game's files turn off too.
-set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/game_access.c PROPERTIES COMPILE_OPTIONS
-        "$<$<BOOL:${WIN32}>:-mno-ms-bitfields>;$<$<C_COMPILER_ID:GNU>:-Wno-scalar-storage-order>")
+target_compile_options(a11y_melee_game PRIVATE ${MELEE_FP_FLAGS}
+        $<$<BOOL:${WIN32}>:-mno-ms-bitfields> $<$<C_COMPILER_ID:GNU>:-Wno-scalar-storage-order>)
+# iOS is APPLE too and has a launcher of its own; the fork does not build it.
+if (APPLE AND NOT (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS"))
+    set_property(TARGET a11y_melee_game PROPERTY C_COMPILER_LAUNCHER
+            "${PROJECT_SOURCE_DIR}/tools/gcc_launcher.py")
+endif ()
+target_link_libraries(melee PRIVATE a11y_melee_game)
 
 if (A11Y_PRISM_ASSET)
     # Prebuilt, not built from source: see docs/adr/0001-prebuilt-prism-dll.md.

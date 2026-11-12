@@ -71,6 +71,15 @@ _Static_assert(A11Y_CSS_VS_CAMERA == VS_CAMERA, "VS_CAMERA no longer has the for
  * from the wrong place; a11y.cmake gives this file the game's layout. */
 _Static_assert(sizeof(StartMeleeRules) == 136, "StartMeleeRules is laid out unlike the game's");
 
+/* The disc structs read here, the stage's line count among them, are
+ * big-endian, read right only through GCC's scalar_storage_order. Under clang
+ * DISC_STRUCT is empty and they would read byte-swapped, so the floor tests
+ * would walk the wrong lines. a11y.cmake sends this file to GCC on a Mac, as
+ * the game's own files go; another platform built with clang needs the same. */
+#if defined(__clang__) && !defined(MELEE_DISC_LOWERING)
+#error "game_access.c reads the disc structs and needs GCC; see a11y.cmake"
+#endif
+
 /* The main menu tree's table of screens (mnmain.c), declared in no header.
  * It has one row per MenuKind up to MENU_KIND_ONLINE, the base port's last. */
 extern MenuKindData mn_803EB6B0[];
