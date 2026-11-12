@@ -55,8 +55,16 @@ The loudness of all cues together, set under the port's master volume, which the
 _Avoid_: Master volume (that is the port's), cue master
 
 **Position cue**:
-A pulsed cue whose pan and pitch say where a fighter is on the stage: pan across it, pitch how high. There are two: **your position cue**, whose pulse also quickens as the opponent comes near, and **the opponent's position cue**, a lower pulse at a steady pace.
-_Avoid_: Locator, radar, beacon, player cue
+A pulsed cue whose pan and pitch say where a fighter or an item is: on the stage, pan across it and pitch how high, or relative to you. There are three: **your position cue**, always on the stage, whose pulse also quickens as the opponent comes near; **the opponent's position cue**, a lower pulse at a steady pace; and **the item's position cue**, which follows the nearest loose item and pulses faster while it is within reach.
+_Avoid_: Locator, radar, beacon, player cue, item cue (alone)
+
+**Relative to you**:
+A way of placing a cue in which the pan says which side of you something is on and how far, and the pitch how far above or below you, rather than where it is on the stage. The opponent's position cue and the item cues each have their own switch for it.
+_Avoid_: Player-relative, local frame, egocentric
+
+**Appearance cue**:
+A cue played once as an item appears, placed where it appears, in the air if that is where it comes in.
+_Avoid_: Spawn cue, sparkle, item alert
 
 **Gap warning**:
 A held, low cue that sounds while you are in the air with no floor anywhere below you, platforms included, so that falling straight down would take you past the bottom blast zone. It says nothing of whether you can still get back; the game's own sound near the bottom blast zone is a separate warning.
@@ -81,8 +89,12 @@ A Windows voice the fork speaks with itself, beside the screen reader, so the pl
 _Avoid_: TTS voice, channel, speaker, narrator, player voice
 
 **Match announcement**:
-An announcement about a match as it is played: a player's damage, their stocks, the time left.
+An announcement about a match as it is played: a player's damage, their stocks, the time left, an item appearing, an item taken.
 _Avoid_: Callout, combat speech, match speech
+
+**Pickup announcement**:
+The match announcement of an item a player has taken, by picking it up, catching it or touching it, in your voice or the opponents' voice by who took it.
+_Avoid_: Item callout, grab announcement (a grab is a fighter seizing another)
 
 **Player label**:
 The words a match announcement names a player by when the voice alone does not tell whom it is about: the player's name tag where they have one, otherwise their port ("P2") or, for a computer player, "CPU" and their slot ("CPU 3"); a teammate's label starts with "teammate". The character's name is never used.
@@ -279,6 +291,24 @@ _Avoid_: Confirmed, done, finished
 **Reading cursor**:
 The fork's own place in a stats panel's page, which the D-pad moves row by row and from player to player while the game's panels keep their own pages and scroll.
 _Avoid_: Virtual cursor, review cursor, focus
+
+### Items
+
+**Item**:
+One of the things the item switch controls, met in a match: a weapon, a healing item, a container such as a Crate. Projectiles, a character's own pulls (turnips, bombs), Pokémon and stage hazards are not items in the fork's sense, though the game keeps them on the same list.
+_Avoid_: Pickup, power-up, object, entry (that belongs to a tree screen)
+
+**Appearing**:
+An item coming into a match, whatever brings it: the item switch dropping it in, a broken container letting it out, Training's item menu. A container is an item that appears, and its contents appear again when it breaks.
+_Avoid_: Spawn (the decomp's and the code's word, never the player's), drop
+
+**Loose item**:
+An item no one holds that is lying on the floor or falling after it appeared. One flying after a throw is not loose until it lands.
+_Avoid_: Free item, available item, grabbable item (that is the game's wider test)
+
+**Within reach**:
+An item is within reach when the button to take it would take it as soon as you can act, by the game's own test: it looks in front of you, so an item just behind you is out of reach until you turn; in the air only light items count, and while you hold something only healing items. Items taken by touch, such as the Starman, are never within reach: walking into them takes them.
+_Avoid_: In range, close enough, grabbable
 
 ### Prompts and notices
 
