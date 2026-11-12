@@ -1,0 +1,262 @@
+# The fork's CI release: every push to master builds the Windows x86_64
+# package and the macOS packages (arm64, and Intel, which nobody tests), and
+# publishes them together as the rolling prerelease ci-latest, so the newest
+# build is one plain download link away.
+#
+# Each build job keeps its zip as a run artifact; the publish job alone
+# writes the release, and only on a push to master. A run anywhere else
+# (macos-ci, or a dispatch on any branch) builds and keeps its zips as run
+# artifacts and leaves ci-latest alone.
+#
+# The Windows zip is the one that must ship: publish needs the Windows job to
+# pass, and takes whichever macOS zips were built. A failed macOS job leaves
+# its zip out of ci-latest for that commit, and the release notes say so; the
+# run itself still shows as failed.
+#
+# Fork-owned file, so base merges never conflict here. The base port's own
+# workflows (build.yml, pages.yml) stay in the tree but are disabled in the
+# fork's GitHub settings (gh workflow disable); a base merge that adds a
+# workflow file needs the same treatment. The build steps follow the base
+# port's Windows and macOS jobs in build.yml.
+name: A11y
+
+on:
+  push:
+    # macos-ci: the topic branch this file was developed on while master on
+    # GitHub still had a11y-windows.yml. GitHub dispatches only workflows the
+    # default branch has, so a push trigger was the way to run it there. Once
+    # master on GitHub has this file, remove the branch from this list:
+    # `gh workflow run a11y.yml --ref <branch>` then runs it on any branch.
+    branches: [master, macos-ci]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The newest push to a branch wins: an older build of the same branch still
+# running is cancelled. Each branch has its own group, so a topic branch's
+# run never cancels master's, or the other way round.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ZIP_NAME: NonVisualMelee-Windows-x86_64.zip
+
+jobs:
+  windows:
+    name: Windows (x86_64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same toolchain as the base port's Windows job in build.yml.
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build cmake zip cabextract curl mingw-w64
+          # aurora's C++20 code needs std::thread, which only the POSIX
+          # threading model provides.
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+
+      - name: Build and package
+        env:
+          TARGET_ARCH: x86_64
+        run: tools/package_windows.sh
+
+      # The connection checker (src/pc/a11y/netcheck.cpp), beside melee.exe,
+      # so a friend testing their network has it in the same download.
+      # package_windows.sh builds the melee target alone, so it is built here
+      # in the same build directory.
+      - name: Add the connection checker
+        run: |
+          ninja -C build-win melee-netcheck
+          cp build-win/melee-netcheck.exe dist/melee-windows-x86_64/
+          cd dist
+          zip -q Melee-Windows-x86_64.zip melee-windows-x86_64/melee-netcheck.exe
+
+      # package_windows.sh ships prism.dll; Prism's licences (its own and
+      # those of the libraries inside it) are added here, beside the game.
+      - name: Add Prism licences
+        working-directory: dist
+        run: |
+          prism_dir="$(ls -d ../build-win/prism-*/ | head -n 1)"
+          mkdir -p melee-windows-x86_64/LICENSES.prism
+          cp -r "${prism_dir}LICENSES/." "${prism_dir}NOTICE" melee-windows-x86_64/LICENSES.prism/
+          zip -qr Melee-Windows-x86_64.zip melee-windows-x86_64/LICENSES.prism
+          mv Melee-Windows-x86_64.zip "${ZIP_NAME}"
+          ls -lh "${ZIP_NAME}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NonVisualMelee-Windows-x86_64
+          path: dist/${{ env.ZIP_NAME }}
+          if-no-files-found: error
+
+  macos:
+    name: macOS (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-26
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    env:
+      # package_macos.sh's own default build directory, named here for the
+      # steps after it.
+      BUILD_DIR: ${{ github.workspace }}/build/macos
+      STAGE: melee-macos-${{ matrix.arch }}
+      MAC_ZIP: NonVisualMelee-macOS-${{ matrix.arch }}.zip
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same as the base port's macOS job in build.yml: Apple clang builds the
+      # C++ and links; the decomp's C, and the fork's game_access.c, go
+      # through Homebrew's gcc by tools/gcc_launcher.py, for
+      # scalar_storage_order.
+      - name: Install build dependencies
+        run: |
+          xcodebuild -version
+          brew install gcc cmake ninja zstd libpng freetype libusb
+
+      - name: Verify native rollback snapshot restore
+        run: python3 tools/test_snapshot_platforms.py SnapshotPlatforms.test_native_mac_restore
+
+      # Makes build/macos/Melee.app, with Prism's dylib bundled from beside
+      # melee into Contents/Frameworks, ad-hoc signed and verified
+      # (codesign --verify), and lists Contents/Frameworks.
+      - name: Build and package
+        run: tools/package_macos.sh
+
+      # game_access.c reads the game's big-endian disc structs, so it must be
+      # compiled by GCC, as the decomp is (src/pc/a11y/a11y.cmake,
+      # a11y_melee_game). It stops with #error under clang, so this build
+      # passing is the proof; these lines show the route in the log: the
+      # launcher in front of the compile, the gcc-NN it picks (the same
+      # search as tools/gcc_launcher.py, which GCC_BIN would override), and
+      # the compiler's ident in the object, if GCC wrote one.
+      - name: Show game_access.c compiled by GCC
+        run: |
+          ninja -C "${BUILD_DIR}" -t commands a11y_melee_game | grep 'game_access\.c'
+          echo "GCC_BIN=${GCC_BIN:-}"
+          for v in $(seq 20 -1 13); do
+            if command -v "gcc-${v}"; then
+              "gcc-${v}" --version | head -n 1
+              break
+            fi
+          done
+          obj="$(find "${BUILD_DIR}/CMakeFiles/a11y_melee_game.dir" -name 'game_access.c.o')"
+          echo "${obj}"
+          strings -a "${obj}" | grep -m 1 'GCC' || echo "(no compiler ident in the object)"
+
+      # Prism found at run time: the build directory's rpath for the copy
+      # beside melee, and the bundle's copy with its @rpath name. libtolk,
+      # Prism's unused Tolk shim, must not come along.
+      - name: Show Prism in the build and the bundle
+        working-directory: build/macos
+        run: |
+          otool -l melee | grep -A2 LC_RPATH
+          ls Melee.app/Contents/Frameworks
+          if ls Melee.app/Contents/Frameworks | grep -q tolk; then
+            echo "error: libtolk was bundled" >&2
+            exit 1
+          fi
+          otool -L Melee.app/Contents/MacOS/melee | grep prism
+          otool -D Melee.app/Contents/Frameworks/libprism.dylib
+          ls prism-*/LICENSES prism-*/NOTICE
+
+      # The zip holds one folder, as the Windows zip does: Melee.app, the
+      # connection checker beside it, and Prism's licences. package_macos.sh
+      # builds the melee target alone, so the checker is built here in the
+      # same build directory. It links only the system's libraries; it is
+      # stripped as melee is and ad-hoc signed, as the arm64 kernel needs.
+      - name: Add the connection checker and Prism licences
+        run: |
+          ninja -C "${BUILD_DIR}" melee-netcheck
+          mkdir -p "dist/${STAGE}/LICENSES.prism"
+          ditto "${BUILD_DIR}/Melee.app" "dist/${STAGE}/Melee.app"
+          cp "${BUILD_DIR}/melee-netcheck" "dist/${STAGE}/"
+          strip -S "dist/${STAGE}/melee-netcheck"
+          codesign --force --sign - --timestamp=none "dist/${STAGE}/melee-netcheck"
+          otool -L "dist/${STAGE}/melee-netcheck"
+          prism_dir="$(ls -d "${BUILD_DIR}"/prism-*/ | head -n 1)"
+          cp -r "${prism_dir}LICENSES/." "${prism_dir}NOTICE" "dist/${STAGE}/LICENSES.prism/"
+          cd dist
+          ditto -c -k --keepParent "${STAGE}" "${MAC_ZIP}"
+          ls -lh "${MAC_ZIP}"
+
+      # The zip as a player gets it: unpacked, signatures verified, and melee
+      # started far enough for the dynamic loader to find every bundled
+      # dylib, Prism's among them (--version prints and quits).
+      - name: Check the zip
+        timeout-minutes: 5
+        run: |
+          mkdir zip-check
+          ditto -x -k "dist/${MAC_ZIP}" zip-check
+          find zip-check -maxdepth 2 | sort
+          codesign --verify --deep --strict --verbose=2 "zip-check/${STAGE}/Melee.app"
+          codesign --verify --strict --verbose=2 "zip-check/${STAGE}/melee-netcheck"
+          file "zip-check/${STAGE}/Melee.app/Contents/MacOS/melee" "zip-check/${STAGE}/melee-netcheck"
+          "zip-check/${STAGE}/Melee.app/Contents/MacOS/melee" --version
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NonVisualMelee-macOS-${{ matrix.arch }}
+          path: dist/${{ env.MAC_ZIP }}
+          if-no-files-found: error
+
+      # The unit tests, the fork's suites and the base port's few that build
+      # off Linux, in the same build directory, after the zip is kept.
+      - name: Unit tests
+        run: |
+          ninja -C "${BUILD_DIR}" unit_tests
+          ctest --test-dir "${BUILD_DIR}" -L melee --output-on-failure
+
+  publish:
+    name: Publish ci-latest
+    needs: [windows, macos]
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.windows.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: NonVisualMelee-*
+          path: dist
+          merge-multiple: true
+
+      # Delete and recreate rather than edit, so the tag always names the
+      # commit that was built. The download links stay the same.
+      - name: Publish ci-latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -lh dist
+          {
+            echo "The newest build of master, rebuilt on every push. Not a tested release."
+            echo
+            echo "Commit ${GITHUB_SHA::7}, $(git log -1 --format=%cs):"
+            echo
+            git log -1 --format=%B
+            for zip in NonVisualMelee-macOS-arm64.zip NonVisualMelee-macOS-x86_64.zip; do
+              if [[ ! -f "dist/${zip}" ]]; then
+                echo
+                echo "No ${zip} for this commit: its build failed."
+              fi
+            done
+          } > notes.md
+          gh release delete ci-latest --yes --cleanup-tag || true
+          gh release create ci-latest \
+            --prerelease \
+            --target "${GITHUB_SHA}" \
+            --title "Latest CI build" \
+            --notes-file notes.md \
+            dist/NonVisualMelee-*.zip
