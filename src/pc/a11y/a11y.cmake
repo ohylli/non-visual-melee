@@ -261,6 +261,8 @@ if (TARGET unit_tests)
     # The voices' rows wired as the game wires them, over the accessibility
     # settings' file in a scratch folder, the voices' worker the real one
     # over a fake voice bridge; a fake screen reader and its own pc_log_line.
+    # Each scratch folder here is named <suite>_files, not after its test's
+    # executable: off Windows the executable has no .exe and takes that name.
     add_executable(voice_settings_test EXCLUDE_FROM_ALL
             ${CMAKE_CURRENT_LIST_DIR}/test_voice_settings.cpp
             ${CMAKE_CURRENT_LIST_DIR}/voice_settings.cpp
@@ -275,7 +277,7 @@ if (TARGET unit_tests)
     target_include_directories(voice_settings_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
     target_link_libraries(voice_settings_test PRIVATE a11y_miniaudio)
     target_compile_options(voice_settings_test PRIVATE -UNDEBUG)
-    add_test(NAME voice_settings COMMAND voice_settings_test ${CMAKE_BINARY_DIR}/voice_settings_test)
+    add_test(NAME voice_settings COMMAND voice_settings_test ${CMAKE_BINARY_DIR}/voice_settings_files)
     set_tests_properties(voice_settings PROPERTIES LABELS melee)
     add_dependencies(unit_tests voice_settings_test)
 
@@ -573,7 +575,7 @@ if (TARGET unit_tests)
             ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
     target_include_directories(accessibility_settings_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
     target_compile_options(accessibility_settings_test PRIVATE -UNDEBUG)
-    add_test(NAME accessibility_settings COMMAND accessibility_settings_test ${CMAKE_BINARY_DIR}/accessibility_settings_test)
+    add_test(NAME accessibility_settings COMMAND accessibility_settings_test ${CMAKE_BINARY_DIR}/accessibility_settings_files)
     set_tests_properties(accessibility_settings PROPERTIES LABELS melee)
     add_dependencies(unit_tests accessibility_settings_test)
 
@@ -593,7 +595,7 @@ if (TARGET unit_tests)
             ${CMAKE_CURRENT_LIST_DIR}/speech.cpp)
     target_include_directories(switches_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
     target_compile_options(switches_test PRIVATE -UNDEBUG)
-    add_test(NAME switches COMMAND switches_test ${CMAKE_BINARY_DIR}/switches_test)
+    add_test(NAME switches COMMAND switches_test ${CMAKE_BINARY_DIR}/switches_files)
     set_tests_properties(switches PROPERTIES LABELS melee)
     add_dependencies(unit_tests switches_test)
 

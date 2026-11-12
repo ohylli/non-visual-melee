@@ -598,7 +598,7 @@ extern "C" void pc_log_line(const char* fmt, ...) {
 }
 
 int main(int argc, char** argv) {
-    s_dir = argc > 1 ? fs::path(argv[1]) : fs::path("voice_settings_test");
+    s_dir = argc > 1 ? fs::path(argv[1]) : fs::path("voice_settings_files");
     fs::create_directories(s_dir);
     the_rows_are_in_their_submenu();
     the_defaults_come_from_the_backend();

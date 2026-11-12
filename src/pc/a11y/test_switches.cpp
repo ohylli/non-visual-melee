@@ -347,7 +347,7 @@ extern "C" void pc_log_line(const char* fmt, ...) {
 }
 
 int main(int argc, char** argv) {
-    s_dir = argc > 1 ? fs::path(argv[1]) : fs::path("switches_test");
+    s_dir = argc > 1 ? fs::path(argv[1]) : fs::path("switches_files");
     fs::create_directories(s_dir);
     the_switches_are_the_first_rows();
     speech_waits_for_the_switches();

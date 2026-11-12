@@ -1029,7 +1029,7 @@ extern "C" void pc_log_line(const char* fmt, ...) {
 }
 
 int main(int argc, char** argv) {
-    s_dir = argc > 1 ? fs::path(argv[1]) : fs::path("accessibility_settings_test");
+    s_dir = argc > 1 ? fs::path(argv[1]) : fs::path("accessibility_settings_files");
     fs::create_directories(s_dir);
     a_missing_file_is_written_with_defaults_and_descriptions();
     the_text_is_parsed_with_spaces_comments_units_and_commas();
