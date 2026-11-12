@@ -98,8 +98,9 @@ public:
      * set_voice says otherwise. preview is MELEE_A11Y_VOICE_PREVIEW. */
     Voices(Speech& speech, CueEngine& engine, std::unique_ptr<VoiceBridge> bridge,
         const VoiceBackend& backend, bool log, bool preview);
-    /* Detaches from speech, stops the voices and joins the worker, which
-     * closes the bridge on its own thread. Only as the game exits: the
+    /* Detaches from speech, stops the voices and waits for the worker to
+     * end, which closes the bridge on its own thread, giving the bridge its
+     * turns while it waits (wait_in_turns). Only as the game exits: the
      * bridge leaves Prism's context open (PrismVoiceBridge::close). */
     ~Voices() override;
     Voices(const Voices&) = delete;
@@ -149,7 +150,7 @@ public:
     bool speaking(Voice voice) const;
 
     /* For tests: blocks until the worker has opened the bridge and rendered
-     * every line asked for so far. */
+     * every line asked for so far, in turns (wait_in_turns). */
     void wait_for_worker();
 
 private:
@@ -207,6 +208,10 @@ private:
     void preview_frame(Clock::time_point now);
     void drop(int voice, const Line& line, const char* why) const;
     void log(const char* fmt, ...) const __attribute__((format(printf, 2, 3)));
+    /* On the game thread, holding m_mutex: waits until done() holds, a
+     * short step at a time, giving the bridge its turn before each step. */
+    template <typename Done>
+    void wait_in_turns(std::unique_lock<std::mutex>& lock, Done done);
     void work();
 
     Speech& m_speech;
@@ -234,7 +239,7 @@ private:
     Clock::time_point m_preview_at;
 
     /* The worker's own: the bridge, and the voices sorted, with the default's
-     * index among them. */
+     * index among them. The game thread calls the bridge's turn alone. */
     std::unique_ptr<VoiceBridge> m_bridge;
     std::vector<VoiceInfo> m_worker_voices;
     int m_worker_default = -1;
@@ -247,6 +252,7 @@ private:
     std::vector<Rendered> m_rendered;
     bool m_quit = false;
     bool m_busy = false;
+    bool m_finished = false; /* the worker has closed the bridge and ends */
     bool m_open_done = false;
     bool m_open_seen = false;
     std::string m_open_error;

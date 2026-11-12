@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -616,6 +617,73 @@ void the_developer_preview_says_each_voice() {
     assert(lines_starting("[a11y] voice yours plays").size() == 1);
 }
 
+/* A bridge whose every call waits for the game thread's turn, as AVSpeech's
+ * wait for the Mac's main thread: the voices open, render and play with it,
+ * the game thread giving the turns while it waits for the worker. */
+void a_bridge_that_needs_turns_speaks() {
+    VoiceCalls calls;
+    calls.needs_turns = true;
+    {
+        Rig rig(calls);
+        assert(rig.voices.state() == VoicesState::ready);
+        rig.yours(1, "45");
+        rig.play_out();
+        assert(logged(plays("yours", "45")));
+    }
+    std::lock_guard<std::mutex> lock(calls.mutex);
+    assert(calls.closes == 1);
+    assert(calls.timeouts == 0 && calls.wrong_thread_turns == 0);
+}
+
+/* Quitting while the worker waits for lines: closing the bridge needs a
+ * turn, which the game thread gives while it waits for the worker to end,
+ * rather than waiting for a worker that waits for it. */
+void quitting_gives_the_bridge_turns_while_idle() {
+    VoiceCalls calls;
+    calls.needs_turns = true;
+    std::optional<Rig> rig;
+    rig.emplace(calls);
+    assert(rig->voices.state() == VoicesState::ready);
+    int asked = 0;
+    {
+        std::lock_guard<std::mutex> lock(calls.mutex);
+        asked = calls.asked;
+    }
+    rig.reset();
+    std::lock_guard<std::mutex> lock(calls.mutex);
+    assert(calls.closes == 1);
+    assert(calls.asked == asked + 1 && calls.given == calls.asked);
+    assert(calls.timeouts == 0 && calls.wrong_thread_turns == 0);
+}
+
+/* Quitting while a line renders: the render, waiting for a turn, gets it
+ * and finishes, and so does closing the bridge after it. */
+void quitting_gives_the_bridge_turns_while_a_line_renders() {
+    /* Both voices at the backend's default, so the line's first call is its
+     * render. */
+    constexpr a11y::VoiceBackend kDefaults{"Fake voices", {{{""}, {""}}}};
+    VoiceCalls calls;
+    calls.needs_turns = true;
+    std::optional<Rig> rig;
+    rig.emplace(calls, "", false, kDefaults);
+    rig->yours(1, "45");
+    {
+        /* The worker inside render, waiting for its turn; nobody gives it
+         * one until the voices quit. */
+        std::unique_lock<std::mutex> lock(calls.mutex);
+        const bool waiting = calls.turned.wait_for(lock, a11y::test::kTurnTimeout / 2, [&calls] {
+            return !calls.renders.empty() && calls.renders.back().second == "45" &&
+                   calls.asked > calls.given;
+        });
+        assert(waiting);
+    }
+    rig.reset();
+    std::lock_guard<std::mutex> lock(calls.mutex);
+    assert(calls.closes == 1);
+    assert(calls.given == calls.asked);
+    assert(calls.timeouts == 0 && calls.wrong_thread_turns == 0);
+}
+
 }  // namespace
 
 extern "C" void pc_log_line(const char* fmt, ...) {
@@ -646,6 +714,9 @@ int main() {
     no_audio_output_sends_the_lines_to_the_screen_reader();
     the_worker_starts_with_speech();
     the_developer_preview_says_each_voice();
+    a_bridge_that_needs_turns_speaks();
+    quitting_gives_the_bridge_turns_while_idle();
+    quitting_gives_the_bridge_turns_while_a_line_renders();
     std::cout << "voices: all tests passed\n";
     return 0;
 }

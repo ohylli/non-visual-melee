@@ -66,11 +66,11 @@ const VoiceBackend& voice_backend();
 
 /* The voices' side of the bridge (docs/a11y/speech.md, "Voices"): Prism's
  * backend for the build's voice backend, one instance per voice, rendering
- * lines to memory for the cue engine to play. Every call comes from the voices' worker thread, the
- * one that opened it, as Prism's thread-safety rules ask; Prism is started
- * on that thread for the voices alone, apart from the screen reader's. The
- * unit test swaps in a fake. Each call that can fail returns an error text,
- * empty on success. */
+ * lines to memory for the cue engine to play. Every call but turn comes from
+ * the voices' worker thread, the one that opened it, as Prism's
+ * thread-safety rules ask; Prism is started on that thread for the voices
+ * alone, apart from the screen reader's. The unit test swaps in a fake. Each
+ * call that can fail returns an error text, empty on success. */
 class VoiceBridge {
 public:
     virtual ~VoiceBridge() = default;
@@ -91,6 +91,13 @@ public:
     /* The whole line, synthesized before it returns, silence trimmed at
      * both ends. */
     virtual std::string render(int instance, std::string_view utf8, RenderedLine& out) = 0;
+    /* The game thread's turn, given while it waits for the worker (at quit):
+     * whatever the worker's calls wait for the main thread to do, done now.
+     * A backend that runs its calls on the main thread (AVSpeech on a Mac)
+     * would otherwise wait for a thread that waits for it. Called while the
+     * worker uses the instances, so it touches none of them; nothing to do
+     * for a backend whose calls need no other thread. */
+    virtual void turn() = 0;
 };
 
 /* Prism's backend for the build's voice backend where a11y.cmake wired

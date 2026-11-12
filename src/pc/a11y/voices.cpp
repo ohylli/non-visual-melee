@@ -24,6 +24,10 @@ constexpr std::chrono::milliseconds kPreviewPause{700};
 /* Below this a line's peak is silence, left as it is rather than raised. */
 constexpr float kSilentPeak = 1e-4f;
 
+/* How long the game thread waits for the worker between the bridge's turns:
+ * the delay each of the worker's waits for the main thread may add. */
+constexpr std::chrono::milliseconds kTurnStep{5};
+
 char lower(char c) {
     return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
 }
@@ -246,6 +250,22 @@ Voices::Voices(Speech& speech, CueEngine& engine, std::unique_ptr<VoiceBridge> b
     m_speech.attach_voices(this);
 }
 
+/* Every wait of the game thread for the worker goes through here, never a
+ * bare wait or join: on a Mac the worker's calls into the bridge wait for
+ * the main thread (AVSpeech runs them there), so a main thread waiting for
+ * the worker without giving the bridge its turns would wait forever
+ * (docs/a11y/speech.md, "Shutting down"). std::thread has no timed join,
+ * hence the worker's m_finished. */
+template <typename Done>
+void Voices::wait_in_turns(std::unique_lock<std::mutex>& lock, Done done) {
+    while (!done()) {
+        lock.unlock();
+        m_bridge->turn();
+        lock.lock();
+        m_idle.wait_for(lock, kTurnStep, done);
+    }
+}
+
 Voices::~Voices() {
     m_speech.attach_voices(nullptr);
     for (VoiceSlot& v : m_voices) {
@@ -253,10 +273,14 @@ Voices::~Voices() {
     }
     if (m_worker.joinable()) {
         {
-            std::lock_guard<std::mutex> lock(m_mutex);
+            std::unique_lock<std::mutex> lock(m_mutex);
             m_quit = true;
+            m_wake.notify_all();
+            /* Not a bare join: the worker, closing the bridge or finishing a
+             * line, may wait for the main thread, this one. A line still
+             * rendering finishes; those waiting are never rendered. */
+            wait_in_turns(lock, [this] { return m_finished; });
         }
-        m_wake.notify_all();
         m_worker.join();
     }
 }
@@ -539,7 +563,7 @@ void Voices::wait_for_worker() {
     if (!m_worker.joinable()) {
         return;
     }
-    m_idle.wait(lock, [this] { return m_open_done && m_jobs.empty() && !m_busy; });
+    wait_in_turns(lock, [this] { return m_open_done && m_jobs.empty() && !m_busy; });
 }
 
 /* The worker thread. Prism is started here, for the voices alone
@@ -631,6 +655,11 @@ void Voices::work() {
         m_idle.notify_all();
     }
     m_bridge->close();
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_finished = true;
+    }
+    m_idle.notify_all();
 }
 
 }  // namespace a11y

@@ -23,6 +23,7 @@ public:
     std::string set_voice(int, int) override { return "no voices"; }
     std::string set_rate(int, float) override { return "no voices"; }
     std::string render(int, std::string_view, RenderedLine&) override { return "no voices"; }
+    void turn() override {}
 
 private:
     const char* m_why;
@@ -46,12 +47,16 @@ namespace {
 struct PrismVoiceBackend {
     PrismBackendId id;
     VoiceBackend values;
+    /* The game thread's turn while it waits for the worker
+     * (VoiceBridge::turn): runs what the backend's calls left for the main
+     * thread. Null for a backend whose calls never wait for it. */
+    void (*turn)();
 };
 
 constexpr PrismVoiceBackend kVoiceBackends[] = {
     /* Windows. The defaults are grimdark's (.scratch/voices/spec.md,
      * "Defaults"): US English voices of every Windows 10 and 11 install. */
-    {PRISM_BACKEND_ONE_CORE, {"OneCore", {{{"Zira", "en-US"}, {"Mark", "en-US"}}}}},
+    {PRISM_BACKEND_ONE_CORE, {"OneCore", {{{"Zira", "en-US"}, {"Mark", "en-US"}}}}, nullptr},
 };
 
 constexpr const PrismVoiceBackend* find_backend(PrismBackendId id) {
@@ -239,6 +244,14 @@ public:
         const PrismError error =
             prism_backend_speak_to_memory(backend, text.c_str(), collect, &out);
         return error == PRISM_OK ? std::string() : error_text(error);
+    }
+
+    /* OneCore's calls run on the worker and the thread pool, never waiting
+     * for the main thread: its row has no turn. */
+    void turn() override {
+        if (m_backend.turn != nullptr) {
+            m_backend.turn();
+        }
     }
 
 private:
