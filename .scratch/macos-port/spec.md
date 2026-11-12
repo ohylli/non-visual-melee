@@ -1,40 +1,71 @@
-# macOS port of speech
+# macOS port
 
-Status: parked (2026-09-23). Needs a Mac with VoiceOver and a session with its owner; a friend of the maintainer has one. Not before the speech feature has shipped on Windows.
+Status: agreed 2026-11-12 (conversation with the maintainer). The Windows half is ready to start; the Mac half needs a friend of the maintainer, who has a Mac with VoiceOver, for its checks and play test. First written 2026-09-23 for screen reader speech alone, before the voices existed; rewritten for the voices and split into issues.
 
-## Why this should be cheap
+The maintainer agreed:
 
-The speech feature (`.scratch/screen-reader-speech/`) was laid out so a second platform is a cmake branch, not a code change:
+- Everything that can be built and checked on Windows is done there first, so the Mac half is as small as it can be: the code only a Mac can run, and what only a Mac can tell.
+- The voices on a Mac are Apple's system voices through Prism's AVSpeech backend, the same design as OneCore on Windows (ADR-0008).
+- The chosen voice is saved by name and language. No code reads files written before that: the only one is the maintainer's own `a11y.ini`, edited by hand once.
+- A CI job on GitHub's Mac runners builds and packages the Mac build, so the friend downloads it and never builds.
 
-- The screen reader bridge is the only fork file that includes `prism.h`, and its real body is gated on the cmake-defined macro `A11Y_HAVE_PRISM`, not on `_WIN32`. Prism's C API is the same on every platform it ships for, so the bridge should compile unchanged on macOS.
-- `a11y.cmake` keeps the platform choice in one variable (`A11Y_PRISM_ASSET`, the release zip name). Prism v0.18.2 publishes `prism-macos-universal.zip` (arm64 and x86_64 in one dylib; macOS 11 or later) next to the Windows zip, under the same tag and hash-pinnable the same way. Linux has `prism-linux-x64.zip` and `prism-linux-arm64.zip`.
-- The base port already builds and packages macOS (`tools/package_macos.sh`, Xcode clang for C++ plus Homebrew GCC for the decomp C; see `docs/building.md`), so the game itself is not the porting job.
+## Goal
 
-## What the port consists of
+A blind player on a Mac gets what a Windows player gets: the native menus, port menu and launcher spoken through VoiceOver (or Apple's voice when VoiceOver is off), the cues, steering, and the match announcements in two voices of their own choosing.
 
-1. **Cmake branch** in `src/pc/a11y/a11y.cmake`: on `APPLE`, set the asset to the macOS zip and its hash, download and extract like Windows, link the dylib from the zip's dynamic release variant, define `A11Y_HAVE_PRISM`. Verify the zip layout on the day; it may not mirror the Windows one. For a plain build directory, copy the dylib beside `melee` and make sure the executable finds it (`install_name_tool -add_rpath @executable_path` or a `BUILD_RPATH`). The Windows import-library question does not exist on macOS: clang links the dylib directly.
-2. **Bundling**: nothing new. `tools/package_macos.sh` walks the executable's dependencies with `otool`, copies every non-system dylib into `Melee.app/Contents/Frameworks` and rewrites load paths to `@rpath`. Prism is picked up by that walk once the game links against it. Check `ls Frameworks` in the script output shows the Prism dylib.
-3. **Code signing**: nothing new either. The script ad-hoc signs the whole bundle with `codesign --force --deep --sign -`, which re-signs every dylib inside, Prism included, and then verifies it. Background: Apple Silicon refuses to run unsigned native code, so every binary needs at least an ad-hoc seal, and everything inside a bundle must be signed consistently; a foreign dylib carrying its own signature would fail verification, which is why the `--deep` re-sign matters. The base port has no Apple Developer ID and does no notarization, so a downloaded `Melee.app` needs right-click > Open on first launch (Gatekeeper); the fork inherits that. If the base port ever adopts a Developer ID, the same `--deep` pass carries Prism along.
-4. **Speech log and switches**: unchanged. `MELEE_A11Y`, `MELEE_A11Y_LOG`, the `[a11y]` lines and the bounded-run check all work the same; the log file lands in the working directory, which for a launched `.app` is not the bundle. Set `MELEE_LOG_FILE` explicitly.
+Vocabulary is `CONTEXT.md`. Background: `docs/a11y/speech.md` (the screen reader bridge and the voices), ADR-0001 (Prism prebuilt), ADR-0008 (voices rendered by Prism, played by the cue engine), the base port's `docs/building.md`, "macOS".
 
-## Play-test on the Mac (by ear, VoiceOver)
+## Where things stand
 
-Prism's macOS backends are Apple's own APIs (VoiceOver through the accessibility announcement path, and Apple's speech synthesizer as the fallback), which behave differently from NVDA's controller client. Verify, do not assume:
+- **The base port** builds macOS: Apple Silicon tested, Intel built by its CI but untested. Apple's clang builds the C++ and the link; the decomp's C (`melee_game`) goes through Homebrew GCC by `tools/gcc_launcher.py`, because only GCC implements `scalar_storage_order`, which reads the disc's big-endian structs. `tools/package_macos.sh` makes `Melee.app`, copies every non-system dylib into `Contents/Frameworks` with `@rpath` load paths, and ad-hoc signs the bundle with `codesign --force --deep --sign -`, which seals a foreign dylib like Prism's too. No Developer ID, no notarization: a downloaded app needs right-click > Open (VoiceOver: VO-Shift-M on it, then Open) or `xattr -d com.apple.quarantine Melee.app`. The base port's own Mac CI job is in `.github/workflows/build.yml`, disabled in the fork.
+- **The fork's code** is mostly portable: the cue engine (SDL and miniaudio), the readers, the settings, steering. The screen reader bridge (`screen_reader_bridge.cpp`) has no platform code and is gated on `A11Y_HAVE_PRISM`, which `a11y.cmake` defines only for Windows today; without it speech still logs, silently.
+- **The connection checker** (`melee-netcheck`) compiles and works on a Mac: the maintainer's friend has confirmed it.
+- **The drive scripts** are Windows-only. On a Mac the checks are the friend's ears and the speech log.
 
-1. Launch with VoiceOver running: hear "Non-Visual Melee ready". Log shows which backend Prism chose; record the exact name, it goes into the primer.
-2. Launch with VoiceOver off: hear the fallback voice; record that backend name too.
-3. Interrupt semantics: does an interrupting announcement actually cut VoiceOver off mid-sentence, or does VoiceOver queue it anyway? Needs a consumer that can speak twice in a row, so this waits for menu narration or a temporary key.
-4. Braille: if a braille display is at hand, does `output` reach it.
-5. Focus: VoiceOver may read the game window's own accessibility tree (title, "window") on top of the announcements. Note anything it says that the player did not ask for.
-6. Missing dylib: remove the Prism dylib from `Frameworks` and launch. Expected: the app fails to start with a dyld error, which Finder shows as a generic "cannot be opened" dialog. Confirm VoiceOver reads it; this is the macOS counterpart of the Windows "prism.dll was not found" dialog the spec relies on.
+## The voices on a Mac
+
+Read in Prism v0.18.2's source, `source/backends/avspeech.cpp`; not yet run.
+
+- **Everything the voices use is there**: rendering a line to memory (`writeUtterance:toBufferCallback:`, macOS 10.15 and later, below Prism's own macOS 11 floor), listing voices with name and language, choosing one, and the rate (Prism's 0 to 1 maps onto Apple's slowest to fastest, 0.5 Apple's default). Each instance keeps its own synthesizer, so one instance per voice holds as on Windows.
+- **The voices are those in System Settings > Accessibility > Spoken Content**, the downloadable Enhanced and Premium voices among them. Apple keeps the Siri voices from other apps.
+- **Every call runs on the main thread.** The backend sends each piece of work to the main thread with `dispatch_sync` and waits. The voices' worker therefore waits until the game's main thread next runs its event loop, which SDL does once a frame: a line starts up to a frame or two later, and waits through any long stall of the main thread, such as a scene loading.
+- **So the main thread must never wait for the worker.** At quit it does today: `Voices::~Voices` joins the worker, and the worker, freeing its instances (or still rendering a line), waits for the main thread. Both wait forever. Issues 03 and 07 fix this.
+- **Names repeat.** On a Mac a voice's name is not unique: some come in several languages under one name (Eddy, among Apple's Eloquence voices), and the list is sorted by language, so a saved "Eddy" could find the German one. Hence name and language, issue 02. Prism gives no stable id.
+- **Personal Voice.** On macOS 14 and later, starting an instance asks for Personal Voice permission and waits for the answer. Whether that shows a dialog, which would take focus, is one of the play test's questions.
+
+## A fork bug only a Mac would hit
+
+`game_access.c` reads the stage's line count (`mpLib_8004D164()->line_count`, a field of `MapCollData`, a disc struct). It is built with the `melee` target, which on a Mac is Apple's clang, where `DISC_STRUCT` is empty: the count would read byte-swapped, the floor tests behind the gap and ledge warnings would loop over the wrong number of lines and could read past the end. It must go through GCC on a Mac as the decomp does, issue 04.
+
+## The split
+
+Windows half, built and verified here:
+
+1. `01-voice-backend-per-platform.md`: the voice backend and its defaults chosen per platform by `a11y.cmake`, OneCore on Windows; platform-neutral wording.
+2. `02-voice-saved-with-language.md`: a voice saved and matched by name and language.
+3. `03-voices-close-without-blocking.md`: at quit, the main thread gives the bridge a turn while it waits for the worker, a no-op on Windows; a unit test with a fake bridge that needs those turns.
+4. `04-game-access-through-gcc.md`: `game_access.c` compiled by GCC on Macs.
+5. `05-prism-on-macos.md`: the Mac branch of `a11y.cmake`, Prism's dylib linked and found, the AVSpeech backend named.
+6. `06-macos-ci.md`: the fork's CI builds and packages the Mac build, with `melee-netcheck` and Prism's licences, beside the Windows one.
+
+Mac half, written here and compiled by 06's CI, checked on the friend's Mac:
+
+7. `07-avspeech-voices.md`: the bridge's turn on a Mac, running the main thread's queue; the Mac default voices.
+8. `08-play-test-mac.md`: the play test with VoiceOver and with it off.
+9. `09-docs-for-mac-players.md`: `ACCESSIBILITY.md` and the status lines, once the play test has said what works.
+
+## Out
+
+- **Building Prism from source** on a Mac. ADR-0001 stands: one prebuilt release, one pin.
+- **Linux.** The same mechanism would serve it (Speech Dispatcher and Orca backends), but nobody is asking.
+- **Drive scripts on a Mac.** The named pipes and the window handling are Windows-only, and the agent cannot reach a Mac anyway.
+- **Intel Macs as a supported target.** CI may build them if it costs nothing; nobody tests them.
+- **Online between Mac and Windows** beyond what the base port promises: the fork leaves the simulation alone on every platform, so it adds nothing to check. The play test may try it if two machines are at hand.
+- **Reading old `a11y.ini` voice lines.** See above.
 
 ## Open questions, answered on the day
 
-- Zip layout of `prism-macos-universal.zip` (header location, dylib name, whether it is a `.dylib` or a `.framework`).
-- Does the base port's macOS CI job (GitHub Mac runners) mind one more configure-time download. It already fetches SDL and the rest from Homebrew.
-- Minimum macOS of the friend's machine versus Prism's macOS 11 floor.
-
-## Not planned
-
-- Building Prism from source on macOS. Possible there (no MIDL, no delay loading), but the prebuilt zip keeps both platforms on one mechanism and one pin. ADR-0001 stands.
-- Linux. Same mechanism would apply (Speech Dispatcher and Orca backends), but nobody is asking for it.
+- `prism-macos-universal.zip`'s layout (issue 05): header location, dylib name, `.dylib` or `.framework`.
+- The friend's macOS version against Prism's macOS 11 floor.
+- How long a line takes to render on a Mac, main-thread hops included (issue 08).
+- Whether VoiceOver's audio ducking lowers the game's sound, voices and cues with it, while it speaks (issue 08).
