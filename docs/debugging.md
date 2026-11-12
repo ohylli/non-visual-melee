@@ -7,7 +7,11 @@ milliseconds from startup. The log goes to `stderr` and, when `MELEE_LOG_FILE`
 names a path, to that file too; output is flushed per line and both streams are
 flushed before a fatal `abort()`, so the file survives a crash. An empty value
 disables the file sink. On Windows it defaults to `melee-pc.log` beside
-`melee.exe`, because a double-clicked console app's window vanishes on exit.
+`melee.exe`, because a double-clicked console app's window vanishes on exit,
+and on macOS to `melee-pc.log` in the settings folder
+(`~/Library/Application Support/melee-pc/`), because an app opened from Finder
+has no console and runs in `/`. A portable install writes it in its settings
+folder too.
 `MELEE_DEBUG=1` raises aurora's log level to debug. Any frame over 50 ms leaves
 a marker in the log (`src/pc/vi.c`). Backend selection logs one line per
 skipped backend with Dawn's reason (`No usable D3D12 adapter (...); trying the
@@ -54,7 +58,7 @@ only; none of them fixes anything. User-facing knobs (`MELEE_BACKEND`,
 | Variable | Effect |
 |---|---|
 | `MELEE_DEBUG=1` | Debug-level aurora logging. |
-| `MELEE_LOG_FILE=<path>` | Log file sink (default `melee-pc.log` on Windows; empty disables). |
+| `MELEE_LOG_FILE=<path>` | Log file sink (default `melee-pc.log` on Windows and macOS; empty disables). |
 | `MELEE_FPS=1` | Print frame rate once a second. |
 | `MELEE_HEAP_CHECK=1` | Canaries on every heap allocation, checked each frame; aborts at the first stomp. |
 | `MELEE_SEED=<n>` | Deterministic RNG for the attract demo. |

@@ -235,7 +235,7 @@ per-device `.controller` files; keyboard bindings and the menu shortcut share
 |---|---|
 | `MELEE_BACKEND=<name>` | Pin the graphics backend (`vulkan`, `d3d12`, `d3d11`, `metal`, ...) instead of the platform's preferred order; an unknown name lists the valid ones. |
 | `MELEE_VSYNC=0\|1` | Override the saved VSync preference. |
-| `MELEE_LOG_FILE=<path>` | Write the log to a file (default `melee-pc.log` beside `melee.exe` on Windows; empty disables). |
+| `MELEE_LOG_FILE=<path>` | Write the log to a file (default `melee-pc.log` beside `melee.exe` on Windows, in `~/Library/Application Support/melee-pc/` on macOS; empty disables). |
 | `MELEE_WINDOW_TITLE=<t>` | Window title. |
 | `MELEE_FILES_DIR=<dir>` | Loose-file overlay: files here (or in `./files/`) replace the disc's. |
 | `MELEE_USER_DIR=<dir>` | Settings folder (`launcher.cfg`, controller bindings, memory card, net identity, user textures and music) in place of the per-user one, made if missing: a test run starts from default settings and leaves the player's alone. The shader caches keep their own `MELEE_CACHE_DIR`. |

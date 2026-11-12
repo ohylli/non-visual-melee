@@ -111,21 +111,28 @@ static void melee_install_crash_handler(void) {}
 
 /* A log file sink, so a double-clicked build still leaves a diagnosable
  * trace after its console disappears. MELEE_LOG_FILE picks the path; an
- * empty value disables it. Windows defaults it on because that is where the
- * console is not a reliable place to read errors from. */
+ * empty value disables it. Windows and macOS default it on because that is
+ * where the console is not a reliable place to read errors from. */
 static FILE* log_file(void) {
     static FILE* fp;
     static bool tried;
     if (!tried) {
         tried = true;
         const char* path = getenv("MELEE_LOG_FILE");
-        static char portable_log[4096];
-        if (path == NULL && pc_is_portable()) {
+        static char pref_log[4096];
+        /* A portable install keeps its log with its settings, and so does a
+         * Mac: an app opened from Finder runs in /, where no file can be made. */
+#if defined(SDL_PLATFORM_MACOS)
+        const bool in_pref_folder = true;
+#else
+        const bool in_pref_folder = pc_is_portable();
+#endif
+        if (path == NULL && in_pref_folder) {
             char* directory = pc_get_pref_path();
             if (directory != NULL) {
-                snprintf(portable_log, sizeof portable_log, "%smelee-pc.log", directory);
+                snprintf(pref_log, sizeof pref_log, "%smelee-pc.log", directory);
                 SDL_free(directory);
-                path = portable_log;
+                path = pref_log;
             }
         }
 #if defined(_WIN32)

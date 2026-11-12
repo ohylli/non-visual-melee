@@ -4,7 +4,7 @@ Status: ready-for-human
 Type: task
 Blocked by: 06, 07
 
-Spec: `.scratch/macos-port/spec.md`. The maintainer runs this with the friend, who has the Mac and VoiceOver. The build is the Mac zip from `ci-latest` (issue 06); first launch needs right-click > Open (VoiceOver: VO-Shift-M on the app, then Open) or `xattr -d com.apple.quarantine Melee.app`. Set `MELEE_LOG_FILE` to a known path when launching from Terminal, since a launched app's working directory is not the bundle; the friend sends the log back.
+Spec: `.scratch/macos-port/spec.md`. The maintainer runs this with the friend, who has the Mac and VoiceOver. The build is the Mac zip from `ci-latest` (issue 06); first launch needs right-click > Open (VoiceOver: VO-Shift-M on the app, then Open) or `xattr -d com.apple.quarantine Melee.app`. Each launch writes `~/Library/Application Support/melee-pc/melee-pc.log` (Finder: Go to Folder, Cmd-Shift-G), replacing the last launch's; the friend copies it out after each check worth reading and sends it back.
 
 ## Speech
 
