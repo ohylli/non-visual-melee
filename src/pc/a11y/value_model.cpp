@@ -89,9 +89,12 @@ std::string describe(const NamedValue& named) {
         range = option_list(named);
         break;
     }
-    const std::string default_shown = named.kind == ValueKind::choice ?
-                                          named.default_text :
-                                          format_amount(named, named.default_value);
+    std::string default_shown = format_amount(named, named.default_value);
+    if (named.kind == ValueKind::choice) {
+        /* An empty default, as a voice that is the backend's own default
+         * voice, is written as an empty value. */
+        default_shown = named.default_text.empty() ? "empty" : named.default_text;
+    }
     return "# " + named.description + " " + range + ", default " + default_shown + ".\n";
 }
 
@@ -573,7 +576,9 @@ TextRead ValueModel::read_text(std::string_view text) {
             continue;
         }
         if (named->kind == ValueKind::choice) {
-            if (value.empty()) {
+            /* Empty is understood only as an empty default, which the file
+             * writes so. */
+            if (value.empty() && !named->default_text.empty()) {
                 read.bad_lines.push_back(number);
                 read.notes.push_back("line " + std::to_string(number) +
                                      " not understood: " + std::string(trim(raw)) + "; " +

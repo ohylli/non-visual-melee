@@ -846,6 +846,47 @@ void a_hand_edit_of_a_choice_is_picked_up() {
     assert(count_logged_containing("damage.yours stays Every change") == 1);
 }
 
+/* A choice whose default is empty, as a voice whose default is the backend's
+ * own default voice (AVSpeech's): written empty, its comment saying so, and
+ * an empty value read as that default, at the next start and in a hand edit. */
+void an_empty_default_choice_reads_back_empty() {
+    Fixture f("choice_empty.ini");
+    auto add_voice = [](ValueModel& model) {
+        return model.group("voices", "Voices")
+            .add_choice(a11y::ChoiceSpec{
+                .name = "yours",
+                .label = "Your voice",
+                .description = "The voice that speaks what happens to you.",
+                .default_option = "",
+                .list = [] { return a11y::ChoiceOptions{{"Alex", ""}, {"Samantha", ""}}; },
+                .shown = true,
+            });
+    };
+    a11y::Choice voice = add_voice(f.model);
+    f.load();
+    const std::string written = read_file(f.path);
+    assert(written.find("# The voice that speaks what happens to you. One of the options the "
+                        "menus list, default empty.\nvoices.yours = \n") != std::string::npos);
+    assert(voice.saved().empty());
+    /* Read back at the next start: nothing not understood. */
+    ValueModel again;
+    CueSettings again_cues(again);
+    a11y::Choice again_voice = add_voice(again);
+    a11y::TextRead read = again.read_text(written);
+    assert(read.bad_lines.empty() && read.notes.empty() && read.missing.empty());
+    assert(again_voice.saved().empty());
+    /* A hand edit names a voice, then empties the line again. */
+    std::string text = written;
+    text.replace(text.find("voices.yours = \n"), 16, "voices.yours = Samantha\n");
+    edit_file(f.path, text);
+    f.poll_later();
+    assert(voice.saved() == "Samantha");
+    edit_file(f.path, written);
+    std::vector<const a11y::NamedValue*> changed = f.poll_later();
+    assert(changed.size() == 1 && changed[0] == &voice.named() && voice.saved().empty());
+    assert(f.spoken.empty() && count_logged_containing("not understood") == 0);
+}
+
 /* A saved text that names no option stays in the file, unchanged by every
  * other save, while the option in use is the fallback; picking an option
  * replaces it. */
@@ -1012,6 +1053,7 @@ int main(int argc, char** argv) {
     an_override_of_a_key_the_file_lacks_is_not_appended();
     a_choice_is_saved_as_its_options_text();
     a_hand_edit_of_a_choice_is_picked_up();
+    an_empty_default_choice_reads_back_empty();
     a_saved_option_not_listed_is_kept_and_the_fallback_used();
     a_choices_options_may_change_between_reads();
     a_choice_step_wraps_at_each_end();

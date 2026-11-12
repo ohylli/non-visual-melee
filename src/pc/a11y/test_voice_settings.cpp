@@ -274,6 +274,9 @@ void the_defaults_come_from_the_backend() {
     assert(again.rows->voice(Voice::opponents).saved().empty());
     assert(again.rows->voice(Voice::opponents).option() == "Microsoft George (en-GB)");
     assert(again.spoken.size() == 0);
+    /* The empty line is understood: the game would say so otherwise. */
+    assert(!logged("[a11y] accessibility settings: line"));
+    assert(again.settings->problem().empty());
 }
 
 void languages_are_named() {
