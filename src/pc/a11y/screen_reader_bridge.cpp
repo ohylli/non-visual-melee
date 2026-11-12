@@ -51,7 +51,7 @@ struct PrismVoiceBackend {
 constexpr PrismVoiceBackend kVoiceBackends[] = {
     /* Windows. The defaults are grimdark's (.scratch/voices/spec.md,
      * "Defaults"): US English voices of every Windows 10 and 11 install. */
-    {PRISM_BACKEND_ONE_CORE, {"OneCore", {{{"Zira"}, {"Mark"}}}}},
+    {PRISM_BACKEND_ONE_CORE, {"OneCore", {{{"Zira", "en-US"}, {"Mark", "en-US"}}}}},
 };
 
 constexpr const PrismVoiceBackend* find_backend(PrismBackendId id) {

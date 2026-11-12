@@ -38,6 +38,36 @@ bool holds(std::string_view text, std::string_view part) {
                [](char x, char y) { return lower(x) == lower(y); }) != text.end();
 }
 
+/* A language tag as a backend gives one ("en-US", "fi", "zh-Hant-TW"): a
+ * language of two or three letters, then any parts of letters and digits,
+ * each after a hyphen or an underscore. So a name's own brackets at its end,
+ * as in "Ava (Enhanced)", are not taken for one. */
+bool is_language_tag(std::string_view tag) {
+    const auto letter = [](char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); };
+    const auto digit = [](char c) { return c >= '0' && c <= '9'; };
+    const size_t first = std::min(tag.find_first_of("-_"), tag.size());
+    if (first < 2 || first > 3 ||
+        !std::all_of(tag.begin(), tag.begin() + static_cast<std::ptrdiff_t>(first), letter))
+    {
+        return false;
+    }
+    size_t part = 0;
+    for (size_t i = first; i < tag.size(); i++) {
+        const char c = tag[i];
+        if (c == '-' || c == '_') {
+            if (part == 0 && i != first) {
+                return false;
+            }
+            part = 0;
+        } else if (letter(c) || digit(c)) {
+            part++;
+        } else {
+            return false;
+        }
+    }
+    return first == tag.size() || part > 0;
+}
+
 int text_length(std::string_view text) {
     return static_cast<int>(text.size());
 }
@@ -116,17 +146,53 @@ std::vector<int> sort_voices(std::vector<VoiceInfo>& voices) {
     return order;
 }
 
+std::string voice_text(std::string_view name, std::string_view language) {
+    std::string text(name);
+    if (!name.empty() && !language.empty()) {
+        text += " (" + std::string(language) + ")";
+    }
+    return text;
+}
+
+VoiceInfo parse_voice_text(std::string_view text) {
+    VoiceInfo whole{std::string(text), ""};
+    const size_t open = text.rfind('(');
+    if (text.empty() || text.back() != ')' || open == std::string_view::npos) {
+        return whole;
+    }
+    const std::string_view tag = text.substr(open + 1, text.size() - open - 2);
+    if (!is_language_tag(tag)) {
+        return whole;
+    }
+    std::string_view name = text.substr(0, open);
+    while (!name.empty() && name.back() == ' ') {
+        name.remove_suffix(1);
+    }
+    if (name.empty()) {
+        return whole;
+    }
+    return VoiceInfo{std::string(name), std::string(tag)};
+}
+
+bool same_language(std::string_view a, std::string_view b) {
+    return same_text(a, b);
+}
+
 int match_voice(const std::vector<VoiceInfo>& voices, std::string_view wanted) {
-    if (wanted.empty()) {
+    const VoiceInfo voice = parse_voice_text(wanted);
+    if (voice.name.empty()) {
         return -1;
     }
+    const auto in_language = [&voice](const VoiceInfo& installed) {
+        return voice.language.empty() || same_language(installed.language, voice.language);
+    };
     for (size_t i = 0; i < voices.size(); i++) {
-        if (same_text(voices[i].name, wanted)) {
+        if (in_language(voices[i]) && same_text(voices[i].name, voice.name)) {
             return static_cast<int>(i);
         }
     }
     for (size_t i = 0; i < voices.size(); i++) {
-        if (holds(voices[i].name, wanted)) {
+        if (in_language(voices[i]) && holds(voices[i].name, voice.name)) {
             return static_cast<int>(i);
         }
     }
@@ -174,7 +240,8 @@ Voices::Voices(Speech& speech, CueEngine& engine, std::unique_ptr<VoiceBridge> b
         spec.mode = VoiceMode::once;
         VoiceSlot& v = m_voices[static_cast<size_t>(i)];
         v.engine_voice = m_engine.add_voice(spec);
-        v.wanted = backend.defaults[static_cast<size_t>(i)].name;
+        const VoiceDefault& wanted = backend.defaults[static_cast<size_t>(i)];
+        v.wanted = voice_text(wanted.name, wanted.language);
     }
     m_speech.attach_voices(this);
 }
@@ -440,10 +507,15 @@ void Voices::set_voice(Voice voice, std::string_view wanted) {
     slot(voice).wanted = std::string(wanted);
 }
 
-std::string Voices::voice_in_use(Voice voice) const {
+const VoiceInfo* Voices::in_use(Voice voice) const {
     /* The worker finds it the same way, in the same sorted list. */
     const int index = find_voice(m_installed, slot(voice).wanted, m_default_index);
-    return index < 0 ? std::string() : m_installed[static_cast<size_t>(index)].name;
+    return index < 0 ? nullptr : &m_installed[static_cast<size_t>(index)];
+}
+
+std::string Voices::voice_in_use(Voice voice) const {
+    const VoiceInfo* found = in_use(voice);
+    return found == nullptr ? std::string() : found->name;
 }
 
 void Voices::set_rate(Voice voice, float rate) {

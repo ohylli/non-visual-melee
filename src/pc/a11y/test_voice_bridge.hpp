@@ -26,12 +26,20 @@ struct VoiceCalls {
 
 /* The voices' backend the tests give the voices and their rows, under a
  * name of the tests' own. */
-constexpr VoiceBackend kTestBackend{"Fake voices", {{{"Zira"}, {"Mark"}}}};
+constexpr VoiceBackend kTestBackend{"Fake voices", {{{"Zira", "en-US"}, {"Mark", "en-US"}}}};
 
 /* Five voices in three languages, the backend's default the second. */
 inline std::vector<VoiceInfo> several_languages() {
     return {{"Microsoft David", "en-US"}, {"Microsoft George", "en-GB"},
         {"Microsoft Zira", "en-US"}, {"Microsoft Heidi", "fi-FI"}, {"Microsoft Mark", "en-US"}};
+}
+
+/* Voices whose names repeat across languages, as on a Mac, one with
+ * brackets of its own, sorted as the voices sort them; the backend's
+ * default the first. */
+inline std::vector<VoiceInfo> repeated_names() {
+    return {{"Eddy", "de-DE"}, {"Eddy (English (UK))", "en-GB"}, {"Eddy", "en-US"},
+        {"Zira Lite", "en-US"}, {"Eddy", "fi-FI"}, {"Zira", "fi-FI"}};
 }
 
 /* Renders each line as 0.1 s per character of a stereo constant at 16 kHz,

@@ -246,8 +246,8 @@ void the_rows_are_in_their_submenu() {
     const size_t steering = file.find("\nsteering.on = on\n");
     assert(speech != std::string::npos && speech < delay && delay < steering && steering < yours &&
            yours < theirs);
-    assert(has_line(file, "your_voice.voice = Zira"));
-    assert(has_line(file, "opponents_voice.voice = Mark"));
+    assert(has_line(file, "your_voice.voice = Zira (en-US)"));
+    assert(has_line(file, "opponents_voice.voice = Mark (en-US)"));
     assert(has_line(file, "your_voice.rate = 50"));
     assert(has_line(file, "opponents_voice.volume = 100"));
     assert(has_line(file, "your_voice.boost = 3"));
@@ -257,21 +257,22 @@ void the_rows_are_in_their_submenu() {
  * (voice_backend), saved as they are; an empty default is the backend's own
  * default voice, which is not missing, and reads back from the file. */
 void the_defaults_come_from_the_backend() {
-    constexpr a11y::VoiceBackend kOther{"Other voices", {{{"Heidi"}, {""}}}};
+    constexpr a11y::VoiceBackend kOther{"Other voices", {{{"Heidi", "fi-FI"}, {""}}}};
     Game game("defaults.ini", "", a11y::test::several_languages(), "", kOther);
     game.frames(1);
-    assert(game.rows->voice(Voice::yours).saved() == "Heidi");
-    assert(game.rows->voice(Voice::yours).option() == "Microsoft Heidi");
+    assert(game.rows->voice(Voice::yours).saved() == "Heidi (fi-FI)");
+    assert(game.rows->voice(Voice::yours).option() == "Microsoft Heidi (fi-FI)");
     assert(game.rows->voice(Voice::opponents).saved().empty());
-    assert(game.rows->voice(Voice::opponents).option() == "Microsoft George");
+    assert(game.rows->voice(Voice::opponents).option() == "Microsoft George (en-GB)");
     assert(game.voices->voice_in_use(Voice::opponents) == "Microsoft George");
     assert(game.spoken.size() == 0);
-    assert(has_line(game.file(), "your_voice.voice = Heidi"));
+    assert(has_line(game.file(), "your_voice.voice = Heidi (fi-FI)"));
+    assert(has_line(game.file(), "opponents_voice.voice = "));
     Game again("defaults_again.ini", game.file(), a11y::test::several_languages(), "", kOther);
     again.frames(1);
-    assert(again.rows->voice(Voice::yours).saved() == "Heidi");
+    assert(again.rows->voice(Voice::yours).saved() == "Heidi (fi-FI)");
     assert(again.rows->voice(Voice::opponents).saved().empty());
-    assert(again.rows->voice(Voice::opponents).option() == "Microsoft George");
+    assert(again.rows->voice(Voice::opponents).option() == "Microsoft George (en-GB)");
     assert(again.spoken.size() == 0);
 }
 
@@ -294,14 +295,14 @@ void the_options_are_the_installed_voices() {
     assert(several.rows->voice(Voice::yours).options().empty());
     several.frames(1);
     const a11y::ChoiceOptions options = several.rows->voice(Voice::yours).options();
-    assert((options ==
-            a11y::ChoiceOptions{{"Microsoft George", "Microsoft George, English (United Kingdom)"},
-                {"Microsoft David", "Microsoft David, English (United States)"},
-                {"Microsoft Mark", "Microsoft Mark, English (United States)"},
-                {"Microsoft Zira", "Microsoft Zira, English (United States)"},
-                {"Microsoft Heidi", "Microsoft Heidi, Finnish (Finland)"}}));
-    assert(several.rows->voice(Voice::yours).option() == "Microsoft Zira");
-    assert(several.rows->voice(Voice::opponents).option() == "Microsoft Mark");
+    assert((options == a11y::ChoiceOptions{{"Microsoft George (en-GB)",
+                                               "Microsoft George, English (United Kingdom)"},
+                           {"Microsoft David (en-US)", "Microsoft David, English (United States)"},
+                           {"Microsoft Mark (en-US)", "Microsoft Mark, English (United States)"},
+                           {"Microsoft Zira (en-US)", "Microsoft Zira, English (United States)"},
+                           {"Microsoft Heidi (fi-FI)", "Microsoft Heidi, Finnish (Finland)"}}));
+    assert(several.rows->voice(Voice::yours).option() == "Microsoft Zira (en-US)");
+    assert(several.rows->voice(Voice::opponents).option() == "Microsoft Mark (en-US)");
     /* Both defaults are installed: nothing said of them. */
     assert(several.spoken.empty());
 
@@ -310,16 +311,73 @@ void the_options_are_the_installed_voices() {
         "");
     one.frames(1);
     assert((one.rows->voice(Voice::opponents).options() ==
-            a11y::ChoiceOptions{
-                {"Microsoft David", ""}, {"Microsoft Mark", ""}, {"Microsoft Zira", ""}}));
-    /* A step saves the display name, and the voice speaks with it. */
+            a11y::ChoiceOptions{{"Microsoft David (en-US)", "Microsoft David"},
+                {"Microsoft Mark (en-US)", "Microsoft Mark"},
+                {"Microsoft Zira (en-US)", "Microsoft Zira"}}));
+    /* A step saves the display name and language, and the voice speaks
+     * with it. */
     one.step("your_voice.voice", 1);
-    assert(one.rows->voice(Voice::yours).saved() == "Microsoft David");
-    assert(has_line(one.file(), "your_voice.voice = Microsoft David"));
+    assert(one.rows->voice(Voice::yours).saved() == "Microsoft David (en-US)");
+    assert(has_line(one.file(), "your_voice.voice = Microsoft David (en-US)"));
     assert(one.voices->voice_in_use(Voice::yours) == "Microsoft David");
     one.step("your_voice.voice", -1);
     one.step("your_voice.voice", -1);
     assert(one.voices->voice_in_use(Voice::yours) == "Microsoft Mark");
+}
+
+/* Names repeat across languages on some platforms: each voice is saved
+ * with its language and found by it, a language not installed falls back,
+ * and a saved text reads back as the voice it names. */
+void voices_of_one_name_are_told_apart() {
+    Game game(
+        "repeated.ini", "your_voice.voice = Eddy (fi-FI)\n", a11y::test::repeated_names(), "");
+    game.frames(1);
+    assert((game.rows->voice(Voice::yours).options() ==
+            a11y::ChoiceOptions{{"Eddy (de-DE)", "Eddy, German (Germany)"},
+                {"Eddy (English (UK)) (en-GB)", "Eddy (English (UK)), English (United Kingdom)"},
+                {"Eddy (en-US)", "Eddy, English (United States)"},
+                {"Zira Lite (en-US)", "Zira Lite, English (United States)"},
+                {"Eddy (fi-FI)", "Eddy, Finnish (Finland)"},
+                {"Zira (fi-FI)", "Zira, Finnish (Finland)"}}));
+    assert(game.rows->voice(Voice::yours).option() == "Eddy (fi-FI)");
+    assert((*game.voices->in_use(Voice::yours) == a11y::VoiceInfo{"Eddy", "fi-FI"}));
+    /* The opponents' default, Mark, is not installed; the backend's
+     * default, the bridge's second, speaks. */
+    assert((game.spoken == Spoken{{"Voice Mark, English (United States) not installed, using "
+                                   "Eddy (English (UK)), English (United Kingdom).",
+                               false}}));
+    /* Steps save each voice by name and language, and each speaks with it. */
+    game.step("your_voice.voice", -1);
+    game.step("your_voice.voice", -1);
+    assert(has_line(game.file(), "your_voice.voice = Eddy (en-US)"));
+    assert((*game.voices->in_use(Voice::yours) == a11y::VoiceInfo{"Eddy", "en-US"}));
+    game.step("opponents_voice.voice", -1);
+    assert(has_line(game.file(), "opponents_voice.voice = Eddy (de-DE)"));
+    assert((*game.voices->in_use(Voice::opponents) == a11y::VoiceInfo{"Eddy", "de-DE"}));
+    game.seconds(game.rows->sample_delay() * 1.2);
+    {
+        std::lock_guard<std::mutex> lock(game.calls.mutex);
+        assert((game.calls.set_voices == std::vector<std::pair<int, int>>{{0, 2}, {1, 0}}));
+    }
+    /* The file read afresh finds the same voices. */
+    Game again("repeated_again.ini", game.file(), a11y::test::repeated_names(), "");
+    again.frames(1);
+    assert(again.rows->voice(Voice::yours).option() == "Eddy (en-US)");
+    assert(again.rows->voice(Voice::opponents).option() == "Eddy (de-DE)");
+    assert(again.spoken.empty());
+    /* A name with brackets of its own, saved with its language. */
+    again.step("your_voice.voice", -1);
+    assert(has_line(again.file(), "your_voice.voice = Eddy (English (UK)) (en-GB)"));
+    assert(again.rows->voice(Voice::yours).option() == "Eddy (English (UK)) (en-GB)");
+    /* A language not installed: the backend's default speaks, the file
+     * keeps the text, and the voice is said with its language. */
+    again.edit("your_voice.voice = Eddy (English (UK)) (en-GB)", "your_voice.voice = Eddy (fr-FR)");
+    assert(again.spoken.back() ==
+           std::make_pair(std::string("Voice Eddy, French (France) not installed, using Eddy "
+                                      "(English (UK)), English (United Kingdom)."),
+               false));
+    assert(again.rows->voice(Voice::yours).option() == "Eddy (English (UK)) (en-GB)");
+    assert(again.rows->voice(Voice::yours).saved() == "Eddy (fr-FR)");
 }
 
 /* A change plays a sample in its voice a moment later; a quick run of
@@ -408,11 +466,12 @@ void the_boost_lifts_the_voice() {
 
 /* The file's values reach the voices at the start, with no sample. */
 void the_saved_values_apply_at_the_start() {
-    Game game("saved.ini",
-        "your_voice.voice = Microsoft David\nyour_voice.rate = 80\nopponents_voice.volume = 40\n");
+    Game game("saved.ini", "your_voice.voice = Microsoft David (en-US)\nyour_voice.rate = "
+                           "80\nopponents_voice.volume = "
+                           "40\n");
     game.frames(1);
     assert(game.voices->voice_in_use(Voice::yours) == "Microsoft David");
-    assert(game.rows->voice(Voice::yours).option() == "Microsoft David");
+    assert(game.rows->voice(Voice::yours).option() == "Microsoft David (en-US)");
     assert(logged("[a11y] voice yours speaks with Microsoft David"));
     game.seconds(game.rows->sample_delay() * 2.0);
     assert(!logged(kSample) && !logged(kTheirSample));
@@ -429,8 +488,10 @@ void a_missing_voice_falls_back() {
     Game game("missing.ini", "your_voice.voice = Hazel\n");
     assert(game.spoken.size() == 0);
     game.frames(1);
-    assert((game.spoken == Spoken{{"Voice Hazel not installed, using Microsoft George.", false}}));
-    assert(game.rows->voice(Voice::yours).option() == "Microsoft George");
+    assert((game.spoken ==
+            Spoken{{"Voice Hazel not installed, using Microsoft George, English (United Kingdom).",
+                false}}));
+    assert(game.rows->voice(Voice::yours).option() == "Microsoft George (en-GB)");
     assert(game.rows->voice(Voice::yours).saved() == "Hazel");
     assert(game.voices->voice_in_use(Voice::yours) == "Microsoft George");
     assert(logged("[a11y] voice yours speaks with Microsoft George"));
@@ -442,13 +503,15 @@ void a_missing_voice_falls_back() {
     assert(has_line(game.file(), "your_voice.voice = Hazel"));
     /* A step moves on from the voice in use, George, the first. */
     game.step("your_voice.voice", 1);
-    assert(game.rows->voice(Voice::yours).saved() == "Microsoft David");
-    assert(has_line(game.file(), "your_voice.voice = Microsoft David"));
+    assert(game.rows->voice(Voice::yours).saved() == "Microsoft David (en-US)");
+    assert(has_line(game.file(), "your_voice.voice = Microsoft David (en-US)"));
     /* A hand edit naming a voice not installed is said as it is read. */
-    game.edit("your_voice.voice = Microsoft David", "your_voice.voice = Susan");
-    assert(
-        game.spoken.back() ==
-        std::make_pair(std::string("Voice Susan not installed, using Microsoft George."), false));
+    game.edit("your_voice.voice = Microsoft David (en-US)", "your_voice.voice = Susan");
+    assert(game.spoken.back() ==
+           std::make_pair(
+               std::string(
+                   "Voice Susan not installed, using Microsoft George, English (United Kingdom)."),
+               false));
     assert(game.voices->voice_in_use(Voice::yours) == "Microsoft George");
 
     /* In the game, the news waits for the first scene's announcement, which
@@ -460,7 +523,9 @@ void a_missing_voice_falls_back() {
     in_game.speech->announce("Title screen. Press Start.", a11y::Mode::interrupt);
     in_game.rows->scene_announced();
     assert((in_game.spoken == Spoken{{"Title screen. Press Start.", true},
-                                  {"Voice Susan not installed, using Microsoft George.", false}}));
+                                  {"Voice Susan not installed, using Microsoft George, English "
+                                   "(United Kingdom).",
+                                      false}}));
     in_game.rows->scene_announced();
     assert(in_game.spoken.size() == 2);
 
@@ -470,9 +535,20 @@ void a_missing_voice_falls_back() {
         "");
     bare.frames(1);
     assert((bare.spoken ==
-            Spoken{{"Voices Zira and Mark not installed, using Microsoft Hazel.", false}}));
-    assert(bare.rows->voice(Voice::opponents).option() == "Microsoft Hazel");
-    assert(has_line(bare.file(), "your_voice.voice = Zira"));
+            Spoken{{"Voices Zira, English (United States) and Mark, English (United States) not "
+                    "installed, using Microsoft Hazel, English (United Kingdom).",
+                false}}));
+    assert(bare.rows->voice(Voice::opponents).option() == "Microsoft Hazel (en-GB)");
+    assert(has_line(bare.file(), "your_voice.voice = Zira (en-US)"));
+
+    /* The voices in one language: a missing voice's language is said only
+     * where it differs from theirs, as a row would show it. */
+    Game british("british.ini", "opponents_voice.voice = Susan\n",
+        {{"Microsoft Hazel", "en-GB"}, {"Microsoft George", "en-GB"}}, "");
+    british.frames(1);
+    assert((british.spoken == Spoken{{"Voices Zira, English (United States) and Susan not "
+                                      "installed, using Microsoft George.",
+                                  false}}));
 }
 
 /* The backend unavailable: the Voice rows say so and step nowhere, the samples
@@ -489,7 +565,7 @@ void unavailable_voices_use_the_screen_reader() {
     game.frames(1);
     assert(game.spoken.size() == 1);
     game.step("your_voice.voice", 1);
-    assert(game.rows->voice(Voice::yours).saved() == "Zira");
+    assert(game.rows->voice(Voice::yours).saved() == "Zira (en-US)");
     game.step("your_voice.rate", 1);
     game.seconds(game.rows->sample_delay() * 1.2);
     assert(game.spoken.back() == std::make_pair(std::string("Your voice"), false));
@@ -525,6 +601,7 @@ int main(int argc, char** argv) {
     the_defaults_come_from_the_backend();
     languages_are_named();
     the_options_are_the_installed_voices();
+    voices_of_one_name_are_told_apart();
     a_change_plays_a_sample();
     the_boost_lifts_the_voice();
     the_saved_values_apply_at_the_start();

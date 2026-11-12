@@ -3,7 +3,7 @@
  * "Choosing a voice", "The rows", "Missing voices"; primer
  * docs/a11y/speech.md, "Voices"): for your voice and then the opponents'
  * voice, a Voice row (a choice of the installed voices, saved by display
- * name), a Rate and a Volume slider, and Preview, in Voice settings
+ * name and language, voice_text), a Rate and a Volume slider, and Preview, in Voice settings
  * inside Match announcement settings, and a boost under the volume, a tuning
  * value. Every change
  * reaches the voices at once, from a row in either host or a hand edit of
@@ -28,9 +28,10 @@
 namespace a11y {
 
 /* The Voice rows' options for these voices, sorted as Voices::installed
- * keeps them: each by its display name, with its language after it
- * ("Microsoft Mark, English (United States)") when the voices span more
- * than one language. */
+ * keeps them: each saved as voice_text gives it ("Microsoft Mark (en-US)")
+ * and shown by its display name, with its language after it ("Microsoft
+ * Mark, English (United States)") when the voices span more than one
+ * language. */
 ChoiceOptions voice_options(const std::vector<VoiceInfo>& voices);
 
 class VoiceSettings {
@@ -98,7 +99,8 @@ private:
     std::string fallback(std::string_view saved, const ChoiceOptions& options) const;
     std::string none() const;
     /* "Voice Zira not installed, using Microsoft David.", for the voices given
-     * whose saved voice is not installed; empty when each is. */
+     * whose saved voice is not installed, each voice as a row would show it;
+     * empty when each is. */
     std::string missing(const std::vector<Voice>& voices) const;
     void sample(Voice voice);
     /* The voices' news, said now or once a scene is announced. */

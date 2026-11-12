@@ -45,18 +45,18 @@ wait '"Match announcement settings\. Voice settings, Enter to open\. '
 key Right
 wait '"Voice settings\. Your voice, (?P<yours>[^",]+)(, [^"]+)?, Left and right to change\. The voice that says what happens to you in a match\."$'
 
-# A step Right: the next voice, saved by its display name, said alone, and a
-# moment later its sample.
+# A step Right: the next voice, saved by its display name and its language
+# tag in brackets, said alone, and a moment later its sample.
 key Right
-wait '\[a11y\] accessibility settings: saved your_voice\.voice = (?P<next>[^,]+)$'
+wait '\[a11y\] accessibility settings: saved your_voice\.voice = (?P<next>[^,(]+) \((?P<nextlang>[^()]+)\)$'
 wait '\[a11y\] speak interrupt \(muted\): "%next%(, [^"]+)?"$'
 wait '\[a11y\] voice yours: "Your voice"$'
 wait '\[a11y\] voice yours plays: "Your voice" \(rendered in \d+ ms, \d+ ms after it was said\)$'
-ini '^your_voice\.voice = %next%$'
+ini '^your_voice\.voice = %next% \(%nextlang%\)$'
 
 # Two steps Left at once: each said, one sample once they settle.
 key Left Left
-wait '\[a11y\] accessibility settings: saved your_voice\.voice = %yours%$'
+wait '\[a11y\] accessibility settings: saved your_voice\.voice = %yours% \((?P<yourslang>[^()]+)\)$'
 wait '\[a11y\] accessibility settings: saved your_voice\.voice = (?P<before>[^,]+)$'
 wait '\[a11y\] voice yours: "Your voice"$'
 wait '\[a11y\] voice yours plays: "Your voice" '
@@ -64,10 +64,10 @@ ini '^your_voice\.voice = %before%$'
 
 # A step Right back to the voice the run started on.
 key Right
-wait '\[a11y\] accessibility settings: saved your_voice\.voice = %yours%$'
+wait '\[a11y\] accessibility settings: saved your_voice\.voice = %yours% \(%yourslang%\)$'
 wait '\[a11y\] voice yours: "Your voice"$'
 wait '\[a11y\] voice yours plays: "Your voice" '
-ini '^your_voice\.voice = %yours%$'
+ini '^your_voice\.voice = %yours% \(%yourslang%\)$'
 
 # Your voice rate a step down and back up, each with its sample.
 key Down
@@ -102,10 +102,10 @@ wait "\[a11y\] voice opponents: \"Opponents' voice\"$"
 wait "\[a11y\] voice opponents plays: \"Opponents' voice\" "
 ini '^opponents_voice\.voice = %other%$'
 key Left
-wait '\[a11y\] accessibility settings: saved opponents_voice\.voice = %theirs%$'
+wait '\[a11y\] accessibility settings: saved opponents_voice\.voice = %theirs% \((?P<theirslang>[^()]+)\)$'
 wait "\[a11y\] voice opponents: \"Opponents' voice\"$"
 wait "\[a11y\] voice opponents plays: \"Opponents' voice\" "
-ini '^opponents_voice\.voice = %theirs%$'
+ini '^opponents_voice\.voice = %theirs% \(%theirslang%\)$'
 
 # The opponents' other rows and round to Your voice; Escape back to Voice
 # settings' row, then the match announcements' rows and round to it.

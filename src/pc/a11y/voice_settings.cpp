@@ -25,18 +25,35 @@ float bridge_rate(const Number& rate) {
     return rate.value() / 100.0f;
 }
 
+/* The installed voices span more than one language, counting `also`, a
+ * voice's language beside them, when not empty. */
+bool spans_languages(const std::vector<VoiceInfo>& voices, std::string_view also = {}) {
+    if (voices.empty()) {
+        return false;
+    }
+    const std::string& first = voices.front().language;
+    return (!also.empty() && !same_language(also, first)) ||
+           std::any_of(voices.begin(), voices.end(),
+               [&first](const VoiceInfo& voice) { return !same_language(voice.language, first); });
+}
+
+/* A voice as a row shows it: its name, with its language after it when the
+ * voices span more than one. */
+std::string shown_voice(const VoiceInfo& voice, bool languages) {
+    if (!languages || voice.language.empty()) {
+        return voice.name;
+    }
+    return voice.name + ", " + language_name(voice.language);
+}
+
 }  // namespace
 
 ChoiceOptions voice_options(const std::vector<VoiceInfo>& voices) {
-    const bool languages = std::any_of(voices.begin(), voices.end(),
-        [&voices](const VoiceInfo& voice) { return voice.language != voices.front().language; });
+    const bool languages = spans_languages(voices);
     ChoiceOptions options;
     for (const VoiceInfo& voice : voices) {
-        ChoiceOption option{voice.name, ""};
-        if (languages) {
-            option.label = voice.name + ", " + language_name(voice.language);
-        }
-        options.push_back(std::move(option));
+        options.push_back(
+            ChoiceOption{voice_text(voice.name, voice.language), shown_voice(voice, languages)});
     }
     return options;
 }
@@ -68,7 +85,7 @@ VoiceSettings::Rows VoiceSettings::add_rows(ValueModel& model, const NamedMenu* 
         .name = "voice",
         .label = name,
         .description = std::string("The voice that says ") + about + " in a match.",
-        .default_option = std::string(default_voice.name),
+        .default_option = voice_text(default_voice.name, default_voice.language),
         /* Called only once the rows exist: this is whole by then. */
         .list = [this] { return m_options; },
         .fallback = [this](std::string_view saved,
@@ -197,15 +214,20 @@ void VoiceSettings::sample(Voice voice) {
 }
 
 std::string VoiceSettings::fallback(std::string_view saved, const ChoiceOptions& options) const {
-    std::vector<VoiceInfo> names;
+    std::vector<VoiceInfo> voices;
     int default_index = -1;
-    for (const ChoiceOption& option : options) {
-        if (m_voices != nullptr && option.text == m_voices->default_voice()) {
-            default_index = static_cast<int>(names.size());
-        }
-        names.push_back(VoiceInfo{option.text, ""});
+    const VoiceInfo* backend_default = nullptr;
+    if (m_voices != nullptr && m_voices->default_index() >= 0) {
+        backend_default = &m_voices->installed()[static_cast<size_t>(m_voices->default_index())];
     }
-    const int index = find_voice(names, saved, default_index);
+    for (const ChoiceOption& option : options) {
+        VoiceInfo voice = parse_voice_text(option.text);
+        if (backend_default != nullptr && voice == *backend_default) {
+            default_index = static_cast<int>(voices.size());
+        }
+        voices.push_back(std::move(voice));
+    }
+    const int index = find_voice(voices, saved, default_index);
     return index < 0 ? std::string() : options[static_cast<size_t>(index)].text;
 }
 
@@ -223,17 +245,26 @@ std::string VoiceSettings::none() const {
 }
 
 std::string VoiceSettings::missing(const std::vector<Voice>& voices) const {
+    /* Each as a row would show it: the voice in use as its row does, the
+     * one missing with its language too where it differs from the voices'
+     * one language. */
+    const std::vector<VoiceInfo>& installed = m_voices->installed();
+    std::vector<std::string> texts;
     std::vector<std::string> saved;
     std::vector<std::string> in_use;
     for (Voice voice : voices) {
         const std::string& text = rows(voice).voice.saved();
-        if (text.empty() || match_voice(m_voices->installed(), text) >= 0 ||
-            std::find(saved.begin(), saved.end(), text) != saved.end())
+        if (text.empty() || match_voice(installed, text) >= 0 ||
+            std::find(texts.begin(), texts.end(), text) != texts.end())
         {
             continue;
         }
-        saved.push_back(text);
-        in_use.push_back(m_voices->voice_in_use(voice));
+        const VoiceInfo missing = parse_voice_text(text);
+        const VoiceInfo* used = m_voices->in_use(voice);
+        texts.push_back(text);
+        saved.push_back(shown_voice(missing, spans_languages(installed, missing.language)));
+        in_use.push_back(
+            used == nullptr ? std::string() : shown_voice(*used, spans_languages(installed)));
     }
     if (saved.empty()) {
         return {};

@@ -41,9 +41,13 @@ public:
 /* Speech, the cue engine and the voices, wired as hooks.cpp wires them. */
 struct Rig {
     explicit Rig(VoiceCalls& calls, std::string open_error = "", bool preview = false,
-        const a11y::VoiceBackend& backend = a11y::test::kTestBackend)
+        const a11y::VoiceBackend& backend = a11y::test::kTestBackend,
+        std::vector<a11y::VoiceInfo> installed = a11y::test::several_languages(),
+        int default_voice = 1)
         : speech(config(), std::make_unique<NoScreenReader>()),
-          voices(speech, engine, std::make_unique<FakeVoiceBridge>(calls, std::move(open_error)),
+          voices(speech, engine,
+              std::make_unique<FakeVoiceBridge>(
+                  calls, std::move(open_error), std::move(installed), default_voice),
               backend, true, preview) {
         s_lines.clear();
         speech.init();
@@ -166,7 +170,7 @@ void the_voices_open_with_their_defaults() {
  * gives it (voice_backend); an empty default is the backend's own default
  * voice. */
 void the_defaults_come_from_the_backend() {
-    constexpr a11y::VoiceBackend kOther{"Other voices", {{{"heidi"}, {""}}}};
+    constexpr a11y::VoiceBackend kOther{"Other voices", {{{"heidi", "fi-FI"}, {""}}}};
     VoiceCalls calls;
     Rig rig(calls, "", false, kOther);
     assert(rig.voices.state() == VoicesState::ready);
@@ -205,6 +209,80 @@ void a_voice_is_found_by_name_or_part() {
     rig.frames(1);
     std::lock_guard<std::mutex> lock(calls.mutex);
     assert(calls.set_voices.back() == std::make_pair(0, 0));
+}
+
+/* A setting's text is the voice's name with its language tag in brackets
+ * after it, read back from its end, so a name's own brackets stay in the
+ * name; text without a tag is a name of any language. */
+void a_voice_text_holds_name_and_language() {
+    using a11y::parse_voice_text;
+    using a11y::VoiceInfo;
+    assert(a11y::voice_text("Microsoft Zira", "en-US") == "Microsoft Zira (en-US)");
+    assert(a11y::voice_text("Zira", "") == "Zira");
+    assert(a11y::voice_text("", "en-US").empty());
+    assert((parse_voice_text("Microsoft Zira (en-US)") == VoiceInfo{"Microsoft Zira", "en-US"}));
+    assert((parse_voice_text("Eddy (English (UK)) (en-GB)") ==
+            VoiceInfo{"Eddy (English (UK))", "en-GB"}));
+    assert((parse_voice_text("Ava (Enhanced) (en-US)") == VoiceInfo{"Ava (Enhanced)", "en-US"}));
+    assert((parse_voice_text("Tingting (zh-Hans_CN)") == VoiceInfo{"Tingting", "zh-Hans_CN"}));
+    assert((parse_voice_text("Satu(fi)") == VoiceInfo{"Satu", "fi"}));
+    /* No language tag at the end: the whole text is the name. */
+    assert((parse_voice_text("Zira") == VoiceInfo{"Zira", ""}));
+    assert((parse_voice_text("Ava (Enhanced)") == VoiceInfo{"Ava (Enhanced)", ""}));
+    assert((parse_voice_text("Eddy (English (UK))") == VoiceInfo{"Eddy (English (UK))", ""}));
+    assert((parse_voice_text("Odd (e)") == VoiceInfo{"Odd (e)", ""}));
+    assert((parse_voice_text("Odd (en-)") == VoiceInfo{"Odd (en-)", ""}));
+    assert((parse_voice_text("Odd (en--US)") == VoiceInfo{"Odd (en--US)", ""}));
+    assert((parse_voice_text("(en-US)") == VoiceInfo{"(en-US)", ""}));
+    assert(parse_voice_text("") == VoiceInfo{});
+    /* Every voice's text reads back as the voice. */
+    for (const VoiceInfo& voice : a11y::test::repeated_names()) {
+        assert(parse_voice_text(a11y::voice_text(voice.name, voice.language)) == voice);
+    }
+}
+
+/* Names repeat across languages on some platforms: a text's language tells
+ * them apart, and the name, whole or a part, is looked for in that language
+ * alone; a language not installed falls back. */
+void a_voice_is_found_in_its_language() {
+    const std::vector<a11y::VoiceInfo> voices = a11y::test::repeated_names();
+    assert(a11y::find_voice(voices, "Eddy (de-DE)", 3) == 0);
+    assert(a11y::find_voice(voices, "Eddy (en-US)", 3) == 2);
+    assert(a11y::find_voice(voices, "Eddy (fi-FI)", 3) == 4);
+    assert(a11y::find_voice(voices, "eddy (EN-us)", 3) == 2);
+    assert(a11y::find_voice(voices, "Eddy (English (UK)) (en-GB)", 3) == 1);
+    /* Part of a name, within the language: Zira Lite holds "Zira", but
+     * only the Finnish Zira is Finnish. */
+    assert(a11y::find_voice(voices, "Zira (en-US)", 0) == 3);
+    assert(a11y::find_voice(voices, "Zira (fi-FI)", 0) == 5);
+    assert(a11y::find_voice(voices, "Edd (en-GB)", 0) == 1);
+    /* No voice of the name in the language, or the language not
+     * installed: the default. */
+    assert(a11y::find_voice(voices, "Zira (de-DE)", 2) == 2);
+    assert(a11y::find_voice(voices, "Eddy (fr-FR)", 2) == 2);
+    assert(a11y::match_voice(voices, "Eddy (fr-FR)") == -1);
+    /* A name alone is of any language: the first of that name, else the
+     * first holding it. */
+    assert(a11y::find_voice(voices, "Eddy", 3) == 0);
+    assert(a11y::find_voice(voices, "Zira", 0) == 5);
+    assert(a11y::find_voice(voices, "Lite", 0) == 3);
+
+    /* The worker speaks with the voice of the text's language, by the
+     * bridge's own index. */
+    VoiceCalls calls;
+    Rig rig(calls, "", false, a11y::test::kTestBackend, a11y::test::repeated_names(), 0);
+    /* The defaults' Zira is in en-US, Zira Lite; Mark is nowhere. */
+    assert(logged("[a11y] voice yours speaks with Zira Lite"));
+    assert(logged("[a11y] voice opponents speaks with Eddy"));
+    rig.voices.set_voice(Voice::yours, "Eddy (fi-FI)");
+    assert((*rig.voices.in_use(Voice::yours) == a11y::VoiceInfo{"Eddy", "fi-FI"}));
+    rig.voices.set_voice(Voice::opponents, "Eddy (en-US)");
+    assert((*rig.voices.in_use(Voice::opponents) == a11y::VoiceInfo{"Eddy", "en-US"}));
+    rig.yours(1, "45");
+    rig.theirs(2, "60");
+    rig.frames(1);
+    std::lock_guard<std::mutex> lock(calls.mutex);
+    assert((calls.set_voices == std::vector<std::pair<int, int>>{{0, 4}, {1, 2}}));
 }
 
 void a_rate_applies_from_the_next_line() {
@@ -553,6 +631,8 @@ int main() {
     the_voices_open_with_their_defaults();
     the_defaults_come_from_the_backend();
     a_voice_is_found_by_name_or_part();
+    a_voice_text_holds_name_and_language();
+    a_voice_is_found_in_its_language();
     a_rate_applies_from_the_next_line();
     lines_queue_in_turn();
     a_line_about_the_same_subject_cuts_the_one_playing();

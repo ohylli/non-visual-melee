@@ -42,11 +42,12 @@ struct RenderedLine {
     int rate = 0;
 };
 
-/* A voice's default, as a setting's text names a voice: part of a display
- * name ("Zira"), matched as find_voice matches one; empty for the
- * backend's own default voice. */
+/* A voice's default: part of a display name ("Zira") in a language
+ * ("en-US"), matched as find_voice matches a setting's text; an empty name
+ * is the backend's own default voice, whatever the language. */
 struct VoiceDefault {
     std::string_view name;
+    std::string_view language;
 };
 
 /* The voices' backend this build speaks with, chosen per platform in

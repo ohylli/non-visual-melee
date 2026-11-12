@@ -59,9 +59,23 @@ static_assert(std::tuple_size_v<decltype(VoiceBackend::defaults)> == kVoiceCount
 /* A rate, 0 to 1, that is the voice's normal speed. */
 constexpr float kNormalRate = 0.5f;
 
-/* The voice a setting's text names among the installed: the one of that
- * display name, ignoring case; else the first whose name holds the text,
- * ignoring case ("Zira"); -1 for none, and for empty text. */
+/* A voice as a setting's text saves it (docs/a11y/speech.md, "Choosing a
+ * voice"): its display name with its language tag after it in brackets,
+ * "Microsoft Zira (en-US)", since a name alone may repeat across languages.
+ * A voice of no language is its name alone, and an empty name empty text. */
+std::string voice_text(std::string_view name, std::string_view language);
+/* A setting's text read back, from its end: a language tag in brackets
+ * there is the language and what comes before it the name, so a name with
+ * brackets of its own reads right ("Eddy (Old) (de-DE)" is "Eddy (Old)" in
+ * de-DE). Text without one is a name, or part of one, of any language. */
+VoiceInfo parse_voice_text(std::string_view text);
+/* Two language tags are one, ignoring case. */
+bool same_language(std::string_view a, std::string_view b);
+
+/* The voice a setting's text names among the installed, within its language
+ * (any, for text without one): the one of that display name, ignoring case;
+ * else the first whose name holds the name given, ignoring case ("Zira");
+ * -1 for none, and for an empty name. */
 int match_voice(const std::vector<VoiceInfo>& voices, std::string_view wanted);
 /* The voice a setting's text gives: match_voice's, else default_voice. Empty
  * text is the default. -1 when none is installed. */
@@ -114,11 +128,15 @@ public:
     /* The backend's default voice's display name; empty until ready or
      * when unknown. */
     const std::string& default_voice() const { return m_default; }
-    /* A setting's text, a display name or part of one: the voice the next
-     * line rendered speaks with (find_voice). */
+    /* Its index in installed(); -1 until ready or when unknown. */
+    int default_index() const { return m_default_index; }
+    /* A setting's text (voice_text, or a hand edit's name or part of one):
+     * the voice the next line rendered speaks with (find_voice). */
     void set_voice(Voice voice, std::string_view wanted);
-    /* The display name find_voice gives for the voice's text; empty until
-     * ready. */
+    /* The voice find_voice gives for the voice's text, in installed(); null
+     * until ready. */
+    const VoiceInfo* in_use(Voice voice) const;
+    /* Its display name; empty until ready. */
     std::string voice_in_use(Voice voice) const;
     /* 0 to 1, kNormalRate the voice's normal speed: from the next line
      * rendered. */

@@ -18,7 +18,7 @@ Two of the maintainer's other mods do the same: grimdark renders OneCore voices 
 - Rendering is synchronous and takes a few to some tens of milliseconds a line, so it runs on a worker thread; each Prism instance is used from that thread alone, as Prism's thread-safety rules ask. The game thread only queues text and reads back nothing but whether a line is still waiting.
 - The cue engine gains a voice that plays a one-shot buffer handed to it at run time, beside its looped and pulsed voices whose sounds are fixed when they are added.
 - The voices follow the master volume but not the cue volume or the Cues switch; they sit under the Speech switch.
-- Prism identifies a voice only by display name and language, so the chosen voice is saved by its display name.
+- Prism identifies a voice only by display name and language, so the chosen voice is saved by both, `Microsoft Zira (en-US)`: a name alone repeats across languages on a Mac (`docs/a11y/speech.md`, "Choosing a voice").
 - The backend is per platform, OneCore on Windows, AVSpeech planned for macOS (`.scratch/macos-port/`): each platform's branch in `a11y.cmake` names it, and its name and default voices are its row in the screen reader bridge (`docs/a11y/speech.md`, "The voice backend").
 - Online nothing changes: the voices never touch the game's sounds, and like all speech they are silent while `pc_net_resim()` is true.
 - The agent cannot hear the voices any more than the cues; the speech log names the voice of every announcement, and the cue engine's dump records their audio.
