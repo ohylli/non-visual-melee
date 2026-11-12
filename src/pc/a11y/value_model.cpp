@@ -4,6 +4,8 @@
 #include <cctype>
 #include <charconv>
 #include <cmath>
+#include <locale>
+#include <sstream>
 #include <utility>
 
 namespace a11y {
@@ -134,6 +136,65 @@ bool read_toggle(std::string_view text, float& out) {
     return false;
 }
 
+bool is_digit(char c) {
+    return c >= '0' && c <= '9';
+}
+
+/* A plain decimal read whole into a float, by std::from_chars' rules: an
+ * optional minus, digits with an optional point, an optional exponent
+ * ("-1.5", ".5", "5.", "2e-3"). Not from_chars itself: Apple's libc++ has
+ * its float overload only from macOS 26, below what the Mac build aims at.
+ * The text is held to that grammar first, as a stream alone would also take
+ * what a C library adds (hex, inf, nan); the classic locale keeps the point
+ * a point. A number out of a float's range fails. */
+bool read_decimal(std::string_view text, float& out) {
+    std::size_t at = 0;
+    if (at < text.size() && text[at] == '-') {
+        ++at;
+    }
+    std::size_t digits = 0;
+    while (at < text.size() && is_digit(text[at])) {
+        ++at;
+        ++digits;
+    }
+    if (at < text.size() && text[at] == '.') {
+        ++at;
+        while (at < text.size() && is_digit(text[at])) {
+            ++at;
+            ++digits;
+        }
+    }
+    if (digits == 0) {
+        return false;
+    }
+    if (at < text.size() && (text[at] == 'e' || text[at] == 'E')) {
+        ++at;
+        if (at < text.size() && (text[at] == '+' || text[at] == '-')) {
+            ++at;
+        }
+        std::size_t exponent = 0;
+        while (at < text.size() && is_digit(text[at])) {
+            ++at;
+            ++exponent;
+        }
+        if (exponent == 0) {
+            return false;
+        }
+    }
+    if (at != text.size()) {
+        return false;
+    }
+    std::istringstream stream{std::string(text)};
+    stream.imbue(std::locale::classic());
+    float value = 0.0f;
+    stream >> value;
+    if (stream.fail()) {
+        return false;
+    }
+    out = value;
+    return true;
+}
+
 /* A number, optionally followed by the value's unit ("80%", "0.5 s"). A
  * decimal comma is taken for a point. */
 bool read_number(const NamedValue& named, std::string_view text, float& out) {
@@ -146,11 +207,8 @@ bool read_number(const NamedValue& named, std::string_view text, float& out) {
     }
     std::replace(number.begin(), number.end(), ',', '.');
     std::size_t start = !number.empty() && number[0] == '+' ? 1 : 0;
-    const char* first = number.data() + start;
-    const char* last = number.data() + number.size();
     float value = 0.0f;
-    auto result = std::from_chars(first, last, value);
-    if (result.ec != std::errc() || result.ptr != last || first == last || !std::isfinite(value)) {
+    if (!read_decimal(std::string_view(number).substr(start), value) || !std::isfinite(value)) {
         return false;
     }
     out = value;

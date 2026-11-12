@@ -179,6 +179,47 @@ void the_text_is_parsed_with_spaces_comments_units_and_commas() {
     assert(a11y::format_value(*model.find("gap.on")) == "off");
 }
 
+/* A number is read by the same rules on every platform: a plain decimal,
+ * with a leading + or -, a fraction and an exponent. Nothing a C library
+ * would add (hex, inf, nan, a space inside) is taken. */
+void a_number_is_read_by_the_same_rules_everywhere() {
+    ValueModel model;
+    CueSettings cues(model);
+    struct Accepted {
+        const char* text;
+        float value;
+    };
+    for (const Accepted& accepted :
+        {
+            Accepted{"50", 50.0f},
+            Accepted{"+50", 50.0f},
+            Accepted{"-0", 0.0f},
+            Accepted{"50.5", 50.5f},
+            Accepted{".5", 0.5f},
+            Accepted{"5.", 5.0f},
+            Accepted{"5e1", 50.0f},
+            Accepted{"5E1", 50.0f},
+            Accepted{"5e+1", 50.0f},
+            Accepted{"1e-1", 0.1f},
+            Accepted{"0,25", 0.25f},
+            Accepted{"007", 7.0f},
+            /* The + is dropped before the number is read, so this is -5,
+             * held to the range. */
+            Accepted{"+-5", 0.0f},
+        })
+    {
+        a11y::TextRead read = model.read_text(std::string("cues.volume = ") + accepted.text);
+        assert(read.bad_lines.empty());
+        assert(model.find("cues.volume")->value == accepted.value);
+    }
+    for (const char* rejected : {"5x", "x5", "0x10", "inf", "-inf", "nan", "1e", "e5", "1.2.3",
+             "--5", "++5", "-+5", "-", ".", "5 0", "1e99", "1_0", "5e1.5"})
+    {
+        a11y::TextRead read = model.read_text(std::string("cues.volume = ") + rejected);
+        assert(read.bad_lines.size() == 1);
+    }
+}
+
 void a_value_out_of_range_is_clamped_and_logged() {
     Fixture f("clamped.ini");
     write_file(f.path, "cues.volume = 150\ncues.on = on\n");
@@ -1033,6 +1074,7 @@ int main(int argc, char** argv) {
     fs::create_directories(s_dir);
     a_missing_file_is_written_with_defaults_and_descriptions();
     the_text_is_parsed_with_spaces_comments_units_and_commas();
+    a_number_is_read_by_the_same_rules_everywhere();
     a_value_out_of_range_is_clamped_and_logged();
     an_unreadable_line_keeps_its_last_value_and_is_reported_by_number();
     a_reload_applies_only_what_changed();
