@@ -139,7 +139,8 @@ jobs:
       # passing is the proof; these lines show the route in the log: the
       # launcher in front of the compile, the gcc-NN it picks (the same
       # search as tools/gcc_launcher.py, which GCC_BIN would override), and
-      # the compiler's ident in the object, if GCC wrote one.
+      # the compiler that wrote the object, as its debug info names it
+      # ("GNU C17 <version> ...").
       - name: Show game_access.c compiled by GCC
         run: |
           ninja -C "${BUILD_DIR}" -t commands a11y_melee_game | grep 'game_access\.c'
@@ -152,7 +153,7 @@ jobs:
           done
           obj="$(find "${BUILD_DIR}/CMakeFiles/a11y_melee_game.dir" -name 'game_access.c.o')"
           echo "${obj}"
-          strings -a "${obj}" | grep -m 1 'GCC' || echo "(no compiler ident in the object)"
+          dwarfdump "${obj}" | grep -m 1 DW_AT_producer || echo "(no producer in the object's debug info)"
 
       # Prism found at run time: the build directory's rpath for the copy
       # beside melee, and the bundle's copy with its @rpath name. libtolk,
