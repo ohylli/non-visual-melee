@@ -1,14 +1,74 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "screen_reader_bridge.hpp"
 
-/* Gated on the cmake-defined macro rather than the platform: Prism's C API is
- * the same everywhere it ships, so a new platform only needs its a11y.cmake
- * branch. Keep this file free of platform headers and platform calls. */
+/* Gated on the cmake-defined macros rather than the platform: Prism's C API
+ * is the same everywhere it ships, so a new platform needs its a11y.cmake
+ * branch and, for its voices, its backend's row in kVoiceBackends. Keep this
+ * file free of platform headers and platform calls. */
 #if defined(A11Y_HAVE_PRISM)
 #include <prism.h>
+#endif
 
 namespace a11y {
 namespace {
+
+/* No voices: open fails, and the voices say why. */
+class NoVoiceBridge final : public VoiceBridge {
+public:
+    explicit NoVoiceBridge(const char* why) : m_why(why) {}
+    std::string open(int) override { return m_why; }
+    void close() override {}
+    std::vector<VoiceInfo> voices() override { return {}; }
+    int default_voice() override { return -1; }
+    std::string set_voice(int, int) override { return "no voices"; }
+    std::string set_rate(int, float) override { return "no voices"; }
+    std::string render(int, std::string_view, RenderedLine&) override { return "no voices"; }
+
+private:
+    const char* m_why;
+};
+
+/* A build that names no voice backend: no name and empty defaults, its
+ * voices never opening. */
+constexpr VoiceBackend kNoVoiceBackend{};
+
+}  // namespace
+}  // namespace a11y
+
+#if defined(A11Y_HAVE_PRISM)
+
+namespace a11y {
+namespace {
+
+/* The voice backends a platform's branch in a11y.cmake may name, by Prism
+ * id (A11Y_VOICE_BACKEND), with what each brings. Another backend is a row
+ * here and a line in its platform's branch. */
+struct PrismVoiceBackend {
+    PrismBackendId id;
+    VoiceBackend values;
+};
+
+constexpr PrismVoiceBackend kVoiceBackends[] = {
+    /* Windows. The defaults are grimdark's (.scratch/voices/spec.md,
+     * "Defaults"): US English voices of every Windows 10 and 11 install. */
+    {PRISM_BACKEND_ONE_CORE, {"OneCore", {{{"Zira"}, {"Mark"}}}}},
+};
+
+constexpr const PrismVoiceBackend* find_backend(PrismBackendId id) {
+    for (const PrismVoiceBackend& backend : kVoiceBackends) {
+        if (backend.id == id) {
+            return &backend;
+        }
+    }
+    return nullptr;
+}
+
+#if defined(A11Y_VOICE_BACKEND)
+constexpr const PrismVoiceBackend* kBuildBackend = find_backend(A11Y_VOICE_BACKEND);
+static_assert(kBuildBackend != nullptr, "a11y.cmake names a voice backend kVoiceBackends lacks");
+#else
+constexpr const PrismVoiceBackend* kBuildBackend = nullptr;
+#endif
 
 class PrismBridge final : public ScreenReaderBridge {
 public:
@@ -69,15 +129,16 @@ std::string error_text(PrismError error) {
     return message != nullptr ? message : "unknown Prism error";
 }
 
-/* The voices' instances. Prism is started here a second time, on the
- * voices' worker thread: prism_init initialises COM on the thread that calls
- * it as a single-threaded apartment, and the OneCore backend then moves its
- * blocking WinRT calls to the thread pool, so the worker needs nothing of its
- * own. A context of its own also keeps the screen reader's, on the game
- * thread, out of the worker's way. Measured with v0.18.2 in
- * docs/a11y/speech.md, "Voices". */
+/* The voices' instances of the build's voice backend. Prism is started
+ * here a second time, on the voices' worker thread: for OneCore, prism_init
+ * initialises COM on the thread that calls it as a single-threaded
+ * apartment, and OneCore's backend then moves its blocking WinRT calls to
+ * the thread pool, so the worker needs nothing of its own. A context of its
+ * own also keeps the screen reader's, on the game thread, out of the
+ * worker's way. Measured with v0.18.2 in docs/a11y/speech.md, "Voices". */
 class PrismVoiceBridge final : public VoiceBridge {
 public:
+    explicit PrismVoiceBridge(const PrismVoiceBackend& backend) : m_backend(backend) {}
     ~PrismVoiceBridge() override { close(); }
 
     std::string open(int count) override {
@@ -87,15 +148,15 @@ public:
             return "Prism did not start";
         }
         for (int i = 0; i < count; i++) {
-            PrismBackend* backend = prism_registry_create(m_context, PRISM_BACKEND_ONE_CORE);
+            PrismBackend* backend = prism_registry_create(m_context, m_backend.id);
             if (backend == nullptr) {
-                return "no OneCore backend";
+                return "no " + std::string(m_backend.values.name) + " backend";
             }
             m_instances.push_back(backend);
             /* create, unlike create_best, leaves it uninitialised. */
             const PrismError error = prism_backend_initialize(backend);
             if (error != PRISM_OK) {
-                return "OneCore did not start: " + error_text(error);
+                return std::string(m_backend.values.name) + " did not start: " + error_text(error);
             }
         }
         return {};
@@ -105,7 +166,7 @@ public:
      * close only as the game exits, from its atexit handler, and there
      * prism_shutdown on the worker never returned once a OneCore instance
      * had rendered (v0.18.2; freeing the instances, or CoUninitialize alone,
-     * returns). The worker's apartment ends with the thread. */
+     * returns). OneCore's apartment on the worker ends with the thread. */
     void close() override {
         for (PrismBackend* backend : m_instances) {
             prism_backend_free(backend);
@@ -139,7 +200,7 @@ public:
     }
 
     int default_voice() override {
-        /* Each instance starts at the Windows default voice. */
+        /* Each instance starts at the backend's default voice. */
         PrismBackend* backend = instance(0);
         size_t index = 0;
         if (backend == nullptr || prism_backend_get_voice(backend, &index) != PRISM_OK) {
@@ -196,6 +257,7 @@ private:
         return m_instances[static_cast<size_t>(which)];
     }
 
+    const PrismVoiceBackend& m_backend;
     PrismContext* m_context = nullptr;
     std::vector<PrismBackend*> m_instances;
 };
@@ -206,8 +268,15 @@ std::unique_ptr<ScreenReaderBridge> make_screen_reader_bridge() {
     return std::make_unique<PrismBridge>();
 }
 
+const VoiceBackend& voice_backend() {
+    return kBuildBackend != nullptr ? kBuildBackend->values : kNoVoiceBackend;
+}
+
 std::unique_ptr<VoiceBridge> make_voice_bridge() {
-    return std::make_unique<PrismVoiceBridge>();
+    if (kBuildBackend == nullptr) {
+        return std::make_unique<NoVoiceBridge>("no voice backend on this platform");
+    }
+    return std::make_unique<PrismVoiceBridge>(*kBuildBackend);
 }
 
 }  // namespace a11y
@@ -225,26 +294,19 @@ public:
     std::string output(std::string_view, bool) override { return {}; }
 };
 
-/* No voices without Prism: open fails, and the voices say so. */
-class NoVoiceBridge final : public VoiceBridge {
-public:
-    std::string open(int) override { return "no Prism on this platform"; }
-    void close() override {}
-    std::vector<VoiceInfo> voices() override { return {}; }
-    int default_voice() override { return -1; }
-    std::string set_voice(int, int) override { return "no voices"; }
-    std::string set_rate(int, float) override { return "no voices"; }
-    std::string render(int, std::string_view, RenderedLine&) override { return "no voices"; }
-};
-
 }  // namespace
 
 std::unique_ptr<ScreenReaderBridge> make_screen_reader_bridge() {
     return std::make_unique<SilentBridge>();
 }
 
+const VoiceBackend& voice_backend() {
+    return kNoVoiceBackend;
+}
+
+/* No voices without Prism. */
 std::unique_ptr<VoiceBridge> make_voice_bridge() {
-    return std::make_unique<NoVoiceBridge>();
+    return std::make_unique<NoVoiceBridge>("no Prism on this platform");
 }
 
 }  // namespace a11y

@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The voices (ADR-0008, primer docs/a11y/speech.md, "Voices"): your voice
- * and the opponents' voice, each a Prism OneCore instance of its own that a
- * worker thread renders lines with, played by a once voice of the cue engine.
- * Speech logs each line and lets it through (Speech::announce_voice); this
- * queues it, has it rendered, and plays it in turn.
+ * and the opponents' voice, each a Prism instance of its own of the build's
+ * voice backend (voice_backend) that a worker thread renders lines with,
+ * played by a once voice of the cue engine. Speech logs each line and lets
+ * it through (Speech::announce_voice); this queues it, has it rendered, and
+ * plays it in turn.
  *
  * Queueing, within one voice: a new line about a subject whose line is
  * playing cuts that line off, with the engine's stop ramp, as soon as the new
@@ -42,14 +43,18 @@ enum class VoicesState {
     stopped,  /* speech has not been on yet: no worker */
     starting, /* the worker is opening the instances */
     ready,    /* lines are rendered and played */
-    /* OneCore did not start, its test line failed, or the cue engine has
-     * no audio output: lines go to the screen reader, queued. */
+    /* The backend did not start, its test line failed, or the cue engine
+     * has no audio output: lines go to the screen reader, queued. */
     unavailable,
 };
 
 /* The loudest sample of every line once evened out, before the cue engine's
- * chain: OneCore's loudness varies from word to word. Set by ear. */
+ * chain: OneCore's loudness varies from word to word, and another backend's
+ * may. Set by ear. */
 constexpr float kVoicePeak = 0.8f;
+
+/* A default per voice in the backend's table. */
+static_assert(std::tuple_size_v<decltype(VoiceBackend::defaults)> == kVoiceCount);
 
 /* A rate, 0 to 1, that is the voice's normal speed. */
 constexpr float kNormalRate = 0.5f;
@@ -74,10 +79,11 @@ class Voices final : public VoiceLines {
 public:
     /* Adds a once voice per voice to the engine, which must outlive this,
      * and attaches to speech, which starts the worker the first time it is
-     * on. preview is MELEE_A11Y_VOICE_PREVIEW. Your voice wants "Zira" and
-     * the opponents' voice "Mark" until set_voice says otherwise. */
-    Voices(Speech& speech, CueEngine& engine, std::unique_ptr<VoiceBridge> bridge, bool log,
-        bool preview);
+     * on. backend is the bridge's (voice_backend in the game), which names
+     * the backend in the log and gives each voice the default it wants until
+     * set_voice says otherwise. preview is MELEE_A11Y_VOICE_PREVIEW. */
+    Voices(Speech& speech, CueEngine& engine, std::unique_ptr<VoiceBridge> bridge,
+        const VoiceBackend& backend, bool log, bool preview);
     /* Detaches from speech, stops the voices and joins the worker, which
      * closes the bridge on its own thread. Only as the game exits: the
      * bridge leaves Prism's context open (PrismVoiceBridge::close). */
@@ -97,16 +103,16 @@ public:
      * which runs at every frame boundary, outside the simulation: the
      * worker's news logged, rendered lines played in turn, the lines waiting
      * dropped as the port menu opens, and MELEE_A11Y_VOICE_PREVIEW's lines.
-     * OneCore found unavailable, the lines waiting go to the screen reader,
-     * queued. */
+     * The backend found unavailable, the lines waiting go to the screen
+     * reader, queued. */
     void frame(Clock::time_point now, bool port_menu_open);
 
     VoicesState state() const { return m_state; }
     /* The installed voices, sorted by language and then name; empty until
      * ready. Kept, so a menu can copy it every frame. */
     const std::vector<VoiceInfo>& installed() const { return m_installed; }
-    /* The Windows default voice's display name; empty until ready or when
-     * unknown. */
+    /* The backend's default voice's display name; empty until ready or
+     * when unknown. */
     const std::string& default_voice() const { return m_default; }
     /* A setting's text, a display name or part of one: the voice the next
      * line rendered speaks with (find_voice). */
@@ -187,6 +193,7 @@ private:
 
     Speech& m_speech;
     CueEngine& m_engine;
+    std::string m_backend_name;
     bool m_log;
     VoicesState m_state = VoicesState::stopped;
     std::array<VoiceSlot, kVoiceCount> m_voices;

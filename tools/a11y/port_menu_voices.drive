@@ -43,7 +43,7 @@ wait '"Match announcement settings, Enter to open\. '
 key Right
 wait '"Match announcement settings\. Voice settings, Enter to open\. '
 key Right
-wait '"Voice settings\. Your voice, (?P<yours>[^",]+)(, [^"]+)?, Left and right to change\. The Windows voice that says what happens to you in a match\."$'
+wait '"Voice settings\. Your voice, (?P<yours>[^",]+)(, [^"]+)?, Left and right to change\. The voice that says what happens to you in a match\."$'
 
 # A step Right: the next voice, saved by its display name, said alone, and a
 # moment later its sample.
@@ -95,7 +95,7 @@ wait '\[a11y\] voice yours plays: "Your voice" '
 
 # Opponents' voice a step Right and back, each with its sample.
 key Down
-wait "\"Opponents' voice, (?P<theirs>[^\",]+)(, [^\"]+)?, Left and right to change\. The Windows voice that says what happens to everyone else, teammates included, in a match\.\"$"
+wait "\"Opponents' voice, (?P<theirs>[^\",]+)(, [^\"]+)?, Left and right to change\. The voice that says what happens to everyone else, teammates included, in a match\.\"$"
 key Right
 wait '\[a11y\] accessibility settings: saved opponents_voice\.voice = (?P<other>[^,]+)$'
 wait "\[a11y\] voice opponents: \"Opponents' voice\"$"

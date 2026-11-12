@@ -2,8 +2,8 @@
 /* The voices' rows in the accessibility settings (.scratch/voices/spec.md,
  * "Choosing a voice", "The rows", "Missing voices"; primer
  * docs/a11y/speech.md, "Voices"): for your voice and then the opponents'
- * voice, a Voice row (a choice of the installed OneCore voices, saved by
- * display name), a Rate and a Volume slider, and Preview, in Voice settings
+ * voice, a Voice row (a choice of the installed voices, saved by display
+ * name), a Rate and a Volume slider, and Preview, in Voice settings
  * inside Match announcement settings, and a boost under the volume, a tuning
  * value. Every change
  * reaches the voices at once, from a row in either host or a hand edit of
@@ -12,7 +12,7 @@
  * plays it at once.
  *
  * A saved voice that is not installed stays in the file; the voice in use is
- * then the Windows default voice, which the row shows, and the screen reader
+ * then the backend's default voice, which the row shows, and the screen reader
  * says so once the voices are ready, as it says once that they are
  * unavailable. Game thread only. */
 #pragma once
@@ -36,9 +36,11 @@ ChoiceOptions voice_options(const std::vector<VoiceInfo>& voices);
 class VoiceSettings {
 public:
     /* Registers both voices' rows into `menu`, Voice settings
-     * (MatchAnnouncementSettings::voice_menu), and the samples' delay with
+     * (MatchAnnouncementSettings::voice_menu), each Voice row's default the
+     * backend's (voice_backend in the game), and the samples' delay with
      * the Speech switch's group. */
-    VoiceSettings(ValueModel& model, Speech& speech, const NamedMenu* menu);
+    VoiceSettings(
+        ValueModel& model, Speech& speech, const NamedMenu* menu, const VoiceBackend& backend);
     VoiceSettings(const VoiceSettings&) = delete;
     VoiceSettings& operator=(const VoiceSettings&) = delete;
 
@@ -89,7 +91,7 @@ private:
     /* title as a row's name begins, in_sentence as it reads inside one
      * ("the opponents' voice"), about what the voice says. */
     Rows add_rows(ValueModel& model, const NamedMenu* menu, const char* id, const char* title,
-        const char* in_sentence, const char* default_voice, const char* about);
+        const char* in_sentence, VoiceDefault default_voice, const char* about);
     void apply(Voice voice);
     /* The option in use for a saved text the options hold none of: as
      * find_voice gives it, so the row shows the voice that speaks. */

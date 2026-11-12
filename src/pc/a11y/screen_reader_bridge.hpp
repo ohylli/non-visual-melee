@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
+#include <array>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -41,9 +42,30 @@ struct RenderedLine {
     int rate = 0;
 };
 
+/* A voice's default, as a setting's text names a voice: part of a display
+ * name ("Zira"), matched as find_voice matches one; empty for the
+ * backend's own default voice. */
+struct VoiceDefault {
+    std::string_view name;
+};
+
+/* The voices' backend this build speaks with, chosen per platform in
+ * a11y.cmake (A11Y_VOICE_BACKEND): what the voices and their rows need of
+ * it before any bridge opens. */
+struct VoiceBackend {
+    /* Its name in the log ("OneCore"); empty in a build that names no
+     * voice backend, whose voices never open. */
+    std::string_view name;
+    /* Each voice's default, by Voice: yours, then the opponents'. */
+    std::array<VoiceDefault, 2> defaults;
+};
+
+/* The build's voice backend, from the bridge's table. */
+const VoiceBackend& voice_backend();
+
 /* The voices' side of the bridge (docs/a11y/speech.md, "Voices"): Prism's
- * OneCore backend, one instance per voice, rendering lines to memory for the
- * cue engine to play. Every call comes from the voices' worker thread, the
+ * backend for the build's voice backend, one instance per voice, rendering
+ * lines to memory for the cue engine to play. Every call comes from the voices' worker thread, the
  * one that opened it, as Prism's thread-safety rules ask; Prism is started
  * on that thread for the voices alone, apart from the screen reader's. The
  * unit test swaps in a fake. Each call that can fail returns an error text,
@@ -52,7 +74,7 @@ class VoiceBridge {
 public:
     virtual ~VoiceBridge() = default;
     /* Starts Prism on this thread and creates count instances, each at the
-     * Windows default voice and its normal rate. */
+     * backend's default voice and its normal rate. */
     virtual std::string open(int count) = 0;
     /* Frees the instances, on the thread that opened them, as the game
      * exits. */
@@ -60,7 +82,7 @@ public:
     /* The installed voices, in the instances' order, which the indexes below
      * follow; it may change between runs. */
     virtual std::vector<VoiceInfo> voices() = 0;
-    /* The index of the Windows default voice, -1 when unknown. */
+    /* The index of the backend's default voice, -1 when unknown. */
     virtual int default_voice() = 0;
     virtual std::string set_voice(int instance, int index) = 0;
     /* 0 to 1, 0.5 the voice's normal speed. */
@@ -70,8 +92,8 @@ public:
     virtual std::string render(int instance, std::string_view utf8, RenderedLine& out) = 0;
 };
 
-/* Prism's OneCore backend where a11y.cmake wired Prism in, elsewhere a
- * bridge whose open fails. */
+/* Prism's backend for the build's voice backend where a11y.cmake wired
+ * Prism in and named one, elsewhere a bridge whose open fails. */
 std::unique_ptr<VoiceBridge> make_voice_bridge();
 
 }  // namespace a11y

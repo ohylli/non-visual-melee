@@ -8,8 +8,8 @@ namespace {
 
 using Name = std::pair<std::string_view, std::string_view>;
 
-/* The languages of Windows' OneCore voices, by their tags' first part, as
- * Windows names them in English. */
+/* The languages OneCore's voices come in, by their tags' first part, with
+ * their English names. */
 constexpr std::array kLanguages = {
     Name{"ar", "Arabic"},
     Name{"bg", "Bulgarian"},

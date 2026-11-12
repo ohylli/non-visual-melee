@@ -14,9 +14,13 @@ set(A11Y_PRISM_SHA256 31c02e3ef2260b4d3b11fb00132f8eb12bc147b5fb17031b580670b117
 # bridge then compiles as a silent stub. Prism publishes
 # prism-macos-universal.zip, prism-linux-x64.zip and prism-linux-arm64.zip for
 # the same tag, so another platform is a new branch here that sets the asset,
-# its hash, the library to link and the runtime file to copy; the fork's C++
-# stays as it is (.scratch/macos-port/spec.md has the worked plan).
+# its hash, the library to link, the runtime file to copy and the voices'
+# backend (.scratch/macos-port/spec.md has the worked plan).
+# A11Y_VOICE_BACKEND is the Prism id of the backend the voices speak with;
+# its name and default voices are its row in screen_reader_bridge.cpp's
+# kVoiceBackends. A platform with Prism and no voice backend has no voices.
 set(A11Y_PRISM_ASSET "")
+set(A11Y_VOICE_BACKEND "")
 if (WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64)$")
     set(A11Y_PRISM_ASSET prism-windows-x64.zip)
     # The dynamic release variant: the static one needs delay loading on the
@@ -24,6 +28,7 @@ if (WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64)$")
     # directly; the exported surface is plain C with opaque pointers.
     set(A11Y_PRISM_LINK_LIB dynamic/release/lib/prism.lib)
     set(A11Y_PRISM_RUNTIME_LIB dynamic/release/bin/prism.dll)
+    set(A11Y_VOICE_BACKEND PRISM_BACKEND_ONE_CORE)
 endif ()
 
 target_sources(melee PRIVATE
@@ -122,6 +127,9 @@ if (A11Y_PRISM_ASSET)
     target_link_libraries(melee PRIVATE "${_prism_dir}/${A11Y_PRISM_LINK_LIB}")
     # This macro, not the platform, selects the real bridge body.
     target_compile_definitions(melee PRIVATE A11Y_HAVE_PRISM)
+    if (A11Y_VOICE_BACKEND)
+        target_compile_definitions(melee PRIVATE A11Y_VOICE_BACKEND=${A11Y_VOICE_BACKEND})
+    endif ()
     # Linked at build time rather than loaded at run time: a missing prism.dll
     # stops melee.exe with the Windows "not found" dialog, which a screen
     # reader reads, instead of starting silently.

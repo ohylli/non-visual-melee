@@ -41,7 +41,8 @@ ChoiceOptions voice_options(const std::vector<VoiceInfo>& voices) {
     return options;
 }
 
-VoiceSettings::VoiceSettings(ValueModel& model, Speech& speech, const NamedMenu* menu)
+VoiceSettings::VoiceSettings(
+    ValueModel& model, Speech& speech, const NamedMenu* menu, const VoiceBackend& backend)
     : m_speech(speech),
       m_sample_delay(model.group("speech", "Speech")
               .add_number(NumberSpec{"voice_sample_delay", "Voice sample delay",
@@ -50,14 +51,15 @@ VoiceSettings::VoiceSettings(ValueModel& model, Speech& speech, const NamedMenu*
                   "through; a quicker run of changes plays one sample.",
                   "s", 0.6f, 0.0f, 3.0f, 0.1f})),
       m_rows{
-          add_rows(
-              model, menu, "your_voice", "Your voice", "your voice", "Zira", "what happens to you"),
+          add_rows(model, menu, "your_voice", "Your voice", "your voice",
+              backend.defaults[static_cast<size_t>(Voice::yours)], "what happens to you"),
           add_rows(model, menu, "opponents_voice", "Opponents' voice", "the opponents' voice",
-              "Mark", "what happens to everyone else, teammates included,"),
+              backend.defaults[static_cast<size_t>(Voice::opponents)],
+              "what happens to everyone else, teammates included,"),
       } {}
 
 VoiceSettings::Rows VoiceSettings::add_rows(ValueModel& model, const NamedMenu* menu,
-    const char* id, const char* title, const char* in_sentence, const char* default_voice,
+    const char* id, const char* title, const char* in_sentence, VoiceDefault default_voice,
     const char* about) {
     ValueGroup group = model.group(id, title).in(menu);
     const std::string name = title;
@@ -65,8 +67,8 @@ VoiceSettings::Rows VoiceSettings::add_rows(ValueModel& model, const NamedMenu* 
     Choice voice = group.add_choice(ChoiceSpec{
         .name = "voice",
         .label = name,
-        .description = std::string("The Windows voice that says ") + about + " in a match.",
-        .default_option = default_voice,
+        .description = std::string("The voice that says ") + about + " in a match.",
+        .default_option = std::string(default_voice.name),
         /* Called only once the rows exist: this is whole by then. */
         .list = [this] { return m_options; },
         .fallback = [this](std::string_view saved,
@@ -236,7 +238,7 @@ std::string VoiceSettings::missing(const std::vector<Voice>& voices) const {
     if (saved.empty()) {
         return {};
     }
-    /* Both fall back to the Windows default voice: one sentence. */
+    /* Both fall back to the backend's default voice: one sentence. */
     if (saved.size() == 2 && in_use[0] == in_use[1]) {
         return "Voices " + saved[0] + " and " + saved[1] + " not installed, using " + in_use[0] +
                ".";

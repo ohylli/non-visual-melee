@@ -40,10 +40,11 @@ public:
 
 /* Speech, the cue engine and the voices, wired as hooks.cpp wires them. */
 struct Rig {
-    explicit Rig(VoiceCalls& calls, std::string open_error = "", bool preview = false)
+    explicit Rig(VoiceCalls& calls, std::string open_error = "", bool preview = false,
+        const a11y::VoiceBackend& backend = a11y::test::kTestBackend)
         : speech(config(), std::make_unique<NoScreenReader>()),
           voices(speech, engine, std::make_unique<FakeVoiceBridge>(calls, std::move(open_error)),
-              true, preview) {
+              backend, true, preview) {
         s_lines.clear();
         speech.init();
         frames(1);
@@ -137,7 +138,7 @@ void the_voices_open_with_their_defaults() {
     VoiceCalls calls;
     Rig rig(calls);
     assert(rig.voices.state() == VoicesState::ready);
-    assert(logged("[a11y] voices: OneCore, 5 installed, default Microsoft George, test line "
+    assert(logged("[a11y] voices: Fake voices, 5 installed, default Microsoft George, test line "
                   "rendered in "));
     assert(logged("[a11y] voice yours speaks with Microsoft Zira"));
     assert(logged("[a11y] voice opponents speaks with Microsoft Mark"));
@@ -159,6 +160,27 @@ void the_voices_open_with_their_defaults() {
            calls.set_voices.end());
     assert(std::find(calls.set_voices.begin(), calls.set_voices.end(), std::make_pair(1, 4)) !=
            calls.set_voices.end());
+}
+
+/* Each voice's default and the log's name are the backend's, as the build
+ * gives it (voice_backend); an empty default is the backend's own default
+ * voice. */
+void the_defaults_come_from_the_backend() {
+    constexpr a11y::VoiceBackend kOther{"Other voices", {{{"heidi"}, {""}}}};
+    VoiceCalls calls;
+    Rig rig(calls, "", false, kOther);
+    assert(rig.voices.state() == VoicesState::ready);
+    assert(logged("[a11y] voices: Other voices, 5 installed, default Microsoft George, test "
+                  "line rendered in "));
+    assert(logged("[a11y] voice yours speaks with Microsoft Heidi"));
+    assert(logged("[a11y] voice opponents speaks with Microsoft George"));
+    rig.yours(1, "45");
+    rig.theirs(2, "60");
+    rig.frames(1);
+    std::lock_guard<std::mutex> lock(calls.mutex);
+    /* Heidi is the bridge's fourth; the opponents' instance stays at the
+     * default voice it started with. */
+    assert((calls.set_voices == std::vector<std::pair<int, int>>{{0, 3}}));
 }
 
 void a_voice_is_found_by_name_or_part() {
@@ -399,7 +421,7 @@ private:
     Spoken& m_spoken;
 };
 
-/* OneCore unavailable: the screen reader speaks every line, queued, those
+/* The backend unavailable: the screen reader speaks every line, queued, those
  * waiting first in the order they were said, whatever their voice and
  * subject. (The Voice rows tell it the voices are unavailable.) */
 void unavailable_voices_speak_through_the_screen_reader() {
@@ -411,7 +433,8 @@ void unavailable_voices_speak_through_the_screen_reader() {
     s_lines.clear();
     {
         Voices voices(speech, engine,
-            std::make_unique<FakeVoiceBridge>(calls, "OneCore did not start"), true, false);
+            std::make_unique<FakeVoiceBridge>(calls, "Fake voices did not start"),
+            a11y::test::kTestBackend, true, false);
         speech.init();
         assert(voices.state() == VoicesState::starting);
         speech.announce_voice(Voice::yours, 1, "early");
@@ -422,7 +445,7 @@ void unavailable_voices_speak_through_the_screen_reader() {
         voices.frame(Clock::time_point{}, false);
         assert(voices.state() == VoicesState::unavailable);
         assert(voices.installed().empty());
-        assert(logged("[a11y] voices unavailable: OneCore did not start"));
+        assert(logged("[a11y] voices unavailable: Fake voices did not start"));
         /* "early" was replaced while it waited. */
         assert((spoken.lines ==
                 std::vector<std::pair<std::string, bool>>{{"theirs", false}, {"again", false}}));
@@ -443,14 +466,15 @@ void unavailable_voices_speak_through_the_screen_reader() {
 }
 
 /* With no audio output the voices could never be heard: unavailable from
- * their start, without opening OneCore, every line on the screen reader. */
+ * their start, without opening the bridge, every line on the screen reader. */
 void no_audio_output_sends_the_lines_to_the_screen_reader() {
     VoiceCalls calls;
     Spoken spoken;
     a11y::Speech speech(Rig::config(), std::make_unique<RecordingScreenReader>(spoken));
     CueEngine engine;
     s_lines.clear();
-    Voices voices(speech, engine, std::make_unique<FakeVoiceBridge>(calls, ""), true, false);
+    Voices voices(speech, engine, std::make_unique<FakeVoiceBridge>(calls, ""),
+        a11y::test::kTestBackend, true, false);
     voices.no_audio_output();
     speech.init();
     assert(voices.state() == VoicesState::unavailable);
@@ -470,7 +494,8 @@ void the_worker_starts_with_speech() {
     config.speech = false;
     a11y::Speech speech(config, std::make_unique<NoScreenReader>());
     CueEngine engine;
-    Voices voices(speech, engine, std::make_unique<FakeVoiceBridge>(calls, ""), true, false);
+    Voices voices(speech, engine, std::make_unique<FakeVoiceBridge>(calls, ""),
+        a11y::test::kTestBackend, true, false);
     speech.init();
     assert(voices.state() == VoicesState::stopped);
     speech.set_on(true);
@@ -486,7 +511,7 @@ void the_worker_starts_with_speech() {
     a11y::Speech muted_speech(muted, std::make_unique<NoScreenReader>());
     CueEngine muted_engine;
     Voices muted_voices(muted_speech, muted_engine,
-        std::make_unique<FakeVoiceBridge>(muted_calls, ""), true, false);
+        std::make_unique<FakeVoiceBridge>(muted_calls, ""), a11y::test::kTestBackend, true, false);
     s_lines.clear();
     muted_speech.init();
     muted_speech.announce_voice(Voice::yours, 1, "45");
@@ -526,6 +551,7 @@ extern "C" void pc_log_line(const char* fmt, ...) {
 
 int main() {
     the_voices_open_with_their_defaults();
+    the_defaults_come_from_the_backend();
     a_voice_is_found_by_name_or_part();
     a_rate_applies_from_the_next_line();
     lines_queue_in_turn();

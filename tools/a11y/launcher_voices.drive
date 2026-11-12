@@ -33,7 +33,7 @@ wait '"Match announcement settings, Enter to open\. '
 key Return
 wait '"Match announcement settings\. Voice settings, Enter to open\. '
 key Return
-wait '"Voice settings\. Your voice, (?P<yours>[^",]+)(, [^"]+)?, Left and right to change\. The Windows voice that says what happens to you in a match\."$'
+wait '"Voice settings\. Your voice, (?P<yours>[^",]+)(, [^"]+)?, Left and right to change\. The voice that says what happens to you in a match\."$'
 
 # A step Right: the next voice, saved by its display name, said alone, and a
 # moment later its sample; then Left back to the voice the run started on.

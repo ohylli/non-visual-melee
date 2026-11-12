@@ -291,11 +291,11 @@ extern "C" void pc_a11y_init(void) {
     s_cue_system = a11y::CueSystem::open(config, *s_speech, *s_settings, s_master_volume);
     s_match_settings = std::make_unique<a11y::MatchAnnouncementSettings>(s_settings->model());
     s_voice_settings = std::make_unique<a11y::VoiceSettings>(
-        s_settings->model(), *s_speech, &s_match_settings->voice_menu());
+        s_settings->model(), *s_speech, &s_match_settings->voice_menu(), a11y::voice_backend());
     /* Attached to speech before the switches turn it on, which starts the
      * voices' worker. */
     s_voices = std::make_unique<a11y::Voices>(*s_speech, s_cue_system->engine(),
-        a11y::make_voice_bridge(), config.log, config.voice_preview);
+        a11y::make_voice_bridge(), a11y::voice_backend(), config.log, config.voice_preview);
     if (!s_cue_system->sounding()) {
         s_voices->no_audio_output();
     }

@@ -24,7 +24,11 @@ struct VoiceCalls {
     std::vector<std::pair<int, std::string>> renders;
 };
 
-/* Five voices in three languages, the Windows default the second. */
+/* The voices' backend the tests give the voices and their rows, under a
+ * name of the tests' own. */
+constexpr VoiceBackend kTestBackend{"Fake voices", {{{"Zira"}, {"Mark"}}}};
+
+/* Five voices in three languages, the backend's default the second. */
 inline std::vector<VoiceInfo> several_languages() {
     return {{"Microsoft David", "en-US"}, {"Microsoft George", "en-GB"},
         {"Microsoft Zira", "en-US"}, {"Microsoft Heidi", "fi-FI"}, {"Microsoft Mark", "en-US"}};

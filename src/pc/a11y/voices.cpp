@@ -13,8 +13,8 @@
 namespace a11y {
 namespace {
 
-/* The line the worker renders as the voices open: a failure here is OneCore
- * unavailable, and its time is the first render's, the slowest. */
+/* The line the worker renders as the voices open: a failure here is the
+ * backend unavailable, and its time is the first render's, the slowest. */
 constexpr const char* kTestLine = "Ready";
 
 /* MELEE_A11Y_VOICE_PREVIEW's pause between your voice's line ending and the
@@ -163,19 +163,19 @@ Sound even_out(const RenderedLine& line) {
     return sound;
 }
 
-Voices::Voices(
-    Speech& speech, CueEngine& engine, std::unique_ptr<VoiceBridge> bridge, bool log, bool preview)
-    : m_speech(speech), m_engine(engine), m_log(log), m_preview(preview),
-      m_bridge(std::move(bridge)) {
+Voices::Voices(Speech& speech, CueEngine& engine, std::unique_ptr<VoiceBridge> bridge,
+    const VoiceBackend& backend, bool log, bool preview)
+    : m_speech(speech), m_engine(engine), m_backend_name(backend.name), m_log(log),
+      m_preview(preview), m_bridge(std::move(bridge)) {
     const char* names[kVoiceCount] = {"your voice", "opponents' voice"};
     for (int i = 0; i < kVoiceCount; i++) {
         VoiceSpec spec;
         spec.name = names[i];
         spec.mode = VoiceMode::once;
-        m_voices[static_cast<size_t>(i)].engine_voice = m_engine.add_voice(spec);
+        VoiceSlot& v = m_voices[static_cast<size_t>(i)];
+        v.engine_voice = m_engine.add_voice(spec);
+        v.wanted = backend.defaults[static_cast<size_t>(i)].name;
     }
-    slot(Voice::yours).wanted = "Zira";
-    slot(Voice::opponents).wanted = "Mark";
     m_speech.attach_voices(this);
 }
 
@@ -365,9 +365,9 @@ void Voices::opened(
     if (default_index >= 0 && default_index < static_cast<int>(m_installed.size())) {
         m_default = m_installed[static_cast<size_t>(default_index)].name;
     }
-    log("voices: OneCore, %d installed, default %s, test line rendered in %.0f ms",
-        static_cast<int>(m_installed.size()), m_default.empty() ? "unknown" : m_default.c_str(),
-        test_ms);
+    log("voices: %s, %d installed, default %s, test line rendered in %.0f ms",
+        m_backend_name.c_str(), static_cast<int>(m_installed.size()),
+        m_default.empty() ? "unknown" : m_default.c_str(), test_ms);
     for (int i = 0; i < kVoiceCount; i++) {
         const Voice voice = static_cast<Voice>(i);
         log("voice %s speaks with %s", voice_name(voice), voice_in_use(voice).c_str());

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The voices' rows: where they sit, their options and words, the samples a
- * change plays, a missing voice, and OneCore unavailable. Wired as
+ * change plays, a missing voice, and the backend unavailable. Wired as
  * pc_a11y_init wires them, over the accessibility settings' file in a
  * scratch folder, the voices' worker the real one over a fake voice bridge,
  * speech over a fake screen reader, and the cue engine rendered into a
@@ -125,7 +125,7 @@ struct Game {
 
     explicit Game(const char* name, const std::string& file = "",
         std::vector<a11y::VoiceInfo> installed = a11y::test::several_languages(),
-        std::string open_error = "")
+        std::string open_error = "", const a11y::VoiceBackend& backend = a11y::test::kTestBackend)
         : path(s_dir / name) {
         fs::remove(path);
         if (!file.empty()) {
@@ -143,10 +143,10 @@ struct Game {
             settings->model()
                 .group("test", "Tests")
                 .add_menu(a11y::MenuSpec{"voices", "Voice settings", "The voices."});
-        rows = std::make_unique<a11y::VoiceSettings>(settings->model(), *speech, &menu);
+        rows = std::make_unique<a11y::VoiceSettings>(settings->model(), *speech, &menu, backend);
         voices = std::make_unique<a11y::Voices>(*speech, engine,
             std::make_unique<FakeVoiceBridge>(calls, std::move(open_error), std::move(installed)),
-            true, false);
+            backend, true, false);
         settings->listen([this](const std::vector<const a11y::NamedValue*>& changed) {
             switches->update();
             rows->changed(changed, now);
@@ -251,6 +251,28 @@ void the_rows_are_in_their_submenu() {
     assert(has_line(file, "your_voice.rate = 50"));
     assert(has_line(file, "opponents_voice.volume = 100"));
     assert(has_line(file, "your_voice.boost = 3"));
+}
+
+/* The rows' defaults are the backend's, as the build gives it
+ * (voice_backend), saved as they are; an empty default is the backend's own
+ * default voice, which is not missing, and reads back from the file. */
+void the_defaults_come_from_the_backend() {
+    constexpr a11y::VoiceBackend kOther{"Other voices", {{{"Heidi"}, {""}}}};
+    Game game("defaults.ini", "", a11y::test::several_languages(), "", kOther);
+    game.frames(1);
+    assert(game.rows->voice(Voice::yours).saved() == "Heidi");
+    assert(game.rows->voice(Voice::yours).option() == "Microsoft Heidi");
+    assert(game.rows->voice(Voice::opponents).saved().empty());
+    assert(game.rows->voice(Voice::opponents).option() == "Microsoft George");
+    assert(game.voices->voice_in_use(Voice::opponents) == "Microsoft George");
+    assert(game.spoken.size() == 0);
+    assert(has_line(game.file(), "your_voice.voice = Heidi"));
+    Game again("defaults_again.ini", game.file(), a11y::test::several_languages(), "", kOther);
+    again.frames(1);
+    assert(again.rows->voice(Voice::yours).saved() == "Heidi");
+    assert(again.rows->voice(Voice::opponents).saved().empty());
+    assert(again.rows->voice(Voice::opponents).option() == "Microsoft George");
+    assert(again.spoken.size() == 0);
 }
 
 void languages_are_named() {
@@ -400,7 +422,7 @@ void the_saved_values_apply_at_the_start() {
     assert(game.calls.set_rates.back() == std::make_pair(0, 0.8f));
 }
 
-/* A saved voice not installed: the Windows default voice speaks, the row
+/* A saved voice not installed: the backend's default voice speaks, the row
  * shows it, the file keeps the name, and the screen reader says so once,
  * queued. */
 void a_missing_voice_falls_back() {
@@ -453,11 +475,11 @@ void a_missing_voice_falls_back() {
     assert(has_line(bare.file(), "your_voice.voice = Zira"));
 }
 
-/* OneCore unavailable: the Voice rows say so and step nowhere, the samples
+/* The backend unavailable: the Voice rows say so and step nowhere, the samples
  * and every voice line go to the screen reader, queued, after it says once
  * that the voices are unavailable. */
 void unavailable_voices_use_the_screen_reader() {
-    Game game("unavailable.ini", "", a11y::test::several_languages(), "OneCore did not start");
+    Game game("unavailable.ini", "", a11y::test::several_languages(), "Fake voices did not start");
     game.frames(1);
     assert(game.voices->state() == VoicesState::unavailable);
     assert(game.none(Voice::yours) == "Unavailable");
@@ -500,6 +522,7 @@ int main(int argc, char** argv) {
     s_dir = argc > 1 ? fs::path(argv[1]) : fs::path("voice_settings_test");
     fs::create_directories(s_dir);
     the_rows_are_in_their_submenu();
+    the_defaults_come_from_the_backend();
     languages_are_named();
     the_options_are_the_installed_voices();
     a_change_plays_a_sample();

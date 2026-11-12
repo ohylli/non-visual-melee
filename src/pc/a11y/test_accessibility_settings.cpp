@@ -910,7 +910,7 @@ void a_choices_options_may_change_between_reads() {
         return voices;
     };
     /* Your voice's default, as the spec has it: the first voice whose name
-     * holds "Zira", else the Windows default voice. */
+     * holds "Zira", else the backend's default voice. */
     auto fallback = [](std::string_view saved, const a11y::ChoiceOptions& options) {
         for (const a11y::ChoiceOption& option : options) {
             if (option.text.find(saved) != std::string::npos) {

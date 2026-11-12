@@ -191,7 +191,7 @@ wait '"Voice settings, Enter to open\. '
 # Voice settings opened with the gamepad's A: its own name alone, then its
 # first row; every row in turn, and round; Up past the first to the last.
 gamepad a
-wait '"Voice settings\. Your voice, [^",]+(, [^"]+)?, Left and right to change\. The Windows voice that says what happens to you in a match\."$'
+wait '"Voice settings\. Your voice, [^",]+(, [^"]+)?, Left and right to change\. The voice that says what happens to you in a match\."$'
 key Down
 wait "\"Your voice rate, slider, 50\. Left and right to adjust\. How fast your voice speaks, 50 being the voice's normal speed\.\"$"
 key Down
@@ -199,7 +199,7 @@ wait '"Your voice volume, slider, 100%\. Left and right to adjust\. The loudness
 key Down
 wait '"Preview your voice: Play, button\. Says "Your voice" in your voice, at its rate and volume\."$'
 key Down
-wait "\"Opponents' voice, [^\",]+(, [^\"]+)?, Left and right to change\. The Windows voice that says what happens to everyone else, teammates included, in a match\.\"$"
+wait "\"Opponents' voice, [^\",]+(, [^\"]+)?, Left and right to change\. The voice that says what happens to everyone else, teammates included, in a match\.\"$"
 key Down
 wait "\"Opponents' voice rate, slider, 50\. Left and right to adjust\. How fast the opponents' voice speaks, 50 being the voice's normal speed\.\"$"
 key Down
