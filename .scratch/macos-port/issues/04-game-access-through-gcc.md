@@ -40,3 +40,11 @@ For the issues after this one:
 
 - **05** edits `a11y.cmake`'s Prism branch; this target's block sits between `melee`'s source list and `if (A11Y_PRISM_ASSET)` and takes nothing from Prism.
 - **06** checks the Mac half. Ninja's usual progress line (`Building C object CMakeFiles/a11y_melee_game.dir/src/pc/a11y/game_access.c.o`) names no compiler, and even a verbose build (`cmake --build build -v`) shows the launcher in front of CMake's compiler (`tools/gcc_launcher.py /usr/bin/cc ...`), not the GCC it runs. The build passing is the proof, since the `#error` stops a clang compile of the file; for a line in the log, the job can show the launcher in the verbose command for that one file (`cmake --build build -v 2>&1 | grep game_access`) and that `gcc-NN` exists (`which gcc-15` or the like), or ask the object (`strings` on it for GCC's `GCC: (Homebrew GCC ...)` ident, if Mach-O GCC objects carry it). Then tick this issue's last Done-when item here.
+
+### 2026-11-12, Mac half checked (agent, issue 06)
+
+The fork's CI built the Mac packages on both arches (https://github.com/ohylli/non-visual-melee/actions/runs/43226714268, arm64 on its second attempt), so the last Done-when item is met: `game_access.c` was compiled by Homebrew GCC on the Mac.
+
+- **The proof** is the build passing at all: the file's `#error` stops a clang compile.
+- **In the log**, the macOS job's step "Show game_access.c compiled by GCC": `ninja -t commands a11y_melee_game` shows the compile as `tools/gcc_launcher.py /usr/bin/clang ...`; the launcher's search finds `/opt/homebrew/bin/gcc-16`, `gcc-16 (Homebrew GCC 16.2.0) 16.2.0`; and the object's debug info names its compiler, `DW_AT_producer ("GNU C11 16.2.0 -mmacosx-version-min=13.3 -mcpu=apple-m1 ... -fexec-charset=CP932 ...")` on arm64 and the same with `-mtune=core2` on Intel. `-fexec-charset=CP932` is the launcher's own GCC flag, so the line could not come from clang. GCC writes no ident string into a Mach-O object; the debug info is where it shows.
+- **Rollback**: the link still ends with `Apple rollback sections: game globals included, engine/audio globals excluded`.

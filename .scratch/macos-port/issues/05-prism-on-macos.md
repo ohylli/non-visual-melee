@@ -59,3 +59,13 @@ For the issues after this one:
 - **06**: after `package_macos.sh`, `ls Melee.app/Contents/Frameworks` should list `libprism.dylib` and no `libtolk`; `otool -L Melee.app/Contents/MacOS/melee | grep prism` should print `@rpath/libprism.dylib`, and `otool -D` on the bundled copy the same. The configure log shows `a11y: downloading Prism v0.18.2 (prism-macos-universal.zip)`. The licences are in `build/macos/prism-v0.18.2/LICENSES/` and `NOTICE` (extracted there by the configure, as on Windows), so the package step copies them from the build directory as the Windows job does. A launch, if the job tries one, would log `[a11y] speech backend: <name>` and, with speech on, `voices: AVSpeech, ...`; the voices' calls wait for the main thread, so they may not get far before issue 07.
 - **07** fills the AVSpeech row's defaults, with their language as issue 02 says, and its `turn`.
 - **08**: the friend's Mac must run macOS 11 or later for Prism (the spec's second open question).
+
+### 2026-11-12, Mac half checked (agent, issue 06)
+
+The fork's CI built and packaged the Mac build on both arches (https://github.com/ohylli/non-visual-melee/actions/runs/43226714268, arm64 on its second attempt). Everything predicted above held, and `a11y.cmake` needed no change:
+
+- **The configure** logs `a11y: downloading Prism v0.18.2 (prism-macos-universal.zip)`, its hash checked.
+- **Linked and found in the build directory**: `otool -l build/macos/melee` lists `@executable_path` as the first `LC_RPATH`, then Prism's extraction directory (`prism-v0.18.2/dynamic/release/lib`, which CMake adds for a library linked by full path, as foreseen) and SDL's build directory. No linker warning about the dylib's macOS 11 floor.
+- **Bundled**: `ls Melee.app/Contents/Frameworks` lists `libprism.dylib` beside `libSDL3.0.dylib`, `libusb-1.0.0.dylib`, `libpng16.16.dylib`, `libfreetype.6.dylib` and, on arm64, `libbrotlicommon.1.dylib` and `libbrotlidec.1.dylib`; no `libtolk`. `otool -L Melee.app/Contents/MacOS/melee` names `@rpath/libprism.dylib`, and `otool -D` on the bundled copy gives `@rpath/libprism.dylib` for both slices. `codesign --verify --deep --strict` passes on the app as unpacked from the zip, and `melee --version` started from it prints `melee-pc v0.4.2`, so the dynamic loader found every bundled dylib.
+- **Licences**: `build/macos/prism-v0.18.2/LICENSES/` (concurrentqueue, djinni, dr_wav, fmt, highway, moderncom, nvdaController, nvgt, prism, simdutf) and `NOTICE`, copied into the zip's `LICENSES.prism/` as on Windows.
+- **The bridge** compiled with `A11Y_HAVE_PRISM` and `PRISM_BACKEND_AV_SPEECH`, and the unit tests pass on the Mac runners. Nothing has run speech on a Mac yet; that is issues 07 and 08.
