@@ -5,7 +5,7 @@
 #
 # Each build job keeps its zip as a run artifact; the publish job alone
 # writes the release, and only on a push to master. A run anywhere else
-# (macos-ci, or a dispatch on any branch) builds and keeps its zips as run
+# (a dispatch on any branch) builds and keeps its zips as run
 # artifacts and leaves ci-latest alone.
 #
 # The Windows zip is the one that must ship: publish needs the Windows job to
@@ -22,12 +22,8 @@ name: A11y
 
 on:
   push:
-    # macos-ci: the topic branch this file was developed on while master on
-    # GitHub still had a11y-windows.yml. GitHub dispatches only workflows the
-    # default branch has, so a push trigger was the way to run it there. Once
-    # master on GitHub has this file, remove the branch from this list:
-    # `gh workflow run a11y.yml --ref <branch>` then runs it on any branch.
-    branches: [master, macos-ci]
+    branches: [master]
+  # Any other branch: `gh workflow run a11y.yml --ref <branch>`.
   workflow_dispatch:
 
 permissions:
