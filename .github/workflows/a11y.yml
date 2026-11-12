@@ -191,9 +191,12 @@ jobs:
           ditto -c -k --keepParent "${STAGE}" "${MAC_ZIP}"
           ls -lh "${MAC_ZIP}"
 
-      # The zip as a player gets it: unpacked, signatures verified, and melee
-      # started far enough for the dynamic loader to find every bundled
-      # dylib, Prism's among them (--version prints and quits).
+      # The zip as a player gets it: unpacked, signatures verified, the oldest
+      # macOS each binary loads on (minos: the base port sets no deployment
+      # target, so it is the runner's macOS, and Homebrew's dylibs are built
+      # for it too), and melee started far enough for the dynamic loader to
+      # find every bundled dylib, Prism's among them (--version prints and
+      # quits).
       - name: Check the zip
         timeout-minutes: 5
         run: |
@@ -203,6 +206,13 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "zip-check/${STAGE}/Melee.app"
           codesign --verify --strict --verbose=2 "zip-check/${STAGE}/melee-netcheck"
           file "zip-check/${STAGE}/Melee.app/Contents/MacOS/melee" "zip-check/${STAGE}/melee-netcheck"
+          for f in "zip-check/${STAGE}/Melee.app/Contents/MacOS/melee" \
+                   "zip-check/${STAGE}/Melee.app/Contents/Frameworks/"*.dylib \
+                   "zip-check/${STAGE}/melee-netcheck"; do
+            minos="$(otool -arch "${{ matrix.arch }}" -l "${f}" |
+                     awk '$1 == "minos" { print $2; exit }')"
+            echo "minos ${minos:-unknown}: $(basename "${f}")"
+          done
           "zip-check/${STAGE}/Melee.app/Contents/MacOS/melee" --version
 
       - uses: actions/upload-artifact@v4
