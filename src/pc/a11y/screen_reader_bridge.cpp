@@ -89,6 +89,9 @@ constexpr const PrismVoiceBackend* find_backend(PrismBackendId id) {
 #if defined(A11Y_VOICE_BACKEND)
 constexpr const PrismVoiceBackend* kBuildBackend = find_backend(A11Y_VOICE_BACKEND);
 static_assert(kBuildBackend != nullptr, "a11y.cmake names a voice backend kVoiceBackends lacks");
+/* Without its turn, quit would wait forever for AVSpeech's worker. */
+static_assert(kBuildBackend->id != PRISM_BACKEND_AV_SPEECH || kBuildBackend->turn != nullptr,
+    "AVSpeech needs main_queue_mac.cpp's turn: a11y.cmake's branch lacks A11Y_MAIN_QUEUE_TURN");
 #else
 constexpr const PrismVoiceBackend* kBuildBackend = nullptr;
 #endif

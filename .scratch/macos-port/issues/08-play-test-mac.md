@@ -34,3 +34,15 @@ Spec: `.scratch/macos-port/spec.md`. The maintainer runs this with the friend, w
 ## Done when
 
 Each numbered check has its answer recorded in this file's comments, and issues for anything that fails.
+
+## Comments
+
+### 2026-11-12, code review of issues 01 to 07 (agent)
+
+The review's plain fixes are in their own commit ("A11y: macOS port, review fixes"). Left for the maintainer, most severe first:
+
+- **Quit waits for the voices without a limit.** `Voices::wait_in_turns` (`voices.cpp`) waits until the worker finishes, so a render AVSpeech never returns from (an audio device gone, a frozen synthesizer) would hang the game at quit; Windows had the same exposure with the bare `join`, and the Mac adds ways to stall. Options: leave it to check 12 above; or bound the wait (a few seconds), log it, detach the worker and skip `close`, which the bridge's comments already accept for Prism's context. Recommended: wait for check 12, bound it only if a hang is ever seen.
+- **"Not installed" says the language twice on a non-English Windows.** With no en-US voice installed (a Finnish Windows with Heidi alone), a fresh start says "Voices Zira, English (United States) and Mark, English (United States) not installed, using Microsoft Heidi." on every start until a voice is picked; before issue 02 it said "Voices Zira and Mark not installed, ...". The commas run name and language together by ear. Options: say a shared language once ("Voices Zira and Mark, English (United States), not installed, ..."), or drop the language when no installed voice has the missing name in any language. Recommended: the first. (`VoiceSettings::missing`, `voice_settings.cpp`; pinned in `test_voice_settings.cpp`.)
+- **`a11y.ini`'s comment on a Mac voice says "default empty".** A player editing the file by hand may write `your_voice.voice = empty`, a voice named "empty", and hear "Voice empty not installed" on every start. Only the Mac's empty defaults show it, until issue 09 sets them. Options: "default blank (the system's default voice)", or leave it, since issue 09 replaces the empty defaults. Recommended: leave it unless 09 keeps an empty default. (`describe`, `value_model.cpp`.)
+- **The backend's defaults have a second home.** `Voices` takes the whole `VoiceBackend` and seeds each voice's wanted text from its defaults, which `VoiceSettings::attach` overwrites at once in the game; only the tests see the seed. Options: let `Voices` take the backend's name alone and start empty, leaving defaults to `VoiceSettings`; or keep it. A cross-module interface change, so not made in the review.
+- **`macos-ci` in `a11y.yml`'s push trigger** is there only while `master` on GitHub lacks `a11y.yml`. Once `master` is pushed, drop it from the branch list and its comment, and from the `verify` skill's "Mac build" bullet.

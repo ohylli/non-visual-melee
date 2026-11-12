@@ -181,7 +181,9 @@ void the_text_is_parsed_with_spaces_comments_units_and_commas() {
 
 /* A number is read by the same rules on every platform: a plain decimal,
  * with a leading + or -, a fraction and an exponent. Nothing a C library
- * would add (hex, inf, nan, a space inside) is taken. */
+ * would add (hex, inf, nan, a space inside) is taken, nor a number out of a
+ * float's range either way, which one standard library takes and another
+ * refuses. */
 void a_number_is_read_by_the_same_rules_everywhere() {
     ValueModel model;
     CueSettings cues(model);
@@ -203,6 +205,8 @@ void a_number_is_read_by_the_same_rules_everywhere() {
             Accepted{"1e-1", 0.1f},
             Accepted{"0,25", 0.25f},
             Accepted{"007", 7.0f},
+            Accepted{"0e-50", 0.0f},
+            Accepted{"0.000", 0.0f},
             /* The + is dropped before the number is read, so this is -5,
              * held to the range. */
             Accepted{"+-5", 0.0f},
@@ -211,9 +215,10 @@ void a_number_is_read_by_the_same_rules_everywhere() {
         a11y::TextRead read = model.read_text(std::string("cues.volume = ") + accepted.text);
         assert(read.bad_lines.empty());
         assert(model.find("cues.volume")->value == accepted.value);
+        assert(!std::signbit(model.find("cues.volume")->value));
     }
     for (const char* rejected : {"5x", "x5", "0x10", "inf", "-inf", "nan", "1e", "e5", "1.2.3",
-             "--5", "++5", "-+5", "-", ".", "5 0", "1e99", "1_0", "5e1.5"})
+             "--5", "++5", "-+5", "-", ".", "5 0", "1e99", "1e-40", "1e-50", "1_0", "5e1.5"})
     {
         a11y::TextRead read = model.read_text(std::string("cues.volume = ") + rejected);
         assert(read.bad_lines.size() == 1);

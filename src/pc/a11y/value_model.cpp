@@ -143,23 +143,28 @@ bool is_digit(char c) {
 /* A plain decimal read whole into a float, by std::from_chars' rules: an
  * optional minus, digits with an optional point, an optional exponent
  * ("-1.5", ".5", "5.", "2e-3"). Not from_chars itself: Apple's libc++ has
- * its float overload only from macOS 26, below what the Mac build aims at.
+ * its float overload only from macOS 26, and the Mac build aims lower.
  * The text is held to that grammar first, as a stream alone would also take
  * what a C library adds (hex, inf, nan); the classic locale keeps the point
- * a point. A number out of a float's range fails. */
+ * a point. A number out of a float's range fails, too large or too small
+ * (below its normal range, short of zero itself): libc++'s stream fails
+ * both, libstdc++'s only the first, so the second is checked here. */
 bool read_decimal(std::string_view text, float& out) {
     std::size_t at = 0;
     if (at < text.size() && text[at] == '-') {
         ++at;
     }
     std::size_t digits = 0;
+    bool nonzero = false;
     while (at < text.size() && is_digit(text[at])) {
+        nonzero = nonzero || text[at] != '0';
         ++at;
         ++digits;
     }
     if (at < text.size() && text[at] == '.') {
         ++at;
         while (at < text.size() && is_digit(text[at])) {
+            nonzero = nonzero || text[at] != '0';
             ++at;
             ++digits;
         }
@@ -188,10 +193,11 @@ bool read_decimal(std::string_view text, float& out) {
     stream.imbue(std::locale::classic());
     float value = 0.0f;
     stream >> value;
-    if (stream.fail()) {
+    if (stream.fail() || (nonzero && !std::isnormal(value))) {
         return false;
     }
-    out = value;
+    /* + 0 makes "-0" a plain 0, as the rows and the file show it. */
+    out = value + 0.0f;
     return true;
 }
 
@@ -208,7 +214,7 @@ bool read_number(const NamedValue& named, std::string_view text, float& out) {
     std::replace(number.begin(), number.end(), ',', '.');
     std::size_t start = !number.empty() && number[0] == '+' ? 1 : 0;
     float value = 0.0f;
-    if (!read_decimal(std::string_view(number).substr(start), value) || !std::isfinite(value)) {
+    if (!read_decimal(std::string_view(number).substr(start), value)) {
         return false;
     }
     out = value;

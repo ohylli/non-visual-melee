@@ -22,6 +22,12 @@ set(A11Y_PRISM_SHA256_MACOS 268cd7aa14e201f3281a35a0e39bd8b7f9085b9e044c2aa49e51
 # kVoiceBackends. A platform with Prism and no voice backend has no voices.
 set(A11Y_PRISM_ASSET "")
 set(A11Y_VOICE_BACKEND "")
+# iOS is APPLE too and has a launcher of its own; the fork does not build it.
+if (APPLE AND NOT (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS"))
+    set(A11Y_MACOS ON)
+else ()
+    set(A11Y_MACOS OFF)
+endif ()
 if (WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64)$")
     set(A11Y_PRISM_ASSET prism-windows-x64.zip)
     set(A11Y_PRISM_SHA256 ${A11Y_PRISM_SHA256_WINDOWS})
@@ -31,7 +37,7 @@ if (WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64)$")
     set(A11Y_PRISM_LINK_LIB dynamic/release/lib/prism.lib)
     set(A11Y_PRISM_RUNTIME_LIB dynamic/release/bin/prism.dll)
     set(A11Y_VOICE_BACKEND PRISM_BACKEND_ONE_CORE)
-elseif (APPLE AND NOT (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS"))
+elseif (A11Y_MACOS)
     # One universal zip (arm64 and x86_64) for every Mac. Apple's linker takes
     # the dylib itself; its install name is @rpath/libprism.dylib and it needs
     # only the system's frameworks, so it is found beside melee in a build
@@ -129,8 +135,7 @@ target_include_directories(a11y_melee_game PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 # the big-endian disc structs, whose warning the game's files turn off too.
 target_compile_options(a11y_melee_game PRIVATE ${MELEE_FP_FLAGS}
         $<$<BOOL:${WIN32}>:-mno-ms-bitfields> $<$<C_COMPILER_ID:GNU>:-Wno-scalar-storage-order>)
-# iOS is APPLE too and has a launcher of its own; the fork does not build it.
-if (APPLE AND NOT (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS"))
+if (A11Y_MACOS)
     set_property(TARGET a11y_melee_game PROPERTY C_COMPILER_LAUNCHER
             "${PROJECT_SOURCE_DIR}/tools/gcc_launcher.py")
 endif ()

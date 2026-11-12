@@ -214,20 +214,13 @@ void VoiceSettings::sample(Voice voice) {
 }
 
 std::string VoiceSettings::fallback(std::string_view saved, const ChoiceOptions& options) const {
-    std::vector<VoiceInfo> voices;
-    int default_index = -1;
-    const VoiceInfo* backend_default = nullptr;
-    if (m_voices != nullptr && m_voices->default_index() >= 0) {
-        backend_default = &m_voices->installed()[static_cast<size_t>(m_voices->default_index())];
+    /* The options are the installed voices one to one (voice_options), so
+     * the voice find_voice gives is the option at its index, the voice the
+     * worker speaks with. */
+    if (m_voices == nullptr || options.size() != m_voices->installed().size()) {
+        return {};
     }
-    for (const ChoiceOption& option : options) {
-        VoiceInfo voice = parse_voice_text(option.text);
-        if (backend_default != nullptr && voice == *backend_default) {
-            default_index = static_cast<int>(voices.size());
-        }
-        voices.push_back(std::move(voice));
-    }
-    const int index = find_voice(voices, saved, default_index);
+    const int index = find_voice(m_voices->installed(), saved, m_voices->default_index());
     return index < 0 ? std::string() : options[static_cast<size_t>(index)].text;
 }
 

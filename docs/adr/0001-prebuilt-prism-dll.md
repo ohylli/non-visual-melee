@@ -15,4 +15,4 @@ The fork speaks through the Prism screen reader library. Prism's Windows build n
 - `prism.dll` is a required runtime file for everyone, sighted players included, like SDL's DLL. A missing DLL stops the game with the standard Windows dialog, which a screen reader reads; that was chosen over runtime loading so a blind player never mistakes a broken install for "speech is off".
 - The first configure needs network access. Bumping Prism is one tag and one hash per platform's zip in `a11y.cmake`.
 - macOS links the release's prebuilt dylib the same way, and ships it inside the app bundle (`docs/a11y/speech.md`, "macOS").
-- The fork depends on Prism continuing to publish Windows release zips.
+- The fork depends on Prism continuing to publish Windows and macOS release zips.

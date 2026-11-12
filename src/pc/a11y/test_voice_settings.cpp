@@ -552,6 +552,13 @@ void a_missing_voice_falls_back() {
     assert((british.spoken == Spoken{{"Voices Zira, English (United States) and Susan not "
                                       "installed, using Microsoft George.",
                                   false}}));
+
+    /* A voice with no language whose name ends in brackets that look like a
+     * tag: the row still shows the default voice that speaks. */
+    Game bracketed("bracketed.ini", "your_voice.voice = Susan\n", {{"Bar", ""}, {"Foo (Old)", ""}});
+    bracketed.frames(1);
+    assert(bracketed.voices->voice_in_use(Voice::yours) == "Foo (Old)");
+    assert(bracketed.rows->voice(Voice::yours).option() == "Foo (Old)");
 }
 
 /* The backend unavailable: the Voice rows say so and step nowhere, the samples
