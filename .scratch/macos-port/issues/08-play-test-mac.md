@@ -19,10 +19,10 @@ Spec: `.scratch/macos-port/spec.md`. The maintainer runs this with the friend, w
 
 7. **They start**: the log's voices line names AVSpeech, the number of voices and the test line's render time. Record the time.
 8. **Personal Voice**: on macOS 14 or later, does a permission dialog come up as the voices start, and does it take focus?
-9. **Choosing voices**: step the Voice rows; is each voice said with its language when there are several? Pick two voices that tell you and the opponents apart by ear; they become the defaults (issue 07).
+9. **Choosing voices**: first, which voice both voices speak with before any is chosen: the build's default is Prism's, the first voice Apple lists in the system's language, not the Spoken Content setting's (the log's `voice yours speaks with` line names it). Step the Voice rows; is each voice said with its language when there are several? Pick two voices that tell you and the opponents apart by ear, and record each by name and language (the saved form in `a11y.ini`, `Name (xx-YY)`): they become the defaults (issue 09).
 10. **In a match**: are the announcements prompt, or late by more than a moment? Do they wait through a scene loading?
 11. **Audio ducking**: while VoiceOver speaks, do the game, the voices and the cues get quieter? If so, does VoiceOver's own setting (VoiceOver Utility, Sound) change it?
-12. **Quit**: quit from the port menu with the voices open, and again while a line plays. The game must close.
+12. **Quit**: quit with the voices open, and again while a line plays (a voice's Preview), each from the port menu's Quit game and with Cmd-Q. The game must close at once (issue 07's turn); a hang here leaves `voices` in the log's last lines without `speech shutdown`.
 
 ## Cues and the rest
 
