@@ -65,7 +65,7 @@ Mac half, written here and compiled by 06's CI, checked on the friend's Mac:
 
 ## Open questions, answered on the day
 
-- `prism-macos-universal.zip`'s layout (issue 05): header location, dylib name, `.dylib` or `.framework`.
+- `prism-macos-universal.zip`'s layout (issue 05): header location, dylib name, `.dylib` or `.framework`. Answered 2026-11-12: as the Windows zip's, `include/prism.h`, `dynamic/release/lib/libprism.dylib` (a plain `.dylib`, universal arm64 and x86_64, install name `@rpath/libprism.dylib`, macOS 11 and later, system frameworks only), `LICENSES/` and `NOTICE` at the top; the issue's comment has the rest.
 - The friend's macOS version against Prism's macOS 11 floor.
 - How long a line takes to render on a Mac, main-thread hops included (issue 08).
 - Whether VoiceOver's audio ducking lowers the game's sound, voices and cues with it, while it speaks (issue 08).

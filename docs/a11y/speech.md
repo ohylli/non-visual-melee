@@ -74,7 +74,7 @@ The voices speak the match announcements about players, so the player hears from
 
 ### The voice backend
 
-The Prism backend the voices speak with is chosen per platform: OneCore on Windows, AVSpeech planned for macOS (`.scratch/macos-port/`). Each platform's branch in `src/pc/a11y/a11y.cmake` names its backend by Prism id (`A11Y_VOICE_BACKEND`), beside its Prism asset. What a backend brings is its row in `kVoiceBackends`, in `screen_reader_bridge.cpp`: the id, its name in the log (`voices: OneCore, ...`) and each voice's default voice. `voice_backend()` gives the build's row, which the voices and their rows take at startup, before the voices open; a build with Prism but no backend named has no voices, as a build without Prism. Adding a backend is a row there and a line in its platform's branch, and the build stops if a branch names a backend the table lacks.
+The Prism backend the voices speak with is chosen per platform: OneCore on Windows, AVSpeech on macOS (`.scratch/macos-port/`). Each platform's branch in `src/pc/a11y/a11y.cmake` names its backend by Prism id (`A11Y_VOICE_BACKEND`), beside its Prism asset. What a backend brings is its row in `kVoiceBackends`, in `screen_reader_bridge.cpp`: the id, its name in the log (`voices: OneCore, ...`) and each voice's default voice. `voice_backend()` gives the build's row, which the voices and their rows take at startup, before the voices open; a build with Prism but no backend named has no voices, as a build without Prism. Adding a backend is a row there and a line in its platform's branch, and the build stops if a branch names a backend the table lacks. The table is compiled on every platform, so its rows must use only ids Prism's header defines everywhere, as it does every backend's. A row's empty default is the backend's own default voice: AVSpeech's two are empty, so both voices speak with the Mac's default voice until two are chosen by ear; the file then holds an empty value, which reads back as that default.
 
 ### What speaks through them
 
@@ -129,8 +129,12 @@ Measured on the maintainer's machine (Windows 10, seven OneCore voices, among th
 
 ## Prism is a prebuilt, required DLL
 
-The fork's GCC toolchain cannot build Prism, so the build downloads a pinned release and links its DLL; [ADR-0001](../adr/0001-prebuilt-prism-dll.md) records why, and why a missing `prism.dll` stops the game instead of silently turning speech off. Bumping the release is described where the pin lives, at the top of `src/pc/a11y/a11y.cmake`.
+The fork's GCC toolchain cannot build Prism, so the build downloads a pinned release and links its DLL; [ADR-0001](../adr/0001-prebuilt-prism-dll.md) records why, and why a missing `prism.dll` stops the game instead of silently turning speech off. Bumping the release is described where the pin lives, at the top of `src/pc/a11y/a11y.cmake`: one tag, and the sha256 of each platform's zip for it.
 
 ## Other platforms
 
 Porting speech to another platform should be a build change, not a code change: Prism publishes macOS and Linux builds with the same C API, and where the build has not set Prism up, the bridge compiles as a silent stub while the log keeps working. The worked plan for macOS is `.scratch/macos-port/spec.md`.
+
+### macOS
+
+`a11y.cmake`'s Mac branch links `libprism.dylib` from Prism's one universal zip (arm64 and x86_64, macOS 11 and later). Its install name is `@rpath/libprism.dylib` and it needs only the system's frameworks, so the build copies it beside `melee` and gives `melee` the rpath `@executable_path`, and the base port's `tools/package_macos.sh`, which copies every non-system dylib into `Melee.app`'s `Contents/Frameworks` and signs the bundle, takes it with the others unchanged. A missing dylib stops `melee` with dyld's "Library not loaded", as a missing DLL stops it on Windows. The voices speak through AVSpeech, whose calls wait for the main thread (above, "What Prism v0.18.2 does").

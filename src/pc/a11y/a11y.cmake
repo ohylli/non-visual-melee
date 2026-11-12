@@ -6,16 +6,17 @@
 # and the unit_tests target exist. Everything the fork adds to the build lives
 # here, so base merges never touch it.
 
-# The one place to bump Prism: release tag and the sha256 of the zip below.
+# The one place to bump Prism: release tag and the sha256 of each platform's
+# zip for it, as the platform branches below name them.
 set(A11Y_PRISM_VERSION v0.18.2)
-set(A11Y_PRISM_SHA256 31c02e3ef2260b4d3b11fb00132f8eb12bc147b5fb17031b580670b117ba7d23)
+set(A11Y_PRISM_SHA256_WINDOWS 31c02e3ef2260b4d3b11fb00132f8eb12bc147b5fb17031b580670b117ba7d23)
+set(A11Y_PRISM_SHA256_MACOS 268cd7aa14e201f3281a35a0e39bd8b7f9085b9e044c2aa49e51ee1556f44062)
 
 # Per-platform Prism wiring. An empty asset means no Prism: the screen reader
-# bridge then compiles as a silent stub. Prism publishes
-# prism-macos-universal.zip, prism-linux-x64.zip and prism-linux-arm64.zip for
-# the same tag, so another platform is a new branch here that sets the asset,
-# its hash, the library to link, the runtime file to copy and the voices'
-# backend (.scratch/macos-port/spec.md has the worked plan).
+# bridge then compiles as a silent stub. Prism also publishes
+# prism-linux-x64.zip and prism-linux-arm64.zip for the same tag, so another
+# platform is a new branch here that sets the asset, its hash, the library to
+# link, the runtime file to copy and the voices' backend.
 # A11Y_VOICE_BACKEND is the Prism id of the backend the voices speak with;
 # its name and default voices are its row in screen_reader_bridge.cpp's
 # kVoiceBackends. A platform with Prism and no voice backend has no voices.
@@ -23,12 +24,26 @@ set(A11Y_PRISM_ASSET "")
 set(A11Y_VOICE_BACKEND "")
 if (WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64)$")
     set(A11Y_PRISM_ASSET prism-windows-x64.zip)
+    set(A11Y_PRISM_SHA256 ${A11Y_PRISM_SHA256_WINDOWS})
     # The dynamic release variant: the static one needs delay loading on the
     # consumer side, which MinGW lacks. GNU ld reads the MSVC import library
     # directly; the exported surface is plain C with opaque pointers.
     set(A11Y_PRISM_LINK_LIB dynamic/release/lib/prism.lib)
     set(A11Y_PRISM_RUNTIME_LIB dynamic/release/bin/prism.dll)
     set(A11Y_VOICE_BACKEND PRISM_BACKEND_ONE_CORE)
+elseif (APPLE AND NOT (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS"))
+    # One universal zip (arm64 and x86_64) for every Mac. Apple's linker takes
+    # the dylib itself; its install name is @rpath/libprism.dylib and it needs
+    # only the system's frameworks, so it is found beside melee in a build
+    # directory (the rpath below) and in Melee.app's Contents/Frameworks,
+    # where tools/package_macos.sh copies it with the Homebrew dylibs.
+    # libtolk beside it is Prism's Tolk compatibility shim, unused.
+    set(A11Y_PRISM_ASSET prism-macos-universal.zip)
+    set(A11Y_PRISM_SHA256 ${A11Y_PRISM_SHA256_MACOS})
+    set(A11Y_PRISM_LINK_LIB dynamic/release/lib/libprism.dylib)
+    set(A11Y_PRISM_RUNTIME_LIB dynamic/release/lib/libprism.dylib)
+    set_property(TARGET melee APPEND PROPERTY BUILD_RPATH "@executable_path")
+    set(A11Y_VOICE_BACKEND PRISM_BACKEND_AV_SPEECH)
 endif ()
 
 target_sources(melee PRIVATE
@@ -154,7 +169,8 @@ if (A11Y_PRISM_ASSET)
     endif ()
     # Linked at build time rather than loaded at run time: a missing prism.dll
     # stops melee.exe with the Windows "not found" dialog, which a screen
-    # reader reads, instead of starting silently.
+    # reader reads, instead of starting silently; on a Mac dyld stops melee
+    # with "Library not loaded".
     add_custom_command(TARGET melee POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${_prism_dir}/${A11Y_PRISM_RUNTIME_LIB}" "$<TARGET_FILE_DIR:melee>")
