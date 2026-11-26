@@ -9,6 +9,7 @@
 #include "lb_00B0.h"
 #include "lbaudio_ax.h"
 #include "lbvector.h"
+#include "pc/a11y/a11y_hooks.h"
 #include "types.h"
 #include <dolphin/gx.h>
 #include <dolphin/mtx.h>
@@ -241,6 +242,7 @@ int lbColl_80005BB0(HitCapsule* arg0, int arg1)
     u32 temp_r0;
     u32 temp_r6;
 
+    pc_a11y_sfx_track_hint(arg1);
     temp_r0 = arg0->sfx_kind;
     if (temp_r0 == 0xD) {
         temp_r6 = arg0->sfx_severity;

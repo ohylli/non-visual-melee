@@ -201,6 +201,58 @@ void pc_a11y_lobby_frame(const struct OnlineLobbyView* view);
  * rollback. */
 void pc_a11y_match_tick(uint64_t held_mask);
 
+/* A sound effect has a voice of the engine's own (HSD_AudioSFXStartParam's
+ * play in src/sysdolphin/baselib/axdriver.c), on the game thread, before it
+ * first sounds: voice is the engine's id, never a netplay handle, sound the
+ * game's sound id, whose bank says which file it is from (a stage's own,
+ * say), and track the game's grouping, which for a fighter's sounds names
+ * its slot. The fork may change the voice's volume and pan (0 left, 0x80
+ * centre, 0xFF right) to place the sound where its fighter is (positional
+ * sound effects) or to mute a stage's own sounds (docs/a11y/cues.md).
+ * script_pan is the pan the sound's own script starts each later layer
+ * from (the voice's x1C): the engine uses pan for the first layer only.
+ * Never reached for a rollback's re-run start. */
+void pc_a11y_sfx_started(
+    int voice, int sound, int track, uint8_t* volume, uint8_t* pan, uint8_t* script_pan);
+
+/* A sound's own script has set an absolute pan (AXDriverInterp's pan
+ * command in src/sysdolphin/baselib/axdriver.c), which the engine applies
+ * at once. The pan to use: the script's own, or for a voice the fork placed
+ * (pc_a11y_sfx_started), the script's distance from the centre added to
+ * the voice's place, so the sound stays where its fighter is. On the
+ * engine's audio thread: answers from a lock-free table and nothing else. */
+int pc_a11y_sfx_script_pan(int voice, int pan);
+
+/* A fighter's sound is about to start with no track of its own to say
+ * whose it is (ft_PlaySFX in src/melee/ft/ft_0877.c, the way most fighter
+ * sounds play): slot and sub (Nana) name the fighter, and the next start,
+ * if it comes before the next tick, is placed as theirs. */
+void pc_a11y_fighter_sfx(int slot, bool sub);
+
+/* A sound object is about to start its sound (lbaudio_ax.c: a fighter's
+ * landings and steps from its action script's stage sound command): owner
+ * is the object's owner, and the next start, when it is a fighter, is
+ * placed as theirs. */
+struct HSD_GObj;
+void pc_a11y_sound_object_starting(struct HSD_GObj* owner);
+
+/* A hit's sound is about to start (lbColl_80005BB0 in
+ * src/melee/lb/lbcollision.c): track is the fighter track its caller asked
+ * for, which the start then drops for track 0, or -1 for an item's. The next
+ * start, if it comes before the next tick, is placed as if on that track. */
+void pc_a11y_sfx_track_hint(int track);
+
+/* A sound object's pan and volume as they go to the engine each frame
+ * (lbaudio_ax.c, the objects lbAudioAx_800263E8 makes), so a value placed
+ * at the start would be overwritten. owner is the
+ * object's owner, a fighter, an item or none. The game's own pan (0 left,
+ * 64 centre, 127 right) and volume (0 to 127) are returned, or, for a
+ * fighter's object with positional sound effects on, its fighter's place.
+ * They change nothing the game keeps. Reached in a rollback's re-run too,
+ * where the last tick's places stand. */
+int pc_a11y_sound_object_pan(struct HSD_GObj* owner, int pan);
+int pc_a11y_sound_object_volume(struct HSD_GObj* owner, int volume);
+
 /* Port 1's virtual pad is about to be published (publish_locked in
  * src/pc/keyboard.c, once per video frame, after the keyboard, the key
  * driver and a GameCube adapter are merged). The one place the fork writes:

@@ -121,6 +121,9 @@ public:
     /* How far past each end of the floor below you the snapshot's deadly
      * test casts (A11yFloorEnd), as the ledge warning's settings hold it. */
     float edge_offset() const { return m_ledge.edge_offset.value(); }
+    /* Position cues follow the camera, for positional sound effects on the
+     * stage to pan as the position cues do. */
+    bool pan_to_camera() const { return m_pan_to_camera.on(); }
 
 private:
     enum class Preview { none, your, opponent, gap, ledge, appearance, item_position };

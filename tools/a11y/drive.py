@@ -34,6 +34,12 @@ Script steps, one per line (or ';'-separated with -c), '#' starts a comment:
                                  settings file (a11y.ini, below) matches RE
                                  (default 5)
   sleep SECONDS
+  say TEXT                       with --listen, speak TEXT through the
+                                 screen reader and wait about as long as it
+                                 takes to say; otherwise only logged
+  set KEY VALUE                  change a line of the run's a11y.ini
+                                 (positional_sfx.on off), which the game
+                                 reads again about half a second later
   shot PATH                      save the game window as a PNG
   quit                           close the window and wait for a clean exit
 
@@ -265,6 +271,30 @@ def fresh_settings_dir(out):
 GCI_ENTRY = 0x40
 GCI_BLOCK = 0x2000
 GCI_BLOCK_COUNT = 0x38
+
+
+# The volume lines of the maintainer's launcher.cfg a listen run takes, so
+# it sounds as the game does for them (music off, say).
+VOLUME_KEYS = ("volume", "music_volume", "sfx_volume", "mute", "reverb")
+
+
+def copy_volumes(folder, reverb=None):
+    """The maintainer's volume settings into the run's launcher.cfg, alone:
+    every other setting stays the base port's default; reverb, when given,
+    in place of theirs. Nothing when they have none."""
+    appdata = os.environ.get("APPDATA")
+    if not appdata:
+        return []
+    try:
+        with open(os.path.join(appdata, "melee-pc", "launcher.cfg"), encoding="utf-8") as f:
+            lines = [line for line in f.read().splitlines() if line.split(" ", 1)[0] in VOLUME_KEYS]
+    except OSError:
+        lines = []
+    if reverb is not None:
+        lines = [line for line in lines if not line.startswith("reverb ")] + [f"reverb {1 if reverb else 0}"]
+    with open(os.path.join(folder, "launcher.cfg"), "a", encoding="utf-8") as f:
+        f.write("".join(line + "\n" for line in lines))
+    return lines
 
 
 def card_save_place(data):
@@ -771,9 +801,18 @@ class Game:
         self.a11y_ini = os.path.join(REPO, full_env["MELEE_A11Y_SETTINGS"])
         if self.launcher:
             write_launcher_cfg(self.settings_dir, disc, check_updates=bool(update_list))
+        volumes = (copy_volumes(self.settings_dir, False if getattr(args, "no_reverb", False) else None)
+                   if getattr(args, "listen", False) else [])
         self.pipe = Pipe(pipe_name, "key pipe")
         self.event_pipe = Pipe(event_pipe_name, "event pipe", " (a base port build has none)")
         self.out_file = open(out, "w", encoding="utf-8")
+        # A listen run's narrator: the player's screen reader, through Prism.
+        self.narrator = None
+        if getattr(args, "listen", False):
+            from narrator import Narrator
+            self.narrator = Narrator()
+            self.note(f"narrator: {self.narrator.name}")
+            self.note("volumes: " + (", ".join(volumes) if volumes else "the defaults"))
         if self.card_save:
             self.note(f"card save: {self.card_save}" + (" (corrupted)" if getattr(args, "corrupt", False) else ""))
         # No disc argument opens the launcher (src/pc/main.c).
@@ -855,6 +894,23 @@ class Game:
                 raise ScriptError(f"{why} {rx.pattern!r} in {timeout:g} s")
             time.sleep(0.1)
 
+    def set_ini(self, key, value):
+        """Give key a new value in the run's a11y.ini, as an edit by hand
+        would, and wait for the game to read the file again (about half a
+        second after it is saved)."""
+        with open(self.a11y_ini, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        prefix = key + " ="
+        for i, line in enumerate(lines):
+            if line.startswith(prefix):
+                lines[i] = f"{key} = {value}"
+                break
+        else:
+            raise ScriptError(f"no {key} in {self.a11y_ini}")
+        with open(self.a11y_ini, "w", encoding="utf-8", newline="\n") as f:
+            f.write("\n".join(lines) + "\n")
+        time.sleep(1.0)
+
     def matched(self, rx, i):
         """Line i matched rx: keeps its named groups."""
         self.captured.update(rx.search(self.output.lines[i]).groupdict())
@@ -917,6 +973,13 @@ class Game:
             line = self.ini_line(rx, float(rest[1]) if len(rest) == 2 else INI_TIMEOUT)
             self.captured.update(rx.search(line).groupdict())
             self.note(f"a11y.ini: {line}")
+        elif cmd == "say" and rest:
+            if self.narrator is not None:
+                error = self.narrator.say(" ".join(rest))
+                if error:
+                    self.note(f"warning: narrator: {error}")
+        elif cmd == "set" and len(rest) == 2:
+            self.set_ini(rest[0], rest[1])
         elif cmd == "sleep" and len(rest) == 1:
             time.sleep(float(rest[0]))
         elif cmd == "shot" and len(rest) == 1:
@@ -981,6 +1044,12 @@ def main():
                          "(MELEE_A11Y_SCREEN_READER=0): for runs that check what the switch changes, "
                          "such as the launcher's line reading")
     ap.add_argument("--sound", action="store_true", help="play the game's audio (silent by default)")
+    ap.add_argument("--listen", action="store_true",
+                    help="a run for the maintainer to listen to: the game's audio on, accessibility on but "
+                         "muted (as --muted), and each say step spoken through the screen reader")
+    ap.add_argument("--no-reverb", action="store_true",
+                    help="with --listen, the stage's echo (the base port's Reverb) off for the run, "
+                         "whatever the maintainer's setting")
     ap.add_argument("--focus", action="store_true",
                     help="bring the game window to the front once shown, e.g. for a sighted observer "
                          "(interrupts the screen reader; keys typed into the window reach the game too)")
@@ -996,6 +1065,13 @@ def main():
     sys.stdout.reconfigure(errors="replace")
     if sys.platform != "win32":
         ap.error("Windows only; on Linux use MELEE_KEY_FIFO with a mkfifo pipe")
+    if args.no_reverb and not args.listen:
+        ap.error("--no-reverb goes with --listen")
+    if args.listen:
+        if args.speech:
+            ap.error("--listen speaks only its say steps; leave out --speech")
+        args.sound = True
+        args.muted = True
     if args.speech and args.muted:
         ap.error("--speech and --muted contradict each other")
     if args.card is not None:

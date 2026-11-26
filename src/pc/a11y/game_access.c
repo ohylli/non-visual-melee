@@ -38,6 +38,7 @@
 #include <melee/it/item.h>
 #include <melee/it/types.h>
 #include <melee/lb/lb_00B0.h>
+#include <melee/lb/lbaudio_ax.h>
 #include <melee/lb/lblanguage.h>
 #include <melee/lb/lbspdisplay.h>
 #include <melee/mn/forward.h>
@@ -52,6 +53,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sysdolphin/baselib/axdriver.h>
 #include <sysdolphin/baselib/controller.h>
 #include <sysdolphin/baselib/gobj.h>
 #include <sysdolphin/baselib/sislib.h>
@@ -1598,4 +1600,67 @@ void a11y_game_match_hud(int local_port, bool online, A11yMatchHud* out) {
     out->timer_seconds = scene->timer_seconds > 0x7FFFFFFFu ? -1 : (int)scene->timer_seconds;
     out->timer_frames = scene->unk_2C;
     out->you = match_your_slot(local_port, online);
+}
+
+/* The slot's fighter at index (0 main, 1 sub), or NULL, on the live
+ * fighter list as match_fighter checks. */
+static Fighter* sfx_fighter(int slot, int index) {
+    if (Player_GetPlayerSlotType(slot) == Gm_PKind_NA) {
+        return NULL;
+    }
+    HSD_GObj* entity = Player_GetEntityAtIndex(slot, index);
+    if (entity == NULL) {
+        return NULL;
+    }
+    for (HSD_GObj* g = HSD_GObjPLinkHead[HSD_GOBJ_PLINK_FIGHTER]; g != NULL; g = g->next) {
+        if (g == entity) {
+            return g->classifier == HSD_GOBJ_CLASS_FIGHTER ? GET_FIGHTER(g) : NULL;
+        }
+    }
+    return NULL;
+}
+
+void a11y_game_sfx_sources(A11ySfxSources* out) {
+    memset(out, 0, sizeof(*out));
+    for (int slot = 0; slot < A11Y_MATCH_SLOTS; slot++) {
+        for (int index = 0; index < 2; index++) {
+            const Fighter* fp = sfx_fighter(slot, index);
+            if (fp == NULL) {
+                continue;
+            }
+            A11ySfxFighter* f = &out->fighters[slot][index];
+            f->present = true;
+            f->x = fp->cur_pos.x;
+            f->y = fp->cur_pos.y;
+        }
+    }
+}
+
+/* The engine's own call, below the netplay handles: the voice id is the
+ * engine's, so the handle layer passes it through and nothing is counted
+ * in a frame's call order. It checks the id against the voice still
+ * holding it and takes the sound engine's lock. */
+bool a11y_game_sfx_set_pan(int voice, uint8_t pan) {
+    return HSD_AudioSFXSetPan(voice, pan);
+}
+
+bool a11y_game_sfx_set_volume(int voice, uint8_t volume) {
+    return HSD_AudioSFXSetVolumeEx(voice, volume);
+}
+
+/* The game's own lookup, over its table of each bank's first and last id;
+ * reads only. */
+int a11y_game_sfx_bank(int sound) {
+    return lbAudioAx_80023130(sound);
+}
+
+/* As soundGetPosition in lbaudio_ax.c tells a fighter's object. */
+bool a11y_game_sound_owner(const struct HSD_GObj* owner, int* slot, bool* sub) {
+    if (owner == NULL || owner->classifier != HSD_GOBJ_CLASS_FIGHTER || owner->user_data == NULL) {
+        return false;
+    }
+    const Fighter* fp = GET_FIGHTER(owner);
+    *slot = fp->player_idx;
+    *sub = fp->is_sub_fighter;
+    return true;
 }

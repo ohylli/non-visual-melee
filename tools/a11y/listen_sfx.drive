@@ -1,0 +1,100 @@
+# A listen run for positional sound effects (primer docs/a11y/cues.md,
+# "Positional sound effects"): hear the CPU's sounds move while Pichu moves
+# around it.
+#   python tools/a11y/drive.py --listen tools/a11y/listen_sfx.drive
+# --listen plays the game's sound at the maintainer's own volumes, keeps the
+# game's speech off the screen reader and speaks each say step through it,
+# paced for a person. Without it the script runs silent, a check that it
+# still plays through (the say steps are only logged).
+# Training on Final Destination: Pichu (player 1) against a CPU set to
+# Jump, so it makes a sound every second or so where it stands. The cues
+# and the match announcements are off for the run, so the game's own sounds
+# are all there is to hear. Pichu stands with the CPU off to the right,
+# runs up to it, then dashes past it, a tap that slides on to a stop near
+# the right edge (only a slide stops at the floor's end), so the CPU is on
+# the left.
+
+# Title screen to the main menu (tools/a11y/main_menu.drive). The settings
+# file is written as the game starts.
+wait "state 0 scene 0$"
+say "Positional sound effects listening test. Setting up a Training match: Pichu against a computer player that keeps jumping. This takes about half a minute. The cues and match announcements are off, so you hear only the game's own sounds."
+set cues.on off
+set match_announcements.on off
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$" 20 0.3
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# 1-P Mode, Training.
+press A
+wait '"1-P Mode\. Regular Match\. '
+sleep 0.3
+press Down
+wait '"Event Match\. '
+press Down
+wait '"Stadium\. '
+press Down
+wait '"Training\. '
+sleep 0.3
+press A
+wait '"Training character select\. Player 1, no character\. CPU, (?P<cpu>.+)\."$'
+sleep 1
+
+# Pichu, which makes the match ready (tools/a11y/css_training.drive).
+press DUp
+wait ': "Holding your coin\. Pichu"$'
+wait 'glide to "Pichu[^"]*" ended after \d+ frames: arrived'
+press A
+wait 'Ready to fight\. Press Start\.'
+sleep 0.5
+press Start
+wait '"Stage select\. '
+sleep 1
+
+# Final Destination, at the end of the bottom row.
+press DDown
+wait ': "Icicle Mountain\. '
+search ': "Final Destination\. ' DDown*4 DRight*5
+wait 'glide to "Final Destination" ended after \d+ frames: arrived'
+press A
+
+# Training has no Ready and GO: the position cue's start, muted, says the
+# match is on.
+wait 'cue your position start ' 60
+sleep 0.5
+
+# The CPU to Jump: the menu's fourth row, three steps right of Stand.
+press Start until '"Training menu\. ' 20 1
+sleep 1
+press Down
+wait ': "Item: '
+sleep 0.3
+press Down
+wait ': "No\. of CPs, '
+sleep 0.3
+press Down
+wait ': "CP, Stand"$'
+sleep 0.3
+press Right
+wait ': "Walk"$'
+sleep 0.3
+press Right
+wait ': "Evade"$'
+sleep 0.3
+press Right
+wait ': "Jump"$'
+sleep 0.3
+press Start
+sleep 1
+
+# Positional sound effects on, as they are by default.
+say "Positional sound effects are on. The computer player is jumping off to your right, a little quieter for the distance."
+sleep 5
+say "Pichu runs up to it. Its sounds should move toward the middle and get louder."
+press Right 1000
+sleep 4
+say "Pichu dashes past it and slides to a stop near the right edge. Its sounds should now come from your left."
+press Right 100
+sleep 6
+
+say "End of the test."

@@ -8,7 +8,12 @@
 #include "game_access.h"
 #include "match_cues.hpp"
 #include "pc/pc.h"
+#include "sfx_position.hpp"
+#include "sfx_script_pan.hpp"
+#include "stage_sounds.hpp"
 #include "speech.hpp"
+#include <cmath>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -39,6 +44,71 @@ std::vector<std::string> split_ids(const std::string& text) {
 
 }  // namespace
 
+/* Positional sound effects' part of the accessibility settings, in Cue
+ * settings with the cues they sit beside. */
+struct SfxValues {
+    Switch on;
+    Switch relative;
+    Number far_level; /* % */
+    Number side_distance;
+    Number near_distance;
+    Number far_distance;
+    /* Stage sounds, a group of its own beside it. */
+    Switch stage_sounds;
+
+    static Switch add_stage_sounds(ValueGroup group) {
+        return group.add_switch(SwitchSpec{"on", "Stage sounds",
+            "The sounds a stage makes of its own, such as Corneria's Arwings, Mute City's cars or "
+            "Pokemon Stadium's crowd; off mutes them, so the fighters are easier to hear, though "
+            "a stage hazard then comes without its sound. Stage echo is the Reverb setting with "
+            "the volumes instead.",
+            true, true});
+    }
+
+    /* Both groups made first, in the order the menus and the file list them. */
+    static SfxValues add(ValueGroup group, ValueGroup stage_group) {
+        const SfxMapping defaults;
+        return SfxValues{
+            group.add_switch(SwitchSpec{"on", "Positional sound effects",
+                "The game's own sounds of each fighter, its attacks, jumps and landings, come "
+                "from where that fighter is and grow quieter the further away they are; off, "
+                "every fighter's sounds play in the middle, as the game made them.",
+                true, true}),
+            group.add_switch(SwitchSpec{"relative", "Sound effects relative to you",
+                "On, a fighter's sounds come from their side of you, your own from the middle; "
+                "off, from where they are across the stage, as the position cues pan.",
+                defaults.relative, true}),
+            group.add_number(NumberSpec{"far_level", "Far sound effects level",
+                "How loud a fighter's sounds are at the far distance and beyond; close to you "
+                "they play at full volume.",
+                "%", std::round(defaults.far_level * 100.0f), 0.0f, 100.0f, 5.0f, true}),
+            group.add_number(NumberSpec{"side_distance", "Side distance",
+                "Relative to you: how far to your side a fighter's sounds come fully from that "
+                "side.",
+                "units", defaults.side_distance, 10.0f, 300.0f, 5.0f}),
+            group.add_number(NumberSpec{"near_distance", "Near distance",
+                "Within this distance of you a fighter's sounds play at full volume.", "units",
+                defaults.near_distance, 0.0f, 100.0f, 1.0f}),
+            group.add_number(NumberSpec{"far_distance", "Far distance",
+                "From this distance a fighter's sounds play at the far level. Final "
+                "Destination's main floor is about 171 units wide.",
+                "units", defaults.far_distance, 10.0f, 400.0f, 5.0f}),
+            add_stage_sounds(stage_group),
+        };
+    }
+
+    SfxMapping mapping(bool pan_to_camera) const {
+        SfxMapping m;
+        m.relative = relative.on();
+        m.pan_to_camera = pan_to_camera;
+        m.side_distance = side_distance.value();
+        m.near_distance = near_distance.value();
+        m.far_distance = far_distance.value();
+        m.far_level = far_level.value() / 100.0f;
+        return m;
+    }
+};
+
 CueSystem::CueSystem(Speech& speech, AccessibilitySettings& settings)
     : m_speech(speech), m_settings(settings) {}
 
@@ -68,6 +138,16 @@ std::unique_ptr<CueSystem> CueSystem::open(
     sounds.item_position = load_sound(cue_sound_folder() + "item_position.wav");
     system->m_match_cues =
         std::make_unique<MatchCues>(*system->m_cue_settings, *system->m_engine, std::move(sounds));
+    ValueGroup sfx_group =
+        system->m_cue_settings->add_shared("positional_sfx", "Positional sound effects");
+    ValueGroup stage_group = system->m_cue_settings->add_shared("stage_sounds", "Stage sounds");
+    system->m_sfx_values = std::make_unique<SfxValues>(SfxValues::add(sfx_group, stage_group));
+    system->m_stage_sounds = std::make_unique<StageSounds>(
+        [](int voice, std::uint8_t volume) { return a11y_game_sfx_set_volume(voice, volume); });
+    system->m_sfx = std::make_unique<SfxPositions>(SfxPositions::Engine{
+        [](int voice, std::uint8_t pan) { return a11y_game_sfx_set_pan(voice, pan); },
+        [](int voice, std::uint8_t pan) { sfx_remember_pan(voice, pan); },
+    });
     system->m_cue_settings->apply(*system->m_engine);
     return system;
 }
@@ -86,12 +166,14 @@ void CueSystem::poll_settings() {
 void CueSystem::scene_entered() {
     m_match_running = false;
     m_match_cues->scene_entered();
+    m_sfx->forget();
     /* Before the hook polls the settings file, so an error it finds now
      * counts as said in this scene. */
     m_problems_at_scene = m_settings.problems_spoken();
 }
 
 void CueSystem::set_allowed(bool allowed) {
+    m_allowed = allowed;
     m_cue_settings->set_allowed(allowed);
     m_engine->set_mix_level(m_cue_settings->mix_level());
 }
@@ -158,6 +240,45 @@ void CueSystem::tick(int local_port, bool online, uint64_t held_mask) {
     }
     m_match_running = match.running;
     m_match_cues->tick(match);
+    A11ySfxSources sources;
+    a11y_game_sfx_sources(&sources);
+    m_sfx->tick(m_allowed && m_sfx_values->on.on(), match, sources,
+        m_sfx_values->mapping(m_match_cues->pan_to_camera()));
+    m_stage_sounds->tick(mute_stage_sounds());
+}
+
+bool CueSystem::mute_stage_sounds() const {
+    return m_allowed && !m_sfx_values->stage_sounds.on();
+}
+
+void CueSystem::sfx_started(int voice, int sound, int track, std::uint8_t* volume,
+    std::uint8_t* pan, std::uint8_t* script_pan) {
+    if (m_stage_sounds->started(mute_stage_sounds(), voice, a11y_game_sfx_bank(sound), volume)) {
+        return;
+    }
+    m_sfx->started(voice, track, volume, pan, script_pan);
+}
+
+int CueSystem::sound_object_pan(int slot, bool sub, int pan) {
+    const std::optional<SfxPlace> at = m_sfx->place(SfxSource{slot, sub ? 1 : 0});
+    /* The engine's 0 to 0xFF, centre 0x80, as the game's 0 to 127. */
+    return at.has_value() ? at->pan / 2 : pan;
+}
+
+int CueSystem::sound_object_volume(int slot, bool sub, int volume) {
+    const std::optional<SfxPlace> at = m_sfx->place(SfxSource{slot, sub ? 1 : 0});
+    if (!at.has_value()) {
+        return volume;
+    }
+    return static_cast<int>(std::lround(static_cast<float>(volume) * at->gain));
+}
+
+void CueSystem::sfx_track_hint(int track) {
+    m_sfx->track_hint(track);
+}
+
+void CueSystem::fighter_sfx(int slot, bool sub) {
+    m_sfx->fighter_next(SfxSource{slot, sub ? 1 : 0});
 }
 
 std::span<const A11yMatchItem> CueSystem::items_appeared() const {

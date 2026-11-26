@@ -14,6 +14,7 @@
 #ifdef TARGET_PC
 #include "pc/net.h"
 #include "pc/net_sfx.h"
+#include "pc/a11y/a11y_hooks.h"
 #endif
 
 /* Cached once: the .sem interpreter below runs this guard for every opcode
@@ -419,6 +420,7 @@ void AXDriverInterp(HSD_SM* v)
         case 8:
             v->flags |= 8;
             v->x1C = v->cmd_stream->v;
+            v->x1C = pc_a11y_sfx_script_pan(v->unk, v->x1C);
             break;
         case 9:
             v->flags |= 8;
@@ -757,6 +759,7 @@ int HSD_AudioSFXStartParam(int sound_id, u8 volume, u8 pan, int track,
     v->unk =
         (vidhigh << 7) | ((u8*) v - (u8*) AXDriver_804C45A0) / sizeof(HSD_SM);
     vidhigh++;
+    pc_a11y_sfx_started(v->unk, sound_id, track, &v->volume, &v->pan, &v->x1C);
 
     enabled = OSDisableInterrupts();
     v->flags = (v->flags & ~SMSTATE_MASK) | SMSTATE_ACTIVE;

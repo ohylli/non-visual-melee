@@ -273,6 +273,56 @@ A pulse from the loose item within reach, or else the nearest loose item (`item_
 - **Reach in the log.** Its start line gives the pace it starts at; after that each change of reach while it sounds is logged, so a drive script can wait for it. The trace shows each tick's pan and interval.
 - **Ready for several items.** `kTrackedItems`, the number followed, is 1, with no row: the driver returns that many voices' targets, the one within reach first and then the nearest, each keyed by its item's serial, and `MatchCues` adds that many voices (`item position`, then `item position 2` and up). Following several is then a setting and its voices; how they sound together is that feature's question.
 
+## Positional sound effects
+
+### Mental model
+
+The game plays every fighter's sounds centred, at the volume the move asks for: a sighted player's eyes place them. Positional sound effects (`sfx_position.cpp`, driven from `CueSystem`) place them by ear instead: a fighter's sound is panned to where that fighter is, from you or across the stage, and played quieter the further it is from you. Your own fighter's sounds stay centred at their own volume. Unlike a cue, nothing new plays: the fork changes the volume and pan of the game's own voices in the game's own engine (`src/sysdolphin/baselib/axdriver.c`), which mixes in stereo; the game's Sound option must be Stereo, or the synth sums every voice to the centre.
+
+### Knowing whose sound it is
+
+The engine knows a sound only by its id, volume, pan and track, so the fork learns the fighter three ways, each through a hook:
+
+- **By track.** Many fighter sounds go on tracks the game gives each fighter, in blocks of twelve, `base + slot * 2 + sub` (`ft_0881.c`, and `0x7E` for the hits a fighter takes in `ftcoll.c`). `pc_a11y_sfx_started`, called as every start takes its engine voice and before it first sounds, places such a start by rewriting its volume and pan in place.
+- **Named before the start.** `ft_PlaySFX` (`ft_0877.c`), the path most fighter sounds take, starts on track 0. `pc_a11y_fighter_sfx`, just before its start, names the fighter, and the start is placed as on its track. A sound object (`lbAudioAx_800263E8` in `lbaudio_ax.c`: the landings and steps of a fighter's action script) is named the same way by `pc_a11y_sound_object_starting` from its owner, and since the game sets an object's pan and volume again each frame, `pc_a11y_sound_object_pan` and `pc_a11y_sound_object_volume` give the placed values in place of the game's there.
+- **A hint before the start.** A hit's sound (`lbColl_80005BB0` in `lbcollision.c`) is asked for on its fighter's track, which `lbAudioAx_80024184` then drops for track 0. `pc_a11y_sfx_track_hint` passes the asked-for track on, and the next start is placed as if on it. An item's hit asks for none.
+
+A name or a hint holds only for the start it belongs to and only until the next tick, so a stray one never places an unrelated sound.
+
+### Every layer of a sound
+
+A sound is a small script (`AXDriverExec` in `axdriver.c`) that may start several layers, a landing's thud and its scrape. The engine gives the voice's own pan (`pan`, with its flag) to the first layer only and clears the flag; each later layer takes the script's pan, `x1C`, which starts at the centre and which the script's own pan commands move. A start is therefore placed by setting both, which `pc_a11y_sfx_started` hands over, so every layer comes from the fighter. Placing a sound once it has started, through `HSD_AudioSFXSetPan`, reaches only the layer playing: a later layer then sounded centred, a second copy of a landing in the middle (heard in play). That is why fighters are named before their starts, and why the per-tick following moves only the layer playing.
+
+### A sound's own script
+
+A sound's script may also set an absolute pan of its own, a pan command near the centre (122 or 132 for a landing or a jump), which the engine applies in the same audio frame as the sound's start: a placed sound would open in the middle and only move back at the next tick, its sharp attack centred and its tail placed (heard in play as an extra copy in the middle). `pc_a11y_sfx_script_pan`, on that command, takes the script's pan as an offset from the voice's place instead (`sfx_script_pan.cpp`). The command runs on the engine's audio thread, so the places are in a lock-free table, one atomic word per engine voice slot holding the whole voice id and its pan, written by the game thread as it places or moves a voice; a later voice in the same slot never takes an earlier one's place.
+
+### Following and letting go
+
+Each tick (after the cues' snapshot, in `CueSystem::tick`) works out the place of every fighter present, the main fighter and the sub fighter (Nana) of each slot, and pans each followed voice again once its fighter's place has moved a little, so a long sound, a charge or a reflector, moves with the fighter. The engine's answer tells when a voice has ended, and it is let go. Volume is set at the start only: a later volume change is the game's own (a fade).
+
+### Online and rollback
+
+Only the sound engine is touched, never the simulation: the voice ids the fork uses are the engine's own, never the netplay handles the game keeps, so nothing is counted in a frame's call order (`src/pc/net_sfx.h`). Every hook is silent while `pc_net_resim()` is true. A start that a rollback leaves late, played when the re-run catches up, is not placed.
+
+### Its settings
+
+Its group, `positional_sfx`, sits in Cue settings: the switch, whether sounds are placed from you or across the stage (on the stage it pans as the position cues do, following their camera switch) and the far level are shown; the side, near and far distances are tuning values. It follows Accessibility, not the Cues switch, since it plays no cue: with Accessibility off the game's sounds are left as the game made them.
+
+## Stage sounds
+
+### Mental model
+
+A switch, Stage sounds, mutes the sounds a stage makes of its own (Corneria's Arwings and Great Fox, Mute City's cars, Pokémon Stadium's crowd), so the fighters are easier to hear and to place. `stage_sounds.cpp`, driven from `CueSystem` like positional sound effects. It is not the stage's echo: that is the base port's Reverb setting, which stops every voice sending to the reverb busses (`pc_audio_set_reverb` in `src/pc/audio.c`), and Final Destination has echo but no stage sounds.
+
+### Knowing a stage's sound
+
+Every sound id falls in one bank, one of the game's `.ssm` files (`ssm_files` in `lbaudio_ax.c`), and each stage with sounds of its own has its own bank, `castle.ssm` to `pstadium.ssm`. `pc_a11y_sfx_started` now carries the sound id, and the game's own lookup, `lbAudioAx_80023130` (through `a11y_game_sfx_bank`), gives the bank. No hook in the stages' code is needed. A stage's sound that comes from a shared bank (`main.ssm`) is not caught, nor are the Adventure stages' (`1padv.ssm`).
+
+### Holding it silent
+
+A muted sound starts at volume 0. The stages' own code fades its long sounds in and out (`ground.c`), so each tick sets every muted voice back to 0 until it ends; switched back on, each one still playing gets its own starting volume back. Like positional sound effects it follows Accessibility, touches only the sound engine, and is gated on `pc_net_resim()`.
+
 ## Preview
 
 A preview is a short sample of one cue, played on demand outside any match, so a player tuning a cue's volume in the Accessibility category hears what it sounds like there and then. The category's Preview rows (`.scratch/accessibility-settings/issues/04-accessibility-category.md`) are its callers; a row's action holds the cue's id, the one `add_cue` took.

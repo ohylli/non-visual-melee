@@ -3,6 +3,7 @@
 #include "accessibility_settings.hpp"
 #include "css_reader.hpp"
 #include "cue_system.hpp"
+#include "sfx_script_pan.hpp"
 #include "direct_speech.hpp"
 #include "event_pipe.hpp"
 #include "fork_version.hpp"
@@ -692,6 +693,64 @@ extern "C" void pc_a11y_match_tick(uint64_t held_mask) {
             s_appearances->tick(s_cue_system->items_appeared(), s_match_settings->values());
         }
     }
+}
+
+extern "C" void pc_a11y_sfx_started(
+    int voice, int sound, int track, uint8_t* volume, uint8_t* pan, uint8_t* script_pan) {
+    /* A re-run frame starts no second sound, but a private start (a cue
+     * through the game's path) plays again on each: leave every start of a
+     * re-run alone. */
+    if (s_cue_system == nullptr || pc_net_resim()) {
+        return;
+    }
+    s_cue_system->sfx_started(voice, sound, track, volume, pan, script_pan);
+}
+
+extern "C" int pc_a11y_sfx_script_pan(int voice, int pan) {
+    /* The audio thread: the table alone, never the cue system. */
+    return a11y::sfx_script_pan(voice, pan);
+}
+
+extern "C" int pc_a11y_sound_object_pan(struct HSD_GObj* owner, int pan) {
+    int slot = 0;
+    bool sub = false;
+    if (s_cue_system == nullptr || !a11y_game_sound_owner(owner, &slot, &sub)) {
+        return pan;
+    }
+    /* Not gated on a re-run: it only picks a value. */
+    return s_cue_system->sound_object_pan(slot, sub, pan);
+}
+
+extern "C" void pc_a11y_sound_object_starting(struct HSD_GObj* owner) {
+    int slot = 0;
+    bool sub = false;
+    if (s_cue_system == nullptr || pc_net_resim() || !a11y_game_sound_owner(owner, &slot, &sub)) {
+        return;
+    }
+    s_cue_system->fighter_sfx(slot, sub);
+}
+
+extern "C" int pc_a11y_sound_object_volume(struct HSD_GObj* owner, int volume) {
+    int slot = 0;
+    bool sub = false;
+    if (s_cue_system == nullptr || !a11y_game_sound_owner(owner, &slot, &sub)) {
+        return volume;
+    }
+    return s_cue_system->sound_object_volume(slot, sub, volume);
+}
+
+extern "C" void pc_a11y_sfx_track_hint(int track) {
+    if (s_cue_system == nullptr || pc_net_resim()) {
+        return;
+    }
+    s_cue_system->sfx_track_hint(track);
+}
+
+extern "C" void pc_a11y_fighter_sfx(int slot, bool sub) {
+    if (s_cue_system == nullptr || pc_net_resim()) {
+        return;
+    }
+    s_cue_system->fighter_sfx(slot, sub);
 }
 
 extern "C" bool pc_a11y_pad(PADStatus* pad) {

@@ -80,6 +80,9 @@ ARGS = {"launcher_home": ["--launcher", "--muted"], "launcher_settings": ["--lau
         "port_menu_voices": ["--muted"], "match_port_menu": ["--muted"], "direct_call": ["--muted"],
         "match_damage": ["--muted"], "match_thresholds": ["--muted"], "match_stocks": ["--muted"],
         "match_stock_steal": ["--muted"], "match_time": ["--muted"], "match_items_vs": ["--muted"],
+        # Positional sound effects follow Accessibility, which --muted keeps on.
+        "match_sfx": ["--muted"],
+        "match_stage_sounds": ["--muted"],
         # The memory card prompts: the run's own card, empty ("--card=", since
         # the script follows and --card alone would take it as a save), or none.
         "memcard_create": ["--card="], "memcard_no": ["--card="], "memcard_no_card": ["--scene", ""]}

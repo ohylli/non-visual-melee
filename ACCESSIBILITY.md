@@ -116,6 +116,31 @@ settings.
   lying loose, placed as the item appearance cue is, from you or on the
   stage. It quickens while the item is within reach.
 
+##### Positional sound effects
+
+The game itself plays every fighter's sounds in the middle. Non-Visual
+Melee places them instead: an opponent's attacks, jumps, landings and the
+hits they take come from their side of you, and grow quieter the further
+away they are, so you can hear where the action is. Your own fighter's
+sounds stay in the middle at full volume. In the accessibility settings,
+under Cue settings, you can switch it off, choose whether sounds are placed
+from you or across the stage, and set how quiet far sounds get.
+
+For this to work, the game's own sound must be in stereo: in the game's
+Options, Sound, choose Stereo rather than Mono.
+
+##### Stage sounds
+
+Some stages make sounds of their own: Corneria's Arwings and Great Fox,
+Mute City's cars, Pokémon Stadium's crowd. Switch Stage sounds off, in the
+accessibility settings under Cue settings, to mute them so the fighters are
+easier to hear. A stage hazard then comes without its sound, so keep it on
+if you rely on hearing one coming.
+
+The echo some stages add to every sound, such as on Final Destination, is
+a different setting: Reverb, with the volumes in the launcher's Settings
+and in the port menu. Switch it off for dry, easier to place sounds.
+
 ### What is not included
 
 These parts of the game are not accessible yet:

@@ -2,6 +2,19 @@
 
 What changed in each release of Non-Visual Melee, newest first.
 
+## Unreleased
+
+### New
+
+- **Positional sound effects:** each fighter's own sounds, such as attacks,
+  jumps, landings and hits, now come from where that fighter is and grow
+  quieter with distance, instead of always playing in the middle. Your own
+  fighter's sounds stay in the middle. Switch it off, or set it, in Cue
+  settings.
+- **Stage sounds switch:** mutes the sounds a stage makes of its own, such
+  as Corneria's Arwings or Mute City's cars, so the fighters are easier to
+  hear. In Cue settings. The stage's echo is the separate Reverb setting.
+
 ## 0.1.0 (2026-11-24)
 
 Plays online with Melee-PC v0.4.2.

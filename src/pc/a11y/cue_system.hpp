@@ -23,6 +23,9 @@ class CueEngine;
 class CueOutput;
 class CueSettings;
 class MatchCues;
+class SfxPositions;
+class StageSounds;
+struct SfxValues;
 struct NamedValue;
 class Speech;
 
@@ -73,6 +76,21 @@ public:
      * The first tick after it closes starts them again. A preview, started
      * from the menu, plays on. */
     void silence_for_port_menu();
+    /* A game sound's voice has started (pc_a11y_sfx_started): a stage's
+     * own sound is muted with Stage sounds off (StageSounds), a fighter's
+     * placed where its fighter is (SfxPositions). */
+    void sfx_started(int voice, int sound, int track, std::uint8_t* volume, std::uint8_t* pan,
+        std::uint8_t* script_pan);
+    /* A fighter's sound without a track of its own is about to start
+     * (pc_a11y_fighter_sfx, pc_a11y_sound_object_starting). */
+    void fighter_sfx(int slot, bool sub);
+    /* A hit's sound is about to start (pc_a11y_sfx_track_hint). */
+    void sfx_track_hint(int track);
+    /* A fighter's sound object's pan and volume, in the game's units (pan
+     * 0 to 127, 64 the centre; volume 0 to 127), placed where its fighter
+     * is, or the game's own (pc_a11y_sound_object_pan). */
+    int sound_object_pan(int slot, bool sub, int pan);
+    int sound_object_volume(int slot, bool sub, int volume);
 
     /* A cue's preview (MatchCues::preview, docs/a11y/cues.md, "Preview"):
      * about two seconds of the cue with this id, the id add_cue took
@@ -94,6 +112,8 @@ public:
 private:
     CueSystem(Speech& speech, AccessibilitySettings& settings);
     void poll_settings();
+    /* Stage sounds off, with Accessibility letting it work. */
+    bool mute_stage_sounds() const;
 
     Speech& m_speech;
     AccessibilitySettings& m_settings;
@@ -102,6 +122,9 @@ private:
     std::unique_ptr<CueEngine> m_engine;
     std::unique_ptr<CueSettings> m_cue_settings;
     std::unique_ptr<MatchCues> m_match_cues;
+    std::unique_ptr<SfxValues> m_sfx_values;
+    std::unique_ptr<SfxPositions> m_sfx;
+    std::unique_ptr<StageSounds> m_stage_sounds;
     std::unique_ptr<CueOutput> m_output;
     /* The last tick read had a match running, since the scene was entered. */
     bool m_match_running = false;
@@ -109,6 +132,9 @@ private:
      * one spoken since then, in the scene's own quiet, is not repeated. */
     int m_problems_at_scene = 0;
     bool m_log = true;
+    /* Accessibility lets the cues, and the positional sound effects, work
+     * (Switches::cues_allowed). */
+    bool m_allowed = true;
     /* MELEE_A11Y_CUE_PREVIEW, a developer switch: the cues' ids whose
      * previews play in turn from the first frame, a pause apart, for a
      * check through the cue dump. */

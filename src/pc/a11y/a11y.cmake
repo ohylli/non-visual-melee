@@ -148,6 +148,9 @@ target_sources(melee PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/value_model.cpp
         ${CMAKE_CURRENT_LIST_DIR}/value_file.cpp
         ${CMAKE_CURRENT_LIST_DIR}/position_cue.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/sfx_position.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/sfx_script_pan.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/stage_sounds.cpp
         ${CMAKE_CURRENT_LIST_DIR}/gap_warning.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ledge_warning.cpp
         ${CMAKE_CURRENT_LIST_DIR}/item_frame.cpp
@@ -752,6 +755,31 @@ if (TARGET unit_tests)
     add_test(NAME position_cue COMMAND position_cue_test)
     set_tests_properties(position_cue PROPERTIES LABELS melee)
     add_dependencies(unit_tests position_cue_test)
+
+    # Positional sound effects: tracks, pan and level, and the voices
+    # followed, against hand-written snapshots and a fake engine; its own
+    # pc_log_line.
+    add_executable(sfx_position_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_sfx_position.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/sfx_position.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/sfx_script_pan.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/position_cue.cpp)
+    target_include_directories(sfx_position_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(sfx_position_test PRIVATE -UNDEBUG)
+    add_test(NAME sfx_position COMMAND sfx_position_test)
+    set_tests_properties(sfx_position PROPERTIES LABELS melee)
+    add_dependencies(unit_tests sfx_position_test)
+
+    # Stage sounds: the stages' banks and the voices muted, against a fake
+    # engine; its own pc_log_line.
+    add_executable(stage_sounds_test EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_LIST_DIR}/test_stage_sounds.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/stage_sounds.cpp)
+    target_include_directories(stage_sounds_test PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_LIST_DIR})
+    target_compile_options(stage_sounds_test PRIVATE -UNDEBUG)
+    add_test(NAME stage_sounds COMMAND stage_sounds_test)
+    set_tests_properties(stage_sounds PROPERTIES LABELS melee)
+    add_dependencies(unit_tests stage_sounds_test)
 
     # The gap warning's driver against hand-written match snapshots.
     add_executable(gap_warning_test EXCLUDE_FROM_ALL

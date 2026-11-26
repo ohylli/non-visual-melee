@@ -1154,6 +1154,42 @@ typedef struct A11yMatchHud {
  * local player plays on. Reads only. */
 void a11y_game_match_hud(int local_port, bool online, A11yMatchHud* out);
 
+/* Positional sound effects (docs/a11y/cues.md, "Positional sound effects"):
+ * where each slot's fighters stand, as the game files their sounds by
+ * track. Index 0 is the slot's main fighter, 1 its sub fighter (Nana). */
+typedef struct A11ySfxFighter {
+    bool present;
+    /* At the fighter's feet (cur_pos). */
+    float x;
+    float y;
+} A11ySfxFighter;
+
+typedef struct A11ySfxSources {
+    A11ySfxFighter fighters[A11Y_MATCH_SLOTS][2];
+} A11ySfxSources;
+
+/* Fills the fighters after a simulated tick; none outside a match. Reads
+ * only. */
+void a11y_game_sfx_sources(A11ySfxSources* out);
+
+/* A playing sound's pan, by the engine's own voice id as
+ * pc_a11y_sfx_started gave it (0 left, 0x80 centre, 0xFF right). Sound
+ * engine state only, never the simulation's. False once the voice has
+ * ended or been reused. */
+bool a11y_game_sfx_set_pan(int voice, uint8_t pan);
+/* Its volume likewise, in the engine's units (0 to 0xFF). */
+bool a11y_game_sfx_set_volume(int voice, uint8_t volume);
+
+/* The sound bank a sound id is from, by its index in the game's bank list
+ * (lbaudio_ax.c's ssm_files: 0 main.ssm, 35 corneria.ssm), 55 for none. */
+int a11y_game_sfx_bank(int sound);
+
+/* The fighter a sound object belongs to (pc_a11y_sound_object_pan's
+ * owner): its slot and whether it is the sub fighter (Nana); false for an
+ * owner that is no fighter, or none. Reads only. */
+struct HSD_GObj;
+bool a11y_game_sound_owner(const struct HSD_GObj* owner, int* slot, bool* sub);
+
 #ifdef __cplusplus
 }
 #endif

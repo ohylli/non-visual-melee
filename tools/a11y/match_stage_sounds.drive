@@ -1,0 +1,54 @@
+# Stage sounds in a Training match on Corneria: Pichu against a standing
+# CPU, with Stage sounds off from the start (stage_sounds.on in the run's
+# a11y.ini). The Great Fox and the Arwings make Corneria's own sounds, from
+# corneria.ssm: each is muted as it starts, an "sfx muted: stage corneria"
+# line; switched back on, they are heard again (no more muted lines), and
+# fighters' sounds are never muted.
+#   python tools/a11y/drive.py --muted tools/a11y/match_stage_sounds.drive
+
+# Title screen to the main menu (tools/a11y/main_menu.drive).
+wait "state 0 scene 0$"
+set stage_sounds.on off
+press Start until "boot scene: game mode"
+press A until "boot scene: state 0 scene 1$" 20 0.3
+wait '"Main Menu\. 1-P Mode\. '
+sleep 1
+
+# 1-P Mode, Training.
+press A
+wait '"1-P Mode\. Regular Match\. '
+sleep 0.3
+press Down
+wait '"Event Match\. '
+press Down
+wait '"Stadium\. '
+press Down
+wait '"Training\. '
+sleep 0.3
+press A
+wait '"Training character select\. Player 1, no character\. CPU, (?P<cpu>.+)\."$'
+sleep 1
+
+# Pichu, which makes the match ready (tools/a11y/css_training.drive).
+press DUp
+wait ': "Holding your coin\. Pichu"$'
+wait 'glide to "Pichu[^"]*" ended after \d+ frames: arrived'
+press A
+wait 'Ready to fight\. Press Start\.'
+sleep 0.5
+press Start
+wait '"Stage select\. '
+sleep 1
+
+# Corneria: stepping along the rows until the cursor reaches it.
+search ': "Corneria\. ' DRight*14 DUp DRight*14 DUp DRight*14
+wait 'glide to "Corneria" ended after \d+ frames: arrived'
+press A
+
+# The stage's sounds come within a few seconds of the match, muted.
+wait 'sfx muted: stage corneria volume \d+' 60
+sleep 3
+
+# Back on: the stage is heard again.
+set stage_sounds.on on
+sleep 8

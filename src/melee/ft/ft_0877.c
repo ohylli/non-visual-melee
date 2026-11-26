@@ -9,6 +9,7 @@
 #include <dolphin/mtx.h>
 #include <melee/it/it_26B1.h>
 #include <melee/lb/lbaudio_ax.h>
+#include "pc/a11y/a11y_hooks.h"
 #include <sysdolphin/baselib/gobj.h>
 #include <sysdolphin/baselib/random.h>
 
@@ -475,6 +476,7 @@ void ft_PlaySFX(Fighter* fp, enum_t sfx_id, u8 sfx_vol, u8 sfx_pan)
             OSReport("ft_PlaySFX #%lu id=%d\n", plays, (int) sfx_id);
         }
     }
+    pc_a11y_fighter_sfx(fp->player_idx, fp->is_sub_fighter);
     fp->x2160 = lbAudioAx_800237A8(sfx_id, sfx_vol, sfx_pan);
 
     {

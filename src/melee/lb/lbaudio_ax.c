@@ -15,6 +15,7 @@
 #include "pc/net.h"
 #ifdef TARGET_PC
 #include "pc/net_sfx.h"
+#include "pc/a11y/a11y_hooks.h"
 #endif
 #include <dolphin/ai.h>
 #include <dolphin/ar.h>
@@ -1715,6 +1716,7 @@ static void fn_80025FAC(HSD_GObj* gobj, lbAudioAx_UserData* ud,
             if (ud->end_frame < 0) {
                 ud->end_frame = 0;
             }
+            pc_a11y_sound_object_starting(ud->owner);
             if (ud->track == 0) {
                 ud->voice_id = lbAudioAx_800237A8(ud->id, ud->vol, ud->pan);
             } else {
@@ -1763,8 +1765,8 @@ static void fn_800262A0(HSD_GObj* gobj)
     }
 
     if (ud->voice_id != -1) {
-        lbAudioAx_80024B1C(ud->voice_id, ud->pan);
-        lbAudioAx_80024B58(ud->voice_id, ud->vol);
+        lbAudioAx_80024B1C(ud->voice_id, pc_a11y_sound_object_pan(ud->owner, ud->pan));
+        lbAudioAx_80024B58(ud->voice_id, pc_a11y_sound_object_volume(ud->owner, ud->vol));
     }
 
     if (ud->current_frame != -1 && ud->end_frame != -1 &&
